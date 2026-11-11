@@ -15665,9 +15665,7 @@ async def _await_session_execution_slot(session_id: str, path: str) -> bool:
                 if occupied < limit:
                     if cloud_research.billing_enabled():
                         try:
-                            claimed = cloud_research.claim_job(
-                                session_id, project_limit=limit
-                            )
+                            claimed = cloud_research.claim_job(session_id, project_limit=limit)
                             if not claimed and cloud_research.job_status(session_id) != "queued":
                                 # Missing, revoked or already claimed ledger state
                                 # is not permission to dispatch or to reuse a billable

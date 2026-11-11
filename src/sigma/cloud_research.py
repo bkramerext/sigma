@@ -454,17 +454,37 @@ def _now() -> str:
 
 
 def _project_relpath(record: dict[str, Any], owner_path: Path) -> str:
+    """Persist a relocatable, authorized workspace-relative project locator.
+
+    A collaborator's Session is billed under their own workspace but the
+    shared project lives under the verified owner's *different* workspace.
+    Store that location with an explicit, safe prefix so restart recovery can
+    find the saved record without ever trusting a client absolute path.
+    """
     value = record.get("project_path")
     if not isinstance(value, str) or not value:
         return ""
     try:
         root = owner_path.resolve(strict=True)
         project = Path(value).resolve(strict=True)
-        if not project.is_relative_to(root) or not (
-            project.is_dir() or (project.suffix == ".json" and project.is_file())
+        if not (project.is_dir() or (project.suffix == ".json" and project.is_file())):
+            return ""
+        if project.is_relative_to(root):
+            return project.relative_to(root).as_posix()
+        # Shared-project paths may reference a sibling identity workspace, but
+        # never an arbitrary path outside the verified workspace collection.
+        relative = project.relative_to(root.parent)
+        if (
+            len(relative.parts) < 2
+            or len(relative.parts[0]) != 32
+            or any(char not in "0123456789abcdef" for char in relative.parts[0])
         ):
             return ""
-        return project.relative_to(root).as_posix()
+        from sigma import project_collaboration
+
+        if not project_collaboration.authorized_shared_path(project):
+            return ""
+        return "@shared/" + relative.as_posix()
     except (OSError, RuntimeError, ValueError):
         return ""
 
@@ -591,9 +611,7 @@ def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str
         raise CloudResearchUnavailable("Allowance could not be reloaded safely.") from exc
 
 
-def _require_research_queue_capacity(
-    db: sqlite3.Connection, owner: str, session_id: str
-) -> None:
+def _require_research_queue_capacity(db: sqlite3.Connection, owner: str, session_id: str) -> None:
     """Bound durable admission separately from active worker capacity.
 
     Waiting jobs have never dispatched a provider call and must not consume a
@@ -1096,15 +1114,32 @@ def reconcile_orphaned_jobs() -> list[str]:
         except (ValueError, TypeError, AttributeError):
             continue
         relative = candidate["project_relpath"]
-        relative_path = Path(relative) if isinstance(relative, str) else Path("/")
+        is_shared = isinstance(relative, str) and relative.startswith("@shared/")
+        raw_relative = relative[len("@shared/") :] if is_shared else relative
+        relative_path = Path(raw_relative) if isinstance(raw_relative, str) else Path("/")
         if (
-            not isinstance(relative, str)
-            or not relative
+            not isinstance(raw_relative, str)
+            or not raw_relative
             or relative_path.is_absolute()
             or ".." in relative_path.parts
         ):
             continue
-        lexical_project = root
+        base = root.parent if is_shared else root
+        if is_shared:
+            # Background cross-workspace recovery cannot impersonate a creator.
+            # A verified, still-authorized collaborator may safely recover
+            # their own durable Session on reconnect.
+            from sigma import cloud_auth, project_collaboration
+
+            owner_name = relative_path.parts[0] if relative_path.parts else ""
+            if (
+                cloud_auth.current_principal() is None
+                or len(relative_path.parts) < 2
+                or len(owner_name) != 32
+                or any(char not in "0123456789abcdef" for char in owner_name)
+            ):
+                continue
+        lexical_project = base
         unsafe = False
         for part in relative_path.parts:
             lexical_project = lexical_project / part
@@ -1115,7 +1150,9 @@ def reconcile_orphaned_jobs() -> list[str]:
             continue
         try:
             project = lexical_project.resolve(strict=True)
-            if not project.is_relative_to(root):
+            if not project.is_relative_to(base):
+                continue
+            if is_shared and not project_collaboration.authorized_shared_path(project):
                 continue
             bundle_project = project.suffix == ".json" and project.is_file()
             if not bundle_project:

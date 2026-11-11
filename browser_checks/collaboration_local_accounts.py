@@ -452,16 +452,23 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert first_run["created_by"] == OWNER
         assert second_run["created_by"] == COLLABORATOR
 
-        # One project running slot: A starts, B waits durably. Another user's
-        # read may advance the deterministic simulation but may not control it.
+        # One project running slot: either creator may win; the other waits.
+        # Do not impose deterministic ordering on legitimately concurrent jobs.
         status = get_json(
-            owner_context.request.get(
-                ui + "/api/projects/research-sessions", params={"path": path}
-            )
+            owner_context.request.get(ui + "/api/projects/research-sessions", params={"path": path})
         )
         statuses = {item["id"]: item["status"] for item in status["sessions"]}
-        assert statuses[first_run["id"]] == "running", statuses
-        assert statuses[second_run["id"]] == "queued", statuses
+        assert {statuses[first_run["id"]], statuses[second_run["id"]]} == {
+            "running",
+            "queued",
+        }, statuses
+        running_id = next(
+            run_id
+            for run_id in (first_run["id"], second_run["id"])
+            if statuses[run_id] == "running"
+        )
+        queued_id = second_run["id"] if running_id == first_run["id"] else first_run["id"]
+        actors = {first_run["id"]: owner_context, second_run["id"]: member_context}
         for actor, foreign in (
             (owner_context, second_run["id"]),
             (member_context, first_run["id"]),
@@ -472,10 +479,9 @@ def exercise(ui: str, workspaces: Path) -> None:
                 data={"path": path, "action": "stop"},
             )
             assert forbidden.status >= 400, (forbidden.status, forbidden.text())
-        # Stop one's own execution; the queued collaborator advances without
-        # changing its identity, number or saved work.
-        stopped = owner_context.request.post(
-            ui + f"/api/projects/research-sessions/{first_run['id']}/control",
+        # Stop only the current slot holder, regardless of which browser won.
+        stopped = actors[running_id].request.post(
+            ui + f"/api/projects/research-sessions/{running_id}/control",
             headers={"Origin": ui},
             data={"path": path, "action": "stop"},
         )
@@ -486,19 +492,19 @@ def exercise(ui: str, workspaces: Path) -> None:
             )
         )["sessions"]
         latest = {item["id"]: item for item in visible}
-        assert latest[first_run["id"]]["status"] == "stopped", latest
-        assert latest[second_run["id"]]["status"] == "running", latest
-        assert latest[second_run["id"]]["created_by"] == COLLABORATOR
-        own_stop = member_context.request.post(
-            ui + f"/api/projects/research-sessions/{second_run['id']}/control",
+        assert latest[running_id]["status"] == "stopped", latest
+        assert latest[queued_id]["status"] == "running", latest
+        assert latest[queued_id]["created_by"] == (
+            OWNER if queued_id == first_run["id"] else COLLABORATOR
+        )
+        own_stop = actors[queued_id].request.post(
+            ui + f"/api/projects/research-sessions/{queued_id}/control",
             headers={"Origin": ui},
             data={"path": path, "action": "stop"},
         )
         assert own_stop.status == 200, own_stop.text()
         check = get_json(
-            owner_context.request.get(
-                ui + "/api/projects/research-sessions", params={"path": path}
-            )
+            owner_context.request.get(ui + "/api/projects/research-sessions", params={"path": path})
         )
         assert {row["id"] for row in check["sessions"]} >= {
             first_run["id"],

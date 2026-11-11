@@ -2484,6 +2484,68 @@ def test_cross_user_crash_reclaims_only_dead_worker(root: Path, ledger_root: Pat
             cloud_workspaces._CURRENT.reset(token)
 
 
+def test_shared_collaborator_recovery_locator(root: Path, ledger_root: Path) -> None:
+    """An authenticated collaborator can recover a project in the owner's workspace.
+
+    The ledger never stores a client absolute path or grants automatic access
+    after membership is revoked. A missing, unpublished prior-process queued
+    record is the only case safe to release without any provider accounting.
+    """
+    creator = workspace(root / "shared-owner-root", "c" * 32)
+    owner = workspace(root / "shared-owner-root", "d" * 32)
+    project = initialize_project(
+        owner.path / "shared-recovery.sigma",
+        "Shared recovery",
+        "Check recovery without duplicate provider calls",
+        research_mode="mathematical",
+    )
+    (Path(project.path) / "research-sessions").mkdir(exist_ok=True)
+    record = job(creator.workspace_id)
+    record["project_id"] = project.project.id
+    record["project_path"] = project.path
+    settings = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "shared-recovery-fixture",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    token = cloud_workspaces._CURRENT.set(creator)
+    try:
+        with (
+            patch.dict(os.environ, settings, clear=False),
+            patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+            patch("sigma.cloud_auth.current_principal", return_value=object()),
+            patch("sigma.project_collaboration.authorized_shared_path", return_value=True),
+        ):
+            locator = cloud_research._project_relpath(record, creator.path)
+            assert locator == f"@shared/{owner.workspace_id}/shared-recovery.sigma"
+            cloud_research.prepare_job(record)
+            with cloud_research._connect() as db:
+                row = db.execute(
+                    "SELECT project_relpath FROM jobs WHERE session_id=?", (record["id"],)
+                ).fetchone()
+                assert row["project_relpath"] == locator
+                db.execute(
+                    "UPDATE jobs SET process_epoch=? WHERE session_id=?",
+                    ("prior-worker-epoch", record["id"]),
+                )
+            # Revocation must prevent even a creator from traversing the
+            # owner's shared project during recovery.
+            with patch(
+                "sigma.project_collaboration.authorized_shared_path", return_value=False
+            ):
+                assert cloud_research.reconcile_orphaned_jobs() == []
+                assert cloud_research.job_status(record["id"]) == "queued"
+            # A verified creator who still has membership can reconcile a
+            # queued receipt abandoned before any session file/call existed.
+            assert cloud_research.reconcile_orphaned_jobs() == [record["id"]]
+            assert cloud_research.job_status(record["id"]) is None
+    finally:
+        cloud_workspaces._CURRENT.reset(token)
+
+
 def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path) -> None:
     """Full worker capacity queues additional distinct users without dispatch."""
     left = workspace(root, "e" * 32)
@@ -3834,72 +3896,100 @@ def main() -> None:
 
         recovery_ledger = root / "orphan-recovery-ledger"
         recovery_ledger.mkdir(mode=0o700)
+        print("RUNNING test_orphaned_job_reconciliation", flush=True)
         test_orphaned_job_reconciliation(root, recovery_ledger, settings)
         json_ledger = root / "json-project-orphan-ledger"
         json_ledger.mkdir(mode=0o700)
+        print("RUNNING test_json_project_orphan_recovery", flush=True)
         test_json_project_orphan_recovery(root, json_ledger, settings)
         json_playback_ledger = root / "json-playback-ledger"
         json_playback_ledger.mkdir(mode=0o700)
+        print("RUNNING test_json_project_session_playback", flush=True)
         test_json_project_session_playback(root, json_playback_ledger, settings)
         failed_session_ledger = root / "failed-session-ledger"
         failed_session_ledger.mkdir(mode=0o700)
+        print("RUNNING test_failed_session_releases_project_slot", flush=True)
         test_failed_session_releases_project_slot(root, failed_session_ledger, settings)
         issue289_ledger = root / "issue289-funding-ledger"
         issue289_ledger.mkdir(mode=0o700)
+        print("RUNNING test_issue289_global_funding_pause_can_resume", flush=True)
         test_issue289_global_funding_pause_can_resume(root, issue289_ledger, settings)
 
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
+        print("RUNNING test_workspace_spend_budget", flush=True)
         test_workspace_spend_budget(root, budget_ledger)
         above_cap_ledger = root / "above-legacy-cap-ledger"
         above_cap_ledger.mkdir(mode=0o700)
+        print("RUNNING test_configured_session_and_account_budget_above_legacy_cap", flush=True)
         test_configured_session_and_account_budget_above_legacy_cap(root, above_cap_ledger)
         reload_ledger = root / "allowance-reload-ledger"
         reload_ledger.mkdir(mode=0o700)
+        print("RUNNING test_admin_allowance_reload_preserves_provider_spend", flush=True)
         test_admin_allowance_reload_preserves_provider_spend(root, reload_ledger)
         parallel_ledger = root / "parallel-worker-ledger"
         parallel_ledger.mkdir(mode=0o700)
+        print("RUNNING test_multiuser_parallel_cloud_worker_admission", flush=True)
         test_multiuser_parallel_cloud_worker_admission(root, parallel_ledger)
+        shared_recovery_ledger = root / "shared-recovery-ledger"
+        shared_recovery_ledger.mkdir(mode=0o700)
+        print("RUNNING test_shared_collaborator_recovery_locator", flush=True)
+        test_shared_collaborator_recovery_locator(root, shared_recovery_ledger)
         shared_project_ledger = root / "shared-project-ledger"
         shared_project_ledger.mkdir(mode=0o700)
+        print("RUNNING test_shared_project_claim_only_one_creator", flush=True)
         test_shared_project_claim_only_one_creator(root, shared_project_ledger)
         foreign_ledger = root / "cross-owner-recovery-ledger"
         foreign_ledger.mkdir(mode=0o700)
+        print("RUNNING test_cross_user_crash_reclaims_only_dead_worker", flush=True)
         test_cross_user_crash_reclaims_only_dead_worker(root, foreign_ledger)
         auxiliary_ledger = root / "auxiliary-inference-ledger"
         auxiliary_ledger.mkdir(mode=0o700)
+        print("RUNNING test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost", flush=True)
         test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(root, auxiliary_ledger)
         pilot_ledger = root / "pilot-capacity-ledger"
         pilot_ledger.mkdir(mode=0o700)
+        print("RUNNING test_pilot_global_spend_accepts_multiple_users", flush=True)
         test_pilot_global_spend_accepts_multiple_users(root, pilot_ledger)
         explicit_allowance_ledger = root / "explicit-allowance-ledger"
         explicit_allowance_ledger.mkdir(mode=0o700)
+        print("RUNNING test_explicit_account_allowance_does_not_require_default", flush=True)
         test_explicit_account_allowance_does_not_require_default(root, explicit_allowance_ledger)
         allowance_ledger = root / "allowance-ledger"
         allowance_ledger.mkdir(mode=0o700)
+        print("RUNNING test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold", flush=True)
         test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
             root, allowance_ledger
         )
         max_output_ledger = root / "max-output-ledger"
         max_output_ledger.mkdir(mode=0o700)
+        print("RUNNING test_model_max_output_reserves_member_and_global_allowance", flush=True)
         test_model_max_output_reserves_member_and_global_allowance(root, max_output_ledger)
+        print("RUNNING test_hosted_capacity_defaults_allow_eight_distinct_researchers", flush=True)
         test_hosted_capacity_defaults_allow_eight_distinct_researchers()
         eight_user_ledger = root / "eight-user-admission-ledger"
         eight_user_ledger.mkdir(mode=0o700)
+        print("RUNNING test_eight_research_users_fill_exactly_thirty_two_admissions", flush=True)
         test_eight_research_users_fill_exactly_thirty_two_admissions(root, eight_user_ledger)
         imported_ledger = root / "email-import-hosted-ledger"
         imported_ledger.mkdir(mode=0o700)
+        print("RUNNING test_imported_session_keys_do_not_alias_hosted_jobs", flush=True)
         test_imported_session_keys_do_not_alias_hosted_jobs(root, imported_ledger)
+        print("RUNNING test_local_limits_remain_unmodified", flush=True)
         test_local_limits_remain_unmodified(root)
+        print("RUNNING test_local_global_spend_default_supports_small_team_pilot", flush=True)
         test_local_global_spend_default_supports_small_team_pilot()
         monthly_ledger = root / "monthly-global-ledger"
         monthly_ledger.mkdir(mode=0o700)
+        print("RUNNING test_monthly_global_budget_retains_unknown_provider_holds", flush=True)
         test_monthly_global_budget_retains_unknown_provider_holds(root, monthly_ledger)
         admin_monthly_ledger = root / "admin-monthly-ledger"
         admin_monthly_ledger.mkdir(mode=0o700)
+        print("RUNNING test_admin_unlimited_allowance_survives_monthly_global_renewal", flush=True)
         test_admin_unlimited_allowance_survives_monthly_global_renewal(root, admin_monthly_ledger)
         local_admin_ledger = root / "local-admin-global-exempt-ledger"
         local_admin_ledger.mkdir(mode=0o700)
+        print("RUNNING test_e006_local_admin_unlimited_does_not_consume_member_default_global_pool", flush=True)
         test_e006_local_admin_unlimited_does_not_consume_member_default_global_pool(
             root, local_admin_ledger
         )
