@@ -515,6 +515,176 @@ def exercise(ui: str, workspaces: Path) -> None:
             for row in check["sessions"]
             if row["id"] in {first_run["id"], second_run["id"]}
         )
+        # Owner catalog standards are projected into the SAVED shared project.
+        # A member's own custom types/preferences must not override them.
+        standards_before = get_json(owner_context.request.get(ui + "/api/project-types"))
+        owner_custom = [
+            entry for entry in standards_before["project_types"] if entry["user_defined"]
+        ]
+        owner_standards = "https://example.org/shared-research-743"
+        owner_publication = "https://example.org/shared-publication-743"
+        standards_saved = owner_context.request.put(
+            ui + "/api/project-types",
+            headers={"Origin": ui},
+            data={
+                "project_types": owner_custom,
+                "expected_revision": standards_before["revision"],
+                "builtin_custom_references": {
+                    "mathematical": {
+                        "research_standards_references": [
+                            {"name": "Owner research standard", "url": owner_standards}
+                        ],
+                        "publication_standards_references": [
+                            {"name": "Owner publication standard", "url": owner_publication}
+                        ],
+                    }
+                },
+            },
+        )
+        assert standards_saved.status == 200, standards_saved.text()
+        owner_snapshot = get_json(
+            owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )["project"]["project_type_snapshot"]
+        member_snapshot = get_json(
+            member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )["project"]["project_type_snapshot"]
+        assert member_snapshot == owner_snapshot
+        after_standards = get_json(
+            member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )["project"]
+        assert after_standards["problem"] == amended
+        assert after_standards["difficulty"] == "hard"
+        assert after_standards["title"] == title
+        for field, fragment in (
+            ("research_standards_references", "shared-research-743"),
+            ("publication_standards_references", "shared-publication-743"),
+        ):
+            assert any(fragment in entry["url"] for entry in member_snapshot[field]), (
+                field,
+                member_snapshot[field],
+            )
+        member_types = get_json(member_context.request.get(ui + "/api/project-types"))
+        assert not member_types["builtin_custom_references"].get("mathematical"), (
+            "The owner's private type catalog leaked into a collaborator account"
+        )
+
+        # Submit TWO distinct Source Material additions before awaiting either
+        # response: actual overlap across the existing signed-in N/Z browsers.
+        owner_link = "https://example.org/owner-source-743"
+        member_link = "https://example.org/member-source-743"
+        submit_script = """({path, url}) => {
+          window.sigmaSharedAdd = fetch('/api/projects/evidence/link', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({path, url})
+          }).then(async r => ({status:r.status, data:await r.json()}))
+            .catch(e => ({status:0, error:String(e)}));
+        }"""
+        owner.evaluate(submit_script, {"path": path, "url": owner_link})
+        member.evaluate(submit_script, {"path": path, "url": member_link})
+        owner_added = owner.evaluate("() => window.sigmaSharedAdd")
+        member_added = member.evaluate("() => window.sigmaSharedAdd")
+        assert owner_added["status"] == member_added["status"] == 200, (
+            owner_added,
+            member_added,
+        )
+        assert owner_added["data"]["id"] != member_added["data"]["id"]
+        for account in (owner_context, member_context):
+            sources = get_json(
+                account.request.get(ui + "/api/projects/evidence", params={"path": path})
+            )["files"]
+            assert {owner_link, member_link} <= {
+                entry.get("url") for entry in sources if entry.get("kind") == "link"
+            }
+
+        # Both *already open* project pages must show the other user's
+        # committed addition; API visibility alone is not collaboration UI.
+        for page, remote_link in ((owner, member_link), (member, owner_link)):
+            project_toggle = page.get_by_role("button", name="Project", exact=True).first
+            expect(project_toggle).to_be_visible()
+            if project_toggle.get_attribute("aria-expanded") == "false":
+                project_toggle.click()
+            expect(page.locator(f'.sigma-supplied-evidence a[href="{remote_link}"]')).to_have_count(
+                1, timeout=20000
+            )
+
+        duplicate = member_context.request.post(
+            ui + "/api/projects/evidence/link",
+            headers={"Origin": ui},
+            data={"path": path, "url": owner_link},
+        )
+        assert duplicate.status == 200, duplicate.text()
+        assert get_json(duplicate)["id"] == owner_added["data"]["id"]
+
+        # Overlapping edit of ONE link must reject the stale write; it may
+        # not replace another collaborator's committed change.
+        revised_owner_link = "https://example.org/owner-source-revised-743"
+        bypass = member_context.request.put(
+            ui + f"/api/projects/evidence/{owner_added['data']['id']}/link",
+            headers={"Origin": ui},
+            data={"path": path, "url": "https://example.org/unversioned-source-743"},
+        )
+        assert bypass.status >= 400, bypass.text()
+        assert "original URL" in bypass.text()
+        # Start an inline edit in N, then have Z change that same link.
+        # The committed update must cancel N's stale editor, never merge it.
+        member_owner_row = member.locator(".sigma-evidence-row").filter(
+            has=member.locator(f'a[href="{owner_link}"]')
+        )
+        member_owner_row.get_by_role("button", name="Edit Source Material link").click()
+        expect(member.get_by_role("textbox", name="Source Material link")).to_be_visible()
+        changed = owner_context.request.put(
+            ui + f"/api/projects/evidence/{owner_added['data']['id']}/link",
+            headers={"Origin": ui},
+            data={
+                "path": path,
+                "url": revised_owner_link,
+                "expected_url": owner_link,
+            },
+        )
+        assert changed.status == 200, changed.text()
+        expect(member.locator(".sigma-supplied-evidence")).to_contain_text(
+            "This Source Material changed in another window. Your edit was cancelled.",
+            timeout=20000,
+        )
+        expect(member.get_by_role("textbox", name="Source Material link")).to_have_count(0)
+        stale = member_context.request.put(
+            ui + f"/api/projects/evidence/{owner_added['data']['id']}/link",
+            headers={"Origin": ui},
+            data={
+                "path": path,
+                "url": "https://example.org/stale-source-743",
+                "expected_url": owner_link,
+            },
+        )
+        assert stale.status >= 400, stale.text()
+        assert "changed by another collaborator" in stale.text()
+        sources = get_json(
+            member_context.request.get(ui + "/api/projects/evidence", params={"path": path})
+        )["files"]
+        assert any(entry.get("url") == revised_owner_link for entry in sources)
+        assert not any(
+            entry.get("url") == "https://example.org/stale-source-743" for entry in sources
+        )
+
+        # Identical PDFs uploaded by separate collaborators are de-duplicated
+        # by their content hash rather than losing or duplicating the manifest.
+        pdf = (ROOT / "tests/fixtures/sigma-valid-sample-paper.pdf").read_bytes()
+        uploaded = []
+        for account in (owner_context, member_context):
+            result = account.request.post(
+                ui + "/api/projects/evidence",
+                headers={"Origin": ui, "Content-Type": "application/pdf"},
+                params={"path": path, "filename": "shared-source-743.pdf"},
+                data=pdf,
+            )
+            assert result.status == 200, result.text()
+            uploaded.append(get_json(result))
+        assert uploaded[0]["id"] == uploaded[1]["id"], uploaded
+        sources = get_json(
+            owner_context.request.get(ui + "/api/projects/evidence", params={"path": path})
+        )["files"]
+        assert sum(entry.get("sha256") == uploaded[0]["sha256"] for entry in sources) == 1
+
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()

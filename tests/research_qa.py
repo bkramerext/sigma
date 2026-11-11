@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -44,11 +45,17 @@ def check_api_task_lifecycle(path: Path, project_id: str, binding: dict[str, str
             question="A reconnect question",
         )
         key = (os.path.realpath(path), body.request_id)
+        actor = ["n@example.org"]
         with (
             patch.object(
                 api, "require_cloud_inference_binding", new=lambda *_args: asyncio.sleep(0)
             ),
             patch.object(api.research_qa, "answer", new=slow_answer),
+            patch.object(
+                api.project_collaboration,
+                "collaborator_identity",
+                side_effect=lambda _path: actor[0],
+            ),
         ):
             disconnected = asyncio.create_task(api.research_qa_answer(body))
             await started.wait()
@@ -65,6 +72,15 @@ def check_api_task_lifecycle(path: Path, project_id: str, binding: dict[str, str
                 assert "different request parameters" in str(exc)
             else:
                 raise AssertionError("A conflicting in-flight request ID must be rejected")
+            assert calls == 1
+            actor[0] = "z@example.org"
+            try:
+                await api.research_qa_answer(body)
+            except ProjectError as exc:
+                assert "different request parameters" in str(exc)
+            else:
+                raise AssertionError("A collaborator hijacked another's pending Q/A")
+            actor[0] = "n@example.org"
             assert calls == 1
             reconnected = asyncio.create_task(api.research_qa_answer(body))
             await asyncio.sleep(0)
@@ -107,6 +123,42 @@ def check_api_task_lifecycle(path: Path, project_id: str, binding: dict[str, str
                 assert failed_key not in api._research_qa_tasks
 
     asyncio.run(scenario())
+
+
+def check_creator_scoped_request_replay() -> None:
+    """Saved/pending request IDs cannot be replayed under another creator."""
+    request_id = "9" * 32
+    question = "Can SIGMA prove this from saved evidence?"
+    record = {
+        "qa_id": "8" * 32,
+        "request_id": request_id,
+        "question": question,
+        "author_email": "n@example.org",
+    }
+    assert (
+        research_qa._request_record([record], request_id, question, creator="n@example.org")
+        == record
+    )
+    try:
+        research_qa._request_record([record], request_id, question, creator="z@example.org")
+    except ProjectError as exc:
+        assert "another collaborator" in str(exc)
+    else:
+        raise AssertionError("Saved Q/A request identity was reusable by another creator")
+    digest = hashlib.sha256(question.encode()).hexdigest()
+    pending = [
+        {
+            "request_id": request_id,
+            "question_sha256": digest,
+            "creator": "n@example.org",
+        }
+    ]
+    try:
+        research_qa._check_pending_request(pending, request_id, digest, creator="z@example.org")
+    except ProjectError as exc:
+        assert "another collaborator" in str(exc)
+    else:
+        raise AssertionError("A foreign pending Q/A reservation was reusable")
 
 
 def check_bounded_shared_conversation() -> None:
@@ -183,6 +235,7 @@ def check_ask_activity_worker_liveness() -> None:
 
 def main() -> None:
     check_ask_activity_worker_liveness()
+    check_creator_scoped_request_replay()
     check_bounded_shared_conversation()
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "qa.sigma"

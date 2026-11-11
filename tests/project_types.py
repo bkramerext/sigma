@@ -731,6 +731,99 @@ def main() -> None:
                     "legacy default without snapshot bypassed the missing-type safeguard"
                 )
 
+            # Existing projects use the OWNER's effective standards snapshot.
+            # A collaborator's private catalog must not redefine those rules.
+            # Editing by type ID updates future work without changing project
+            # identity, saved strategies or previously frozen Session snapshots.
+            standards = _record(
+                "shared-standards",
+                "Shared Standards",
+                "Initial guidance",
+                _placeholder(),
+            )
+            standards["research_standards_references"] = [
+                {"name": "Research v1", "url": "https://example.org/research-v1"}
+            ]
+            standards["publication_standards_references"] = [
+                {"name": "Publication v1", "url": "https://example.org/publication-v1"}
+            ]
+            previous_catalog = client.get("/api/project-types").json()
+            custom_records = [
+                item for item in previous_catalog["project_types"] if item["user_defined"]
+            ]
+            saved_standards = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [*custom_records, standards],
+                    "expected_revision": previous_catalog["revision"],
+                },
+            )
+            assert saved_standards.status_code == 200, saved_standards.text
+            shared_project = create_project(
+                "Standards propagation",
+                "Preserve source and future guidance",
+                "shared-standards",
+            )
+            preserved_id = shared_project.project.id
+            created_strategy = create_strategy(
+                shared_project.path, "Existing evidence", "Do not replace history"
+            ).project.strategies[0]
+            snapshot_before = inspect_project(shared_project.path).project.project_type_snapshot
+            assert snapshot_before is not None
+            assert any(
+                item["url"] == "https://example.org/research-v1"
+                for item in snapshot_before["research_standards_references"]
+            )
+            standards["scope"] = "Revised guidance from the project owner"
+            standards["research_standards_references"] = [
+                {"name": "Research v2", "url": "https://example.org/research-v2"}
+            ]
+            standards["publication_standards_references"] = [
+                {"name": "Publication v2", "url": "https://example.org/publication-v2"}
+            ]
+            revised_catalog = client.get("/api/project-types").json()
+            changed_standards = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [*custom_records, standards],
+                    "expected_revision": revised_catalog["revision"],
+                },
+            )
+            assert changed_standards.status_code == 200, changed_standards.text
+            after_standard_change = inspect_project(shared_project.path).project
+            assert after_standard_change.id == preserved_id
+            assert after_standard_change.strategies[0] == created_strategy
+            assert after_standard_change.project_type_snapshot != snapshot_before
+            assert after_standard_change.project_type_snapshot is not None
+            assert after_standard_change.project_type_snapshot["scope"] == standards["scope"]
+            for field, suffix in (
+                ("research_standards_references", "research-v2"),
+                ("publication_standards_references", "publication-v2"),
+            ):
+                assert any(
+                    item["url"] == f"https://example.org/{suffix}"
+                    for item in after_standard_change.project_type_snapshot[field]
+                )
+            assert "https://example.org/research-v1" not in {
+                item["url"]
+                for item in after_standard_change.project_type_snapshot[
+                    "research_standards_references"
+                ]
+            }
+            # No-op catalog saves may be accepted but must not rewrite an
+            # unchanged project snapshot or truncate existing project data.
+            before_noop = (Path(shared_project.path) / "project.json").read_bytes()
+            stable_catalog = client.get("/api/project-types").json()
+            unchanged = client.put(
+                "/api/project-types",
+                json={
+                    "project_types": [*custom_records, standards],
+                    "expected_revision": stable_catalog["revision"],
+                },
+            )
+            assert unchanged.status_code == 200, unchanged.text
+            assert (Path(shared_project.path) / "project.json").read_bytes() == before_noop
+
             # The image service is intentionally absent from this PR; a fresh account needs no setup.
             assert (
                 client.post("/api/project-types/icon", json={"name": "x", "scope": "y"}).status_code
