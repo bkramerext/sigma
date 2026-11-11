@@ -107,7 +107,26 @@ with sync_playwright() as playwright:
 
     page.route("**/api/**", forward)
     page.goto(UI)
+    # Projects header mirrors the active Samples / My Work tab's group toggle.
+    project_groups_title = page.get_by_role("button", name="Collapse or expand project type groups")
     samples = page.get_by_role("tabpanel", name="Samples")
+    expect(samples.locator("details.sample-type-group").first).to_be_visible()
+    sample_groups = samples.locator("details.sample-type-group")
+    sample_initially_closed = sample_groups.evaluate_all(
+        "groups => groups.every(group => !group.open)"
+    )
+    project_groups_title.click()
+    assert sample_groups.evaluate_all(
+        "groups => groups.every(group => group.open)"
+        if sample_initially_closed
+        else "groups => groups.every(group => !group.open)"
+    )
+    project_groups_title.click()
+    assert sample_groups.evaluate_all(
+        "groups => groups.every(group => !group.open)"
+        if sample_initially_closed
+        else "groups => groups.every(group => group.open)"
+    )
     sample_group = samples.locator("details.sample-type-group").filter(has_text="Mathematics")
     if not sample_group.evaluate("group => group.open"):
         sample_group.locator("summary").click()
@@ -148,6 +167,27 @@ with sync_playwright() as playwright:
         recent_group.locator("summary").click()
     entry = recent.get_by_role("button", name=project_title, exact=True)
     expect(entry).to_be_visible()
+    recent_groups = recent.locator("details.recent-type-group")
+    recent_initially_closed = recent_groups.evaluate_all(
+        "groups => groups.every(group => !group.open)"
+    )
+    project_groups_title.click()
+    assert recent_groups.evaluate_all(
+        "groups => groups.every(group => group.open)"
+        if recent_initially_closed
+        else "groups => groups.every(group => !group.open)"
+    )
+    project_groups_title.click()
+    assert recent_groups.evaluate_all(
+        "groups => groups.every(group => !group.open)"
+        if recent_initially_closed
+        else "groups => groups.every(group => group.open)"
+    )
+    # Most Recent has no grouped hierarchy and Projects is not a toggle there.
+    page.get_by_role("tab", name="Most Recent").click()
+    expect(page.locator(".home-projects-title-toggle")).to_have_count(0)
+    page.get_by_role("tab", name="My Work").click()
+    expect(project_groups_title).to_be_visible()
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     initial = metadata.inner_text()
     assert "Running" not in initial and initial.count(" · ") == 2, initial

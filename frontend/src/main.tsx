@@ -4031,7 +4031,11 @@ function FloatingTooltip() {
   // Modal dialogs live in the browser's top layer, above body-level portals.
   // Mount the tooltip inside the active dialog so it is actually visible.
   const dialogTarget = active.element.closest<HTMLDialogElement>('dialog[open]');
-  return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, dialogTarget ?? document.body);
+  const activityEntries = active.element.dataset.tooltipActivity === 'true'
+    ? active.text.split(/\r?\n/).filter(Boolean) : null;
+  return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className={`sigma-ui-tooltip${activityEntries ? ' sigma-ui-activity-tooltip' : ''}`}>
+    {activityEntries ? activityEntries.map((entry, index) => <div className="sigma-ui-activity-entry" key={`${index}:${entry}`}>{entry}</div>) : active.text}
+  </div>, dialogTarget ?? document.body);
 }
 
 function UsersRoundIcon() {
@@ -4658,8 +4662,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   </dialog></div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [] }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[] }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], onIdleProjectTitleClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; onIdleProjectTitleClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -4667,8 +4671,10 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{(researchRunning || paperRunning || paperQueued || askRunning)
-        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true"><span className={`research-running-indicator${paperQueued && !researchRunning && !paperRunning && !askRunning ? " paper-queued-indicator" : ""}`}/></span></span></button>
-        : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
+        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true" onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true"><span className={`research-running-indicator${paperQueued && !researchRunning && !paperRunning && !askRunning ? " paper-queued-indicator" : ""}`}/></span></span></button>
+        : onIdleProjectTitleClick
+          ? <button type="button" className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" data-tooltip="Collapse all sections, or reopen Project when all are collapsed" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
+          : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -4711,9 +4717,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [] }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], onIdleProjectTitleClick }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[];
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; onIdleProjectTitleClick?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -4726,7 +4732,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} onIdleProjectTitleClick={onIdleProjectTitleClick}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -5374,8 +5380,8 @@ function plausibleCollaboratorEmail(input: string): string | null {
   return email;
 }
 
-function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
-  initial: ProjectView; onSaved: (next: ProjectView) => void; onCancel: () => void;
+function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, onCancel }: {
+  initial: ProjectView; collaborationRevision?: number; onSaved: (next: ProjectView) => void; onCancel: () => void;
 }) {
   useDocumentScrollLock();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -5392,6 +5398,14 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { dialog.current?.showModal(); }, []);
+  // Keep an already-open Settings dialog synchronized with committed remote edits.
+  // Never dismiss it or leave read-only classification values stale.
+  useEffect(() => {
+    setBaseline(initial);
+    setProjectType(initial.project.investigation_type);
+    setDifficulty(initial.project.difficulty);
+    setError('');
+  }, [initial]);
   useEffect(() => {
     const controller = new AbortController();
     const json = async (url: string) => {
@@ -5418,7 +5432,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
         if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
       }).finally(() => window.clearTimeout(timeout));
     return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [initial.path]);
+  }, [initial.path, collaborationRevision]);
   const nonOwnerCollaborator = !!shared?.owner && shared.owner !== shared.you;
   const canEditClassification = !!shared && !nonOwnerCollaborator;
   const changed = (canEditClassification && (
@@ -6077,7 +6091,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
         try { window.localStorage.setItem(`sigma.home.recentGroup:${groupKey}`, String(isOpen)); } catch { /* Preserve state when storage is available. */ }
         setExpandedGroups(current => current[groupKey] === isOpen ? current : { ...current, [groupKey]: isOpen });
       }}>
-      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}{hiddenGroupActivity && <><span className={`research-running-indicator${hiddenGroupActivity === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip={(() => {
+      <summary>{group.type && <ResearchTypeIcon type={group.type} snapshot={group.projects[0]?.project_type_snapshot}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}{hiddenGroupActivity && <><span className={`research-running-indicator${hiddenGroupActivity === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true" data-tooltip-activity="true" data-tooltip={(() => {
         const active = group.projects.filter(project => paperActivity(project));
         const labels = active.flatMap(project => recentRunLabels(project).map(label => `${project.title}: ${label}`));
         return labels.join('\n') || undefined;
@@ -6099,7 +6113,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`} data-tooltip={`Open active work in ${entry.title}${recentRunLabels(entry).length ? `\n${recentRunLabels(entry).join('\n')}` : ''}`} disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`} data-tooltip={`Open active work in ${entry.title}${recentRunLabels(entry).length ? `\n${recentRunLabels(entry).join('\n')}` : ''}`} data-tooltip-activity="true" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -6164,7 +6178,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   </div>;
 }
 
-function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; guest?: boolean }) {
+function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
   const savedTooltip = guest
     ? 'Sign in to view My Work.'
     : 'Show My Work. Click again to collapse or expand all.';
@@ -6182,7 +6196,12 @@ function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView, op
   const recentPanel = useRef<HTMLDivElement>(null);
   const mostRecentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [guest, tab]);
+  useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); onTabChange?.(tab); }, [guest, tab, onTabChange]);
+  useEffect(() => {
+    const toggle = () => { if (tab !== 'most-recent') switchTab(tab); };
+    window.addEventListener('sigma-home-projects-toggle-groups', toggle);
+    return () => window.removeEventListener('sigma-home-projects-toggle-groups', toggle);
+  }, [tab]);
   function switchTab(next: 'recent' | 'samples' | 'most-recent') {
     if (next === tab) {
       const panel = next === 'samples' ? samplesPanel.current : next === 'recent' ? recentPanel.current : mostRecentPanel.current;
@@ -6270,6 +6289,10 @@ function Home({ initialPath, onOpen }: {
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
+  const [catalogTab, setCatalogTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
+    const saved = window.localStorage.getItem('sigma.homeCatalogTab');
+    return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
+  });
   const settingsButton = useRef<HTMLButtonElement>(null);
   const [typeCatalogRevision, setTypeCatalogRevision] = useState(0);
   useEffect(() => {
@@ -6384,13 +6407,13 @@ function Home({ initialPath, onOpen }: {
       {signOutCopyUnavailable && <p className="home-signout-copy-notice" role="status">Signed out of Google. The original project remains saved in your Google account, but SIGMA could not make a guest copy. Sign back in to open that project.</p>}
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
-          <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
+          <h1 id="home-projects-heading" ref={heading} tabIndex={-1} aria-label="Projects">{catalogTab === 'most-recent' ? 'Projects' : <button type="button" className="home-projects-title-toggle" aria-label="Collapse or expand project type groups" data-tooltip="Collapse or expand project type groups" onClick={() => window.dispatchEvent(new Event('sigma-home-projects-toggle-groups'))}>Projects</button>}</h1>
           {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
             <button type="button" ref={newButton} className="home-project-action home-icon-action" aria-label="New project" data-tooltip="New project" onClick={() => setEntry('new')}><CirclePlusIcon/></button>
           <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>
           </>}
         </div>
-        <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
+        <HomeCatalog onOpen={onOpen} onTabChange={setCatalogTab} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label={`Crafted by Brian Kramer and ${creditAdjective} OpenAI agents`} onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Crafted by Brian Kramer</span><span>and {creditAdjective} OpenAI agents.</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
@@ -6970,20 +6993,25 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           lastLoadedSharedRevision.current = revision;
           return;
         }
-        modeOwner.current = null;
-        setActiveMode(null);
-        setProjectEditing(false);
-        setDescriptionEditing(false);
-        setDescriptionDirty(false);
-        setEditing(false);
-        setGenerating(false);
-        setManualDraft(undefined);
-        setCombinedTextDrafts({});
-        setTextEditSignals({});
-        setEditorVersion(value => value + 1);
+        // Classification and collaborator controls can refresh in place.
+        // Other editors still abandon stale drafts rather than overwriting remote work.
+        if (!projectEditing) {
+          modeOwner.current = null;
+          setActiveMode(null);
+          setDescriptionEditing(false);
+          setDescriptionDirty(false);
+          setEditing(false);
+          setGenerating(false);
+          setManualDraft(undefined);
+          setCombinedTextDrafts({});
+          setTextEditSignals({});
+          setEditorVersion(value => value + 1);
+        }
         setView(next);
         lastLoadedSharedRevision.current = revision;
-        setAnnouncement('Project updated by a collaborator. Unsaved edits were discarded.');
+        setAnnouncement(projectEditing
+          ? 'Project Settings refreshed with collaborator changes.'
+          : 'Project updated by a collaborator. Unsaved edits were discarded.');
       })
       .catch(() => { /* Retain the current view and retry on the next poll. */ });
     return () => controller.abort();
@@ -7136,7 +7164,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const frame = { goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null, researchRunning, paperRunning, paperQueued, askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'), activeRunLabels };
+  const frame = { goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null, researchRunning, paperRunning, paperQueued, askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'), activeRunLabels, onIdleProjectTitleClick: toggleSectionsFromTitle };
   function toggleStrategiesPane() {
     if (!strategiesExpanded) sectionOpen('strategies');
     setStrategiesExpanded(open => { window.localStorage.setItem(`sigma.strategiesPane:${path}`, String(!open)); return !open; });
@@ -7173,6 +7201,18 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     }
   }, [view?.project.id, path]);
   function cancel() { setEditing(false); exitMode('new-strategy'); requestAnimationFrame(() => newButton.current?.focus()); }
+  function toggleSectionsFromTitle() {
+    const sections = ['project-pane-heading', 'pool-heading', 'sessions-heading', 'papers-heading'];
+    const allCollapsed = sections.every(id => document.querySelector(`#${id} .workspace-section-disclosure`)?.getAttribute('aria-expanded') === 'false');
+    if (!allCollapsed) {
+      window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: 'all' }));
+      return;
+    }
+    sectionOpen('project');
+    setProjectExpanded(true);
+    window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
+    requestAnimationFrame(() => requestAnimationFrame(() => focusWorkspace('project-pane-heading')));
+  }
   function expandStrategies() { sectionOpen('strategies'); setStrategiesExpanded(true); window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'true'); }
   const collapseProjectAndStrategies = useCallback(() => {
     sectionOpen('sessions');
@@ -7459,7 +7499,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
     <PapersPane collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.paper} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} draftCreatorEmail={sharedActivity?.artifact_authors?.paper_draft?.[project.id]} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
-    {projectEditing && <ProjectClassificationDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { markLocalSharedSave(); setView(next); setAnnouncement('Project settings saved.'); }}/>}
+    {projectEditing && <ProjectClassificationDialog initial={view} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { markLocalSharedSave(); setView(next); setAnnouncement('Project settings saved.'); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}
       onCancel={() => { setEmailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-email-button')?.focus()); }}
