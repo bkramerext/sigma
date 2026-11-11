@@ -24,6 +24,7 @@ _release = asyncio.Event()
 # progress them on every read. Freeze only after admission so a two-browser
 # acceptance can observe the same overlapping running/queued state.
 _real_has_active_session = research_sessions.has_active_session
+_real_advance_mock = research_sessions._advance_mock
 
 
 @app.post("/api/__fixture/collaboration-freeze-sessions")
@@ -73,7 +74,7 @@ async def held_paper(path: str, run_id: str, number: int, release: asyncio.Event
                 "reasoning_effort": "medium",
             }
             try:
-                await asyncio.wait_for(release.wait(), timeout=30)
+                await release.wait()
             finally:
                 papers._active_progress.pop(key, None)
 
@@ -113,6 +114,13 @@ async def release_held_paper(body: dict[str, str]):
     project_collaboration.discard_execution_run(path, "paper", run_id)
     _paper_holds.pop(run_id, None)
     return {"released": run_id}
+
+
+@app.post("/api/__fixture/collaboration-unfreeze-sessions")
+def unfreeze_mock_sessions():
+    research_sessions._advance_mock = _real_advance_mock
+    research_sessions.has_active_session = _real_has_active_session
+    return {"frozen": False}
 
 
 @app.get("/api/__fixture/collaboration-qa-state")
