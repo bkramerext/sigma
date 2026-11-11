@@ -790,8 +790,7 @@ def reserve_execution_run(
             if existing["creator_hash"] != creator_hash:
                 raise ProjectError("Only the original execution creator can resume this run.")
             status = db.execute(
-                "SELECT status FROM shared_run_reservations "
-                "WHERE path=? AND kind=? AND run_id=?",
+                "SELECT status FROM shared_run_reservations WHERE path=? AND kind=? AND run_id=?",
                 (path, kind, run_id),
             ).fetchone()
             if status is not None and status["status"] == "discarded":

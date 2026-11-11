@@ -957,9 +957,7 @@ def papers_preflight_view(
     run_id: str | None = None,
 ):
     if run_id is not None:
-        project_collaboration.execution_run(
-            path, "paper", run_id, operator=True, missing_ok=True
-        )
+        project_collaboration.execution_run(path, "paper", run_id, operator=True, missing_ok=True)
     with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
         return papers.preflight(
             path,
@@ -1830,9 +1828,7 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         additional_calls=body.additional_calls,
         browser_presence_required=body.browser_presence_required,
     )
-    project_collaboration.note_artifact_author(
-        body.path, "session", session_id, created_only=True
-    )
+    project_collaboration.note_artifact_author(body.path, "session", session_id, created_only=True)
     return result
 
 
@@ -1861,9 +1857,7 @@ async def research_session_remove_view(session_id: str, body: ResearchSessionRem
         session_id,
         owner_terminal=session["status"] in {"completed", "ended"},
     )
-    return await research_sessions.remove_session(
-        body.path, session_id, body.expected_updated_at
-    )
+    return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
 
 
 @app.get("/api/research-tools")

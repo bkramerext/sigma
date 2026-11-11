@@ -1426,8 +1426,12 @@ class CollaborationTests(TestCase):
         with papers.paper_run_scope(run_owner):
             papers._write_queue_status(self.path, "queued", papers._now())
         with (
-            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=collaborator),
-            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current", return_value=collaborator
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
         ):
             other = shared.reserve_execution_run(
                 self.path, "paper", run_other, 2, model="paper-other", thinking="medium"
@@ -1436,8 +1440,9 @@ class CollaborationTests(TestCase):
             self.assertEqual(other["number"], owner["number"] + 1)
             with papers.paper_run_scope(run_other):
                 papers._write_queue_status(self.path, "queued", papers._now())
-            with papers.paper_run_scope(run_owner), self.assertRaisesRegex(
-                ProjectError, "another creator"
+            with (
+                papers.paper_run_scope(run_owner),
+                self.assertRaisesRegex(ProjectError, "another creator"),
             ):
                 papers._write_queue_status(self.path, "queued", papers._now())
             seen = papers.run_progress_list(self.path)
@@ -1462,7 +1467,6 @@ class CollaborationTests(TestCase):
         )
         assert latest is not None
         self.assertEqual(latest["number"], other["number"] + 1)
-
 
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:
