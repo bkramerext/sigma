@@ -542,12 +542,13 @@ def test_orphaned_job_reconciliation(
                 ]
                 == 0.25
             )
+            assert cloud_research.job_status(ambiguous["id"]) == "paused"
             assert (
                 db.execute(
                     "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'",
                     (workspace_a.workspace_id,),
                 ).fetchone()[0]
-                == 2
+                == 1
             )
             db.close()
 

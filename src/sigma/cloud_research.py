@@ -1142,68 +1142,70 @@ def _reconcile_foreign_job(candidate: sqlite3.Row, project: Path, owner: str) ->
         view = inspect_project(str(project))
         if view.project.id != candidate["project_id"]:
             return
-        with research_sessions._project_manager_lock(str(project)):
-            with research_sessions._idle_worker_lock(str(project), candidate["session_id"]):
-                # The admission lock rules out a concurrent unpublished
-                # Session receipt. Retire it only if no provider call exists.
-                if project.suffix == ".json":
-                    from sigma.project_bundle import read_bundle
+        with (
+            research_sessions._project_manager_lock(str(project)),
+            research_sessions._idle_worker_lock(str(project), candidate["session_id"]),
+        ):
+            # The admission lock rules out a concurrent unpublished
+            # Session receipt. Retire it only if no provider call exists.
+            if project.suffix == ".json":
+                from sigma.project_bundle import read_bundle
 
-                    has_session = (
-                        f"research-sessions/{candidate['session_id']}.json"
-                        in read_bundle(str(project))["files"]
-                    )
-                else:
-                    session_dir = project / "research-sessions"
-                    if session_dir.is_symlink() or not session_dir.is_dir():
-                        return
-                    record_path = session_dir / f"{candidate['session_id']}.json"
-                    if record_path.is_symlink():
-                        return  # Unsafe state is never evidence of absence.
-                    has_session = record_path.is_file()
-                with _transaction() as db:
-                    row = db.execute(
-                        "SELECT workspace_id,project_id,project_relpath,process_epoch,status "
-                        "FROM jobs WHERE session_id=?",
-                        (candidate["session_id"],),
-                    ).fetchone()
-                    if (
-                        row is None
-                        or row["workspace_id"] != owner
-                        or row["project_id"] != candidate["project_id"]
-                        or row["project_relpath"] != candidate["project_relpath"]
-                        or row["process_epoch"] == _PROCESS_EPOCH
-                        or row["status"] not in {"queued", "running", "stopping"}
-                    ):
-                        return
-                    unsettled = db.execute(
-                        "SELECT 1 FROM calls WHERE session_id=? AND status='reserved' LIMIT 1",
-                        (candidate["session_id"],),
-                    ).fetchone()
-                    if row["status"] == "queued" and not unsettled and has_session:
-                        return
-                    has_call = db.execute(
-                        "SELECT 1 FROM calls WHERE session_id=? LIMIT 1",
-                        (candidate["session_id"],),
-                    ).fetchone()
-                    if row["status"] == "queued" and not has_session and not has_call:
-                        db.execute(
-                            "DELETE FROM jobs WHERE session_id=? AND workspace_id=? "
-                            "AND status='queued'",
-                            (candidate["session_id"], owner),
-                        )
-                        return
-                    stamp = _now()
+                has_session = (
+                    f"research-sessions/{candidate['session_id']}.json"
+                    in read_bundle(str(project))["files"]
+                )
+            else:
+                session_dir = project / "research-sessions"
+                if session_dir.is_symlink() or not session_dir.is_dir():
+                    return
+                record_path = session_dir / f"{candidate['session_id']}.json"
+                if record_path.is_symlink():
+                    return  # Unsafe state is never evidence of absence.
+                has_session = record_path.is_file()
+            with _transaction() as db:
+                row = db.execute(
+                    "SELECT workspace_id,project_id,project_relpath,process_epoch,status "
+                    "FROM jobs WHERE session_id=?",
+                    (candidate["session_id"],),
+                ).fetchone()
+                if (
+                    row is None
+                    or row["workspace_id"] != owner
+                    or row["project_id"] != candidate["project_id"]
+                    or row["project_relpath"] != candidate["project_relpath"]
+                    or row["process_epoch"] == _PROCESS_EPOCH
+                    or row["status"] not in {"queued", "running", "stopping"}
+                ):
+                    return
+                unsettled = db.execute(
+                    "SELECT 1 FROM calls WHERE session_id=? AND status='reserved' LIMIT 1",
+                    (candidate["session_id"],),
+                ).fetchone()
+                if row["status"] == "queued" and not unsettled and has_session:
+                    return
+                has_call = db.execute(
+                    "SELECT 1 FROM calls WHERE session_id=? LIMIT 1",
+                    (candidate["session_id"],),
+                ).fetchone()
+                if row["status"] == "queued" and not has_session and not has_call:
                     db.execute(
-                        "UPDATE jobs SET status='interrupted',updated_at=? "
-                        "WHERE session_id=? AND workspace_id=?",
-                        (stamp, candidate["session_id"], owner),
+                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? "
+                        "AND status='queued'",
+                        (candidate["session_id"], owner),
                     )
-                    db.execute(
-                        "UPDATE calls SET status='unknown',updated_at=? "
-                        "WHERE session_id=? AND workspace_id=? AND status='reserved'",
-                        (stamp, candidate["session_id"], owner),
-                    )
+                    return
+                stamp = _now()
+                db.execute(
+                    "UPDATE jobs SET status='interrupted',updated_at=? "
+                    "WHERE session_id=? AND workspace_id=?",
+                    (stamp, candidate["session_id"], owner),
+                )
+                db.execute(
+                    "UPDATE calls SET status='unknown',updated_at=? "
+                    "WHERE session_id=? AND workspace_id=? AND status='reserved'",
+                    (stamp, candidate["session_id"], owner),
+                )
 
 
 def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
@@ -1381,45 +1383,47 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                     continue
                 # The admission lock proves no publisher is concurrently
                 # writing this record; also require the worker OS fence.
-                with research_sessions._idle_worker_lock(str(project), session_id):
-                    with _transaction() as db:
-                        current = db.execute(
-                            "SELECT workspace_id,status,project_id,project_relpath,process_epoch "
-                            "FROM jobs WHERE session_id=?",
-                            (session_id,),
-                        ).fetchone()
-                        if (
-                            not current
-                            or current["workspace_id"] != owner
-                            or current["status"] != "queued"
-                            or current["project_id"] != candidate["project_id"]
-                            or current["project_relpath"] != relative
-                            or current["process_epoch"] == _PROCESS_EPOCH
-                        ):
-                            continue
-                        has_call = db.execute(
-                            "SELECT 1 FROM calls WHERE session_id=? LIMIT 1", (session_id,)
-                        ).fetchone()
-                        if has_call:
-                            # No published Session exists, but billing history
-                            # remains held. Retire the orphaned queue slot.
-                            stamp = _now()
-                            db.execute(
-                                "UPDATE jobs SET status='interrupted',updated_at=? "
-                                "WHERE session_id=? AND workspace_id=? AND status='queued'",
-                                (stamp, session_id, owner),
-                            )
-                            db.execute(
-                                "UPDATE calls SET status='unknown',updated_at=? "
-                                "WHERE session_id=? AND workspace_id=? AND status='reserved'",
-                                (stamp, session_id, owner),
-                            )
-                            continue
+                with (
+                    research_sessions._idle_worker_lock(str(project), session_id),
+                    _transaction() as db,
+                ):
+                    current = db.execute(
+                        "SELECT workspace_id,status,project_id,project_relpath,process_epoch "
+                        "FROM jobs WHERE session_id=?",
+                        (session_id,),
+                    ).fetchone()
+                    if (
+                        not current
+                        or current["workspace_id"] != owner
+                        or current["status"] != "queued"
+                        or current["project_id"] != candidate["project_id"]
+                        or current["project_relpath"] != relative
+                        or current["process_epoch"] == _PROCESS_EPOCH
+                    ):
+                        continue
+                    has_call = db.execute(
+                        "SELECT 1 FROM calls WHERE session_id=? LIMIT 1", (session_id,)
+                    ).fetchone()
+                    if has_call:
+                        # No published Session exists, but billing history
+                        # remains held. Retire the orphaned queue slot.
+                        stamp = _now()
                         db.execute(
-                            "DELETE FROM jobs WHERE session_id=? AND workspace_id=? AND status='queued'",
-                            (session_id, owner),
+                            "UPDATE jobs SET status='interrupted',updated_at=? "
+                            "WHERE session_id=? AND workspace_id=? AND status='queued'",
+                            (stamp, session_id, owner),
                         )
-                        removed.append(session_id)
+                        db.execute(
+                            "UPDATE calls SET status='unknown',updated_at=? "
+                            "WHERE session_id=? AND workspace_id=? AND status='reserved'",
+                            (stamp, session_id, owner),
+                        )
+                        continue
+                    db.execute(
+                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? AND status='queued'",
+                        (session_id, owner),
+                    )
+                    removed.append(session_id)
         except (OSError, RuntimeError, ValueError, sqlite3.Error, ProjectError):
             # Recovery is conservative: inability to prove absence keeps the row.
             continue

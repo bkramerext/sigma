@@ -93,10 +93,13 @@ def test_foreign_collaborator_crash() -> None:
                     assert cloud_research.claim_job(session_id)
                     cloud_research.reserve_call(session_id, attempt_id, 0.04, 40)
                 with cloud_research._connect() as db:
-                    assert db.execute(
-                        "SELECT project_relpath FROM jobs WHERE session_id=?",
-                        (session_id,),
-                    ).fetchone()["project_relpath"] == f"@shared/{ALICE}/shared.sigma"
+                    assert (
+                        db.execute(
+                            "SELECT project_relpath FROM jobs WHERE session_id=?",
+                            (session_id,),
+                        ).fetchone()["project_relpath"]
+                        == f"@shared/{ALICE}/shared.sigma"
+                    )
             finally:
                 cloud_workspaces._CURRENT.reset(creator_token)
 
@@ -134,13 +137,19 @@ def test_foreign_collaborator_crash() -> None:
                     # Account A's maintenance pass cannot steal B's live lock.
                     cloud_research.reconcile_all_orphaned_jobs()
                     with cloud_research._connect() as db:
-                        assert db.execute(
-                            "SELECT status FROM jobs WHERE session_id=?",
-                            (session_id,),
-                        ).fetchone()["status"] == "running"
-                    assert research_sessions._recover(
-                        research_sessions._read(project.path, session_id)
-                    )["status"] == "running"
+                        assert (
+                            db.execute(
+                                "SELECT status FROM jobs WHERE session_id=?",
+                                (session_id,),
+                            ).fetchone()["status"]
+                            == "running"
+                        )
+                    assert (
+                        research_sessions._recover(
+                            research_sessions._read(project.path, session_id)
+                        )["status"]
+                        == "running"
+                    )
 
                     fcntl.flock(fd, fcntl.LOCK_UN)
                     os.close(fd)
@@ -155,8 +164,7 @@ def test_foreign_collaborator_crash() -> None:
                             (session_id,),
                         ).fetchone()
                         charge = db.execute(
-                            "SELECT status,amount_usd,token_reservation FROM calls "
-                            "WHERE call_id=?",
+                            "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
                             (attempt_id,),
                         ).fetchone()
                         assert (state["status"], state["workspace_id"]) == (
@@ -231,8 +239,7 @@ def test_queued_call_fence() -> None:
                 assert cloud_research.job_status(session_id) == "interrupted"
                 with cloud_research._connect() as db:
                     call = db.execute(
-                        "SELECT status,amount_usd,token_reservation FROM calls "
-                        "WHERE call_id=?",
+                        "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
                         (attempt_id,),
                     ).fetchone()
                     assert (call["status"], call["amount_usd"]) == (

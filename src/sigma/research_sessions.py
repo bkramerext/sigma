@@ -4965,9 +4965,11 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         )
         record["message"] = (
             "Backend restarted with an unsettled provider reservation or call. "
-            "Its outcome and billing remain unknown; it will not be replayed automatically."
+            "Its outcome and billing remain unknown; it will not be retried automatically."
             if interrupted_on_restart
-            or (cloud_research.billing_enabled() and cloud_research.has_reserved_calls(record["id"]))
+            or (
+                cloud_research.billing_enabled() and cloud_research.has_reserved_calls(record["id"])
+            )
             else "Backend restarted before the session completed. No provider request was recorded in flight."
         )
         record["current_step"] = None

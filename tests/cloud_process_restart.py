@@ -279,14 +279,13 @@ def _execute(stage: str) -> None:
                     assert active_saved["created_by"] == CREATOR
                     assert active_saved["artifacts"][0]["id"] == "saved-checkpoint"
                     ambiguous_path = str(root / CREATOR / "ambiguous.sigma")
+
                     # Exercise the actual queued-worker restoration entrypoint.
                     # Its creator admission is supplied by this synthetic
                     # owner fixture rather than an HTTP auth middleware.
                     async def reconnect() -> None:
                         with (
-                            patch(
-                                "sigma.project_collaboration.require_execution_operator"
-                            ),
+                            patch("sigma.project_collaboration.require_execution_operator"),
                             patch.object(
                                 research_sessions, "_worker", new_callable=AsyncMock
                             ) as scheduled,
