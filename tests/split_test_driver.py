@@ -21,7 +21,6 @@ from unittest.mock import patch
 
 import httpx
 
-
 _EXPECTED_FAULT_LOGS = {
     "research_sessions": {
         "session.strategy_exception": 3,
@@ -183,9 +182,7 @@ def run_split(
             "test_provider_limit_recovery_completes_full_v2_protocol": 3,
         }
         selected_half = {
-            key
-            for index, key in enumerate(group_names)
-            if heavy.get(key, index % 3 + 1) == half
+            key for index, key in enumerate(group_names) if heavy.get(key, index % 3 + 1) == half
         }
         assert selected_half and len(selected_half) < len(group_names)
 
