@@ -516,10 +516,10 @@ def exercise(ui: str, workspaces: Path) -> None:
                 arg={
                     "first": first_run["session_number"],
                     "second": second_run["session_number"],
-                    "firstStatus": "(running)"
+                    "firstStatus": ""
                     if statuses[first_run["id"]] == "running"
                     else "(queued)",
-                    "secondStatus": "(running)"
+                    "secondStatus": ""
                     if statuses[second_run["id"]] == "running"
                     else "(queued)",
                     "owner": OWNER,
@@ -620,8 +620,8 @@ def exercise(ui: str, workspaces: Path) -> None:
                     return lines.length === 4
                         && lines.filter(line => line.startsWith('Session ')).length === 2
                         && lines.filter(line => line.startsWith('Answer ')).length === 2
-                        && lines.every(line => line.includes('(running)')
-                            || line.includes('(queued)'))
+                        && lines.every(line => !line.includes('(running)'))
+                        && lines.some(line => line.includes('(queued)'))
                         && lines.filter(line => line.includes(owner)).length === 2
                         && lines.filter(line => line.includes(member)).length === 2;
                 }""",
@@ -702,8 +702,8 @@ def exercise(ui: str, workspaces: Path) -> None:
                         && lines.filter(line => line.startsWith('Session ')).length === 2
                         && lines.filter(line => line.startsWith('Paper ')).length === 2
                         && lines.filter(line => line.startsWith('Answer ')).length === 2
-                        && lines.every(line => line.includes('(running)')
-                            || line.includes('(queued)'))
+                        && lines.every(line => !line.includes('(running)'))
+                        && lines.some(line => line.includes('(queued)'))
                         && lines.filter(line => line.includes(owner)).length === 3
                         && lines.filter(line => line.includes(member)).length === 3;
                 }""",
@@ -730,7 +730,9 @@ def exercise(ui: str, workspaces: Path) -> None:
                         === 'Open active work in ' + project);
                     const lines = (indicator?.getAttribute('data-tooltip') || '').split('\\n')
                         .slice(1).filter(Boolean);
-                    return lines.length === 6
+                    return lines.every(line => !line.includes('(running)'))
+                        && lines.some(line => line.includes('(queued)'))
+                        && lines.length === 6
                         && lines.filter(line => line.startsWith('Session ')).length === 2
                         && lines.filter(line => line.startsWith('Paper ')).length === 2
                         && lines.filter(line => line.startsWith('Answer ')).length === 2
