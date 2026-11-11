@@ -115,7 +115,7 @@ jobs:
 
 
   real-paper-pdf:
-    name: Two-creator real PDF acceptance (no stub/skip)
+    name: Two-creator real PDF acceptance
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
