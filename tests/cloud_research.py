@@ -393,8 +393,10 @@ def test_orphaned_job_reconciliation(
                 item["events"] = []
                 return item
 
-            # Existing databases migrate the new column to zero. An active
-            # legacy job with a saved session record must still consume a slot.
+            # Existing databases can have session_slot=0. The next
+            # admission migrates the saved legacy session, but it must not
+            # reject an independent queued job merely because the first has
+            # not yet reached provider dispatch.
             legacy = derived_job("queued")
             legacy["max_concurrent_sessions"] = 1
             cloud_research.prepare_job(legacy)
@@ -407,39 +409,42 @@ def test_orphaned_job_reconciliation(
             db.close()
             after_upgrade = derived_job("queued")
             after_upgrade["max_concurrent_sessions"] = 1
-            try:
-                cloud_research.prepare_job(after_upgrade)
-            except cloud_research.CloudResearchUnavailable as exc:
-                assert "maximum concurrent sessions" in str(exc).lower()
-            else:
-                raise AssertionError("an active pre-migration job did not consume a project slot")
+            cloud_research.prepare_job(after_upgrade)
+            assert cloud_research.job_status(after_upgrade["id"]) == "queued"
             db = cloud_research._connect()
-            assert (
-                db.execute(
-                    "SELECT 1 FROM jobs WHERE session_id=?", (after_upgrade["id"],)
-                ).fetchone()
-                is None
+            migrated = db.execute(
+                "SELECT session_slot,project_relpath FROM jobs WHERE session_id=?",
+                (legacy["id"],),
+            ).fetchone()
+            assert migrated["session_slot"] == 1
+            assert migrated["project_relpath"]
+            db.close()
+            assert cloud_research.claim_job(legacy["id"], project_limit=1)
+            assert not cloud_research.claim_job(after_upgrade["id"], project_limit=1)
+            assert cloud_research.job_status(after_upgrade["id"]) == "queued"
+            cloud_research.release_job(legacy["id"], paused=True)
+            assert cloud_research.claim_job(after_upgrade["id"], project_limit=1)
+            db = cloud_research._connect()
+            db.execute(
+                "DELETE FROM jobs WHERE session_id IN (?,?)",
+                (legacy["id"], after_upgrade["id"]),
             )
-            db.execute("DELETE FROM jobs WHERE session_id=?", (legacy["id"],))
             db.close()
             (Path(project.path) / "research-sessions" / f"{legacy['id']}.json").unlink()
 
+            # Two admitted jobs occupy one *running* project slot. Finishing
+            # the current worker promotes the waiting job without resubmitting.
             slot_one = derived_job("queued")
             slot_one["max_concurrent_sessions"] = 1
             cloud_research.prepare_job(slot_one)
             slot_two = derived_job("queued")
             slot_two["max_concurrent_sessions"] = 1
-            try:
-                cloud_research.prepare_job(slot_two)
-            except cloud_research.CloudResearchUnavailable as exc:
-                assert "maximum concurrent sessions" in str(exc).lower()
-                assert slot_one["id"] in str(exc)
-            else:
-                raise AssertionError("hosted reservation exceeded the project's session limit")
-            db = cloud_research._connect()
-            db.execute("UPDATE jobs SET status='paused' WHERE session_id=?", (slot_one["id"],))
-            db.close()
             cloud_research.prepare_job(slot_two)
+            assert cloud_research.job_status(slot_two["id"]) == "queued"
+            assert cloud_research.claim_job(slot_one["id"], project_limit=1)
+            assert not cloud_research.claim_job(slot_two["id"], project_limit=1)
+            cloud_research.release_job(slot_one["id"], paused=True)
+            assert cloud_research.claim_job(slot_two["id"], project_limit=1)
             db = cloud_research._connect()
             db.execute("UPDATE jobs SET status='terminal' WHERE session_id=?", (slot_two["id"],))
             db.close()
