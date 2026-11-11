@@ -7,19 +7,24 @@ import copy
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from contextvars import ContextVar
+from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
 
-from sigma import api, research_qa
+from sigma import api, project_collaboration as shared, research_qa
+from sigma.cloud_auth import Principal
+from sigma.cloud_workspaces import Workspace
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
     ProjectError,
-    create_strategy,
+    project_settings,
+    update_project,
     export_complete_project,
     initialize_project,
     inspect_project,
@@ -167,7 +172,8 @@ def check_creator_scoped_request_replay() -> None:
 def check_two_creators_answer_same_project_concurrently() -> None:
     """N/Z provider calls overlap without crossing saved answers or attribution."""
     with TemporaryDirectory() as temporary:
-        path = Path(temporary) / "shared-qa.sigma"
+        root = Path(temporary)
+        path = root / "shared-qa.sigma"
         view = initialize_project(path, "Shared Q/A", "Test concurrent collaboration")
         source = "session:11111111-1111-4111-8111-111111111111"
         package = {
@@ -184,8 +190,29 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 },
             ],
         }
-        user: ContextVar[str] = ContextVar("qa-test-user", default="")
         identities = ("n@example.org", "z@example.org")
+        user: ContextVar[str] = ContextVar("qa-test-user", default=identities[0])
+        (root / "z-private").mkdir()
+        principals = {
+            email: Principal(subject=f"google-{i}", email=email, role="member")
+            for i, email in enumerate(identities)
+        }
+        workspaces = {
+            email: Workspace(
+                workspace_id=f"workspace-{i}",
+                subject_hash=f"subject-hash-{i}",
+                path=root if i == 0 else root / "z-private",
+                email=email,
+                verified_subject=principals[email].subject,
+            )
+            for i, email in enumerate(identities)
+        }
+
+        def connect(_root: Path) -> sqlite3.Connection:
+            db = sqlite3.connect(root / "collaboration.sqlite3", timeout=10, isolation_level=None)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA busy_timeout=10000")
+            return db
         provider_started: set[str] = set()
         provider_calls = 0
 
@@ -249,20 +276,41 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                     return_value={"summary": "Independent saved context"},
                 ),
                 patch(
-                    "sigma.project_collaboration.collaborator_identity",
-                    side_effect=lambda _path: user.get(),
+                    "sigma.project_collaboration.cloud_workspaces.current",
+                    side_effect=lambda: workspaces[user.get()],
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_auth.current_principal",
+                    side_effect=lambda: principals[user.get()],
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_workspaces.storage_root",
+                    return_value=root,
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_workspaces._connect",
+                    side_effect=connect,
                 ),
             ):
+                shared.register_owner(view)
+                shared.save_settings(
+                    str(path), 0, [identities[1]], "gpt-6.1-sol", "high", view.project.title
+                )
+                assert shared.summary(str(path))["collaborators"] == [identities[1]]
                 first_task = asyncio.create_task(submit(identities[0], "1" * 32))
                 second_task = asyncio.create_task(submit(identities[1], "2" * 32))
                 try:
                     await asyncio.wait_for(both_entered.wait(), timeout=5)
                     # Source work and shared project editing cannot wait for
                     # either outstanding provider call to release its lock.
-                    modified = create_strategy(
-                        path, "Edited while Q/A was running", "Independent collaborator edit"
+                    modified = api.create_strategy_view(
+                        api.CreateStrategyRequest(
+                            path=str(path),
+                            title="Edited while Q/A was running",
+                            approach="Independent collaborator edit",
+                        )
                     )
-                    assert len(modified.project.strategies) == 1
+                    assert len(modified["project"]["strategies"]) == 1
                 finally:
                     allow_completion.set()
                 first, second = await asyncio.wait_for(
@@ -275,6 +323,11 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 assert first["sources"][0]["source_id"] == source
                 assert second["sources"][0]["source_id"] == source
                 assert len(research_qa.list_answers(str(path))) == 2
+                assert len(inspect_project(path).project.strategies) == 1
+                assert (
+                    inspect_project(path).project.strategies[0].title
+                    == "Edited while Q/A was running"
+                )
                 assert research_qa.list_pending_answers(str(path)) == []
                 assert provider_calls == 2
 
@@ -289,6 +342,47 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 assert provider_calls == 2
                 assert len(research_qa.list_answers(str(path))) == 2
 
+                # Revoke Z using the actual project settings mutation, not a
+                # direct SQLite DELETE. Its active lease must not lock out N.
+                token = user.set(identities[1])
+                try:
+                    lease = shared.acquire_lease(str(path), "Paper generation")
+                    assert lease is not None
+                finally:
+                    user.reset(token)
+                settings = project_settings(inspect_project(path).project)
+                revision = shared.summary(str(path))["revision"]
+                updated = update_project(
+                    path,
+                    settings.title,
+                    settings.problem,
+                    settings.investigation_type,
+                    settings.ai_model,
+                    settings.reasoning_effort,
+                    asdict(settings),
+                    difficulty=settings.difficulty,
+                    desired_outcomes=settings.desired_outcomes,
+                    paper_requirements=settings.paper_requirements,
+                    expected_revision=revision,
+                    collaborators=[],
+                )
+                assert updated.project.id == view.project.id
+                assert shared.summary(str(path))["collaborators"] == []
+                assert not shared.renew_lease(str(path), lease)
+                token = user.set(identities[1])
+                try:
+                    try:
+                        shared.reserve_execution_run(
+                            str(path), "session", "3" * 32, 0, model="mock", thinking="low"
+                        )
+                    except ValueError as exc:
+                        assert "access denied" in str(exc)
+                    else:
+                        raise AssertionError("Revoked collaborator admitted another run")
+                finally:
+                    user.reset(token)
+                assert len(inspect_project(path).project.strategies) == 1
+
         asyncio.run(exercise())
 
         # A backend restart must recover both independently attributed answers
@@ -302,7 +396,9 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                     "rows=list_answers(sys.argv[1]); "
                     "assert len(rows)==2; "
                     "assert {row['created_by'] for row in rows}"
-                    "=={'n@example.org','z@example.org'}"
+                    "=={'n@example.org','z@example.org'}; "
+                    "from sigma.projects import inspect_project; "
+                    "assert len(inspect_project(sys.argv[1]).project.strategies)==1"
                 ),
                 str(path),
             ],
