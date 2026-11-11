@@ -275,6 +275,12 @@ def run_tooling(command: str) -> int:
                 owner = 1
             elif step == ["npm", "--prefix", "frontend", "run", "build"]:
                 owner = 7
+            elif "tests/crucible_scheduler_evidence.py" in step:
+                owner = 1
+            elif "tests/papers_part2.py" in step:
+                owner = 5
+            elif "tests/sage_execution.py" in step:
+                owner = 3
             elif extra_half:
                 owner = 8 if extra_half_b else 6
             else:
