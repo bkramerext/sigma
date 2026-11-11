@@ -15664,7 +15664,9 @@ async def _ensure_mandatory_dispatch_preflight(session_id: str, path: str) -> bo
             if branch.get("status") in {"queued", "running"}
         ]
         if not active:
-            return True
+            # A fully paused/completed portfolio cannot justify spending on
+            # optional reference compilation merely because Resume was clicked.
+            return False
         oversized: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for branch in active:
             mandatory = _mandatory_dispatch_lower_bound(record, branch)
