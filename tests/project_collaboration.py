@@ -1499,12 +1499,17 @@ class CollaborationTests(TestCase):
             with papers.paper_run_scope(paper_run):
                 papers._write_queue_status(self.path, "queued", papers._now())
             shared.require_execution_operator(self.path, "session", session_run, "research")
+            lease = shared.acquire_lease(self.path, "Research session")
+            self.assertIsNotNone(lease)
 
-        with shared._db() as db:
-            db.execute(
-                "DELETE FROM shared_collaborators WHERE path=? AND email=?",
-                (self.path, self.other.email),
-            )
+        # Exercise the actual owner settings path while the revoked creator
+        # holds a live execution lease. Revocation must invalidate that lease.
+        revision = shared.summary(self.path, verify_revision=True)["revision"]
+        saved = shared.save_settings(
+            self.path, revision, [], "gpt-6.1-sol", "high", "Shared project"
+        )
+        self.assertTrue(saved["changed"])
+        self.assertFalse(shared.renew_lease(self.path, lease))
 
         with (
             patch("sigma.project_collaboration.cloud_workspaces.current", return_value=member),
@@ -1528,6 +1533,12 @@ class CollaborationTests(TestCase):
                 shared.reserve_execution_run(
                     self.path, "session", str(uuid4()), 1, model="stale", thinking="low"
                 )
+            # Neither kind may replay an existing reservation after removal.
+            for kind, run_id in (("paper", paper_run), ("session", session_run)):
+                with self.subTest(kind=kind), self.assertRaises(ValueError):
+                    shared.reserve_execution_run(
+                        self.path, kind, run_id, 0, model="stale", thinking="low"
+                    )
 
         # Revocation protects access without erasing the original attribution
         # or the owner's visibility into retained, unfinished work.
@@ -1535,6 +1546,10 @@ class CollaborationTests(TestCase):
         self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0]["creator_email"], self.other.email)
         self.assertEqual(runs[0]["run_id"], paper_run)
+        session_runs = shared.list_execution_runs(self.path, "session")
+        self.assertEqual(len(session_runs), 1)
+        self.assertEqual(session_runs[0]["creator_email"], self.other.email)
+        self.assertEqual(session_runs[0]["run_id"], session_run)
         # The durable ledger records an accepted reservation; the separate
         # crash-safe Paper sidecar records the queued execution phase.
         self.assertEqual(runs[0]["status"], "reserved")
