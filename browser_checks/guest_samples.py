@@ -272,8 +272,10 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         )
         sample_group.evaluate("element => { element.open = true; }")
         with page.expect_response(
-            lambda response: response.url.endswith("/api/projects/samples/open")
-            and response.request.method == "POST"
+            lambda response: (
+                response.url.endswith("/api/projects/samples/open")
+                and response.request.method == "POST"
+            )
         ) as opened_response:
             sample_group.locator("button.sample-open").click()
         expect(
