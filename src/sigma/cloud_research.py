@@ -1106,7 +1106,7 @@ def reconcile_orphaned_jobs() -> list[str]:
     try:
         with _connect() as db:
             candidates = db.execute(
-                "SELECT session_id,project_id,project_relpath,status FROM jobs WHERE workspace_id=? AND status IN ('queued','running','stopping') AND process_epoch<>?",
+                "SELECT session_id,project_id,project_relpath,status,process_epoch FROM jobs WHERE workspace_id=? AND status IN ('queued','running','stopping') AND process_epoch<>?",
                 (owner, _PROCESS_EPOCH),
             ).fetchall()
     except sqlite3.Error as exc:
@@ -1238,13 +1238,19 @@ def reconcile_orphaned_jobs() -> list[str]:
                             recovered_state = "interrupted"
                         with _transaction() as db:
                             db.execute(
-                                "UPDATE jobs SET status=?,updated_at=? WHERE session_id=? AND workspace_id=? AND status IN ('queued','running','stopping')",
-                                (recovered_state, _now(), session_id, owner),
+                                "UPDATE jobs SET status=?,updated_at=? WHERE session_id=? AND workspace_id=? AND process_epoch=? AND status IN ('queued','running','stopping')",
+                                (
+                                    recovered_state,
+                                    _now(),
+                                    session_id,
+                                    owner,
+                                    candidate["process_epoch"],
+                                ),
                             )
                     else:
                         # Keep the job and call ledger as spending history;
                         # recover_job marks uncertain reservations unknown.
-                        recover_job(session_id)
+                        recover_job(session_id, expected_epoch=candidate["process_epoch"])
                     continue
                 if has_session:
                     continue
@@ -1364,23 +1370,36 @@ def release_job(session_id: str, *, paused: bool = False) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-def recover_job(session_id: str) -> None:
-    """Release a process-dead worker slot only after its project lock is free."""
+def recover_job(session_id: str, *, expected_epoch: str | None = None) -> None:
+    """Reclaim a dead slot without changing a newer worker's ownership.
+
+    Callers must first prove the OS worker lock is free. When reconciliation
+    began with a prior-epoch snapshot, an epoch mismatch leaves both the slot
+    and its in-flight billing reservations untouched.
+    """
     owner = _workspace_id()
     try:
         with _transaction() as db:
             row = db.execute(
-                "SELECT workspace_id FROM jobs WHERE session_id=?", (session_id,)
+                "SELECT workspace_id,process_epoch FROM jobs WHERE session_id=?",
+                (session_id,),
             ).fetchone()
-            if row and row["workspace_id"] == owner:
-                db.execute(
-                    "UPDATE jobs SET status='interrupted',updated_at=? WHERE session_id=? AND status IN ('running','stopping')",
-                    (_now(), session_id),
-                )
-                db.execute(
-                    "UPDATE calls SET status='unknown',updated_at=? WHERE session_id=? AND status='reserved'",
-                    (_now(), session_id),
-                )
+            if (
+                not row
+                or row["workspace_id"] != owner
+                or (expected_epoch is not None and row["process_epoch"] != expected_epoch)
+            ):
+                return
+            db.execute(
+                "UPDATE jobs SET status='interrupted',updated_at=? "
+                "WHERE session_id=? AND workspace_id=? AND status IN ('running','stopping')",
+                (_now(), session_id, owner),
+            )
+            db.execute(
+                "UPDATE calls SET status='unknown',updated_at=? "
+                "WHERE session_id=? AND workspace_id=? AND status='reserved'",
+                (_now(), session_id, owner),
+            )
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
