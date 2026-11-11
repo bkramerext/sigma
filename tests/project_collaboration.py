@@ -1106,6 +1106,65 @@ class CollaborationTests(TestCase):
         ):
             self.assertFalse(shared.authorized_shared_path(Path(self.path)))
 
+    def test_collaborator_sees_owner_paper_activity_before_and_after_share(self) -> None:
+        """A creator stays visible to another account without lease attribution."""
+        from sigma import papers, recents
+
+        shared.reserve_paper_draft(self.path, "saved-project", resuming=False)
+        project = SimpleNamespace(
+            id="saved-project", ai_model="gpt-6.1-sol", reasoning_effort="high"
+        )
+        with (
+            patch.object(
+                papers,
+                "progress_status",
+                return_value={"model": "gpt-paper", "reasoning_effort": "low"},
+            ),
+            patch.object(papers, "next_paper_number_for_activity", return_value=2),
+        ):
+            # Zero collaborators must not erase the original owner's authorship.
+            with shared._db() as db:
+                db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
+            owner_runs = recents.project_activity_runs(
+                self.path,
+                project=project,
+                paper_status="active",
+                session_active=False,
+                pending_answers=[],
+            )
+            self.assertEqual(owner_runs[0]["creator"], self.owner.email)
+            with shared._db() as db:
+                db.execute(
+                    "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
+                    (self.path, self.other.email),
+                )
+            colleague = Workspace(
+                workspace_id="collaborator-workspace",
+                subject_hash="collaborator-hash",
+                path=self.root,
+                email=self.other.email,
+                verified_subject=self.other.subject,
+            )
+            with (
+                patch(
+                    "sigma.project_collaboration.cloud_workspaces.current",
+                    return_value=colleague,
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_auth.current_principal",
+                    return_value=self.other,
+                ),
+            ):
+                collaborator_runs = recents.project_activity_runs(
+                    self.path,
+                    project=project,
+                    paper_status="active",
+                    session_active=False,
+                    pending_answers=[],
+                )
+            self.assertEqual(collaborator_runs[0]["creator"], self.owner.email)
+            self.assertEqual(collaborator_runs[0]["model"], "gpt-paper")
+
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:
             try:
