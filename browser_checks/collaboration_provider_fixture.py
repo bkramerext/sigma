@@ -10,7 +10,9 @@ import asyncio
 
 from fastapi import HTTPException
 
-from sigma import papers, research_qa, research_sessions
+from sigma import papers, project_collaboration, research_qa, research_sessions
+from sigma.projects import inspect_project
+from uuid import uuid4
 from sigma.api import app
 
 _started: list[str] = []
@@ -45,6 +47,72 @@ def freeze_mock_sessions(body: dict[str, str]):
 
     research_sessions.has_active_session = simulated_liveness
     return {"frozen": True}
+
+
+# The Paper fixture uses the real serialized Paper gate and durable run ledger.
+# It never invokes model inference, scoring, publication, or PDF generation;
+# full two-PDF verification belongs to #769.
+_paper_holds: dict[str, tuple[str, asyncio.Event, asyncio.Task[None]]] = {}
+
+
+async def held_paper(path: str, run_id: str, number: int, release: asyncio.Event) -> None:
+    with papers.paper_run_scope(run_id, number=number):
+        async with papers._paper_operation(path, generating=True):
+            key = papers._paper_state_key(path)
+            now = papers._now()
+            papers._active_progress[key] = {
+                "run_id": uuid4().hex,
+                "status": "running",
+                "stage": "writing",
+                "current": 0,
+                "total": 1,
+                "started_at": now,
+                "updated_at": now,
+                "elapsed_seconds": 0,
+                "model": "fixture-model",
+                "reasoning_effort": "medium",
+            }
+            try:
+                await asyncio.wait_for(release.wait(), timeout=30)
+            finally:
+                papers._active_progress.pop(key, None)
+
+
+@app.post("/api/__fixture/collaboration-paper-start")
+async def start_held_paper(body: dict[str, str]):
+    path = body.get("path", "")
+    if not isinstance(path, str) or not path:
+        raise HTTPException(400, "Missing project path")
+    view = inspect_project(path)
+    project_collaboration.register_owner(view)
+    run_id = uuid4().hex
+    receipt = project_collaboration.reserve_execution_run(
+        path, "paper", run_id, papers.next_paper_number_for_activity(path) - 1,
+        model="fixture-model", thinking="medium",
+    )
+    if receipt is None:
+        raise HTTPException(409, "Paper admission unavailable")
+    release = asyncio.Event()
+    task = asyncio.create_task(held_paper(path, run_id, receipt["number"], release))
+    _paper_holds[run_id] = (path, release, task)
+    return {"run_id": run_id, "number": receipt["number"]}
+
+
+@app.post("/api/__fixture/collaboration-paper-release")
+async def release_held_paper(body: dict[str, str]):
+    run_id = body.get("run_id", "")
+    path = body.get("path", "")
+    if not isinstance(run_id, str) or run_id not in _paper_holds:
+        raise HTTPException(404, "Fixture Paper run unavailable")
+    saved_path, release, task = _paper_holds[run_id]
+    if path != saved_path:
+        raise HTTPException(403, "Incorrect shared project")
+    project_collaboration.execution_run(path, "paper", run_id, operator=True)
+    release.set()
+    await asyncio.wait_for(task, timeout=5)
+    project_collaboration.discard_execution_run(path, "paper", run_id)
+    _paper_holds.pop(run_id, None)
+    return {"released": run_id}
 
 
 @app.get("/api/__fixture/collaboration-qa-state")
