@@ -851,9 +851,11 @@ def verify_new_windows_inherit_latest_google_account(browser, ui: str) -> None:
         logout_requests = []
         third.on(
             "request",
-            lambda request: logout_requests.append(request)
-            if request.url.endswith("/api/cloud-auth/logout")
-            else None,
+            lambda request: (
+                logout_requests.append(request)
+                if request.url.endswith("/api/cloud-auth/logout")
+                else None
+            ),
         )
         third.get_by_role("button", name="Sign out of Google", exact=True).click()
         expect(third.get_by_role("link", name="Sign in with Google")).to_be_visible()
