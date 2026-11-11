@@ -848,7 +848,7 @@ def execution_run(
     path: str, kind: str, run_id: str, *, operator: bool = False, missing_ok: bool = False
 ) -> dict[str, Any] | None:
     """A reserved run has one permanent owner, including before invitations."""
-    from sigma.projects import ProjectError
+    from sigma.projects import ProjectError, project_path
 
     if kind not in {"paper", "session"}:
         raise ValueError("Unknown run kind")
@@ -857,6 +857,7 @@ def execution_run(
         return None
     if workspace.guest:
         raise ProjectError("Execution not found or access denied.")
+    path = str(project_path(path))
     with _db() as db:
         _membership(db, path)
         row = db.execute(
@@ -876,12 +877,13 @@ def execution_run(
 
 def discard_execution_run(path: str, kind: str, run_id: str) -> None:
     """Tombstone an explicitly discarded unpublished run; never reuse its number."""
-    from sigma.projects import ProjectError
+    from sigma.projects import ProjectError, project_path
 
     if kind not in {"paper", "session"}:
         raise ValueError("Unknown run kind")
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
+    path = str(project_path(path))
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
         _membership(db, path)
@@ -936,10 +938,13 @@ def require_execution_operator(
     require_active_lease: bool = False,
 ) -> None:
     """Authorize an executor independently of the owner's artifact-delete privilege."""
-    from sigma.projects import ProjectError
+    from sigma.projects import ProjectError, project_path
 
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
+    # Check the canonical workspace ACL before reading shared authorship.
+    # An uninvited account gets the normal hidden 404 instead of ValueError.
+    path = str(project_path(path))
     with _db() as db:
         if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
             return  # Private, unregistered projects have no collaboration ACL.
@@ -1109,12 +1114,15 @@ def require_artifact_manager(
     path: str, kind: str, artifact_id: str, *, owner_terminal: bool = True
 ) -> None:
     """Creators manage their own artifacts; owners remove others' terminal work only."""
-    from sigma.projects import ProjectError
+    from sigma.projects import ProjectError, project_path
 
     if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
         return
     if kind not in {"session", "paper", "answer"}:
         raise ValueError("Unknown artifact kind")
+    # Validate the workspace ACL before the creator/owner lookup, including
+    # forged cross-workspace deletes for Papers, Sessions, and Q/A.
+    path = str(project_path(path))
     with _db() as db:
         if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
             return  # Unregistered private projects have no collaboration ACL.
