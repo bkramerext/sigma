@@ -4747,6 +4747,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   const [answers, setAnswers] = useState<ResearchQARecord[]>([]);
   const [pendingAnswers, setPendingAnswers] = useState<{ request_id: string; creator: string; model: string; thinking: string }[]>([]);
   const [binding, setBinding] = useState('');
+  const [configError, setConfigError] = useState('');
   const [model, setModel] = useState('');
   const [effort, setEffort] = useState('');
   const [loading, setLoading] = useState(true);
@@ -4775,21 +4776,62 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     if (!silent) setLoading(true);
     try {
       const q = new URLSearchParams({ path });
-      const [listResponse, configResponse] = await Promise.all([
-        fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' }),
-        silent ? Promise.resolve(null) : fetch(`/api/projects/proposals/config?${q}`, { cache: 'no-store' }),
-      ]);
-      const list = await listResponse.json();
-      const config = configResponse ? await configResponse.json() : null;
-      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
+      const response = await fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' });
+      const list = await response.json();
+      if (!response.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
       const saved = (list.answers ?? []) as ResearchQARecord[];
       if (typeof list.archive_available !== 'boolean') throw new Error('Could not verify the saved Q/A archive.');
       setAnswers(saved);
-      if (configResponse?.ok && config) { setBinding(config.binding); setModel(config.model); setEffort(config.reasoning_effort); }
       return { answers: saved, archiveAvailable: list.archive_available };
     } catch (cause) { setError(errorMessage(cause)); return null; }
     finally { if (!silent) setLoading(false); }
   }
+  useEffect(() => {
+    if (guest) return;
+    const controller = new AbortController();
+    let requesting = false;
+    let retryTimer: number | undefined;
+    const loadConfiguration = async () => {
+      if (controller.signal.aborted || requesting) return;
+      requesting = true;
+      const attempt = new AbortController();
+      const abortAttempt = () => attempt.abort();
+      controller.signal.addEventListener('abort', abortAttempt, { once: true });
+      // A hung configuration read must also be retried, not just a failed one.
+      const timeout = window.setTimeout(abortAttempt, 8000);
+      try {
+        const response = await fetch(
+          `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
+          { cache: 'no-store', signal: attempt.signal, headers: { 'X-Sigma-Error-Handled': 'true' } },
+        );
+        const current = await response.json();
+        if (!response.ok || !current.available || typeof current.binding !== 'string' || !current.binding) {
+          throw new Error(current.error ?? current.message ?? 'Model configuration is unavailable.');
+        }
+        if (controller.signal.aborted) return;
+        setBinding(current.binding);
+        setModel(current.model ?? '');
+        setEffort(current.reasoning_effort ?? '');
+        setConfigError('');
+        if (retryTimer !== undefined) window.clearInterval(retryTimer);
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          const detail = attempt.signal.aborted ? 'Request timed out' : errorMessage(cause);
+          setConfigError(`Could not load model settings: ${detail}. Retrying…`);
+        }
+      } finally {
+        window.clearTimeout(timeout);
+        controller.signal.removeEventListener('abort', abortAttempt);
+        requesting = false;
+      }
+    };
+    // Never leave Ask permanently disabled after a transient configuration
+    // failure. Retry only the read; never resubmit an answer/provider call.
+    retryTimer = window.setInterval(() => void loadConfiguration(), 3500);
+    void loadConfiguration();
+    return () => { controller.abort(); if (retryTimer !== undefined) window.clearInterval(retryTimer); };
+  }, [guest, path]);
+
   useEffect(() => {
     if (guest) return;
     let closed = false;
@@ -4909,6 +4951,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
         <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
+        {configError && <p role="alert" className="error">{configError}</p>}
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
         {pendingAnswers.length > 0 && <section aria-label="Q/A in progress">
           {pendingAnswers.map(pending => <p className="ai-paper-status" role="status" key={pending.request_id}>
