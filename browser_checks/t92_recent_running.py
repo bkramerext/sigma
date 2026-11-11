@@ -118,12 +118,14 @@ with sync_playwright() as playwright:
     project_groups_title.click()
     assert sample_groups.evaluate_all(
         "groups => groups.every(group => group.open)"
-        if sample_initially_closed else "groups => groups.every(group => !group.open)"
+        if sample_initially_closed
+        else "groups => groups.every(group => !group.open)"
     )
     project_groups_title.click()
     assert sample_groups.evaluate_all(
         "groups => groups.every(group => !group.open)"
-        if sample_initially_closed else "groups => groups.every(group => group.open)"
+        if sample_initially_closed
+        else "groups => groups.every(group => group.open)"
     )
     sample_group = samples.locator("details.sample-type-group").filter(has_text="Mathematics")
     if not sample_group.evaluate("group => group.open"):
@@ -172,12 +174,14 @@ with sync_playwright() as playwright:
     project_groups_title.click()
     assert recent_groups.evaluate_all(
         "groups => groups.every(group => group.open)"
-        if recent_initially_closed else "groups => groups.every(group => !group.open)"
+        if recent_initially_closed
+        else "groups => groups.every(group => !group.open)"
     )
     project_groups_title.click()
     assert recent_groups.evaluate_all(
         "groups => groups.every(group => !group.open)"
-        if recent_initially_closed else "groups => groups.every(group => group.open)"
+        if recent_initially_closed
+        else "groups => groups.every(group => group.open)"
     )
     # Most Recent has no grouped hierarchy and Projects is not a toggle there.
     page.get_by_role("tab", name="Most Recent").click()
