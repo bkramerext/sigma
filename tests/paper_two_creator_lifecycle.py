@@ -103,7 +103,6 @@ async def _exercise() -> None:
         openai_connection,
         paper_scores,
         papers,
-        project_collaboration,
     )
 
     principals = {
@@ -147,7 +146,9 @@ async def _exercise() -> None:
                 await asyncio.wait_for(release_first.wait(), timeout=60)
             else:
                 second_entered.set()
-            ref = next(source["id"] for source in package["sources"] if source["kind"] == "project")
+            ref = next(
+                source["id"] for source in package["sources"] if source["kind"] == "project"
+            )
             value = draft(ref)
             return value.model_copy(
                 update={"title": f"Independent Paper by {name.upper()} collaborator"}
@@ -167,6 +168,20 @@ async def _exercise() -> None:
         "model": "gpt-6-luna",
         "reasoning_effort": "high",
     }
+    real_compile = papers._compile_pdf
+    fail_first_z_compile = True
+
+    def compile_fixture(*args, **kwargs):
+        # Exercise recovery from a deterministic, pre-compilation failure
+        # after Z's authored draft is saved. The successful outputs still use
+        # the real TeX compiler; no PDF bytes or publication calls are mocked.
+        nonlocal fail_first_z_compile
+        principal = cloud_auth.current_principal()
+        if principal is not None and principal.subject == "paper-z" and fail_first_z_compile:
+            fail_first_z_compile = False
+            raise RuntimeError("Fixture: TeX compiler interrupted before producing a PDF")
+        return real_compile(*args, **kwargs)
+
     app = cloud_workspace_test_app.app
     async with (
         httpx.AsyncClient(
@@ -244,6 +259,7 @@ async def _exercise() -> None:
             patch.object(papers, "configuration", return_value=config),
             patch.object(papers, "_provider", new=author),
             patch.object(papers, "_provider_structured", new=proofread),
+            patch.object(papers, "_compile_pdf", new=compile_fixture),
             patch.object(paper_scores, "score_paper", new=score_fixture),
         ):
             try:
@@ -315,7 +331,32 @@ async def _exercise() -> None:
                 await _wait_for(z_is_queued)
                 assert not second_entered.is_set()
                 release_first.set()
-                z_finished = _completed(await asyncio.wait_for(z_resumed, timeout=90))
+                failed_compilation = await asyncio.wait_for(z_resumed, timeout=90)
+                assert failed_compilation.status_code == 200, failed_compilation.text
+                assert '"type": "error"' in failed_compilation.text or (
+                    '"type":"error"' in failed_compilation.text
+                )
+                assert not fail_first_z_compile
+                still_only_n = await n.get("/api/projects/papers", params={"path": path})
+                assert still_only_n.status_code == 200, still_only_n.text
+                assert len(still_only_n.json()["papers"]) == 1, still_only_n.text
+                # Preserve and reuse Z's authoring checkpoint. Resume must
+                # compile the draft without another author/provider call.
+                token = cloud_workspaces.bind(principals["z"])
+                principal_token = cloud_auth._CURRENT_PRINCIPAL.set(principals["z"])
+                try:
+                    with papers.paper_run_scope(run_ids["z"]):
+                        checkpoint = papers._load_work(path)
+                    assert checkpoint is not None
+                    assert checkpoint["one_shot_draft"]
+                    assert checkpoint["provider_calls"] == 1
+                finally:
+                    cloud_auth._CURRENT_PRINCIPAL.reset(principal_token)
+                    cloud_workspaces.reset(token)
+                assert authoring_order == ["n", "z"], authoring_order
+                z_finished = _completed(
+                    await z.post("/api/projects/papers", json=bodies["z"])
+                )
             finally:
                 release_first.set()
 
@@ -379,7 +420,10 @@ async def _exercise() -> None:
                 }
         # A reconnect or a changed viewer cannot re-assign either published run.
         assert len({paper["paper_id"] for paper in saved}) == 2
-        print("PASS #769: authenticated N/Z, FIFO, Stop/Resume, reconnect, two compiled readable PDFs")
+        print(
+            "PASS #769: authenticated N/Z, FIFO, Stop/Resume, reconnect, "
+            "saved checkpoint reuse and two compiled readable PDFs"
+        )
 
 
 def main() -> None:
