@@ -182,6 +182,8 @@ def check_failures() -> None:
         elif "tests/crucible_scheduler_evidence.py" in step:
             owner = "1"
         elif "tests/papers_part2.py" in step:
+            owner = "3"
+        elif "tests/research_sessions_part2.py" in step:
             owner = "5"
         elif "tests/sage_execution.py" in step:
             owner = "1"
@@ -212,7 +214,8 @@ def check_failures() -> None:
     # Runtime-based moves must remain disjoint, exhaustive and intentional.
     for shard, filename in (
         ("1", "tests/crucible_scheduler_evidence.py"),
-        ("5", "tests/papers_part2.py"),
+        ("3", "tests/papers_part2.py"),
+        ("5", "tests/research_sessions_part2.py"),
         ("1", "tests/sage_execution.py"),
         ("2", "tests/storage.py"),
         ("4", "pyright"),
