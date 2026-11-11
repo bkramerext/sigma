@@ -5064,7 +5064,14 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       if (!response.ok) throw new Error(data.error ?? 'Project settings are unavailable.');
       return data;
     };
-    // Membership must remain editable even if the model provider is down.
+    // An unavailable collaboration endpoint must never trap the Settings
+    // modal in Loading or disable its close button indefinitely.
+    const timeout = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
+      controller.abort();
+      setError('Shared project settings could not be loaded.');
+      setLoading(false);
+    }, 8000);
     void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`)
       .then((saved: SharedProjectInfo) => {
         if (controller.signal.aborted) return;
@@ -5073,8 +5080,8 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
         setLoading(false);
       }).catch(cause => {
         if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
-      });
-    return () => controller.abort();
+      }).finally(() => window.clearTimeout(timeout));
+    return () => { window.clearTimeout(timeout); controller.abort(); };
   }, [initial.path]);
   const nonOwnerCollaborator = !!shared?.owner && shared.owner !== shared.you;
   const canEditClassification = !!shared && !nonOwnerCollaborator;
@@ -5138,7 +5145,8 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
     return () => window.clearTimeout(timer);
   }, [loading, busy, changed, shared, projectType, difficulty, collaborators, error]);
   async function close() {
-    if (busy || loading) return;
+    if (busy) return;
+    if (loading) { onCancel(); return; }
     if (changed) {
       if (!await save()) return;
     }
@@ -5151,7 +5159,7 @@ function ProjectClassificationDialog({ initial, onSaved, onCancel }: {
       <header className="settings-header">
         <h2 id="sigma-project-classification-title">Project Settings</h2>
         <div className="settings-actions">
-          <DialogDismissButton label="Close Project Settings" disabled={busy || loading} onClick={() => void close()}/>
+          <DialogDismissButton label="Close Project Settings" disabled={busy} onClick={() => void close()}/>
         </div>
       </header>
       <div className="settings-body">

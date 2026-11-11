@@ -31,6 +31,7 @@ import jwt
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
 from sigma.config_secrets import SecretConfigurationError, secret_value
 
@@ -511,17 +512,23 @@ def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str)
     """
     if not subject or subject.startswith("legacy-denied:"):
         return False
-    now = _now()
     domain = email.rsplit("@", 1)[1]
-    # Prior versions left an inactive email tombstone on Remove. Clear it
-    # only if this email currently qualifies for active domain membership.
-    # Keep audit and historical usage untouched.
-    db.execute(
-        "DELETE FROM grants WHERE kind='email' AND value=? AND active=0 "
-        "AND EXISTS(SELECT 1 FROM grants WHERE kind='domain' AND value=? "
-        "AND role='member' AND active=1)",
-        (email, domain),
-    )
+    # Authenticated requests must avoid redundant domain grant DML.
+    domain_grant = db.execute(
+        "SELECT 1 FROM grants WHERE kind='domain' AND value=? AND role='member' AND active=1",
+        (domain,),
+    ).fetchone()
+    if domain_grant is None:
+        return False
+    personal_grant = db.execute(
+        "SELECT active FROM grants WHERE kind='email' AND value=?", (email,)
+    ).fetchone()
+    if personal_grant is not None and personal_grant["active"]:
+        return False
+    now = _now()
+    if personal_grant is not None:
+        # Only a live domain grant may supersede a historical revocation.
+        db.execute("DELETE FROM grants WHERE kind='email' AND value=? AND active=0", (email,))
     inserted = db.execute(
         "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
         "SELECT 'email',?,'member',1,?,d.allowance_usd FROM grants AS d "
@@ -656,10 +663,17 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 (principal.subject,),
             )
         if not sponsored_access_enabled():
-            db.execute(
-                "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",
+            outdated = db.execute(
+                "SELECT 1 FROM user_state WHERE subject=? "
+                "AND (model_access!='personal' OR sponsorship_eligible!=0)",
                 (principal.subject,),
-            )
+            ).fetchone()
+            if outdated:
+                db.execute(
+                    "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 "
+                    "WHERE subject=?",
+                    (principal.subject,),
+                )
         row = db.execute(
             "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_access_selected,model_connection_status,invitation_welcome_pending FROM user_state WHERE subject=?",
             (principal.subject,),
@@ -695,6 +709,30 @@ def _upsert_user_state(
     sponsorship_eligible: int,
     model_access: str,
 ) -> None:
+    current = db.execute(
+        "SELECT email,role,access_active,workspace_id,sponsorship_eligible,"
+        "model_access,model_access_selected FROM user_state WHERE subject=?",
+        (subject,),
+    ).fetchone()
+    if current is not None:
+        selected = current["model_access_selected"] if sponsorship_eligible else 0
+        effective_mode = (
+            "personal"
+            if not sponsorship_eligible
+            else model_access
+            if not selected
+            else current["model_access"]
+        )
+        if (
+            current["email"] == email
+            and current["role"] == role
+            and bool(current["access_active"])
+            and current["workspace_id"] == workspace_id
+            and current["sponsorship_eligible"] == sponsorship_eligible
+            and current["model_access"] == effective_mode
+            and current["model_access_selected"] == selected
+        ):
+            return  # Account-status reads must not acquire a SQLite writer lock.
     db.execute(
         """INSERT INTO user_state(subject,email,role,access_active,workspace_id,
                sponsorship_eligible,model_access,model_access_selected,model_connection_status,updated_at)
@@ -900,16 +938,28 @@ def resolve_session(raw: str | None) -> Principal | None:
                 (_now(), row["subject"]),
             )
             return None
-        db.execute(
-            "UPDATE user_state SET role=?,access_active=1,sponsorship_eligible=?,model_access=CASE WHEN ? THEN model_access ELSE 'personal' END,updated_at=? WHERE subject=?",
-            (
-                role,
-                _sponsorship_eligibility_in_db(db, cfg, row["subject"], row["email"], role),
-                int(sponsored_access_enabled()),
-                _now(),
-                row["subject"],
-            ),
+        eligible = _sponsorship_eligibility_in_db(db, cfg, row["subject"], row["email"], role)
+        sponsored_enabled = sponsored_access_enabled()
+        saved = db.execute(
+            "SELECT role,access_active,sponsorship_eligible,model_access "
+            "FROM user_state WHERE subject=?",
+            (row["subject"],),
+        ).fetchone()
+        # Session validation is a read unless role/allowance/model access changed.
+        model_access = (
+            saved["model_access"] if saved is not None and sponsored_enabled else "personal"
         )
+        if saved is not None and (
+            saved["role"] != role
+            or not saved["access_active"]
+            or saved["sponsorship_eligible"] != eligible
+            or saved["model_access"] != model_access
+        ):
+            db.execute(
+                "UPDATE user_state SET role=?,access_active=1,sponsorship_eligible=?,"
+                "model_access=?,updated_at=? WHERE subject=?",
+                (role, eligible, model_access, _now(), row["subject"]),
+            )
         return Principal(row["subject"], row["email"], role)
 
 
@@ -1097,7 +1147,7 @@ async def middleware(request: Request, call_next):
     if public or demo_public:
         return await call_next(request)
     try:
-        principal = resolve_session(_raw_session(request, cfg))
+        principal = await run_in_threadpool(resolve_session, _raw_session(request, cfg))
     except (sqlite3.Error, OSError, RuntimeError):
         return JSONResponse(
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503

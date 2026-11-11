@@ -12,8 +12,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import sqlite3
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -22,7 +24,7 @@ from email.message import EmailMessage
 from functools import wraps
 from html import escape as html_escape
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import Any, TypeVar
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -33,13 +35,31 @@ LEASE_SECONDS = 120
 MAX_NOTIFICATION_ATTEMPTS = 3
 EMAIL = re.compile(r"^[a-z0-9][a-z0-9._+%-]{0,63}@[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$")
 LOGGER = logging.getLogger("sigma.collaboration")
+_SCHEMA_LOCK = Lock()
+_SCHEMA_READY: set[tuple[str, int, int, int]] = set()
 _LEASE_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
     "sigma_project_execution_lease", default=None
 )
-_WRITE_CONTEXT: ContextVar[tuple[str, sqlite3.Connection] | None] = ContextVar(
-    "sigma_project_write_transaction", default=None
+_WRITE_CONTEXT: ContextVar[tuple[str, sqlite3.Connection, tuple[int, int | None]] | None] = (
+    ContextVar("sigma_project_write_transaction", default=None)
 )
 _T = TypeVar("_T")
+
+
+def _write_context_owner() -> tuple[int, int | None]:
+    """Inherited asyncio contexts must not reuse another task's SQLite txn."""
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        task = None
+    return threading.get_ident(), id(task) if task is not None else None
+
+
+def _current_write_transaction() -> tuple[str, sqlite3.Connection] | None:
+    current = _WRITE_CONTEXT.get()
+    if current is None or current[2] != _write_context_owner():
+        return None
+    return current[0], current[1]
 
 
 @contextmanager
@@ -112,7 +132,7 @@ def _reconcile_project_digest(db: sqlite3.Connection, path: str) -> None:
 
 def note_project_published(path: str, contents: bytes) -> None:
     """Commit a project's new digest in its enclosing collaboration transaction."""
-    transaction = _WRITE_CONTEXT.get()
+    transaction = _current_write_transaction()
     if transaction is None or transaction[0] != str(path):
         return
     db = transaction[1]
@@ -154,7 +174,7 @@ def write_guard(
     from sigma.projects import ProjectError
 
     path = str(path)
-    existing = _WRITE_CONTEXT.get()
+    existing = _current_write_transaction()
     if existing is not None:
         if existing[0] != path:
             raise ProjectError("Nested writes across shared projects are unsupported.")
@@ -200,7 +220,7 @@ def write_guard(
                     f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
                 )
             _verify_fence(db, path, actor)
-            binding = _WRITE_CONTEXT.set((path, db))
+            binding = _WRITE_CONTEXT.set((path, db, _write_context_owner()))
             try:
                 yield db
                 if advance_revision:
@@ -229,7 +249,16 @@ def fenced_checkpoint(func: Callable[..., _T]) -> Callable[..., _T]:
 
     @wraps(func)
     def guarded(path: str, *args: Any, **kwargs: Any) -> _T:
-        with write_guard(path, advance_revision=not transient_status):
+        if _current_write_transaction() is not None or cloud_workspaces.current() is None:
+            # Already inside a serialized mutation, or the established local
+            # single-user/test persistence path without a collaboration DB.
+            with write_guard(path, advance_revision=not transient_status):
+                return func(path, *args, **kwargs)
+        # Ordinary checkpoint writes must not hold a global SQLite writer
+        # while waiting for this project's filesystem lock.
+        from sigma.projects import project_write_lock
+
+        with project_write_lock(path, advance_revision=not transient_status):
             return func(path, *args, **kwargs)
 
     return guarded
@@ -301,78 +330,105 @@ def _db() -> Iterator[sqlite3.Connection]:
     db = cloud_workspaces._connect(cloud_workspaces.storage_root())
     try:
         db.execute("PRAGMA foreign_keys=ON")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_projects (
-            path TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
-            owner_hash TEXT NOT NULL,
-            owner_email TEXT NOT NULL,
-            revision INTEGER NOT NULL DEFAULT 0,
-            project_sha256 TEXT,
-            model TEXT NOT NULL,
-            thinking TEXT NOT NULL,
-            last_writer TEXT NOT NULL,
-            updated_at REAL NOT NULL
-        )""")
-        project_columns = {
-            column["name"] for column in db.execute("PRAGMA table_info(shared_projects)")
-        }
-        if "project_sha256" not in project_columns:
-            db.execute("ALTER TABLE shared_projects ADD COLUMN project_sha256 TEXT")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_collaborators (
-            path TEXT NOT NULL,
-            email TEXT NOT NULL,
-            PRIMARY KEY(path, email),
-            FOREIGN KEY(path) REFERENCES shared_projects(path)
-        )""")
-        # Historical collaborators predate inviter tracking. Keep their author
-        # unknown rather than assigning a possibly incorrect collaborator.
-        # Such legacy entries remain removable by the owner.
-        member_columns = {
-            column["name"] for column in db.execute("PRAGMA table_info(shared_collaborators)")
-        }
-        if "added_by" not in member_columns:
-            db.execute("ALTER TABLE shared_collaborators ADD COLUMN added_by TEXT")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_leases (
-            path TEXT PRIMARY KEY,
-            token TEXT NOT NULL,
-            email TEXT NOT NULL,
-            activity TEXT NOT NULL,
-            started_at REAL NOT NULL,
-            expires_at REAL NOT NULL
-        )""")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_email_outbox (
-            id TEXT PRIMARY KEY,
-            recipient TEXT NOT NULL,
-            project_path TEXT NOT NULL,
-            project_title TEXT NOT NULL,
-            event TEXT NOT NULL,
-            created_at REAL NOT NULL,
-            sent_at REAL,
-            attempts INTEGER NOT NULL DEFAULT 0,
-            retry_after REAL NOT NULL DEFAULT 0,
-            failed_at REAL
-        )""")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_artifact_authors (
-            path TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            artifact_id TEXT NOT NULL,
-            email TEXT NOT NULL,
-            updated_at REAL NOT NULL,
-            PRIMARY KEY(path, kind, artifact_id),
-            FOREIGN KEY(path) REFERENCES shared_projects(path)
-        )""")
-        # Existing hosted databases have the earlier outbox schema.
-        fields = {row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")}
-        if "attempts" not in fields:
-            db.execute(
-                "ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
-            )
-        if "retry_after" not in fields:
-            db.execute(
-                "ALTER TABLE shared_email_outbox ADD COLUMN retry_after REAL NOT NULL DEFAULT 0"
-            )
-        if "failed_at" not in fields:
-            db.execute("ALTER TABLE shared_email_outbox ADD COLUMN failed_at REAL")
+        # Schema migration happens once per actual database inode, not on
+        # every read, activity poll, or unrelated account request.
+        db_file = next(
+            (row[2] for row in db.execute("PRAGMA database_list") if row[1] == "main"), ""
+        )
+        identity = None
+        if db_file:
+            info = os.stat(db_file)
+            # The inode alone cannot detect an in-place legacy schema restore.
+            # SQLite bumps schema_version whenever DDL changes the catalog.
+            schema_generation = db.execute("PRAGMA schema_version").fetchone()[0]
+            identity = (db_file, info.st_dev, info.st_ino, schema_generation)
+        if identity is None or identity not in _SCHEMA_READY:
+            with _SCHEMA_LOCK:
+                if identity is None or identity not in _SCHEMA_READY:
+                    db.execute("""CREATE TABLE IF NOT EXISTS shared_projects (
+                        path TEXT PRIMARY KEY,
+                        project_id TEXT NOT NULL,
+                        owner_hash TEXT NOT NULL,
+                        owner_email TEXT NOT NULL,
+                        revision INTEGER NOT NULL DEFAULT 0,
+                        project_sha256 TEXT,
+                        model TEXT NOT NULL,
+                        thinking TEXT NOT NULL,
+                        last_writer TEXT NOT NULL,
+                        updated_at REAL NOT NULL
+                    )""")
+                    project_columns = {
+                        column["name"]
+                        for column in db.execute("PRAGMA table_info(shared_projects)")
+                    }
+                    if "project_sha256" not in project_columns:
+                        db.execute("ALTER TABLE shared_projects ADD COLUMN project_sha256 TEXT")
+                    db.execute("""CREATE TABLE IF NOT EXISTS shared_collaborators (
+                        path TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        PRIMARY KEY(path, email),
+                        FOREIGN KEY(path) REFERENCES shared_projects(path)
+                    )""")
+                    # Historical collaborators predate inviter tracking. Keep their author
+                    # unknown rather than assigning a possibly incorrect collaborator.
+                    # Such legacy entries remain removable by the owner.
+                    member_columns = {
+                        column["name"]
+                        for column in db.execute("PRAGMA table_info(shared_collaborators)")
+                    }
+                    if "added_by" not in member_columns:
+                        db.execute("ALTER TABLE shared_collaborators ADD COLUMN added_by TEXT")
+                    db.execute("""CREATE TABLE IF NOT EXISTS shared_leases (
+                        path TEXT PRIMARY KEY,
+                        token TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        activity TEXT NOT NULL,
+                        started_at REAL NOT NULL,
+                        expires_at REAL NOT NULL
+                    )""")
+                    db.execute("""CREATE TABLE IF NOT EXISTS shared_email_outbox (
+                        id TEXT PRIMARY KEY,
+                        recipient TEXT NOT NULL,
+                        project_path TEXT NOT NULL,
+                        project_title TEXT NOT NULL,
+                        event TEXT NOT NULL,
+                        created_at REAL NOT NULL,
+                        sent_at REAL,
+                        attempts INTEGER NOT NULL DEFAULT 0,
+                        retry_after REAL NOT NULL DEFAULT 0,
+                        failed_at REAL
+                    )""")
+                    db.execute("""CREATE TABLE IF NOT EXISTS shared_artifact_authors (
+                        path TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        artifact_id TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        updated_at REAL NOT NULL,
+                        PRIMARY KEY(path, kind, artifact_id),
+                        FOREIGN KEY(path) REFERENCES shared_projects(path)
+                    )""")
+                    # Existing hosted databases have the earlier outbox schema.
+                    fields = {
+                        row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")
+                    }
+                    if "attempts" not in fields:
+                        db.execute(
+                            "ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
+                        )
+                    if "retry_after" not in fields:
+                        db.execute(
+                            "ALTER TABLE shared_email_outbox ADD COLUMN retry_after REAL NOT NULL DEFAULT 0"
+                        )
+                    if "failed_at" not in fields:
+                        db.execute("ALTER TABLE shared_email_outbox ADD COLUMN failed_at REAL")
+                    if identity is not None:
+                        # DDL increments schema_version. Cache the *post-migration*
+                        # generation; another process or a legacy restore changing
+                        # the schema will trigger validation again.
+                        latest_generation = db.execute("PRAGMA schema_version").fetchone()[0]
+                        _SCHEMA_READY.add(
+                            (identity[0], identity[1], identity[2], latest_generation)
+                        )
         yield db
     finally:
         db.close()
@@ -500,15 +556,18 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             "shared": False,
             "failed_notifications": 0,
         }
+    # Comparing project bytes is read-only. In the common case, opening
+    # Project Settings must not reserve the global SQLite writer slot.
+    digest = _project_digest(view.path) if verify_revision else None
     with _db() as db:
-        if verify_revision:
-            # The workspace status polls every five seconds; only opening the
-            # editor requests the potentially expensive file/bundle check.
-            db.execute("BEGIN IMMEDIATE")
         row, email = _membership(db, view.path)
-        if verify_revision:
+        if verify_revision and digest is not None and digest != row["project_sha256"]:
+            # Reconciliation writes only when interrupted publication actually
+            # changed the project document; re-read under the transaction.
+            db.execute("BEGIN IMMEDIATE")
             _reconcile_project_digest(db, view.path)
             row = _row(db, view.path)
+            db.commit()
         membership = list(
             db.execute(
                 "SELECT email,added_by FROM shared_collaborators WHERE path=? ORDER BY email",
@@ -522,8 +581,6 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             for record in membership
             if is_owner or record["added_by"] == email or record["email"] == email
         ]
-        if verify_revision:
-            db.commit()
         return {
             "owner": row["owner_email"],
             "collaborators": members,
@@ -775,7 +832,7 @@ def require_paper_draft_operator(
 
 def attribute_published_paper(path: str, project_id: str, paper_id: str) -> None:
     """Record the first paper author's identity in the enclosing fenced SQLite write."""
-    transaction = _WRITE_CONTEXT.get()
+    transaction = _current_write_transaction()
     if transaction is None or transaction[0] != str(path):
         # Unshared/local project saves do not use a collaboration transaction.
         return
@@ -907,7 +964,7 @@ def require_edit_revision(path: str, expected: int | None) -> None:
     """Prevent unversioned legacy settings clients from bypassing shared-project CAS."""
     from sigma.projects import ProjectError
 
-    transaction = _WRITE_CONTEXT.get()
+    transaction = _current_write_transaction()
     if transaction is not None and transaction[0] == str(path):
         db = transaction[1]
         row = _row(db, str(path))

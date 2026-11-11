@@ -49,11 +49,29 @@ function initialSettingsTab(): Tab {
   }
 }
 
-async function readJson(url: string): Promise<any> {
-  const response = await fetch(url, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.detail ?? result.error ?? 'Settings could not be loaded');
-  return result;
+async function readJson(url: string, signal?: AbortSignal): Promise<any> {
+  // One stalled endpoint must never leave unrelated Settings tabs spinning.
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 8000);
+  try {
+    const response = await fetch(url, {
+      cache: 'no-store', signal: controller.signal,
+      headers: { 'X-Sigma-Error-Handled': 'true' },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail ?? result.error ?? 'Settings could not be loaded');
+    return result;
+  } catch (cause) {
+    if (timedOut) throw new Error('Settings request timed out.');
+    throw cause;
+  } finally {
+    window.clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
 }
 async function putJson(url: string, payload: unknown): Promise<any> {
   const response = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
@@ -95,6 +113,9 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     progress_email: false,
   });
   const [progressAvailable, setProgressAvailable] = useState(false);
+  const [unattendedAvailable, setUnattendedAvailable] = useState(false);
+  const [layoutAvailable, setLayoutAvailable] = useState(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [ethos, setEthos] = useState<EthosConfig | null>(null);
   const [ethosDraft, setEthosDraft] = useState('');
@@ -107,7 +128,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const [saved, setSaved] = useState(false);
   const [typesSaveState, setTypesSaveState] = useState<ProjectTypesSaveState>({ dirty: false, valid: false, busy: false });
   const typesSaveRef = useRef<(() => Promise<boolean>) | null>(null);
-  const savedSnapshot = useRef<string | null>(null);
+  const savedConfigSnapshot = useRef<string | null>(null);
+  const savedPrefsSnapshot = useRef<string | null>(null);
   // Keep only the selected tab across dialog closes/reopens (and refreshes).
   // Unsaved Settings fields remain local drafts and are discarded on Close.
   useEffect(() => {
@@ -124,30 +146,39 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     const element = dialog.current;
     element?.addEventListener("cancel", preventCancel);
     const controller = new AbortController();
-    void Promise.all([
-      readJson('/api/user-preferences/research-settings'),
-      readJson('/api/user-preferences/unattended-execution'),
-      readJson('/api/user-preferences/section-layout'),
-      readJson('/api/user-preferences/progress-email').catch(() => ({ enabled: false, available: false })),
-    ]).then(([research, unattended, layout, progress]) => {
+    // Model and Limits depend only on the research config; do not make them
+    // wait for optional preferences, which can be slow or unavailable.
+    void readJson('/api/user-preferences/research-settings', controller.signal)
+      .then((research: ResearchConfig) => {
+        if (controller.signal.aborted) return;
+        savedConfigSnapshot.current = JSON.stringify(research);
+        setConfig(research);
+        const minutes = research.limits.session_duration_minutes;
+        setDurationUnit(minutes === null ? 'unlimited'
+          : minutes % 1440 === 0 ? 'days' : minutes % 60 === 0 ? 'hours' : 'minutes');
+        setLoaded(true);
+      }).catch(cause => { if (!controller.signal.aborted) setError(String(cause)); });
+    void Promise.allSettled([
+      readJson('/api/user-preferences/unattended-execution', controller.signal),
+      readJson('/api/user-preferences/section-layout', controller.signal),
+      readJson('/api/user-preferences/progress-email', controller.signal),
+    ]).then(results => {
       if (controller.signal.aborted) return;
-      setConfig(research as ResearchConfig);
-      const minutes = (research as ResearchConfig).limits.session_duration_minutes;
-      setDurationUnit(minutes === null ? 'unlimited'
-        : minutes % 1440 === 0 ? 'days' : minutes % 60 === 0 ? 'hours' : 'minutes');
-      setPrefs({
-        allow_unattended_background_execution: !!unattended.allow_unattended_background_execution,
-        expand_one_project_section_at_a_time: !!layout.expand_one_project_section_at_a_time,
-        progress_email: !!progress.enabled,
-      });
-      setProgressAvailable(!!progress.available);
-      savedSnapshot.current = JSON.stringify({ config: research, prefs: {
-        allow_unattended_background_execution: !!unattended.allow_unattended_background_execution,
-        expand_one_project_section_at_a_time: !!layout.expand_one_project_section_at_a_time,
-        progress_email: !!progress.enabled,
-      } });
-      setLoaded(true);
-    }).catch(cause => { if (!controller.signal.aborted) setError(String(cause)); });
+      const unattended = results[0].status === 'fulfilled' ? results[0].value : null;
+      const layout = results[1].status === 'fulfilled' ? results[1].value : null;
+      const progress = results[2].status === 'fulfilled' ? results[2].value : null;
+      const next: Preference = {
+        allow_unattended_background_execution: !!unattended?.allow_unattended_background_execution,
+        expand_one_project_section_at_a_time: !!layout?.expand_one_project_section_at_a_time,
+        progress_email: !!progress?.enabled,
+      };
+      savedPrefsSnapshot.current = JSON.stringify(next);
+      setPrefs(next);
+      setUnattendedAvailable(!!unattended);
+      setLayoutAvailable(!!layout);
+      setProgressAvailable(!!progress?.available);
+      setPrefsLoaded(true);
+    });
     void readJson('/api/ai/models')
       .then((value: { models?: ModelOption[] }) => {
         if (!controller.signal.aborted) { setModels(Array.isArray(value.models) ? value.models : []); setModelsUnavailable(false); }
@@ -176,7 +207,9 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const selectedModel = models.find(item => item.id === config?.ai_model);
   const modelEfforts = selectedModel?.efforts ?? [];
   const modelPairValid = !selectedModel || modelEfforts.includes(config?.reasoning_effort ?? '');
-  const hasOtherChanges = loaded && !!config && savedSnapshot.current !== JSON.stringify({ config, prefs });
+  const hasConfigChanges = loaded && !!config && savedConfigSnapshot.current !== JSON.stringify(config);
+  const hasPrefChanges = prefsLoaded && savedPrefsSnapshot.current !== JSON.stringify(prefs);
+  const hasOtherChanges = hasConfigChanges || hasPrefChanges;
   const hasChanges = typesSaveState.dirty || hasOtherChanges;
   const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
     .every(field => Number.isInteger(Number(config.limits[field])) && Number(config.limits[field]) >= 1 && String(config.limits[field]).trim() !== '')
@@ -205,43 +238,59 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         return true;
       }
       if (!config) return false;
-    const limits = { ...config.limits };
-    const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
-    for (const field of whole) {
-      const value = Number(limits[field]);
-      if (!Number.isInteger(value) || value < 1) { setError('Enter positive whole numbers for research limits.'); setTab('limits'); return false; }
-      (limits as any)[field] = value;
-    }
-    limits.scheduler_version = 2;
-    limits.model_calls = limits.research_rounds * limits.turns_per_round * 2;
-    for (const field of ['session_duration_minutes', 'maximum_input_tokens_per_session'] as const) {
-      const raw = limits[field] as number | string | null;
-      (limits as any)[field] = raw === '' || raw === null ? null : Number(raw);
-    }
-    const cost = limits.maximum_estimated_cost_usd as number | string | null;
-    limits.maximum_estimated_cost_usd = cost === '' || cost == null ? null : Number(cost);
-      const next = await putJson('/api/user-preferences/research-settings', {
-        limits, ai_model: config.ai_model, reasoning_effort: config.reasoning_effort,
-        show_advanced_outcome_details: config.show_advanced_outcome_details,
-      });
-      setConfig(next);
-      completed.push('Limits and Outcome preference');
-      await putJson('/api/user-preferences/unattended-execution', {
-        allow_unattended_background_execution: prefs.allow_unattended_background_execution,
-      });
-      completed.push('Unattended execution');
-      await putJson('/api/user-preferences/section-layout', {
-        expand_one_project_section_at_a_time: prefs.expand_one_project_section_at_a_time,
-      });
-      completed.push('Section layout');
-      if (progressAvailable) {
-        await putJson('/api/user-preferences/progress-email', { enabled: prefs.progress_email });
-        completed.push('Progress email');
+      if (hasConfigChanges) {
+        const limits = { ...config.limits };
+        const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
+        for (const field of whole) {
+          const value = Number(limits[field]);
+          if (!Number.isInteger(value) || value < 1) {
+            setError('Enter positive whole numbers for research limits.');
+            setTab('limits');
+            return false;
+          }
+          (limits as any)[field] = value;
+        }
+        limits.scheduler_version = 2;
+        limits.model_calls = limits.research_rounds * limits.turns_per_round * 2;
+        for (const field of ['session_duration_minutes', 'maximum_input_tokens_per_session'] as const) {
+          const raw = limits[field] as number | string | null;
+          (limits as any)[field] = raw === '' || raw === null ? null : Number(raw);
+        }
+        const cost = limits.maximum_estimated_cost_usd as number | string | null;
+        limits.maximum_estimated_cost_usd = cost === '' || cost == null ? null : Number(cost);
+        const next = await putJson('/api/user-preferences/research-settings', {
+          limits, ai_model: config.ai_model, reasoning_effort: config.reasoning_effort,
+          show_advanced_outcome_details: config.show_advanced_outcome_details,
+        }) as ResearchConfig;
+        setConfig(next);
+        savedConfigSnapshot.current = JSON.stringify(next);
+        completed.push('Model, Limits and Outcome preference');
       }
-      window.dispatchEvent(new CustomEvent('sigma-section-layout-preference-changed', {
-        detail: prefs.expand_one_project_section_at_a_time,
-      }));
-      savedSnapshot.current = JSON.stringify({ config: next, prefs });
+      if (hasPrefChanges) {
+        const prior = JSON.parse(savedPrefsSnapshot.current ?? '{}') as Preference;
+        if (unattendedAvailable &&
+            prefs.allow_unattended_background_execution !== prior.allow_unattended_background_execution) {
+          await putJson('/api/user-preferences/unattended-execution', {
+            allow_unattended_background_execution: prefs.allow_unattended_background_execution,
+          });
+          completed.push('Unattended execution');
+        }
+        if (layoutAvailable &&
+            prefs.expand_one_project_section_at_a_time !== prior.expand_one_project_section_at_a_time) {
+          await putJson('/api/user-preferences/section-layout', {
+            expand_one_project_section_at_a_time: prefs.expand_one_project_section_at_a_time,
+          });
+          window.dispatchEvent(new CustomEvent('sigma-section-layout-preference-changed', {
+            detail: prefs.expand_one_project_section_at_a_time,
+          }));
+          completed.push('Section layout');
+        }
+        if (progressAvailable && prefs.progress_email !== prior.progress_email) {
+          await putJson('/api/user-preferences/progress-email', { enabled: prefs.progress_email });
+          completed.push('Progress email');
+        }
+        savedPrefsSnapshot.current = JSON.stringify(prefs);
+      }
       setSaved(true);
       window.dispatchEvent(new Event('sigma-global-settings-saved'));
       return true;
@@ -262,29 +311,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     const handle = window.setTimeout(() => { void save(); }, 650);
     return () => window.clearTimeout(handle);
   }, [canSave, loaded, config, prefs, typesSaveState, error]);
-  async function reloadEthos() {
-    setEthosBusy(true); setEthosError('');
-    try {
-      const next = await readJson('/api/user-preferences/research-ethos') as EthosConfig;
-      setEthos(next);
-      setEthosDraft(next.markdown);
-    } catch (cause) { setEthosError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setEthosBusy(false); }
-  }
-  async function recoverEthos() {
-    if (!window.confirm('This preserves an invalid Research Ethos override in a private backup, then restores the built-in Ethos. Continue?')) return;
-    setEthosBusy(true); setEthosError('');
-    try {
-      const response = await fetch('/api/user-preferences/research-ethos/recover', {
-        method: 'POST', headers,
-      });
-      const next = await response.json();
-      if (!response.ok) throw new Error(next.detail ?? next.error ?? 'Research Ethos recovery failed');
-      setEthos(next as EthosConfig);
-      setEthosDraft((next as EthosConfig).markdown);
-    } catch (cause) { setEthosError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setEthosBusy(false); }
-  }
   async function saveEthos(markdown: string | null) {
     if (ethosBusy) return;
     setEthosBusy(true); setEthosError('');
@@ -438,24 +464,20 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           <label className="project-preference-checkbox"><input type="checkbox" checked={config.show_advanced_outcome_details}
             onChange={e => setResearch({ show_advanced_outcome_details: e.target.checked })}/>Show advanced Outcome details</label>
           <label className="project-preference-checkbox"><input type="checkbox"
-            checked={prefs.expand_one_project_section_at_a_time}
+            checked={prefs.expand_one_project_section_at_a_time} disabled={!prefsLoaded || !layoutAvailable}
             onChange={e => setPref({ expand_one_project_section_at_a_time: e.target.checked })}/>Expand one project section at a time</label>
           <label className="project-preference-checkbox"><input type="checkbox" checked={prefs.progress_email}
-            disabled={!progressAvailable && !prefs.progress_email}
+            disabled={!prefsLoaded || !progressAvailable}
             onChange={e => setPref({ progress_email: e.target.checked })}/>Notify me by email on progress</label>
           <label className="project-preference-checkbox"><input type="checkbox"
-            checked={prefs.allow_unattended_background_execution}
+            checked={prefs.allow_unattended_background_execution} disabled={!prefsLoaded || !unattendedAvailable}
             onChange={e => setPref({ allow_unattended_background_execution: e.target.checked })}/>Allow unattended background execution</label>
           <p className="settings-hint">Unattended execution may incur provider usage.</p>
         </fieldset>}
-        {tab === 'ethos' && !ethos && <section className="sigma-research-ethos" aria-label="Research Ethos unavailable">
-          <p role="status">Research Ethos could not be loaded. Other Settings remain available.</p>
-          {ethosError && <p role="alert" className="error">{ethosError}</p>}
-          <div className="sigma-ethos-actions">
-            <button type="button" disabled={ethosBusy} onClick={() => void reloadEthos()}>Retry</button>
-            <button type="button" disabled={ethosBusy} onClick={() => void recoverEthos()}>Recover invalid override</button>
-          </div>
-          <p className="settings-hint">Recovery is refused for a valid or unsafe file. An invalid override is archived privately, not deleted.</p>
+        {tab === 'ethos' && !ethos && <section className="sigma-research-ethos" aria-label="Research Ethos">
+          <p role={ethosError ? 'alert' : 'status'}>
+            {ethosError ? 'Research Ethos could not be loaded.' : 'Loading Research Ethos…'}
+          </p>
         </section>}
         {tab === 'ethos' && ethos && <section className="sigma-research-ethos" aria-label="Research Ethos">
           <p className="settings-hint">Research Ethos means general principles governing how agents investigate, reason, challenge assumptions, and report findings. It is not a project topic or a publication requirement. Each new run freezes the current Ethos.</p>
