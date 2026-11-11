@@ -546,13 +546,17 @@ def test_orphaned_job_reconciliation(
             # step and an already-unknown charge remain queued until the
             # creator inspects or resumes; nothing is silently dispatched.
             assert cloud_research.job_status(ambiguous["id"]) == "queued"
-            assert (
-                db.execute(
-                    "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'",
-                    (workspace_a.workspace_id,),
-                ).fetchone()[0]
-                == 2
-            )
+            # Check the exact queues belonging to this project, rather than
+            # conflating independent accepted work in the same account.
+            queued_ids = {
+                row["session_id"]
+                for row in db.execute(
+                    "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? "
+                    "AND status='queued'",
+                    (workspace_a.workspace_id, project.project.id),
+                ).fetchall()
+            }
+            assert queued_ids == {valid["id"], ambiguous["id"]}, queued_ids
             db.close()
 
             # A real backend restart keeps an already-saved queued Session.
