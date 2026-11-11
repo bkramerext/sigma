@@ -1709,6 +1709,24 @@ def update_project(
                 view.project.title,
             )
 
+    # Collaboration-only settings do not mutate the project document. Process
+    # their ACL update independently of a running research/paper execution lease:
+    # the database CAS still serializes and validates membership changes. Other
+    # project edits continue through the ordinary fenced project writer below.
+    if shared_edit:
+        existing_view = inspect_project(value)
+        if update(existing_view.project) == existing_view.project:
+            assert expected_revision is not None and collaborators is not None
+            project_collaboration.save_settings(
+                existing_view.path,
+                expected_revision,
+                collaborators,
+                ai_model,
+                reasoning_effort,
+                existing_view.project.title,
+            )
+            return inspect_project(value)
+
     edit = ("project", text_format) if text_format else None
     if wanted.title != prior.title:
         from sigma.recents import assert_project_unpinned
