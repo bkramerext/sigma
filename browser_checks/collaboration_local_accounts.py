@@ -417,6 +417,11 @@ def exercise(ui: str, workspaces: Path) -> None:
         invite.press("Tab")
         expect(member_dialog.get_by_text("third@example.org")).to_be_visible(timeout=20000)
         expect(member_dialog).to_be_visible()
+        # Remove the temporary guest so later revoke-last-member coverage still
+        # observes the project becoming private (no shared shortcut in My Work).
+        owner_dialog.get_by_role("button", name="Remove third@example.org").click()
+        expect(member_dialog.get_by_text("third@example.org")).to_have_count(0, timeout=20000)
+        expect(member_dialog).to_be_visible()
 
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
         member_dialog.get_by_role("button", name="Close Project Settings").click()
