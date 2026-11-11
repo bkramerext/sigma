@@ -145,6 +145,16 @@ class CollaborationTests(TestCase):
             holder.rollback()
             holder.close()
 
+    def test_spawned_async_task_does_not_inherit_parent_sqlite_transaction(self) -> None:
+        """ContextVar inheritance must not permit a child task to bypass fencing."""
+        with shared.write_guard(self.path):
+            self.assertIsNotNone(shared._current_write_transaction())
+
+            async def child() -> bool:
+                return shared._current_write_transaction() is None
+
+            self.assertTrue(asyncio.run(child()))
+
     def test_nested_fenced_checkpoint_reuses_same_project_file_lock(self) -> None:
         """Nested Paper checkpoints cannot deadlock on their own file lock."""
         from sigma.projects import project_write_lock
