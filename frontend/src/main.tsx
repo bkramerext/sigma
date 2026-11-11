@@ -347,14 +347,25 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
   const evidence = `${action} ${recordedReason}`;
+  // In a multi-strategy session the specific pre-dispatch guard can be saved
+  // on a paused branch while the aggregate session message is only "context limit".
+  // Read only active context failures; never infer a provider limit from the
+  // aggregate status or resurrect stale branch diagnostics.
+  const contextBranchReasons = /context/i.test(evidence)
+    ? (session.strategy_runs ?? [])
+      .filter(run => ['paused', 'stopped', 'failed'].includes(run.status)
+        && typeof run.reason === 'string' && /context|dispatch guard/i.test(run.reason))
+      .map(run => run.reason || '')
+    : [];
+  const contextDiagnosis = [message, ...contextBranchReasons].join(' · ');
   if (/clipped|output.token limit/.test(evidence))
     return { cause: 'The provider response was clipped before a complete research finding was saved.', next: 'Review provider allowance and session limits before resuming. Another provider call can consume allowance.' };
   // SIGMA's fixed UTF-8 safety guard is separate from a provider model's
   // token context window. Thinking level does not change this byte guard.
   const modelSelection = session.model || 'Unknown model';
-  if (/SIGMA's [\d,]+-byte UTF-8 dispatch guard/i.test(message) ||
-      (/256 KB UTF-8 byte limit/i.test(message) && /Context size:/i.test(message))) {
-    const match = /Context size:\s*(\d+)B\s*\/\s*limit\s*(\d+)B/i.exec(message);
+  if (/SIGMA's [\d,]+-byte UTF-8 dispatch guard/i.test(contextDiagnosis) ||
+      (/256 KB UTF-8 byte limit/i.test(contextDiagnosis) && /Context size:/i.test(contextDiagnosis))) {
+    const match = /Context size:\s*(\d+)B\s*\/\s*limit\s*(\d+)B/i.exec(contextDiagnosis);
     const sizes = match
       ? `Required ${Number(match[1]).toLocaleString('en-US')} bytes; SIGMA limit ${Number(match[2]).toLocaleString('en-US')} bytes.`
       : 'SIGMA enforces an internal UTF-8 dispatch limit after non-destructive compaction.';
@@ -363,14 +374,14 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
       next: 'Review the context-size diagnostics. If this error was saved under an older SIGMA guard, updating and clicking Resume may permit the preserved context to proceed; a successful dispatch can consume allowance. If it still exceeds the current bound, narrow mandatory source material for a new session. Switching models alone does not change SIGMA’s guard.',
     };
   }
-  if (/SIGMA context manifest requires|research context manifest exceeds its storage bound/i.test(message)) {
+  if (/SIGMA context manifest requires|research context manifest exceeds its storage bound/i.test(contextDiagnosis)) {
     return {
       cause: `SIGMA blocked the next research call because the source-evidence manifest exceeded its separate storage bound. Selected model: ${modelSelection}. Saved research is preserved.`,
       next: 'Review the selected source material and start a narrower session. Changing models does not increase SIGMA’s manifest storage limit.',
     };
   }
   if (/context|token limit/.test(evidence))
-    return { cause: `Research stopped because a context limit was reached. Selected model: ${modelSelection}. Saved research is preserved; the exact limit source has not been established.`, next: 'Inspect session diagnostics to determine whether SIGMA or the provider enforced the limit before choosing a recovery action.' };
+    return { cause: `Research stopped because a context limit was reached. Selected model: ${modelSelection}. Saved research is preserved; the exact limit source has not been established.`, next: session.next_step_guidance?.trim() || 'Inspect session diagnostics, including the saved strategy reasons and failed-attempt metadata, to identify whether SIGMA or the provider enforced the limit before choosing a recovery action.' };
   if (/duration|wall.clock/.test(evidence))
     return { cause: 'This session stopped after reaching its configured elapsed-time limit. Saved research is preserved.', next: 'Adjust the project time limit if appropriate, then resume the session.' };
   if (/stopped by user|stopped by you/i.test(recordedReason))
