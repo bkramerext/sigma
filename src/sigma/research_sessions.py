@@ -127,7 +127,7 @@ MODEL_OUTPUT_LIMITS = {
 }
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
-    "max_concurrent_sessions": 2,
+    "max_concurrent_sessions": 1,
     "research_rounds": 2,
     "model_calls": 12,
     "session_duration_minutes": 60,
@@ -6434,14 +6434,11 @@ async def start_session(
                 return _public(_recover(existing))
             active = [_recover(r) for r in records]
             active = [r for r in active if r["status"] in {"queued", "running"}]
-            if len(active) >= limits["max_concurrent_sessions"]:
-                occupants = ", ".join(
-                    f"#{item.get('session_number')} ({item['id']})" for item in active
-                )
-                raise ProjectError(
-                    "This project is at its maximum concurrent sessions limit. "
-                    f"Sessions occupying slots: {occupants}. Open Research Sessions to inspect or stop them."
-                )
+            # Resource concurrency is enforced at worker dispatch, not at
+            # admission. Independent collaborators get durable queue records
+            # instead of a project-busy error.
+            if len(active) >= 32:
+                raise ProjectError("Research session queue is full; retry after work finishes.")
             if (
                 credential["mode"] == "api_key"
                 and limits["maximum_estimated_cost_usd"] is not None
@@ -7467,9 +7464,9 @@ async def control_session(
                 for recovered in [_recover(item)]
                 if recovered.get("status") in {"queued", "running"}
             ]
-            if len(others) >= current_limits["max_concurrent_sessions"]:
+            if len(others) >= 32:
                 raise ProjectError(
-                    "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Home Settings → Limits."
+                    "Research session queue is full; retry after existing work finishes."
                 )
             if record.get("cloud_sponsored") is True and record.get("cost_status") != "available":
                 # Older recovered sessions discarded their accumulated estimate
@@ -15647,6 +15644,33 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                 return False
 
 
+async def _await_session_execution_slot(session_id: str, path: str) -> bool:
+    """Queue independently admitted Sessions behind the configured run capacity.
+
+    An OS manager lock protects the short claim across worker processes. Never
+    hold any project lock while awaiting a slot or running provider work.
+    A stopped or paused queued record exits without dispatch.
+    """
+    while True:
+        async with _manager_lock:
+            with _project_manager_lock(path):
+                latest = _read(path, session_id)
+                if latest.get("status") != "queued":
+                    return False
+                occupied = sum(
+                    item.get("id") != session_id and item.get("status") == "running"
+                    for item in _all(path)
+                )
+                if occupied < get_limits(path)["max_concurrent_sessions"]:
+                    latest["status"] = "running"
+                    latest["current_action"] = "Preparing research"
+                    latest["message"] = "Research is starting."
+                    latest["updated_at"] = _now()
+                    _save(path, latest)
+                    return True
+        await asyncio.sleep(0.5)
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -15675,6 +15699,8 @@ async def _worker(session_id: str, path: str) -> None:
                 _save(path, initial)
                 return
         if not await _claim_cloud_job(session_id, path):
+            return
+        if not await _await_session_execution_slot(session_id, path):
             return
         # All newly started sessions use the branch-aware path, including a
         # one-strategy session. The legacy worker below remains only for

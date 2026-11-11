@@ -354,20 +354,21 @@ async def test_single_project_admission(path: Path):
         )
         # Background provider dispatch can take longer under CI contention.
         await asyncio.wait_for(entered.wait(), 10)
-        try:
-            await research_sessions.start_session(
-                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
-            )
-        except ProjectError as exc:
-            assert "maximum concurrent sessions" in str(exc)
-        else:
-            raise AssertionError("a second session was admitted for one project")
+        # Independent collaborators must be admitted into durable queues,
+        # not rejected when the one-session provider slot is occupied.
+        second = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        assert second["status"] == "queued"
+        assert second["session_number"] == started["session_number"] + 1
+        assert research_sessions.get_session(str(path), second["id"])["status"] == "queued"
         paused = await research_sessions.control_session(str(path), started["id"], "pause")
         assert paused["status"] == "paused"
         next_session = await research_sessions.start_session(
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
         assert next_session["status"] == "queued"
+        await research_sessions.control_session(str(path), second["id"], "stop")
         await research_sessions.control_session(str(path), next_session["id"], "stop")
         assert research_sessions.get_session(str(path), started["id"])["status"] == "paused"
 

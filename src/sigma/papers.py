@@ -4432,34 +4432,36 @@ def _read_queue_status(path: str) -> dict[str, Any] | None:
 
 
 def run_progress_list(path: str) -> list[dict[str, Any]]:
-    """Every collaborator sees each Paper's independent activity and number.
+    """Bounded Paper activity from the reservation index and tiny sidecars.
 
-    Polling reads tiny per-run sidecars, never the large draft checkpoints.
-    A reservation with no receipt is an interrupted *unstarted* admission.
+    Never read all published Paper records during ordinary progress polling.
+    A terminal tombstone keeps discarded drafts from coming back after restart.
     """
     from sigma import project_collaboration
 
     rows = project_collaboration.list_execution_runs(path, "paper")
-    published = {
-        item.get("generation", {}).get("progress_run_id"): item
-        for item in list_papers(path)
-        if isinstance(item.get("generation"), dict)
-    }
+    if not rows:
+        return []
     viewer = project_collaboration.collaborator_identity(path)
     result: list[dict[str, Any]] = []
     for row in rows:
+        if row["status"] == "discarded":
+            continue
         run_id = row["run_id"]
         with paper_run_scope(run_id):
             progress = progress_status(path)
             preflight_needed = needs_preflight_on_open(path)
-            published_paper = published.get(run_id)
-            if published_paper and progress is None:
+            published_id = row.get("artifact_id")
+            if progress is None and published_id:
                 progress = {"status": "complete", "stage": "complete"}
             elif progress is None:
                 progress = {
                     "status": "interrupted",
                     "stage": "queued",
-                    "detail": "The Paper was accepted before an interruption. Resume to continue.",
+                    "detail": (
+                        "The Paper was accepted before an interruption. "
+                        "Resume to continue without replaying uncertain calls."
+                    ),
                 }
         result.append(
             {
@@ -4467,7 +4469,7 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
                 "status": progress["status"],
                 "progress": progress,
                 "preflight_needed": preflight_needed,
-                "paper_id": published_paper.get("paper_id") if published_paper else None,
+                "paper_id": published_id,
                 "can_control": viewer is None or viewer == row["creator_email"],
             }
         )
@@ -4576,8 +4578,9 @@ def progress_status(path: str) -> dict[str, Any] | None:
         if state is None:
             work = _load_work(path)
             state = work.get("progress") if work is not None else None
-            if state is not None:
-                # Migrate pre-sidecar checkpoints once, preserving full work.
+            if state is not None and _paper_run_id.get() is None:
+                # Legacy checkpoints may migrate their sidecar. A collaborator
+                # viewing another creator's run must never mutate that run.
                 try:
                     _write_progress_status(path, state)
                 except (OSError, ProjectError):

@@ -3187,6 +3187,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished paper work.');
+      selectPaperRun(null);
       setNewPaperRequested(false); setPaperProgress(null); setCheckpointMismatch(null);
       setRestartableCheckpoint(null); setContinuationAvailable(false); setResumeDetails(null);
       setResetConfirm(false); setConfirmDiscardDraft(false); setSuccess('');

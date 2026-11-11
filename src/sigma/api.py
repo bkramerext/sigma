@@ -1011,7 +1011,10 @@ async def papers_discard_view(body: PaperDiscardRequest):
     else:
         project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
-        return await papers.discard_work(body.path, body.expected_project_id)
+        result = await papers.discard_work(body.path, body.expected_project_id)
+    if body.run_id is not None:
+        project_collaboration.discard_execution_run(body.path, "paper", body.run_id)
+    return result
 
 
 @app.post("/api/projects/papers/restart")

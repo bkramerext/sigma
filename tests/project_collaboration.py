@@ -1406,6 +1406,64 @@ class CollaborationTests(TestCase):
             self.assertEqual(collaborator_runs[0]["creator"], self.owner.email)
             self.assertEqual(collaborator_runs[0]["model"], "gpt-paper")
 
+    def test_scoped_paper_creator_fence_and_discard_does_not_resurrect(self) -> None:
+        """A verified collaborator cannot write the other creator's checkpoint."""
+        from sigma import papers
+
+        Path(self.path).write_text("{}", encoding="utf-8")
+        run_owner, run_other = uuid4().hex, uuid4().hex
+        owner = shared.reserve_execution_run(
+            self.path, "paper", run_owner, 2, model="paper-owner", thinking="high"
+        )
+        assert owner is not None
+        collaborator = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with papers.paper_run_scope(run_owner):
+            papers._write_queue_status(self.path, "queued", papers._now())
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=collaborator),
+            patch("sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other),
+        ):
+            other = shared.reserve_execution_run(
+                self.path, "paper", run_other, 2, model="paper-other", thinking="medium"
+            )
+            assert other is not None
+            self.assertEqual(other["number"], owner["number"] + 1)
+            with papers.paper_run_scope(run_other):
+                papers._write_queue_status(self.path, "queued", papers._now())
+            with papers.paper_run_scope(run_owner), self.assertRaisesRegex(
+                ProjectError, "another creator"
+            ):
+                papers._write_queue_status(self.path, "queued", papers._now())
+            seen = papers.run_progress_list(self.path)
+            self.assertEqual(
+                [(row["number"], row["creator_email"]) for row in seen],
+                [(owner["number"], self.owner.email), (other["number"], self.other.email)],
+            )
+            self.assertFalse(seen[0]["can_control"])
+            self.assertTrue(seen[1]["can_control"])
+            shared.discard_execution_run(self.path, "paper", run_other)
+            self.assertEqual(
+                [row["run_id"] for row in papers.run_progress_list(self.path)], [run_owner]
+            )
+            with self.assertRaisesRegex(ProjectError, "Discarded"):
+                shared.reserve_execution_run(
+                    self.path, "paper", run_other, 2, model="new", thinking="low"
+                )
+        with self.assertRaisesRegex(ProjectError, "Only the creator"):
+            shared.discard_execution_run(self.path, "paper", run_other)
+        latest = shared.reserve_execution_run(
+            self.path, "paper", uuid4().hex, 2, model="next", thinking="low"
+        )
+        assert latest is not None
+        self.assertEqual(latest["number"], other["number"] + 1)
+
+
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:
             try:
