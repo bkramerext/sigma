@@ -6067,12 +6067,24 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   // Running work takes precedence over a queued paper on the same project.
   // The queue API exposes paper_activity when the queued-generation feature lands.
   const paperActivity = (entry: RecentProject): 'running' | 'queued' | null => {
-    // Queued-only collaborator Sessions must not inherit the old running color.
     if (entry.activity_runs?.length) {
       return entry.activity_runs.some(run => run.status === 'active') ? 'running' : 'queued';
     }
     return entry.research_running || entry.answer_active || entry.paper_generating || entry.paper_activity === 'active'
       ? 'running' : entry.paper_activity === 'queued' ? 'queued' : null;
+  };
+  const activityDescription = (entry: RecentProject): string => {
+    const status = paperActivity(entry);
+    if (status === 'queued') {
+      return entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'paper'
+        ? 'Paper queued'
+        : entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'session'
+          ? 'Session queued' : 'Queued';
+    }
+    if (entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'paper') return 'Generating paper';
+    if (entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'answer') return 'Answering';
+    if (!entry.activity_runs?.length && entry.answer_active) return 'Answering';
+    return 'Running';
   };
   // Keep the ten newest projects plus every older running or queued project.
   // Filtering in source order avoids duplicating an active project in the top ten.
@@ -6124,7 +6136,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`} data-tooltip={`Open active work in ${entry.title}${recentRunLabels(entry).length ? `\n${recentRunLabels(entry).join('\n')}` : ''}`} data-tooltip-activity="true" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`} data-tooltip={`Open active work in ${entry.title}${recentRunLabels(entry).length ? `\n${recentRunLabels(entry).join('\n')}` : ''}`} data-tooltip-activity="true" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{activityDescription(entry)}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}

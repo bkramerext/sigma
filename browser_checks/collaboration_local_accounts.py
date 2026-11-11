@@ -567,7 +567,20 @@ def exercise(ui: str, workspaces: Path) -> None:
                 break
             time.sleep(0.1)
         else:
-            raise AssertionError(f"Both provider-free Q/A calls did not start: {state}")
+            # An early HTTP admission failure must be distinguished from a
+            # provider-overlap timeout; surface actual browser responses.
+            outcomes = [
+                page.evaluate(
+                    """async () => Promise.race([
+                      window.sigmaCollaborationQA,
+                      new Promise(resolve => setTimeout(() => resolve({pending: true}), 1000))
+                    ])"""
+                )
+                for page in (owner, member)
+            ]
+            raise AssertionError(
+                f"Both provider-free Q/A calls did not start: {state}; HTTP outcomes={outcomes}"
+            )
         assert set(state["questions"]) == set(qa_questions), state
 
         # Same live activity endpoint under each identity, no faked UI response.
@@ -635,6 +648,14 @@ def exercise(ui: str, workspaces: Path) -> None:
             paper_runs.append(get_json(paper_response))
         assert paper_runs[0]["run_id"] != paper_runs[1]["run_id"]
         assert paper_runs[1]["number"] == paper_runs[0]["number"] + 1
+        # Cross-creator cancellation is forbidden even while queued. An
+        # unauthorized release must leave both reservations and tasks intact.
+        stolen_release = member_context.request.post(
+            ui + "/api/__fixture/collaboration-paper-release",
+            headers={"Origin": ui},
+            data={"path": path, "run_id": paper_runs[0]["run_id"]},
+        )
+        assert stolen_release.status >= 400, stolen_release.text()
 
         for account, page in ((owner_context, owner), (member_context, member)):
             for _ in range(100):
@@ -685,7 +706,8 @@ def exercise(ui: str, workspaces: Path) -> None:
             indicator = home.get_by_role("button", name=f"Open active work in {title}")
             expect(indicator).to_be_visible(timeout=20000)
             home.wait_for_function(
-                """project => {
+                """({title, owner, member}) => {
+                    const project = title;
                     const indicator = [...document.querySelectorAll(
                         'button.recent-activity-jump'
                     )].find(button => button.getAttribute('aria-label')
@@ -695,9 +717,11 @@ def exercise(ui: str, workspaces: Path) -> None:
                     return lines.length === 6
                         && lines.filter(line => line.startsWith('Session ')).length === 2
                         && lines.filter(line => line.startsWith('Paper ')).length === 2
-                        && lines.filter(line => line.startsWith('Answer ')).length === 2;
+                        && lines.filter(line => line.startsWith('Answer ')).length === 2
+                        && lines.filter(line => line.includes(owner)).length === 3
+                        && lines.filter(line => line.includes(member)).length === 3;
                 }""",
-                arg=title,
+                arg={"title": title, "owner": OWNER, "member": COLLABORATOR},
                 timeout=20000,
             )
             homes.append(home)
@@ -712,6 +736,8 @@ def exercise(ui: str, workspaces: Path) -> None:
             assert outcome["status"] == 200, outcome
             answers.append(outcome["data"])
         assert answers[0]["qa_id"] != answers[1]["qa_id"], answers
+        assert answers[0]["created_by"] == OWNER, answers
+        assert answers[1]["created_by"] == COLLABORATOR, answers
         all_answers = get_json(
             member_context.request.get(ui + "/api/projects/research-qa", params={"path": path})
         )["answers"]
