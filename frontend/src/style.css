@@ -625,3 +625,9 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   text-align: left;
   padding-left: 6px;
 }
+
+/* Guest AI previews stay inline with their section, with the standard X in the corner. */
+.guest-feature-card { margin: 12px 0; }
+.guest-feature-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.guest-feature-card-header > strong { flex: 1; }
+.guest-feature-card > p { margin: 8px 0 0; }
