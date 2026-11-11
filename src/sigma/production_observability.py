@@ -144,17 +144,16 @@ def memory_snapshot() -> dict[str, int | None]:
     # controller. Hosted deployments require the metrics for admission and
     # should retain actionable diagnostics if the expected controller is gone.
     optional_controller = os.getenv("SIGMA_MEMORY_REQUIRE_METRICS", "").lower() != "true"
-    if (group / "cgroup.controllers").exists() or (group / "memory.current").exists():
-        usage = _integer(group / "memory.current", missing_ok=optional_controller)
-        limit = _integer(group / "memory.max", missing_ok=optional_controller)
-        peak = _integer(group / "memory.peak", missing_ok=True)
-    else:
-        usage = _integer(
-            group / "memory" / "memory.usage_in_bytes", missing_ok=optional_controller
-        )
-        limit = _integer(
-            group / "memory" / "memory.limit_in_bytes", missing_ok=optional_controller
-        )
+    # Probe v2 first and v1 only when needed. A missing controller is not
+    # a failure if the other version supplies the required measurement.
+    usage = _integer(group / "memory.current", missing_ok=True)
+    limit = _integer(group / "memory.max", missing_ok=True)
+    peak = _integer(group / "memory.peak", missing_ok=True)
+    if usage is None:
+        usage = _integer(group / "memory" / "memory.usage_in_bytes", missing_ok=optional_controller)
+    if limit is None:
+        limit = _integer(group / "memory" / "memory.limit_in_bytes", missing_ok=optional_controller)
+    if peak is None:
         peak = _integer(group / "memory" / "memory.max_usage_in_bytes", missing_ok=True)
     # Linux cgroup-v1 uses a huge sentinel to mean "unlimited".
     if limit is not None and limit >= (1 << 60):
