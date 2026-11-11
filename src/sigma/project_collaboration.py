@@ -232,8 +232,9 @@ def fenced_checkpoint(func: Callable[..., _T]) -> Callable[..., _T]:
 
     @wraps(func)
     def guarded(path: str, *args: Any, **kwargs: Any) -> _T:
-        if _WRITE_CONTEXT.get() is not None:
-            # Already inside a caller's serialized project mutation.
+        if _WRITE_CONTEXT.get() is not None or cloud_workspaces.current() is None:
+            # Already inside a serialized mutation, or the established local
+            # single-user/test persistence path without a collaboration DB.
             with write_guard(path, advance_revision=not transient_status):
                 return func(path, *args, **kwargs)
         # Ordinary checkpoint writes must not hold a global SQLite writer
