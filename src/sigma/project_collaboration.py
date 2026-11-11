@@ -9,6 +9,7 @@ membership invitations, never authorization assertions.
 from __future__ import annotations
 
 import asyncio
+import threading
 import hashlib
 import json
 import logging
@@ -39,10 +40,26 @@ _SCHEMA_READY: set[tuple[str, int, int]] = set()
 _LEASE_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
     "sigma_project_execution_lease", default=None
 )
-_WRITE_CONTEXT: ContextVar[tuple[str, sqlite3.Connection] | None] = ContextVar(
-    "sigma_project_write_transaction", default=None
-)
+_WRITE_CONTEXT: ContextVar[
+    tuple[str, sqlite3.Connection, tuple[int, int | None]] | None
+] = ContextVar("sigma_project_write_transaction", default=None)
 _T = TypeVar("_T")
+
+
+def _write_context_owner() -> tuple[int, int | None]:
+    """Inherited asyncio contexts must not reuse another task's SQLite txn."""
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        task = None
+    return threading.get_ident(), id(task) if task is not None else None
+
+
+def _current_write_transaction() -> tuple[str, sqlite3.Connection] | None:
+    current = _WRITE_CONTEXT.get()
+    if current is None or current[2] != _write_context_owner():
+        return None
+    return current[0], current[1]
 
 
 @contextmanager
@@ -115,7 +132,7 @@ def _reconcile_project_digest(db: sqlite3.Connection, path: str) -> None:
 
 def note_project_published(path: str, contents: bytes) -> None:
     """Commit a project's new digest in its enclosing collaboration transaction."""
-    transaction = _WRITE_CONTEXT.get()
+    transaction = _current_write_transaction()
     if transaction is None or transaction[0] != str(path):
         return
     db = transaction[1]
@@ -157,7 +174,7 @@ def write_guard(
     from sigma.projects import ProjectError
 
     path = str(path)
-    existing = _WRITE_CONTEXT.get()
+    existing = _current_write_transaction()
     if existing is not None:
         if existing[0] != path:
             raise ProjectError("Nested writes across shared projects are unsupported.")
@@ -203,7 +220,7 @@ def write_guard(
                     f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
                 )
             _verify_fence(db, path, actor)
-            binding = _WRITE_CONTEXT.set((path, db))
+            binding = _WRITE_CONTEXT.set((path, db, _write_context_owner()))
             try:
                 yield db
                 if advance_revision:
@@ -232,7 +249,7 @@ def fenced_checkpoint(func: Callable[..., _T]) -> Callable[..., _T]:
 
     @wraps(func)
     def guarded(path: str, *args: Any, **kwargs: Any) -> _T:
-        if _WRITE_CONTEXT.get() is not None or cloud_workspaces.current() is None:
+        if _current_write_transaction() is not None or cloud_workspaces.current() is None:
             # Already inside a serialized mutation, or the established local
             # single-user/test persistence path without a collaboration DB.
             with write_guard(path, advance_revision=not transient_status):
@@ -804,7 +821,7 @@ def require_paper_draft_operator(
 
 def attribute_published_paper(path: str, project_id: str, paper_id: str) -> None:
     """Record the first paper author's identity in the enclosing fenced SQLite write."""
-    transaction = _WRITE_CONTEXT.get()
+    transaction = _current_write_transaction()
     if transaction is None or transaction[0] != str(path):
         # Unshared/local project saves do not use a collaboration transaction.
         return
@@ -928,7 +945,7 @@ def require_edit_revision(path: str, expected: int | None) -> None:
     """Prevent unversioned legacy settings clients from bypassing shared-project CAS."""
     from sigma.projects import ProjectError
 
-    transaction = _WRITE_CONTEXT.get()
+    transaction = _current_write_transaction()
     if transaction is not None and transaction[0] == str(path):
         db = transaction[1]
         row = _row(db, str(path))
