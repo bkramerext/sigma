@@ -37,10 +37,21 @@ def freeze_mock_sessions(body: dict[str, str]):
     if not isinstance(path, str) or not path:
         raise HTTPException(400, "Missing project path")
     records = research_sessions._all(path)
-    if not any(row.get("simulated") and row.get("status") == "running" for row in records):
+    before_admission = body.get("before_admission") == "true"
+    if not before_admission and not any(
+        row.get("simulated") and row.get("status") == "running" for row in records
+    ):
         raise HTTPException(409, "No simulated running Session to freeze")
 
-    research_sessions._advance_mock = lambda record: record
+    # A browser may poll the mock before the second collaborator submits work.
+    # Allow the first queued Session to become running, but prevent subsequent
+    # simulated polling stages from finishing it before both runs are observed.
+    def advance_until_running(record: dict) -> dict:
+        if record.get("simulated") and int(record.get("mock_stage", 0)) >= 1:
+            return record
+        return _real_advance_mock(record)
+
+    research_sessions._advance_mock = advance_until_running
 
     def simulated_liveness(candidate: str, *, project_id: str | None = None) -> bool:
         if candidate == path:
