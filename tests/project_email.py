@@ -183,10 +183,12 @@ class ProjectEmailTests(unittest.TestCase):
     def test_size_limit_does_not_send(self, inspect, bundle, smtp):
         inspect.return_value.project.title = "Sample"
         bundle.return_value = (b"X" * (project_email.MAX_ATTACHMENT_BYTES + 1), "project.json")
-        with self.assertRaisesRegex(ProjectError, "size limit"):
+        with self.assertRaisesRegex(ProjectError, "size limit") as caught:
             project_email.send_project_email(
                 "/project.json", "one@example.com", "", "project", None
             )
+        self.assertIn("Export Project", str(caught.exception))
+        self.assertIn("collaborator", str(caught.exception))
         smtp.assert_not_called()
 
     def test_concurrent_reservation_and_idempotent_completion(self):
