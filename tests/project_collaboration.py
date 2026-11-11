@@ -153,10 +153,12 @@ class CollaborationTests(TestCase):
         def checkpoint(path: str) -> str:
             return "persisted"
 
-        with patch("sigma.projects.project_path", return_value=Path(self.path)):
-            with project_write_lock(self.path):
-                with project_write_lock(self.path):
-                    self.assertEqual(checkpoint(self.path), "persisted")
+        with (
+            patch("sigma.projects.project_path", return_value=Path(self.path)),
+            project_write_lock(self.path),
+            project_write_lock(self.path),
+        ):
+            self.assertEqual(checkpoint(self.path), "persisted")
 
     def test_waiting_project_lock_does_not_hold_global_writer(self) -> None:
         """The file-lock waiter must not block independent SQLite writes."""
