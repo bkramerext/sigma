@@ -73,8 +73,18 @@ def main() -> None:
         ).to_be_visible()
         heading.click()
         assert heading.get_attribute("aria-expanded") == "false"
-        heading.click()
-        assert heading.get_attribute("aria-expanded") == "true"
+        # The stopped-session Source Material link opens both disclosures and
+        # scrolls/focuses the real project subsection without changing sources.
+        project_toggle.click()
+        assert project_toggle.get_attribute("aria-expanded") == "false"
+        page.evaluate("window.dispatchEvent(new Event('sigma-reveal-source-material'))")
+        expect(project_toggle).to_have_attribute("aria-expanded", "true")
+        expect(heading).to_have_attribute("aria-expanded", "true")
+        expect(section.locator("#sigma-supplied-evidence-content")).to_be_visible()
+        expect(heading).to_be_focused()
+        # A second navigation must leave the target open, not toggle it shut.
+        page.evaluate("window.dispatchEvent(new Event('sigma-reveal-source-material'))")
+        expect(heading).to_have_attribute("aria-expanded", "true")
         page.reload()
         expect(section.get_by_role("link", name="https://example.org/source-735")).to_be_visible()
         expect(
