@@ -184,7 +184,11 @@ def check_failures() -> None:
         elif "tests/papers_part2.py" in step:
             owner = "5"
         elif "tests/sage_execution.py" in step:
-            owner = "3"
+            owner = "1"
+        elif "tests/storage.py" in step:
+            owner = "2"
+        elif "pyright" in step:
+            owner = "4"
         elif extra_half:
             owner = "8" if extra_half_b else "6"
         else:
@@ -209,7 +213,9 @@ def check_failures() -> None:
     for shard, filename in (
         ("1", "tests/crucible_scheduler_evidence.py"),
         ("5", "tests/papers_part2.py"),
-        ("3", "tests/sage_execution.py"),
+        ("1", "tests/sage_execution.py"),
+        ("2", "tests/storage.py"),
+        ("4", "pyright"),
     ):
         assert sum(filename in step for step in combined) == 1
         assert any(filename in step for step in plans[shard])
