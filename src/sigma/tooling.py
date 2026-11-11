@@ -125,6 +125,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/research_sessions_part2.py"],
             [*python, "python", "tests/research_sessions_part3.py"],
             [*python, "python", "tests/research_sessions_part3b.py"],
+            [*python, "python", "tests/research_sessions_part3c.py"],
             [*python, "python", "tests/research_sessions_part4.py"],
             [*python, "python", "tests/crucible_scheduler_evidence.py"],
             [*python, "python", "tests/reference_compiler_integration.py"],
@@ -264,8 +265,10 @@ def run_tooling(command: str) -> int:
         selected: list[list[str]] = []
         regular_index = 0
         for step in steps:
-            extra_half = "tests/research_sessions_part3b.py" in step
-            owner = 8 if extra_half else regular_index % 8 + 1
+            extra_half_b = "tests/research_sessions_part3b.py" in step
+            extra_half_c = "tests/research_sessions_part3c.py" in step
+            extra_half = extra_half_b or extra_half_c
+            owner = (8 if extra_half_b else 6) if extra_half else regular_index % 8 + 1
             if not extra_half:
                 regular_index += 1
             if owner == int(shard):
