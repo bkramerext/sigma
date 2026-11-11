@@ -2105,10 +2105,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
 
-    <div id="sessions-pane-content" hidden={!expanded}>
     {guest && guestSessionCard && <GuestFeatureCard title="Research sessions"
       message="SIGMA coordinates Investigator and Skeptic agents to investigate strategies, challenge findings, and record evidence."
       onClose={() => setGuestSessionCard(false)}/>}
+    <div id="sessions-pane-content" hidden={!expanded}>
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
