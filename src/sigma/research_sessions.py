@@ -5019,12 +5019,30 @@ def mock_session(
         previous = next(
             (item for item in records if item.get("idempotency_key") == idempotency_key), None
         )
+        from sigma import project_collaboration
+
         if previous:
             if previous.get("strategy_id") != strategy_id:
                 raise ProjectError("Idempotency key belongs to another strategy")
+            # Idempotent replay is available to the original creator only;
+            # a second verified account cannot claim the first user's mock run.
+            project_collaboration.execution_run(
+                view.path, "session", previous["id"], operator=True, missing_ok=True
+            )
             return _public(previous)
-        if any(item.get("status") in {"queued", "running"} for item in records):
-            raise ProjectError("A research session is already active")
+        if sum(item.get("status") in {"queued", "running"} for item in records) >= 32:
+            raise ProjectError("Research session queue is full; retry after work finishes.")
+        run_id = str(uuid4())
+        tentative_number = _allocate_session_number(view.path, records)
+        reserved = project_collaboration.reserve_execution_run(
+            view.path,
+            "session",
+            run_id,
+            tentative_number - 1,
+            model="mock-deterministic",
+            thinking="none",
+        )
+        number = reserved["number"] if reserved is not None else tentative_number
         now = _now()
         message = {
             "completed": "Simulated research completed. No provider was called.",
@@ -5034,8 +5052,9 @@ def mock_session(
         }[scenario]
         record = {
             "schema_version": 1,
-            "id": str(uuid4()),
-            "session_number": _allocate_session_number(view.path, records),
+            "id": run_id,
+            "created_by": project_collaboration.collaborator_identity(view.path),
+            "session_number": number,
             "project_path": view.path,
             **(
                 {
@@ -5118,6 +5137,10 @@ def mock_session(
         }
         record["outcome"] = _outcome(record)
         _save(view.path, record)
+        if reserved is not None:
+            project_collaboration.note_execution_artifact_author(
+                view.path, "session", run_id, run_id
+            )
         return _public(record)
 
 
@@ -5175,6 +5198,15 @@ def _advance_mock(record: dict[str, Any]) -> dict[str, Any]:
         return record
     stage = int(record.get("mock_stage", 0))
     if stage == 0:
+        # The deterministic fixture obeys the same per-project capacity as
+        # provider-backed research. Both creators can queue immediately, but
+        # a viewer's poll cannot force a second run through the occupied slot.
+        active = sum(
+            item.get("id") != record["id"] and item.get("status") == "running"
+            for item in _all(record["project_path"])
+        )
+        if active >= get_limits(record["project_path"])["max_concurrent_sessions"]:
+            return record
         record["status"] = "running"
         record["current_action"] = "Investigator: examining the strategy"
         record["message"] = "Simulated Investigator is examining the proposed approach."
@@ -5229,15 +5261,8 @@ def control_mock_session(path: str, session_id: str, action: str) -> dict[str, A
     if action == "resume":
         if record.get("status") not in {"paused", "stopped"}:
             return _public(record)
-        limits = get_limits(path)
-        active_count = sum(
-            item.get("id") != session_id and _recover(item).get("status") in {"queued", "running"}
-            for item in _all(path)
-        )
-        if active_count >= limits["max_concurrent_sessions"]:
-            raise ProjectError(
-                "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Home Settings → Limits."
-            )
+        # Admission and Resume are independent of running capacity. Polling
+        # promotes the queued mock only when a project slot becomes available.
         record["status"] = "queued"
         record["current_action"] = "Queued"
         record["message"] = "Simulated research resumed. No provider was called."

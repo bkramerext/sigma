@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from uuid import uuid4
 import socket
 import subprocess
 import time
@@ -401,6 +402,113 @@ def exercise(ui: str, workspaces: Path) -> None:
             "Hard", timeout=20000
         )
         member_dialog.get_by_role("button", name="Close Project Settings").click()
+
+        # Reuse the SAME N/Z browser profiles to test the entire shared Session
+        # admission/control path against real auth, ACL and SQLite persistence.
+        # Mock execution is provider-free but now follows real queue semantics.
+        project_id = get_json(
+            owner_context.request.get(ui + "/api/projects/inspect", params={"path": path})
+        )["project"]["id"]
+        strategy_response = get_json(
+            owner_context.request.get(ui + "/api/projects/strategies", params={"path": path})
+        )["strategies"]
+        if strategy_response:
+            strategy_id = strategy_response[0]["id"]
+        else:
+            made = owner_context.request.post(
+                ui + "/api/projects/strategies",
+                headers={"Origin": ui},
+                data={
+                    "path": path,
+                    "title": "Concurrent collaborator research",
+                    "approach": "Test independent ownership and queued capacity.",
+                },
+            )
+            assert made.status == 201, made.text()
+            strategy_id = get_json(
+                owner_context.request.get(ui + "/api/projects/strategies", params={"path": path})
+            )["strategies"][0]["id"]
+
+        def submit_mock(context):
+            return context.request.post(
+                ui + "/api/projects/research-sessions/mock",
+                headers={"Origin": ui},
+                data={
+                    "path": path,
+                    "expected_project_id": project_id,
+                    "strategy_id": strategy_id,
+                    "idempotency_key": str(uuid4()),
+                },
+            )
+
+        first_response = submit_mock(owner_context)
+        second_response = submit_mock(member_context)
+        assert first_response.status == 200, first_response.text()
+        assert second_response.status == 200, second_response.text()
+        first_run = get_json(first_response)
+        second_run = get_json(second_response)
+        assert first_run["id"] != second_run["id"]
+        assert second_run["session_number"] == first_run["session_number"] + 1
+        assert first_run["created_by"] == OWNER
+        assert second_run["created_by"] == COLLABORATOR
+
+        # One project running slot: A starts, B waits durably. Another user's
+        # read may advance the deterministic simulation but may not control it.
+        status = get_json(
+            owner_context.request.get(
+                ui + "/api/projects/research-sessions", params={"path": path}
+            )
+        )
+        statuses = {item["id"]: item["status"] for item in status["sessions"]}
+        assert statuses[first_run["id"]] == "running", statuses
+        assert statuses[second_run["id"]] == "queued", statuses
+        for actor, foreign in (
+            (owner_context, second_run["id"]),
+            (member_context, first_run["id"]),
+        ):
+            forbidden = actor.request.post(
+                ui + f"/api/projects/research-sessions/{foreign}/control",
+                headers={"Origin": ui},
+                data={"path": path, "action": "stop"},
+            )
+            assert forbidden.status >= 400, (forbidden.status, forbidden.text())
+        # Stop one's own execution; the queued collaborator advances without
+        # changing its identity, number or saved work.
+        stopped = owner_context.request.post(
+            ui + f"/api/projects/research-sessions/{first_run['id']}/control",
+            headers={"Origin": ui},
+            data={"path": path, "action": "stop"},
+        )
+        assert stopped.status == 200, stopped.text()
+        visible = get_json(
+            member_context.request.get(
+                ui + "/api/projects/research-sessions", params={"path": path}
+            )
+        )["sessions"]
+        latest = {item["id"]: item for item in visible}
+        assert latest[first_run["id"]]["status"] == "stopped", latest
+        assert latest[second_run["id"]]["status"] == "running", latest
+        assert latest[second_run["id"]]["created_by"] == COLLABORATOR
+        own_stop = member_context.request.post(
+            ui + f"/api/projects/research-sessions/{second_run['id']}/control",
+            headers={"Origin": ui},
+            data={"path": path, "action": "stop"},
+        )
+        assert own_stop.status == 200, own_stop.text()
+        check = get_json(
+            owner_context.request.get(
+                ui + "/api/projects/research-sessions", params={"path": path}
+            )
+        )
+        assert {row["id"] for row in check["sessions"]} >= {
+            first_run["id"],
+            second_run["id"],
+        }
+        assert all(
+            row["status"] == "stopped"
+            for row in check["sessions"]
+            if row["id"] in {first_run["id"], second_run["id"]}
+        )
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()

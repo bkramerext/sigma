@@ -795,9 +795,7 @@ def prepare_job(record: dict[str, Any]) -> None:
 
 def claim_job(session_id: str, *, project_limit: int | None = None) -> bool:
     """Atomically claim user, global and shared-project running capacity."""
-    if project_limit is not None and (
-        type(project_limit) is not int or project_limit < 1
-    ):
+    if project_limit is not None and (type(project_limit) is not int or project_limit < 1):
         raise CloudResearchUnavailable("Project concurrency limit is invalid.")
     owner = _workspace_id()
     user_limit, global_limit, _user_queue, _global_queue = _evaluation_queue_limits()

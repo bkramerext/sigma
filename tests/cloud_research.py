@@ -3661,27 +3661,28 @@ def main() -> None:
                     cloud_research.prepare_job(stale_worker)
                     assert cloud_research.claim_job(stale_worker["id"])
                     research_sessions._save(stale_worker_project.path, stale_worker)
-                    assert (
+                    try:
                         asyncio.run(
-                            research_sessions._claim_cloud_job(
+                            research_sessions._await_session_execution_slot(
                                 stale_worker["id"], stale_worker_project.path
                             )
                         )
-                        is False
-                    )
+                    except ProjectError as exc:
+                        assert "reservation cannot be claimed" in str(exc)
+                    else:
+                        raise AssertionError("An already claimed worker was dispatched again")
                     worker_snapshot = research_sessions._read(
                         stale_worker_project.path, stale_worker["id"]
                     )
-                    assert worker_snapshot["status"] == "paused"
-                    assert worker_snapshot["strategy_runs"][0]["status"] == "paused"
+                    assert worker_snapshot["status"] == "queued"
                     assert worker_snapshot["steps"] == []
-                    assert worker_snapshot["events"][-1]["kind"] == "interrupted"
-                    assert cloud_research.job_status(stale_worker["id"]) == "interrupted"
+                    # An already-running ledger reservation is ambiguous until
+                    # the worker-lock recovery inspects the previous process.
+                    # Never silently free its provider/billing identity.
+                    assert cloud_research.job_status(stale_worker["id"]) == "running"
 
-                    # A legacy queued job that cannot claim a running slot
-                    # is paused immediately, without waiting for its deadline.
-                    # This is recovery behavior; new capacity-full requests
-                    # are refused before a session is created.
+                    # A queued job expiring while waiting must pause without
+                    # consuming a worker slot or dispatching a provider request.
                     expiry_project = initialize_project(
                         a.path / "queue-expiry.sigma",
                         "Queue expiry",
@@ -3712,26 +3713,18 @@ def main() -> None:
                     )
                     cloud_research.prepare_job(expired)
                     research_sessions._save(expiry_project.path, expired)
-                    with (
-                        patch.object(cloud_research, "claim_job", return_value=False),
-                        patch.object(
-                            research_sessions, "_outcome", return_value={"assessment": "pending"}
-                        ),
-                        patch.object(research_sessions, "_strategy_assessments", return_value=[]),
-                        patch.object(research_sessions, "_portfolio_decision", return_value={}),
-                    ):
-                        assert (
-                            asyncio.run(
-                                research_sessions._claim_cloud_job(
-                                    expired["id"], expiry_project.path
-                                )
+                    assert (
+                        asyncio.run(
+                            research_sessions._await_session_execution_slot(
+                                expired["id"], expiry_project.path
                             )
-                            is False
                         )
+                        is False
+                    )
                     played = research_sessions._read(expiry_project.path, expired["id"])
                     assert played["status"] == "paused"
                     assert played["strategy_runs"][0]["status"] == "paused"
-                    assert played["events"][-1]["kind"] == "interrupted"
+                    assert played["events"][-1]["kind"] == "paused_before_dispatch"
                     assert cloud_research.job_status(expired["id"]) == "paused"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
