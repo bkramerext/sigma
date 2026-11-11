@@ -4706,13 +4706,30 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 "account and click Resume; saved findings remain intact."
             )
         elif "sigma's" in message and "dispatch guard" in message:
-            result["next_step_guidance"] = (
-                f"SIGMA's {_agent_dispatch_guard_bytes(record):,}-byte UTF-8 dispatch guard is independent of the selected model. "
-                "Review the context-size diagnostics. If mandatory source material or the frozen "
-                "question is too large, start a narrower session; the saved session and research "
-                "remain intact. Resume with the same mandatory context will hit the same guard, "
-                "even after switching models."
+            saved_guard = re.search(r"sigma's ([\\d,]+)-byte utf-8 dispatch guard", message)
+            saved_limit = (
+                int(saved_guard.group(1).replace(",", ""))
+                if saved_guard is not None
+                else _agent_dispatch_guard_bytes(record)
             )
+            current_limit = _agent_dispatch_guard_bytes(record)
+            if saved_limit < current_limit:
+                result["next_step_guidance"] = (
+                    f"The saved call was stopped by SIGMA's older {saved_limit:,}-byte guard. "
+                    f"This build allows up to {current_limit:,} bytes after compaction for the "
+                    "selected model. Click Resume to recheck the preserved context. "
+                    "The blocked turn made no provider call; successful resumption may start "
+                    "a new call and use allowance. If the current limit is still exceeded, "
+                    "review the context-size diagnostics and narrow mandatory source material."
+                )
+            else:
+                result["next_step_guidance"] = (
+                    f"SIGMA's {saved_limit:,}-byte UTF-8 dispatch guard is independent of "
+                    "the selected model. Review the context-size diagnostics. If mandatory "
+                    "source material or the frozen question is too large, start a narrower "
+                    "session; saved research remains intact. Resuming with the same oversized "
+                    "mandatory content will hit the same guard even after switching models."
+                )
         elif "sigma context manifest" in message:
             result["next_step_guidance"] = (
                 "The saved research context manifest exceeded SIGMA's separate storage bound. "
