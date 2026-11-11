@@ -9,7 +9,10 @@ scenarios run in one intact group, without modifying their AST.
 from __future__ import annotations
 
 import inspect
+import logging
 import os
+import sys
+from contextlib import contextmanager
 from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
@@ -17,6 +20,68 @@ from typing import Any
 from unittest.mock import patch
 
 import httpx
+
+
+_EXPECTED_FAULT_LOGS = {
+    "research_sessions": {"session.strategy_exception": 3},
+    "papers": {
+        "paper.exception": 2,
+        "paper.score_failed": 22,
+        "paper.section_failed": 6,
+    },
+}
+
+
+@contextmanager
+def _fixture_logs(suite: str):
+    """Capture only known fault-injection diagnostics; reject any new noisy error.
+
+    Keep the complete unexpected record visible if a regression occurs. A changed
+    failure-path count requires an explicit review instead of silently turning
+    a new runtime error into green CI.
+    """
+    expected = _EXPECTED_FAULT_LOGS[suite]
+    observed: dict[str, int] = {}
+    unexpected: list[str] = []
+    captured: list[str] = []
+
+    class Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.levelno < logging.WARNING:
+                return
+            message = self.format(record)
+            captured.append(message)
+            kind = record.getMessage().partition(" ")[0]
+            if kind not in expected:
+                unexpected.append(message)
+            else:
+                observed[kind] = observed.get(kind, 0) + 1
+
+    handler = Capture(level=logging.WARNING)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    try:
+        yield
+        excess = {
+            kind: (found, expected[kind])
+            for kind, found in observed.items()
+            if found > expected[kind]
+        }
+        if unexpected or excess:
+            raise AssertionError(
+                f"Unreviewed {suite} warning/error logs: {unexpected}; "
+                f"fault-injection count over baseline: {excess}"
+            )
+        if observed:
+            summary = ", ".join(f"{key}={value}" for key, value in sorted(observed.items()))
+            print(f"PASS expected fault-injection diagnostics captured: {summary}")
+    except BaseException:
+        for message in captured:
+            print(message, file=sys.stderr)
+        raise
+    finally:
+        logger.removeHandler(handler)
 
 
 def _skip_unselected(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
@@ -115,7 +180,8 @@ def run_split(
             namespace[key] = _time_selected(key, namespace[key])
     assert sum(group == part for group in assigned.values()) > 0
     if not paper:
-        namespace["main"](part)
+        with _fixture_logs(name):
+            namespace["main"](part)
     else:
         # Preserve the entire former main() integration scenario as one
         # independent unit; the standalone cases run in the other unit.
@@ -134,8 +200,9 @@ def run_split(
 
         httpx.AsyncClient = offline_async_client  # type: ignore[assignment]
         try:
-            with patch.object(
-                papers, "_publication_compiler_has_writing_headroom", return_value=False
+            with (
+                _fixture_logs(name),
+                patch.object(papers, "_publication_compiler_has_writing_headroom", return_value=False),
             ):
                 namespace["main_part1"]()
                 if part == 2:
