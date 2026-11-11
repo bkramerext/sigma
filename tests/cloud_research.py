@@ -1797,7 +1797,9 @@ def test_json_project_orphan_recovery(
                 )
             with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
                 assert uncertain["id"] not in cloud_research.reconcile_orphaned_jobs()
-            assert cloud_research.job_status(uncertain["id"]) == "queued"
+            # Unpublished queued work with prior provider liability cannot run
+            # and must not occupy the durable queue indefinitely.
+            assert cloud_research.job_status(uncertain["id"]) == "interrupted"
             with cloud_research._connect() as db:
                 row = db.execute(
                     "SELECT status,amount_usd FROM calls WHERE call_id=?", (call_id,)
@@ -4043,8 +4045,10 @@ def main() -> None:
 
     # Exercise actual SIGKILL of a live backend and new interpreter recovery.
     from cloud_process_restart import test_real_process_recovery
+    from cloud_recovery_adversarial import main as test_recovery_adversarial
 
     test_real_process_recovery()
+    test_recovery_adversarial()
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"
