@@ -515,8 +515,8 @@ def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str)
     domain = email.rsplit("@", 1)[1]
     # Authenticated requests must avoid redundant domain grant DML.
     domain_grant = db.execute(
-        "SELECT 1 FROM grants WHERE kind='domain' AND value=? "
-        "AND role='member' AND active=1", (domain,)
+        "SELECT 1 FROM grants WHERE kind='domain' AND value=? AND role='member' AND active=1",
+        (domain,),
     ).fetchone()
     if domain_grant is None:
         return False
@@ -911,7 +911,8 @@ def resolve_session(raw: str | None) -> Principal | None:
         sponsored_enabled = sponsored_access_enabled()
         saved = db.execute(
             "SELECT role,access_active,sponsorship_eligible,model_access "
-            "FROM user_state WHERE subject=?", (row["subject"],)
+            "FROM user_state WHERE subject=?",
+            (row["subject"],),
         ).fetchone()
         # Session validation is a read unless role/allowance/model access changed.
         model_access = (
