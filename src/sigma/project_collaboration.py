@@ -163,7 +163,11 @@ def _verify_fence(db: sqlite3.Connection, path: str, actor: str) -> None:
 
 @contextmanager
 def write_guard(
-    path: str, expected_revision: int | None = None, *, advance_revision: bool = True
+    path: str,
+    expected_revision: int | None = None,
+    *,
+    advance_revision: bool = True,
+    allow_acl_mutation: bool = False,
 ) -> Iterator[sqlite3.Connection | None]:
     """Fence a persisted mutation and revision under one SQLite writer transaction.
 
@@ -219,7 +223,22 @@ def write_guard(
                 raise ProjectError(
                     f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
                 )
-            _verify_fence(db, path, actor)
+            if allow_acl_mutation:
+                # Only an ACL mutation may bypass an active research lease.
+                # Workers cannot use this path, nor may settings race deletion.
+                if binding is not None:
+                    raise ProjectError("Workers cannot bypass execution fencing for ACL changes.")
+                lease = db.execute(
+                    "SELECT activity,expires_at FROM shared_leases WHERE path=?", (path,)
+                ).fetchone()
+                if (
+                    lease is not None
+                    and lease["expires_at"] > time.time()
+                    and lease["activity"] == "Project deletion"
+                ):
+                    raise ProjectError("Project deletion is in progress.")
+            else:
+                _verify_fence(db, path, actor)
             # A project-wide file mutex protects the short shared write, while
             # the reservation proves which collaborator owns the Paper's
             # checkpoint. Never allow a valid collaborator to impersonate
@@ -1306,8 +1325,10 @@ def save_settings(
     model: str,
     thinking: str,
     title: str,
+    *,
+    allow_active_lease: bool = False,
 ) -> dict[str, Any]:
-    """Validate and stage shared metadata in the surrounding fenced write."""
+    """Atomically update ACL metadata; allow revocation during active research."""
     from sigma.projects import ProjectError
 
     if not isinstance(collaborators, list) or len(collaborators) > 50:
@@ -1318,7 +1339,7 @@ def save_settings(
         raise ProjectError(str(exc)) from exc
     if len(set(emails)) != len(emails):
         raise ProjectError("Each collaborator may appear only once.")
-    with write_guard(path, expected) as db:
+    with write_guard(path, expected, allow_acl_mutation=allow_active_lease) as db:
         if db is None:
             raise ProjectError("Collaboration is not available for this project.")
         row, actor = _membership(db, path)

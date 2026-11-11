@@ -1469,14 +1469,16 @@ class CollaborationTests(TestCase):
         self.assertEqual(latest["number"], other["number"] + 1)
 
     def test_revocation_fences_live_paper_and_session_creators(self) -> None:
-        """N cannot resume or checkpoint after Z removes N from their project."""
+        """Owner can remove an active creator; stale workers and replays stay fenced."""
         from sigma import papers
 
         Path(self.path).write_text("{}", encoding="utf-8")
+        private = self.root / "collaborator-private"
+        private.mkdir()
         member = Workspace(
             workspace_id="collaborator-workspace",
             subject_hash="collaborator-hash",
-            path=self.root,
+            path=private,
             email=self.other.email,
             verified_subject=self.other.subject,
         )
@@ -1499,12 +1501,26 @@ class CollaborationTests(TestCase):
             with papers.paper_run_scope(paper_run):
                 papers._write_queue_status(self.path, "queued", papers._now())
             shared.require_execution_operator(self.path, "session", session_run, "research")
+            token = shared.acquire_lease(self.path, "Paper generation")
+            assert token is not None
+            with shared.bind_lease(self.path, token), shared.write_guard(self.path):
+                pass
 
-        with shared._db() as db:
-            db.execute(
-                "DELETE FROM shared_collaborators WHERE path=? AND email=?",
-                (self.path, self.other.email),
-            )
+        # The test's .json fixture is not a real bundle; leave its queue
+        # sidecar intact while allowing the ordinary digest checker to run.
+        Path(self.path).unlink()
+        revision = self.revision()
+        result = shared.save_settings(
+            self.path,
+            revision,
+            [],
+            "gpt-6.1-sol",
+            "high",
+            "Study",
+            allow_active_lease=True,
+        )
+        self.assertEqual(result["revision"], revision + 1)
+        self.assertEqual(shared.summary(self.path)["collaborators"], [])
 
         with (
             patch("sigma.project_collaboration.cloud_workspaces.current", return_value=member),
@@ -1512,10 +1528,8 @@ class CollaborationTests(TestCase):
                 "sigma.project_collaboration.cloud_auth.current_principal",
                 return_value=self.other,
             ),
+            shared.bind_lease(self.path, token),
         ):
-            # The hidden authorization check may reject with either the
-            # generic ValueError or its ProjectError subtype. Both deny access
-            # without disclosing the project's existence to the former member.
             with self.assertRaisesRegex(ValueError, "access denied"):
                 shared.require_execution_operator(self.path, "session", session_run, "research")
             with self.assertRaises(ValueError):
@@ -1524,24 +1538,27 @@ class CollaborationTests(TestCase):
                 papers._write_queue_status(self.path, "running", papers._now())
             with self.assertRaises(ValueError), shared.write_guard(self.path):
                 pass
+            for kind, run_id in (("paper", paper_run), ("session", session_run)):
+                with self.subTest(kind=kind), self.assertRaises(ValueError):
+                    shared.reserve_execution_run(
+                        self.path, kind, run_id, 0, model="replay", thinking="low"
+                    )
             with self.assertRaises(ValueError):
                 shared.reserve_execution_run(
                     self.path, "session", str(uuid4()), 1, model="stale", thinking="low"
                 )
+            self.assertFalse(shared.renew_lease(self.path, token))
 
-        # Revocation protects access without erasing the original attribution
-        # or the owner's visibility into retained, unfinished work.
-        runs = shared.list_execution_runs(self.path, "paper")
-        self.assertEqual(len(runs), 1)
-        self.assertEqual(runs[0]["creator_email"], self.other.email)
-        self.assertEqual(runs[0]["run_id"], paper_run)
-        # The durable ledger records an accepted reservation; the separate
-        # crash-safe Paper sidecar records the queued execution phase.
-        self.assertEqual(runs[0]["status"], "reserved")
+        # Revocation preserves owner visibility and immutable creator identity.
+        for kind, run_id in (("paper", paper_run), ("session", session_run)):
+            rows = shared.list_execution_runs(self.path, kind)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["creator_email"], self.other.email)
+            self.assertEqual(rows[0]["run_id"], run_id)
+            self.assertEqual(rows[0]["status"], "reserved")
         with papers.paper_run_scope(paper_run):
             queued = papers._read_queue_status(self.path)
-        if queued is None:
-            raise AssertionError("Paper queue receipt vanished after revocation")
+        assert queued is not None
         self.assertEqual(queued["status"], "queued")
 
     def test_concurrent_expected_revision_has_one_winner(self) -> None:

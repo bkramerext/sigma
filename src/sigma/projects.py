@@ -1596,6 +1596,66 @@ def update_project(
     )
     prior = _settings(expected)
 
+    # Membership is SQLite ACL metadata rather than a project-document edit.
+    # Owner revocation must not have to acquire the running worker's lease.
+    # Any project-local changes still use the normal fenced path below.
+    if shared_edit and text_format is None and cloud_workspaces.current() is not None:
+        existing = inspect_project(value)
+        current = project_settings(existing.project)
+        prior_authored = replace(
+            prior,
+            desired_outcomes=(
+                prior.desired_outcomes
+                if "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                prior.paper_requirements
+                if "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+        wanted_authored = replace(
+            wanted,
+            desired_outcomes=(
+                wanted.desired_outcomes
+                if desired_outcomes is not None or "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                wanted.paper_requirements
+                if paper_requirements is not None or "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+
+        def authored_fields(settings: Any) -> tuple[Any, ...]:
+            return (
+                settings.title,
+                settings.problem,
+                settings.desired_outcomes,
+                settings.paper_requirements,
+                settings.investigation_type,
+                settings.difficulty,
+            )
+
+        if (
+            authored_fields(current)
+            == authored_fields(prior_authored)
+            == authored_fields(wanted_authored)
+        ):
+            assert expected_revision is not None and collaborators is not None
+            project_collaboration.save_settings(
+                existing.path,
+                expected_revision,
+                collaborators,
+                ai_model,
+                reasoning_effort,
+                existing.project.title,
+                allow_active_lease=True,
+            )
+            return inspect_project(value)
+
     def update(project: Project) -> Project:
         project_collaboration.require_edit_revision(str(value), expected_revision)
         current = project_settings(project)
