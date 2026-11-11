@@ -48,34 +48,56 @@ jobs:
       - name: Install locked dependencies once
         id: dependencies
         run: ./sigma setup
-      # The hosted Ubuntu image supplies Chromium's shared-library dependencies.
-      # Never install OS packages here: Playwright --with-deps invokes apt and
-      # Ubuntu mirror DNS failures have blocked both browser test groups.
-      # Bound downloads and prove that Chromium can actually launch before tests.
+      # CI caches only the browser binary, not uv's environment (which has
+      # previously caused cleanup stalls). Version the cache by the actual
+      # Playwright wheel and runner OS/arch to avoid stale browser revisions.
+      - name: Identify Playwright version for browser cache
+        id: playwright-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "version=$(uv run --with playwright python -c 'from importlib.metadata import version; print(version("playwright"))')" >> "$GITHUB_OUTPUT"
+      - name: Restore Chromium browser cache
+        id: chromium-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ runner.os == 'Linux' && 'ubuntu-24.04' || 'other' }}-${{ steps.playwright-version.outputs.version }}
+      # The hosted Ubuntu image provides Chromium shared-library dependencies.
+      # Never use --with-deps: apt mirror DNS failures previously blocked both
+      # browser groups. Cached runs skip the download entirely.
       - name: Prepare and smoke-test Chromium (no apt)
         id: chromium
         shell: bash
         timeout-minutes: 6
+        env:
+          CHROMIUM_CACHE_HIT: ${{ steps.chromium-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
-          echo "::group::Chromium installation (max 240 seconds; no apt)"
-          if timeout --signal=TERM --kill-after=10s 240s \
-            uv run --with playwright python -m playwright install chromium \
-            > /tmp/sigma-chromium-setup.log 2>&1; then
-            cat /tmp/sigma-chromium-setup.log
+          if [ "$CHROMIUM_CACHE_HIT" = "true" ]; then
+            echo "Chromium cache hit; no browser download needed."
           else
-            result=$?
-            cat /tmp/sigma-chromium-setup.log
-            if [ "$result" -eq 124 ] || [ "$result" -eq 137 ]; then
-              echo "::error title=Browser infrastructure timeout::Chromium download exceeded 240 seconds. SIGMA browser acceptance was not executed."
+            echo "::group::Chromium download (max 240 seconds; no apt)"
+            if timeout --signal=TERM --kill-after=10s 240s \
+              uv run --with playwright python -m playwright install chromium \
+              > /tmp/sigma-chromium-setup.log 2>&1; then
+              cat /tmp/sigma-chromium-setup.log
             else
-              echo "::error title=Browser infrastructure failure::Chromium installation failed (exit $result). SIGMA browser acceptance was not executed."
+              result=$?
+              cat /tmp/sigma-chromium-setup.log
+              if [ "$result" -eq 124 ] || [ "$result" -eq 137 ]; then
+                echo "::error title=Browser infrastructure timeout::Chromium download exceeded 240 seconds. SIGMA browser acceptance was not executed."
+              else
+                echo "::error title=Browser infrastructure failure::Chromium installation failed (exit $result). SIGMA browser acceptance was not executed."
+              fi
+              exit "$result"
             fi
-            exit "$result"
+            echo "::endgroup::"
           fi
-          echo "::endgroup::"
+          # Launch a browser once before any app-level acceptance. This costs
+          # seconds, not a second download or a redundant test suite.
           echo "::group::Headless Chromium launch smoke"
-          if ! timeout --signal=TERM --kill-after=10s 60s uv run --with playwright \
+          if ! timeout --signal=TERM --kill-after=10s 30s uv run --with playwright \
             python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True); page=b.new_page(); page.goto("data:text/html,<title>SIGMA browser smoke</title>"); assert page.title()=="SIGMA browser smoke"; print("Chromium launch smoke passed:", b.version); b.close(); p.stop()' \
             > /tmp/sigma-chromium-smoke.log 2>&1; then
             cat /tmp/sigma-chromium-smoke.log
