@@ -528,9 +528,7 @@ def _materialize_domain_member(db: sqlite3.Connection, subject: str, email: str)
     now = _now()
     if personal_grant is not None:
         # Only a live domain grant may supersede a historical revocation.
-        db.execute(
-            "DELETE FROM grants WHERE kind='email' AND value=? AND active=0", (email,)
-        )
+        db.execute("DELETE FROM grants WHERE kind='email' AND value=? AND active=0", (email,))
     inserted = db.execute(
         "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) "
         "SELECT 'email',?,'member',1,?,d.allowance_usd FROM grants AS d "
@@ -909,9 +907,7 @@ def resolve_session(raw: str | None) -> Principal | None:
                 (_now(), row["subject"]),
             )
             return None
-        eligible = _sponsorship_eligibility_in_db(
-            db, cfg, row["subject"], row["email"], role
-        )
+        eligible = _sponsorship_eligibility_in_db(db, cfg, row["subject"], row["email"], role)
         sponsored_enabled = sponsored_access_enabled()
         saved = db.execute(
             "SELECT role,access_active,sponsorship_eligible,model_access "
