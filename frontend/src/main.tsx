@@ -425,11 +425,24 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
     </SessionNotice>;
   }
   const guidance = stoppedSessionGuidance(session);
+  // Only the second Source Material mention (in the Next instruction) links
+  // to the editable project sources; the cause remains plain explanation.
+  const sourceLinkAt = guidance.cause.startsWith('Too much Source Material.')
+    ? guidance.next.indexOf('Source Material') : -1;
+  const nextGuidance = sourceLinkAt < 0 ? guidance.next : <>
+    {guidance.next.slice(0, sourceLinkAt)}
+    <a href="#sigma-supplied-evidence-heading" className="session-notice-source-link"
+      onClick={event => {
+        event.preventDefault();
+        window.dispatchEvent(new Event('sigma-reveal-source-material'));
+      }}>Source Material</a>
+    {guidance.next.slice(sourceLinkAt + 'Source Material'.length)}
+  </>;
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
   const title = session.status === 'failed' ? 'Session failed' : 'Stopped';
   return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
-    <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
+    <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {nextGuidance}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
   </SessionNotice>;
 }
@@ -7076,6 +7089,17 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const sectionOpen = useCallback((section: 'project' | 'strategies' | 'sessions' | 'papers') => {
     if (exclusiveSections) window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: section }));
   }, [exclusiveSections]);
+  useEffect(() => {
+    // Error-card Source Material links can originate from a collapsed Sessions
+    // pane. Reveal Project even in the exclusive-one-section layout.
+    const reveal = () => {
+      sectionOpen('project');
+      setProjectExpanded(true);
+      window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
+    };
+    window.addEventListener('sigma-reveal-source-material', reveal);
+    return () => window.removeEventListener('sigma-reveal-source-material', reveal);
+  }, [path, sectionOpen]);
   useEffect(() => {
     const opened = (event: Event) => {
       const section = (event as CustomEvent<string>).detail;
