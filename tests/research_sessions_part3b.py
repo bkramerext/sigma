@@ -1,4 +1,4 @@
-"""Second disjoint half of research-session verification group three.
+"""Second disjoint third of research-session verification group three.
 
 The existing scenario definitions and assertions remain in part3.py; the
 split driver selects alternating test definitions without changing their bodies.
