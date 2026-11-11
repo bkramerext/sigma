@@ -834,6 +834,14 @@ def project_evidence_remove(evidence_id: str, path: str):
     return {"deleted": evidence_id}
 
 
+@app.get("/api/projects/activity-runs")
+def project_activity_runs_view(path: str):
+    """Run-level activity for the project title and collaborator views."""
+    from sigma.recents import project_activity_runs
+
+    return {"runs": project_activity_runs(path)}
+
+
 @app.get("/api/projects/research-qa/activity")
 def research_qa_activity(path: str):
     return {"active": research_qa.list_pending_answers(path)}
