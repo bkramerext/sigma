@@ -581,7 +581,7 @@ def _preflight_record(question: str, *, source: str = "premise") -> dict[str, An
 
 def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() -> None:
     """59k extracted Unicode chars fit source policy but may exceed byte policy."""
-    record = _preflight_record("q" * 30_000, source="🧪" * 59_000)
+    record = _preflight_record("q" * 300_000, source="🧪" * 59_000)
     original = deepcopy(record)
     packet = research_sessions._mandatory_dispatch_lower_bound(record, record["strategy_runs"][0])
     assert len(record["uploaded_project_evidence"][0]["excerpt"]) < 60_000
@@ -612,7 +612,7 @@ def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() 
     assert stored["strategy_runs"][0]["status"] == "paused"
     assert stored["termination_reason_code"] == "context_limit"
     assert "mandatory_preflight" in stored["message"]
-    assert "SIGMA's 256,000-byte UTF-8 dispatch guard" in stored["message"]
+    assert "SIGMA's 512,000-byte UTF-8 dispatch guard" in stored["message"]
     assert "59,000" not in stored["message"]  # No raw source content or characters disclosed
     assert "🧪" not in stored["message"]
     assert stored["calls_used"] == 0
@@ -631,8 +631,27 @@ def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() 
     )
 
 
+def test_reviewed_model_mandatory_preflight_allows_310k_without_compiler_spend() -> None:
+    """The newer 512 kB ceiling must include the earliest pre-provider gate."""
+    record = _preflight_record("q" * 310_000)
+    before = deepcopy(record)
+    mandatory = research_sessions._mandatory_dispatch_lower_bound(
+        record, record["strategy_runs"][0]
+    )
+    assert LIMIT < _size(mandatory) < research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES
+    with (
+        patch.object(research_sessions, "_read", return_value=record),
+        patch.object(research_sessions, "_save") as save,
+    ):
+        assert asyncio.run(
+            research_sessions._ensure_mandatory_dispatch_preflight("context-791", "test")
+        )
+    save.assert_not_called()
+    assert record == before
+
+
 def test_mandatory_preflight_does_not_block_viable_portfolio_peers() -> None:
-    record = _preflight_record("q" * (LIMIT + 1000))
+    record = _preflight_record("q" * (research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES + 1000))
     record["strategy_runs"].append(
         {
             "strategy_id": "strategy-b",
