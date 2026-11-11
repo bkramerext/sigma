@@ -289,6 +289,8 @@ SIGMA remains experimental. Supplied source material can be incomplete or wrong;
 - **Recovery after interrupted workers.** Session, Paper, and Q/A work retain durable checkpoints. Backend process failures, restarts, and stale-worker recovery are handled without silently replaying uncertain paid AI calls.
 - **Paper restart from saved work.** Shift-click a saved Paper heading to choose a confirmed restart point, such as the validated manuscript or the writing stage. A new attempt preserves the original PDF, manuscript, and frozen research evidence.
 - **More helpful Source Material errors.** Research startup now distinguishes SIGMA's source-size and dispatch-packet guards from a model's context window, reports usable source-size diagnostics where available, and explains how to reduce excessive source input.
+- **Source Material recovery fixes (#796).** Recovered source-material configuration and Resume behavior more reliably after interrupted or failed research startup.
+- **Larger research dispatch packets (#790).** Expanded the bounded research dispatch limit to 512 kB, with preflight checks that reject oversized inputs before provider work and without silently truncating supplied evidence.
 - **Preflight checks before provider work.** Inputs that necessarily exceed SIGMA's dispatch limits can be rejected before unnecessary reference compilation or research calls. SIGMA does not silently truncate the supplied evidence.
 
 ### Smaller improvements that add up
@@ -304,4 +306,4 @@ Guest Mode does not grant AI execution or durable account storage. Members must 
 
 SIGMA remains experimental. Source Materials can contain incorrect premises, Investigator/Skeptic agreement is not independent verification, and a high Paper Score does not establish scientific correctness. Review generated research, citations, and papers critically.
 
-**Status:** Draft release notes for v0.4.0. These notes describe changes targeted from the current merged code, not a confirmed production deployment. The frontend and backend version declarations remain at 0.3.0 until a separate version-bump and release process. A 0.4.0 deployment SHA and production smoke-test result must be recorded before marking this release deployed.
+**Release source cutoff:** `dae6de2690fa47e79bd53fb98ace565ad5789210`. The v0.4.0 release commit and production deployment record will be added after exact-SHA verification and deployment acceptance. Live two-real-account collaboration smoke testing remains pending.
