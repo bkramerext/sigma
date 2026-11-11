@@ -490,8 +490,12 @@ def exercise(ui: str, workspaces: Path) -> None:
                 arg={
                     "first": first_run["session_number"],
                     "second": second_run["session_number"],
-                    "firstStatus": "(running)" if statuses[first_run["id"]] == "running" else "(queued)",
-                    "secondStatus": "(running)" if statuses[second_run["id"]] == "running" else "(queued)",
+                    "firstStatus": "(running)"
+                    if statuses[first_run["id"]] == "running"
+                    else "(queued)",
+                    "secondStatus": "(running)"
+                    if statuses[second_run["id"]] == "running"
+                    else "(queued)",
                     "owner": OWNER,
                     "member": COLLABORATOR,
                 },
@@ -522,7 +526,12 @@ def exercise(ui: str, workspaces: Path) -> None:
         ):
             page.evaluate(
                 submit_qa,
-                {"path": path, "projectId": project_id, "question": question, "requestId": request_id},
+                {
+                    "path": path,
+                    "projectId": project_id,
+                    "question": question,
+                    "requestId": request_id,
+                },
             )
         for _ in range(100):
             state = get_json(
@@ -579,9 +588,12 @@ def exercise(ui: str, workspaces: Path) -> None:
             },
         )
         assert stolen.status >= 400, (stolen.status, stolen.text())
-        assert get_json(
-            owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state")
-        )["started"] == 2
+        assert (
+            get_json(owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state"))[
+                "started"
+            ]
+            == 2
+        )
 
         # Home's own green indicator also lists all four lines. A second tab
         # keeps both in-flight Q/A fetches attached to their original pages.
@@ -627,12 +639,16 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert {record["qa_id"] for record in all_answers} >= {
             answer["qa_id"] for answer in answers
         }
-        assert get_json(
-            owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state")
-        )["started"] == 2, "No implicit provider retry is permitted"
+        assert (
+            get_json(owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state"))[
+                "started"
+            ]
+            == 2
+        ), "No implicit provider retry is permitted"
         foreign_delete = member_context.request.delete(
             ui + f"/api/projects/research-qa/{answers[0]['qa_id']}",
-            params={"path": path}, headers={"Origin": ui}
+            params={"path": path},
+            headers={"Origin": ui},
         )
         assert foreign_delete.status >= 400, foreign_delete.text()
         for home in homes:
