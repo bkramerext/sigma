@@ -307,8 +307,12 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                     # both Q/A provider requests are suspended. Keep the actual
                     # project edit outside the Paper lease: document mutations
                     # must remain fenced by active Paper execution (#761).
+                    paper_run_id = "3" * 32
+                    assert shared.reserve_execution_run(
+                        str(path), "paper", paper_run_id, 0, model="mock", thinking="low"
+                    )
                     with (
-                        papers.paper_run_scope("3" * 32),
+                        papers.paper_run_scope(paper_run_id),
                         patch("sigma.memory_guard.require_capacity"),
                     ):
                         async with papers._paper_operation(str(path), generating=True):
