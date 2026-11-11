@@ -126,20 +126,20 @@ def _time_selected(name: str, original: Callable[..., Any]) -> Callable[..., Any
                 if duration >= 5:
                     print(f"TEST_DURATION {name} {duration:.1f}s", flush=True)
 
-    else:
+        measured_async.__name__ = name
+        return measured_async
 
-        def measured_sync(*args: Any, **kwargs: Any) -> Any:
-            start = perf_counter()
-            try:
-                return original(*args, **kwargs)
-            finally:
-                duration = perf_counter() - start
-                if duration >= 5:
-                    print(f"TEST_DURATION {name} {duration:.1f}s", flush=True)
+    def measured_sync(*args: Any, **kwargs: Any) -> Any:
+        start = perf_counter()
+        try:
+            return original(*args, **kwargs)
+        finally:
+            duration = perf_counter() - start
+            if duration >= 5:
+                print(f"TEST_DURATION {name} {duration:.1f}s", flush=True)
 
-    timed = measured_async if inspect.iscoroutinefunction(original) else measured_sync
-    timed.__name__ = name
-    return timed
+    measured_sync.__name__ = name
+    return measured_sync
 
 
 def run_split(
@@ -169,7 +169,7 @@ def run_split(
             ):
                 assigned[key] = number
 
-    # CI can divide the unusually slow third research-session group into two
+    # CI can divide the unusually slow third research-session group into three
     # disjoint processes. Every definition is still executed exactly once, and
     # nested calls to other tests retain their original helper behavior.
     selected_half: set[str] | None = None
