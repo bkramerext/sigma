@@ -179,6 +179,12 @@ def check_failures() -> None:
             owner = "1"
         elif step == ["npm", "--prefix", "frontend", "run", "build"]:
             owner = "7"
+        elif "tests/crucible_scheduler_evidence.py" in step:
+            owner = "1"
+        elif "tests/papers_part2.py" in step:
+            owner = "5"
+        elif "tests/sage_execution.py" in step:
+            owner = "3"
         elif extra_half:
             owner = "8" if extra_half_b else "6"
         else:
@@ -199,6 +205,14 @@ def check_failures() -> None:
     assert sum("tests/research_sessions_part3c.py" in step for step in combined) == 1
     assert any("scripts/increment15_offline_pairs.py" in step for step in combined)
     assert any(step[-2:] == ["run", "build"] for step in combined)
+    # Runtime-based moves must remain disjoint, exhaustive and intentional.
+    for shard, filename in (
+        ("1", "tests/crucible_scheduler_evidence.py"),
+        ("5", "tests/papers_part2.py"),
+        ("3", "tests/sage_execution.py"),
+    ):
+        assert sum(filename in step for step in combined) == 1
+        assert any(filename in step for step in plans[shard])
     # If frontend commands move shards, the workflow's npm-skip configuration
     # must be updated rather than silently running without dependencies.
     assert all(
