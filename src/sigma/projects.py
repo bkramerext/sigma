@@ -1713,7 +1713,7 @@ def update_project(
     # their ACL update independently of a running research/paper execution lease:
     # the database CAS still serializes and validates membership changes. Other
     # project edits continue through the ordinary fenced project writer below.
-    if shared_edit:
+    if shared_edit and text_format is None:
         existing_view = inspect_project(value)
         if update(existing_view.project) == existing_view.project:
             assert expected_revision is not None and collaborators is not None
