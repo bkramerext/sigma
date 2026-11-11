@@ -59,9 +59,10 @@ function sourceUrlError(value: string): string | null {
   }
 }
 
-function SourceMaterialLink({ url }: { url: string }) {
+function SourceMaterialLink({ url, guest }: { url: string; guest: boolean }) {
   const [title, setTitle] = useState<string | null>(null);
   useEffect(() => {
+    if (guest) return; // No external metadata requests from anonymous sample browsing.
     const controller = new AbortController();
     setTitle(null);
     void fetch('/api/reference-title?url=' + encodeURIComponent(url), {
@@ -71,7 +72,7 @@ function SourceMaterialLink({ url }: { url: string }) {
         if (!controller.signal.aborted) setTitle(result?.title?.trim() || null);
       }).catch(() => {});
     return () => controller.abort();
-  }, [url]);
+  }, [url, guest]);
   return <a className="sigma-evidence-link" href={url} target="_blank" rel="noopener noreferrer">{title || url}</a>;
 }
 
@@ -88,9 +89,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
   const saving = useRef(false);
   const cancelled = useRef(false);
   const currentPath = useRef(path);
-  const currentGuest = useRef(guest);
   currentPath.current = path;
-  currentGuest.current = guest;
 
   async function reload() {
     const response = await fetch('/api/projects/evidence?' + new URLSearchParams({ path }), {
@@ -98,7 +97,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not load Source Material.');
-    if (currentPath.current === path && !currentGuest.current) {
+    if (currentPath.current === path) {
       const latest = result.files as EvidenceRow[];
       if (editingId) {
         const current = latest.find(row => row.id === editingId);
@@ -116,7 +115,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
 
   useEffect(() => {
     setRows([]); setError(''); setAdding(false); setEditingId(null); setUrl('');
-    if (!guest) void reload().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+    void reload().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
   }, [path, guest]);
 
   useEffect(() => { if (adding || editingId) linkInput.current?.focus(); }, [adding, editingId]);
@@ -251,7 +250,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
       {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
         <div className={'sigma-evidence-item' + (entry.enabled === false ? ' is-disabled' : '')}>
           {entry.kind === 'link'
-            ? editingId === entry.id ? linkEditor() : <SourceMaterialLink url={entry.url || ''}/>
+            ? editingId === entry.id ? linkEditor() : <SourceMaterialLink url={entry.url || ''} guest={guest}/>
             : <a className="sigma-evidence-attachment" href={'/api/projects/evidence/' + encodeURIComponent(entry.id) + '/pdf?' + new URLSearchParams({ path })}
                 target="_blank" rel="noopener noreferrer"><EvidenceClipIcon/><span>{entry.filename}</span></a>}
           {editingId === entry.id && error && <span className="sigma-evidence-url-error" role="alert">{error}</span>}

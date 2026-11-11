@@ -347,11 +347,8 @@ def _index():
 
 def record_access(view: ProjectView) -> None:
     """A secondary index failure must not turn a successful research write into a retry."""
-    from sigma import cloud_workspaces
-
-    workspace = cloud_workspaces.current()
-    if workspace is not None and workspace.guest:
-        return
+    # Anonymous copies remain indexed within this temporary, private cookie
+    # workspace. They are never entered in a shared listing or permanent root.
     from sigma.samples import sample_project_ids
 
     try:
@@ -529,8 +526,6 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
     from sigma.research_sessions import has_active_session
 
     workspace = cloud_workspaces.current()
-    if workspace is not None and workspace.guest:
-        return {"projects": []}
     shared_rows, shared_paths = project_collaboration.shared_listing()
     shared_by_path = {row["path"]: row for row in shared_rows}
     with _index() as index:

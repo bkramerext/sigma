@@ -1344,6 +1344,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const [suggestionError, setSuggestionError] = useState('');
   const [suggestionStatus, setSuggestionStatus] = useState('');
   const [markdownView, setMarkdownView] = useState(false);
+  const [guestMarkdownPreview, setGuestMarkdownPreview] = useState(false);
   const [formattedBlocks, setFormattedBlocks] = useState<Record<string, { source: string; body: string }>>({});
   const [formatProgress, setFormatProgress] = useState('');
   const [formatError, setFormatError] = useState('');
@@ -1359,6 +1360,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const textFingerprint = JSON.stringify(textBlocks);
   useEffect(() => () => { formatAbort.current?.abort(); }, [projectId, path, textFingerprint]);
   async function toggleUnderstandingMarkdown() {
+    if (guest) { setGuestMarkdownPreview(true); return; }
     if (markdownView) {
       formatAbort.current?.abort();
       setMarkdownView(false);
@@ -1367,7 +1369,6 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       return;
     }
     setMarkdownView(true);
-    if (guest) return;
     const queued = textBlocks.filter(item => item.source.trim().length >= 40
       && item.source.length <= 20000 && formattedBlocks[item.field]?.source !== item.source);
     if (!queued.length) return;
@@ -1524,6 +1525,9 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     window.localStorage.setItem(`sigma.currentUnderstanding:${projectId}`, String(isOpen));
   }}>
     <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><button type="button" className="sigma-render-toggle current-understanding-markdown" aria-label={markdownView ? "Show saved Current Understanding text" : "Format Current Understanding as Markdown"} aria-pressed={markdownView} data-tooltip={markdownView ? "Show saved Current Understanding text" : "Format Current Understanding as Markdown"} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleUnderstandingMarkdown(); }}><MarkdownGlyph/></button>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was saved." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
+    {guestMarkdownPreview && createPortal(<GuestFeatureDialog title="Markdown for Current Understanding"
+      message="With member access and ChatGPT, SIGMA can reformat the saved findings, questions and limitations as Markdown. This is a presentation change, not a scientific result. No text was sent or changed."
+      onClose={() => setGuestMarkdownPreview(false)}/>, document.body)}
     <div className="hint current-understanding-scope">{markdownView ? narrative(state.scope_note, 'scope_note') : state.scope_note}</div>{formatProgress && <p className="outcome-markdown-progress" role="status">{formatProgress}</p>}{formatError && <p className="outcome-conclusion-format-error" role="alert">{formatError}</p>}
     <div className="current-understanding-columns">
       <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>
@@ -1781,6 +1785,16 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
     try {
+      if (guest) {
+        if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
+        const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
+        if (!limitResponse.ok) throw new Error('Could not load example research limits.');
+        setLimits(await limitResponse.json() as ResearchLimits);
+        setPendingStrategyIds(chosenIds);
+        setConfig({ available: false, model: '', reasoning_effort: '', mode: '', binding: '', message: 'Preview only' });
+        setConfirmStart(true);
+        return;
+      }
       if (mockResearch) {
         if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
         setPendingStrategyIds(chosenIds);
@@ -1815,6 +1829,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }
 
   async function start() {
+    if (guest) { setConfirmStart(false); onGuestPlay(); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
     setBusy(true); setError('');
@@ -2042,11 +2057,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const play = useCallback(() => {
     if (busy || readError || projectAtCapacity) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
-    if (!eligible.length) return;
+    if (!eligible.length) {
+      if (guest) onGuestPlay();
+      return;
+    }
     if (missingType) { setConfirmMissingType(true); return; }
     setConfirmStart(false);
     void begin();
-  }, [busy, eligible, readError, path, projectAtCapacity, missingType]);
+  }, [busy, eligible, readError, path, projectAtCapacity, missingType, guest, onGuestPlay]);
   const stop = useCallback(() => {
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
@@ -2054,14 +2072,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits ? `${limits.research_rounds} ${limits.research_rounds === 1 ? "round" : "rounds"} × ${limits.turns_per_round ?? 3} paired ${limits.turns_per_round === 1 ? "turn" : "turns"} × 2 agents × ${eligible.length} enabled ${eligible.length === 1 ? "strategy" : "strategies"} = ${limits.research_rounds * (limits.turns_per_round ?? 3) * 2 * eligible.length} maximum agent calls` : undefined,
+      confirmationSummary: limits ? `${limits.research_rounds} ${limits.research_rounds === 1 ? "round" : "rounds"} × ${limits.turns_per_round ?? 3} paired ${limits.turns_per_round === 1 ? "turn" : "turns"} × 2 agents × ${confirmStart ? pendingStrategyIds.length : eligible.length} enabled ${(confirmStart ? pendingStrategyIds.length : eligible.length) === 1 ? "strategy" : "strategies"} = ${limits.research_rounds * (limits.turns_per_round ?? 3) * 2 * (confirmStart ? pendingStrategyIds.length : eligible.length)} maximum agent calls` : undefined,
       // Match the backend's queued/running slot count. The server remains
       // authoritative when another browser starts a session concurrently.
       playDisabled: busy || !!readError || confirmStart || !eligible.length || projectAtCapacity,
       stopDisabled: busy || !!readError || !runningSession,
       playLabel,
     });
-  }, [busy, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, projectAtCapacity, readError, runningSession, sessions, sponsoredSession]);
+  }, [busy, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, projectAtCapacity, readError, runningSession, sessions, sponsoredSession, pendingStrategyIds.length]);
 
   const orderedSessions = [...sessions].sort((left, right) => right.session_number - left.session_number);
 
@@ -2092,12 +2110,21 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         {sessionControls.confirming ? <>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
-        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={guest ? onGuestPlay : sessionControls.play}><CirclePlusIcon/></button>}
+        </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={sessionControls.play}><CirclePlusIcon/></button>}
       </div>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
+    {guest && confirmStart && limits && <fieldset className="research-pause-guidance" aria-label="Example session configuration">
+      <legend>Example session configuration</legend>
+      <p>Explore the settings for a research session. These choices are a preview and won't run or save research.</p>
+      <label>Rounds <input type="number" min={1} max={60} value={limits.research_rounds} onChange={event => setLimits(previous => previous && ({ ...previous, research_rounds: Math.min(60, Math.max(1, Number(event.target.value) || 1)) }))}/></label>
+      <label>Turns per round <input type="number" min={1} max={20} value={limits.turns_per_round} onChange={event => setLimits(previous => previous && ({ ...previous, turns_per_round: Math.min(20, Math.max(1, Number(event.target.value) || 1)) }))}/></label>
+      <p>Strategies in this session:</p>
+      {eligible.map(strategy => <label key={strategy.id}><input type="checkbox" checked={pendingStrategyIds.includes(strategy.id)} onChange={event => setPendingStrategyIds(current => event.target.checked ? [...current, strategy.id] : current.filter(id => id !== strategy.id))}/>{strategy.title}</label>)}
+      <p>{limits.research_rounds * limits.turns_per_round * 2 * pendingStrategyIds.length} maximum Investigator/Skeptic calls; none will be dispatched in this demo.</p>
+    </fieldset>}
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
@@ -2520,7 +2547,7 @@ type PaperScore = {
   categories: Record<'tex_correctness' | 'readability' | 'sustained_answer' | 'research_rigor' | 'evidence' | 'visuals', { earned: number; max: 100; weight: number; explanation: string }>;
 };
 const HIGH_SCORING_PAPER_THRESHOLD = 70;
-const HIGH_SCORING_PAPER_TOOLTIP = 'Marked as a high scoring paper (>70)';
+const HIGH_SCORING_PAPER_TOOLTIP = 'Marked as a high scoring paper (70 or higher)';
 const paperScoreCategories: { key: keyof PaperScore['categories']; title: string; standard: string }[] = [
   { key: 'tex_correctness', title: 'TeX correctness', standard: 'Equations render correctly, without material compilation, clipping, or obscuration defects.' },
   { key: 'readability', title: 'Human readability, including layout', standard: 'A scientifically curious nonspecialist can follow the prose, definitions, equations, and page flow on a careful first read; full credit also requires a human cold read.' },
@@ -2800,6 +2827,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     };
   }, [includeOptionsOpen]);
   const [newPaperRequested, setNewPaperRequested] = useState(false);
+  const [guestPaperPreview, setGuestPaperPreview] = useState(false);
+  const [guestScorePreview, setGuestScorePreview] = useState(false);
+  const [guestExplainPreview, setGuestExplainPreview] = useState(false);
   const [confirmNewPaper, setConfirmNewPaper] = useState(false);
   const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
   useEffect(() => {
@@ -2942,7 +2972,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     document.addEventListener('pointerdown', dismissOutside);
     return () => document.removeEventListener('pointerdown', dismissOutside);
   }, [confirmRestartDraft, confirmDiscardDraft, confirmPlayRestartDraft, confirmRecoverDraft]);
-  useEffect(() => { if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest, path]);
+  useEffect(() => {
+    if (guest) {
+      const controller = new AbortController();
+      void fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, {
+        signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+      }).then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Could not load saved papers.');
+        if (!controller.signal.aborted) setPapers(Array.isArray(data.papers) ? data.papers : []);
+      }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+      return () => controller.abort();
+    }
+    void refresh();
+    return () => request.current?.abort();
+  }, [guest, path]);
   const lastPaperRevision = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (collaborationRevision === undefined || guest) return;
@@ -3646,9 +3691,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
-      {!guest && <div className="papers-heading-actions strategy-heading-actions">
+      <div className="papers-heading-actions strategy-heading-actions">
         {confirmNewPaper ? <>
           <button type="button" className="text-view-link session-start-link" disabled={loading || busy} onClick={() => {
+            if (guest) { setConfirmNewPaper(false); setGuestPaperPreview(true); return; }
             setConfirmNewPaper(false); selectPaperRun(crypto.randomUUID().replaceAll('-', ''));
             setPaperProgress(null); setNewPaperRequested(true); setDraftPaperExpanded(true);
             setCheckpointMismatch(null); setRestartableCheckpoint(null); setRestartReady(false);
@@ -3663,7 +3709,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           }}><CirclePlusIcon/></button>
         </>}
         <span className="paper-includes-anchor">
-          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" disabled={loading || confirmNewPaper || busy} onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
+          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" disabled={loading || (!guest && confirmNewPaper) || busy} onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
           {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className={`paper-includes-dialog${includePopupAbove ? ' paper-includes-dialog-above' : ''}`} role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset, maxHeight: includePopupMaxHeight }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
@@ -3679,10 +3725,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       </fieldset>
           </div>}
         </span>
-      </div>}
+      </div>
       <p className="section-count">{papers.length + otherPaperRuns.length + (showDraftPaper ? 1 : 0)} {papers.length + otherPaperRuns.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
 
+    {guestPaperPreview && <GuestFeatureDialog title="Generate a research paper"
+      message="With authorized SIGMA access and ChatGPT, SIGMA can extract evidence from completed research, plan and write sections, validate claims, proofread LaTeX, generate a PDF and score the result. Research findings and AI-written papers still need human verification."
+      onClose={() => setGuestPaperPreview(false)}/>}
+    {guestExplainPreview && <GuestFeatureDialog title="Explain this paper"
+      message="With member access and ChatGPT, SIGMA can summarize a saved paper in simpler language, explain its claims and limitations, and keep that explanation alongside the paper. An AI explanation is not an independent validation."
+      onClose={() => setGuestExplainPreview(false)}/>}
+    {guestScorePreview && <GuestFeatureDialog title="Score a research paper"
+      message="With authorized SIGMA access and ChatGPT, SIGMA evaluates a saved PDF against its research, correctness, readability, evidence and visual-quality rubric. Scores are provisional and are not proof of scientific correctness."
+      onClose={() => setGuestScorePreview(false)}/>}
     {showPaperNotice && <SessionNotice key={paperNoticeKey} number={draftVersion}
       title={paperNoticeCopy?.title ?? 'Paper generation stopped'}
       kind="research-pause-guidance paper-contextual-error"
@@ -3694,7 +3749,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     </SessionNotice>}
     <div id="papers-pane-content" hidden={!expanded} className="papers-pane-content">
       <div className="ai-paper-body">
-      {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
+      <>
 
       {rewindDialog && createPortal(<div className="paper-rewind-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !rewindBusy) { setRewindDialog(null); rewindReturnFocus.current?.focus(); } }}>
         <div className="paper-rewind-dialog" role="dialog" aria-modal="true" aria-labelledby="paper-rewind-title" aria-describedby="paper-rewind-description">
@@ -3810,11 +3865,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} onRewind={!guest ? element => void openPaperRewind(paper, element) : undefined} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} onRewind={!guest ? element => void openPaperRewind(paper, element) : undefined} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
-                  : <button type="button" className={`ai-paper-eli5-balloon${explainingId === paper.paper_id ? ' is-explaining' : ''}`} disabled={!!explainingId} data-tooltip={explainingId === paper.paper_id ? undefined : "Explain it to me like I'm 5"} aria-label="Explain it to me like I'm 5" onClick={() => void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
+                  : <button type="button" className={`ai-paper-eli5-balloon${explainingId === paper.paper_id ? ' is-explaining' : ''}`} disabled={!!explainingId} data-tooltip={explainingId === paper.paper_id ? undefined : "Explain it to me like I'm 5"} aria-label="Explain it to me like I'm 5" onClick={() => guest ? setGuestExplainPreview(true) : void explainPaper(paper)}>{explainingId === paper.paper_id ? <span className="ai-paper-explaining"><span aria-hidden="true">⌛</span> Explaining...</span> : <svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg>}</button>}
                 {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View paper in a new browser tab" data-tooltip="View paper in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
                 <span className="paper-action-menu">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-download-button" aria-label={`Download ${paper.title}`} data-tooltip="Download paper" aria-haspopup="menu" aria-expanded={paperMenu?.paperId === paper.paper_id && paperMenu.kind === 'download'} onClick={event => { positionPaperPopup(event.currentTarget, 145, 100); setPaperMenu(current => current?.paperId === paper.paper_id && current.kind === 'download' ? null : { paperId: paper.paper_id, kind: 'download' }); }}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
@@ -3823,7 +3878,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     <a role="menuitem" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`${paper.download_basename}.tex`} onClick={() => setPaperMenu(null)}>Download LaTeX source</a>
                   </span>}
                 </span>
-                {(!viewerEmail || viewerEmail === projectOwnerEmail || artifactAuthors?.[paper.paper_id] === viewerEmail) && <span className="paper-remove-anchor">
+                {!guest && (!viewerEmail || viewerEmail === projectOwnerEmail || artifactAuthors?.[paper.paper_id] === viewerEmail) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
                     <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
@@ -3834,7 +3889,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </div></div>}
                 </span>}
               </>}/>
-            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · {(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : paperModelThinkingLabel(paper.generation)}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
+            <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · {(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : paperModelThinkingLabel(paper.generation)}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
             <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
               ? paperReviewLabel(paper.generation)
               : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
@@ -3898,8 +3953,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       </section>}
       {success && <p className="ai-paper-status" role="status">{success}</p>}
 
-      </>}
-      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={!!scoreConfig?.available && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoreUnavailableReason={!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available ? 'A compiled PDF is required to rescore this paper.' : !scoreConfig ? 'Checking current AI model and connection…' : scoreConfig.available ? '' : scoreConfig.message} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
+      </>
+      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { if (guest) { setScoreDialog(null); setGuestScorePreview(true); return; } const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={guest || !!scoreConfig?.available && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoreUnavailableReason={!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available ? 'A compiled PDF is required to rescore this paper.' : !scoreConfig ? 'Checking current AI model and connection…' : scoreConfig.available ? '' : scoreConfig.message} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
       </div>
     </div>
   </section>;
@@ -4108,15 +4163,16 @@ function LazyViewport({ children, fallback, force = false }: {
   return <div ref={target}>{mounted ? children : fallback}</div>;
 }
 
-function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, guest = false, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
+function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, guest = false, aiGuest = false, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; guest?: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; guest?: boolean; aiGuest?: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
   const [storedSelected, setSelected] = useState<TextDisplay>(() => window.localStorage.getItem(preferenceKey) === 'rendered' ? 'rendered' : 'plain');
   const selected: TextDisplay = storedSelected;
   const [rendering, setRendering] = useState(false);
+  const [guestMarkdownPreview, setGuestMarkdownPreview] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editingFromRendered, setEditingFromRendered] = useState(false);
   const [draft, setDraft] = useState('');
@@ -4193,6 +4249,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     if (restoreFocus) requestAnimationFrame(() => bodyTrigger.current?.focus());
   }
   async function convert(targetFormat: TextFormat = format) {
+    if (guest || aiGuest) { setGuestMarkdownPreview(true); return; }
     if (!data || busy) return;
     const controller = new AbortController(); abort.current = controller; setBusy(true); setRendering(true); setError('');
     let finishProviderRequest = () => {};
@@ -4229,7 +4286,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       aria-label={selected === 'rendered' ? `Show plain ${name}` : plainRecovery ? `Convert ${name} to Plain` : `Render ${name} as Markdown`}
       aria-pressed={selected === 'rendered' || rendering} data-tooltip={renderTooltip}
       aria-hidden={combinedEditMode || undefined} style={combinedEditMode ? { visibility: 'hidden' } : undefined}
-      disabled={editing || busy || combinedEditMode || (guest && selected !== 'rendered' && (plainRecovery || !data?.markdown?.current))} onClick={() => {
+      disabled={editing || busy || combinedEditMode} onClick={() => {
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
@@ -4252,6 +4309,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {markdownPortalTarget && createPortal(markdownControl, markdownPortalTarget)}
+    {guestMarkdownPreview && <GuestFeatureDialog title="AI Markdown formatting" message="With an authorized model, SIGMA can format this text as readable Markdown for your review before adopting it. Manual Markdown editing and rendering remain available without AI." onClose={() => setGuestMarkdownPreview(false)}/>}
     {copyPortalTarget && createPortal(copyControl, copyPortalTarget)}
     {scope === 'project' && exportOpen && <ProjectExportDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
@@ -4786,6 +4844,28 @@ type Destination = { root: string; path: string | null; exists: boolean };
 type ResearchQASource = { source_id: string; session_number: number | null; kind: string; label?: string; navigation_available?: boolean; navigation_url?: string; navigation_unavailable_reason?: string };
 type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; author_email?: string; created_by?: string; markdown_answer?: string | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
 
+function GuestFeatureDialog({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    ref.current?.showModal();
+    return () => {
+      if (ref.current?.open) ref.current.close();
+      requestAnimationFrame(() => previousFocus.current?.isConnected && previousFocus.current.focus());
+    };
+  }, []);
+  return <dialog ref={ref} className="project-settings-dialog guest-research-dialog" aria-label={title}
+    onCancel={event => { event.preventDefault(); onClose(); }}>
+    <header className="settings-header"><h2>{title}</h2><DialogDismissButton label="Close preview" onClick={onClose}/></header>
+    <div className="settings-body"><p>{message}</p>
+      <p className="settings-hint">This is a preview. No ChatGPT request was made and no research was changed.</p>
+      <p className="settings-hint">AI execution requires authorized SIGMA access and an available ChatGPT connection or supported provider.</p>
+      <button type="button" className="text-view-link" onClick={onClose}>Close</button>
+    </div>
+  </dialog>;
+}
+
 function LeanPlaceholderDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { dialog.current?.showModal(); }, []);
@@ -4799,6 +4879,8 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
   const [question, setQuestion] = useState('');
+  const [guestAskPreview, setGuestAskPreview] = useState(false);
+  const [guestAnswerMarkdownPreview, setGuestAnswerMarkdownPreview] = useState(false);
   const [answers, setAnswers] = useState<ResearchQARecord[]>([]);
   const [pendingAnswers, setPendingAnswers] = useState<{ request_id: string; creator: string; model: string; thinking: string }[]>([]);
   const [binding, setBinding] = useState('');
@@ -4823,8 +4905,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       const saved = JSON.parse(window.localStorage.getItem(requestKey) ?? 'null') as { question?: string; id?: string } | null;
       if (saved?.question && saved.id) { setQuestion(saved.question); setRecovery({ question: saved.question, id: saved.id }); }
     } catch { window.localStorage.removeItem(requestKey); }
-    if (guest) setLoading(false);
-    else void refresh();
+    void refresh();
     return () => { request.current?.abort(); formattingRequest.current?.abort(); };
   }, [guest]);
   async function refresh(silent = false): Promise<{ answers: ResearchQARecord[]; archiveAvailable: boolean } | null> {
@@ -4906,7 +4987,10 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     return () => { closed = true; window.clearInterval(timer); };
   }, [guest, path]);
   async function ask(event: React.FormEvent) {
-    event.preventDefault(); if (!question.trim() || busy || !binding) return;
+    event.preventDefault();
+    if (!question.trim() || busy) return;
+    if (guest) { setGuestAskPreview(true); return; }
+    if (!binding) return;
     if (recovery?.question === question) {
       // A response might have completed after its browser request failed.
       // Check for the durable result before an explicitly requested retry.
@@ -4961,7 +5045,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
       return;
     }
-    if (guest) { setError('Sign in to format a saved answer with AI.'); return; }
+    if (guest) { setGuestAnswerMarkdownPreview(true); return; }
     const controller = new AbortController();
     formattingRequest.current = controller;
     setFormattingAnswerId(record.qa_id); setError('');
@@ -5003,11 +5087,16 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog research-qa-dialog" aria-labelledby="research-qa-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }} onKeyDownCapture={event => { if (event.key === 'Escape' && busy) { event.preventDefault(); event.stopPropagation(); } }}>
     <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><DialogDismissButton label="Close research Q/A" disabled={busy} onClick={onCancel}/></div></header>
     <div className="settings-body ai-paper-body">
-      {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
+      {guestAnswerMarkdownPreview && createPortal(<GuestFeatureDialog title="Format an answer as Markdown"
+        message="With an authorized model, SIGMA can format a saved answer as readable Markdown for review. This does not re-evaluate the research or prove its findings."
+        onClose={() => setGuestAnswerMarkdownPreview(false)}/>, document.body)}
+      <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
-        <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
+        {guest ? <p className="settings-hint ai-paper-model">Guest preview · no ChatGPT connection or model execution</p>
+          : <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>}
         {configError && <p role="alert" className="error">{configError}</p>}
-        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
+        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={(!guest && !binding) || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
+        {guestAskPreview && <div className="research-pause-guidance" role="status"><strong>Ask about your research</strong><p>With authorized SIGMA access and ChatGPT, SIGMA would answer this question using saved research and cite supporting evidence. Answers require verification. No request was sent.</p><button type="button" className="text-view-link" onClick={() => setGuestAskPreview(false)}>Close</button></div>}
         {pendingAnswers.length > 0 && <section aria-label="Q/A in progress">
           {pendingAnswers.map(pending => <p className="ai-paper-status" role="status" key={pending.request_id}>
             <span className="research-running-indicator" aria-label="Answer in progress"
@@ -5019,12 +5108,12 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
           <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
             <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-view-pdf-icon" aria-label="View answer in a new browser tab" data-tooltip="View answer in a new browser tab" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></button>
-            {(!viewerEmail || viewerEmail === projectOwnerEmail || answerAuthors?.[record.qa_id] === viewerEmail) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label="Remove saved answer" data-tooltip="Remove saved answer" onClick={() => setRemoveId(record.qa_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
+            {!guest && (!viewerEmail || viewerEmail === projectOwnerEmail || answerAuthors?.[record.qa_id] === viewerEmail) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label="Remove saved answer" data-tooltip="Remove saved answer" onClick={() => setRemoveId(record.qa_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
           </>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · Elapsed {savedPaperElapsed(record.generation.generation_elapsed_seconds)} · {(record.author_email || (record.created_by && record.created_by !== 'Local user')) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'answer', creator: record.author_email || record.created_by, model: record.generation.model, thinking: record.generation.reasoning_effort })}</span> : modelThinkingLabel(record.generation.model, record.generation.reasoning_effort)}</p></div></div></div>
           {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><DialogDismissButton label="Cancel answer removal" onClick={() => setRemoveId('')}/></div>}
           <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><div className="research-qa-answer-heading"><h3>Answer</h3></div>{renderedAnswerIds.has(record.qa_id) && record.markdown_answer ? <div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.markdown_answer}/></Suspense></div> : <div className="research-qa-answer-plain">{record.answer}</div>}<h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => <li key={`${source.source_id}-${index}`}>{source.navigation_available && source.navigation_url ? <a href={source.navigation_url}>{source.label || source.kind}</a> : <>{source.label || source.kind} · navigation unavailable{source.navigation_unavailable_reason ? `: ${source.navigation_unavailable_reason}` : ''}</>}</li>) : <li>No verified source links available.</li>}</ul></article></div>
         </article>)}</section>}
-      </>}
+      </>
     </div>
   </dialog>;
 }
@@ -6145,7 +6234,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
         <div className="recent-entry">
           <div className="recent-title-row">
             <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
-            {entry.best_paper_score != null && entry.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
+            {entry.best_paper_score != null && entry.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
             <button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
@@ -6200,8 +6289,8 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
     try {
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
-      // Guest copies live only in the temporary guest workspace.
-      if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
+      // This visitor's copy remains in their private temporary workspace.
+      window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
       onOpen(copy);
     }
     catch (error) { setError(errorMessage(error)); }
@@ -6217,7 +6306,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score > HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{visibleProgress === `open:${sample.id}` && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{visibleProgress === `open:${sample.id}` && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
@@ -6225,10 +6314,9 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
 
 function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
   const savedTooltip = guest
-    ? 'Sign in to view My Work.'
+    ? 'Your temporary private work in this browser (expires after inactivity or server restart).'
     : 'Show My Work. Click again to collapse or expand all.';
   const [tab, setTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
-    if (guest) return 'samples';
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
     return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
   });
@@ -6241,7 +6329,7 @@ function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: Pr
   const recentPanel = useRef<HTMLDivElement>(null);
   const mostRecentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); onTabChange?.(tab); }, [guest, tab, onTabChange]);
+  useEffect(() => { window.localStorage.setItem('sigma.homeCatalogTab', tab); onTabChange?.(tab); }, [tab, onTabChange]);
   useEffect(() => {
     const toggle = () => { if (tab !== 'most-recent') switchTab(tab); };
     window.addEventListener('sigma-home-projects-toggle-groups', toggle);
@@ -6269,8 +6357,8 @@ function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: Pr
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>My Work</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}>{guest ? <p className="guest-recent-message">Sign in to view your projects.</p> : <RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/>}</div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
@@ -6453,12 +6541,13 @@ function Home({ initialPath, onOpen }: {
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1} aria-label="Projects">{catalogTab === 'most-recent' ? 'Projects' : <button type="button" className="home-projects-title-toggle" aria-label="Collapse or expand project type groups" data-tooltip="Collapse or expand project type groups" onClick={() => window.dispatchEvent(new Event('sigma-home-projects-toggle-groups'))}>Projects</button>}</h1>
-          {(!cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest')) && <>
+          {(!cloud?.enabled || !cloud.authenticated || cloud.user?.role !== 'guest') && <>
             <button type="button" ref={newButton} className="home-project-action home-icon-action" aria-label="New project" data-tooltip="New project" onClick={() => setEntry('new')}><CirclePlusIcon/></button>
-          <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>
+          {(!cloud?.enabled || cloud.authenticated) && <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>}
           </>}
         </div>
-        <HomeCatalog onOpen={onOpen} onTabChange={setCatalogTab} guest={!!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest')}/>
+        {cloud?.enabled && !cloud.authenticated && <p className="settings-hint" role="status">Guest preview: your projects are private to this browser session and temporary. Export any work you wish to keep. AI execution requires member access.</p>}
+        <HomeCatalog onOpen={onOpen} onTabChange={setCatalogTab} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label={`Crafted by Brian Kramer and ${creditAdjective} OpenAI agents`} onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Crafted by Brian Kramer</span><span>and {creditAdjective} OpenAI agents.</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
@@ -6605,7 +6694,7 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
         <button type="button" className="text-view-link session-start-link" data-tooltip="Start Session" aria-label="Start Session" disabled={disabled} onClick={controls.start}>Start Session</button>
         <button type="button" className="text-view-link session-start-link" data-tooltip="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
-      <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || controls.playDisabled} onClick={guest ? onGuestPlay : controls.play}>
+      <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || controls.playDisabled} onClick={controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
       </button>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label="Stop research session" data-tooltip="Stop research session" disabled={controls.stopDisabled || disabled} onClick={controls.stop}>
@@ -6614,33 +6703,6 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
       </>}
       {running && <span className="research-running-indicator-frame" aria-label="Research running" data-tooltip="Research running"><span className="research-running-indicator"/></span>}
   </span>;
-}
-
-function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => void; onSignIn: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null> }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const signIn = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    dialog.current?.showModal();
-    signIn.current?.focus();
-  }, []);
-  function dismiss() {
-    if (dialog.current?.open) dialog.current.close();
-    onClose();
-    requestAnimationFrame(() => playButtonRef.current?.focus());
-  }
-  function startSignIn() {
-    if (dialog.current?.open) dialog.current.close();
-    onSignIn();
-  }
-  return <dialog ref={dialog} className="project-settings-dialog guest-research-dialog" aria-labelledby="guest-research-heading" aria-describedby="guest-research-message" onCancel={event => { event.preventDefault(); dismiss(); }}>
-    <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2><DialogDismissButton label="Close sign-in prompt" onClick={dismiss}/></header>
-    <div className="settings-body">
-      <p id="guest-research-message">Sign in to run a research session.</p>
-      <div className="settings-actions session-remove-confirm-actions">
-        <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in with Google</button>
-      </div>
-    </div>
-  </dialog>;
 }
 
 type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
@@ -6852,6 +6914,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
 }) {
   const cloud = useCloudIdentity();
   const guest = !!cloud?.enabled && (!cloud.authenticated || cloud.user?.role === 'guest');
+  // Anonymous visitors may edit their isolated, expiring sandbox.
+  const readOnlyGuest = false;
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [advancedOutcomeGlobal, setAdvancedOutcomeGlobal] = useState(false);
   const [guestAdvancedOutcome, setGuestAdvancedOutcome] = useState(false);
@@ -7006,6 +7070,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [guestAiNotice, setGuestAiNotice] = useState('');
+  const [guestStrategyPreview, setGuestStrategyPreview] = useState(false);
   const markLocalSharedSave = () => {
     if (sharedActivity?.shared) {
       // A successful local save is already reflected in this window's view.
@@ -7397,7 +7462,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </> : <button ref={editDescriptionButton} type="button"
         className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-description-toolbar-edit"
         aria-label="Edit project fields" data-tooltip="Edit project fields"
-        disabled={guest || closing || ordering || !!dragId || activeMode !== null}
+        disabled={readOnlyGuest || closing || ordering || !!dragId || activeMode !== null}
         onClick={() => {
           if (!enterMode('project-title')) return;
           sectionOpen('project');
@@ -7413,7 +7478,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </button>}
       <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
       {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Lean proof verification" data-tooltip="Lean proof verification" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setLeanOpen(true)}><img src="/lean-logo.svg" alt="" aria-hidden="true"/></button>}
-      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={guest || closing || ordering || !!dragId || activeMode !== null} onClick={() => setExportOpen(true)}>
+      <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
       <button type="button" className="text-view-link text-view-icon project-email-button" aria-label="Email project" data-tooltip="Email project with attachments" disabled={closing || ordering || !!dragId || guest || activeMode !== null} onClick={() => setEmailOpen(true)}>
@@ -7422,7 +7487,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <path d="M18 8.5v7.25a2.75 2.75 0 0 1-5.5 0v-5a1.4 1.4 0 0 1 2.8 0v4.75"/>
         </svg>
       </button>
-      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={guest || closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+      <button ref={editProjectButton} type="button" className="text-view-link text-view-icon workspace-icon-button sigma-heading-icon-action project-classification-settings-button" aria-label="Project settings" data-tooltip="Project settings" disabled={readOnlyGuest || closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
         <SlidersSettingsIcon/>
       </button>
 
@@ -7439,7 +7504,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         {projectActionBar}
       </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
-      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. {guest ? 'Sign in to replace the project type.' : 'Choose a replacement in Project Settings to use a current type.'}</p>{!guest && <button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button>}</div>}
+      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>TITLE</span></div>
       <ProjectDescriptionEditor view={view} guest={guest} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined}
@@ -7479,7 +7544,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={() => { if (guest) setGuestAiNotice('Sign in to edit strategies. Your guest project remains available.'); else startNewStrategy(); }} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
+          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={() => startNewStrategy()} onAI={() => { if (guest) setGuestStrategyPreview(true); else startGeneration(); }}/>
           <p className="section-count">{headingStrategies.length} strateg{headingStrategies.length === 1 ? 'y' : 'ies'}{headingDisabledCount > 0 ? `, ${headingDisabledCount} disabled` : ''}</p>
         </div>
       </header>
@@ -7499,8 +7564,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor key={`${strategy.id}:${editorVersion}`} authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={guest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={guest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
-              if (guest || ordering || dragId || activeMode !== null || processControls.confirming) return;
+            <StrategyTitleEditor key={`${strategy.id}:${editorVersion}`} authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={readOnlyGuest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={readOnlyGuest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
+              if (readOnlyGuest || ordering || dragId || activeMode !== null || processControls.confirming) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;
                 if (!enterMode(owner)) return;
@@ -7526,9 +7591,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
                 .catch(cause => { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); })
                 .finally(() => exitMode(owner));
             }}/>} />
-            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews key={`${strategy.id}:${editorVersion}`} guest={guest} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={guest || (activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`)} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
+            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><LazyViewport force={strategy.id === strategies[0]?.id || activeMode === `strategy-title-${strategy.id}` || (textEditSignals[`strategy:${strategy.id}`] ?? 0) > 0} fallback={<div className="strategy-approach" style={{ whiteSpace: 'pre-wrap' }}>{strategy.approach}</div>}><TextViews key={`${strategy.id}:${editorVersion}`} guest={readOnlyGuest} aiGuest={guest} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={readOnlyGuest || (activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`)} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></LazyViewport></div>
           </div>
-          {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={guest || ordering || closing}
+          {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={readOnlyGuest || ordering || closing}
             aria-label={`Reorder ${strategy.title}`} data-tooltip={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
             onKeyDown={event => { if (event.key === 'Escape' && drag.current) { event.preventDefault(); cancelDrag(); }
@@ -7542,12 +7607,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
-    {guestPlayOpen && <GuestPlayDialog onClose={() => setGuestPlayOpen(false)} onSignIn={() => {
-      window.sessionStorage.setItem('sigma.playSignInReturn', 'true');
-      window.sessionStorage.setItem('sigma.resumeGuestPlay', 'true');
-      setGuestPlayOpen(false);
-      requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
-    }} playButtonRef={playButton}/>}
+    {guestStrategyPreview && <GuestFeatureDialog title="Generate a strategy"
+      message="With member access and ChatGPT, SIGMA proposes candidate hypotheses and research approaches, challenges them for originality and weaknesses, and presents a draft for your review before saving. You can write and edit strategies manually without AI."
+      onClose={() => setGuestStrategyPreview(false)}/>}
+    {guestPlayOpen && <GuestFeatureDialog title="Research sessions"
+      message="A session needs at least one enabled strategy, which you can write manually. With member access and ChatGPT, Sessions coordinate Investigator and Skeptic turns across selected strategies, recording findings, objections, evidence and unanswered questions. Saved example sessions can be explored without executing a model."
+      onClose={() => setGuestPlayOpen(false)}/>}
     <ResearchWorkspace collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.session} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
       if (guest) { setGuestAdvancedOutcome(true); return; }
       if (advancedOutcomeGlobal) return;
@@ -8783,7 +8848,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     <h2 id="invitation-welcome-heading">{heading}</h2>
     {allowanceMessage && <p className="invitation-welcome-allowance">{allowanceMessage}</p>}
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
-    {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore as a guest without running or saving projects, or request an invitation to become a member. The administrator decides whether to include sponsorship when granting your invitation.</p>}
+    {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore samples, create private temporary projects, edit strategies and inspect saved research without signing in. Your drafts last only for this browser session and can be exported. Running AI research requires authorized membership and an available provider.</p>}
     {audience === 'nonmember' && <p className="invitation-welcome-intro">Your Google account does not yet have SIGMA membership. Request an invitation to join the research workspace, or explore as a guest while an administrator reviews your request.</p>}
     {audience === 'returning' && <p className="invitation-welcome-intro">Your invitation request is in! We're looking forward to welcoming you as a member. In the meantime, feel free to explore as a guest.</p>}
     {audience === 'requested' && <p className="invitation-welcome-intro">We've received your request and will get back to you soon. In the meantime, feel free to explore SIGMA as a guest.</p>}
