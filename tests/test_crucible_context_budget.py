@@ -365,15 +365,93 @@ def test_sigma_dispatch_byte_guard_reports_model_as_diagnostic_not_cause() -> No
             role="investigator",
         )
     )
-    assert "SIGMA's 256,000-byte UTF-8 dispatch guard" in message
+    assert "SIGMA's 512,000-byte UTF-8 dispatch guard" in message
     assert "not the provider model's token context window" in message
     assert "Context size:" in message
-    assert "limit 256000B" in message
+    assert "limit 512000B" in message
     assert "selected_model=gpt-6-luna" in message
     assert "thinking" not in message
     assert "phase=portfolio_dispatch" in message
     assert "sensitive-evidence" not in message
     assert "No provider call was made" in message
+
+
+def test_reviewed_models_have_bounded_dispatch_headroom_after_compaction() -> None:
+    """A >256 kB required source can reach the provider without silent cropping.
+
+    This constructs the exact provider request locally. It does NOT dispatch
+    a model call or change stored research, and models share the same limit.
+    """
+    required_text = "REQUIRED HUMAN-CURATED SOURCE " + "e" * 310_000
+    original = {
+        "problem": required_text,
+        "context_manifest": {"sources": []},
+    }
+    assert _size(original) > research_sessions.MAX_AGENT_CONTEXT_BYTES
+    assert _size(original) < research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES
+    compacted = deepcopy(original)
+    assert not compact_dispatch_context(compacted, limit=LIMIT)
+    assert compacted["problem"] == required_text  # Never trim active mandatory evidence.
+    for model in ("gpt-6-luna", "gpt-6-sol", "gpt-6.1-sol", "gpt-6-astra"):
+        assert (
+            research_sessions._agent_dispatch_guard_bytes({"model": model})
+            == research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES
+        )
+        for role in ("investigator", "skeptic"):
+            record = {
+                "model": model,
+                "mode": "chatgpt",
+                "reasoning_effort": "medium",
+                "output_token_limit": 4000,
+            }
+            packet = research_sessions._role_request_payload(record, role, deepcopy(original))
+            assert required_text in packet["input"][0]["content"]
+            assert original["problem"] == required_text
+
+    # Unreviewed legacy selections must not silently inherit longer limits.
+    assert (
+        research_sessions._agent_dispatch_guard_bytes({"model": "unknown-old-model"})
+        == research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+    try:
+        research_sessions._role_request_payload(
+            {
+                "model": "unknown-old-model",
+                "mode": "chatgpt",
+                "reasoning_effort": "medium",
+            },
+            "investigator",
+            deepcopy(original),
+        )
+    except research_sessions.ResearchContextLimitError:
+        pass
+    else:
+        raise AssertionError("An unreviewed model bypassed its old dispatch guard")
+
+
+def test_true_dispatch_overflow_still_fails_before_provider_call() -> None:
+    """Oversized mandatory evidence is never truncated just to pass a guard."""
+    content = "NEVER-OMIT-MANDATORY-EVIDENCE " + "z" * (
+        research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES + 10_000
+    )
+    context = {"problem": content, "context_manifest": {"sources": []}}
+    record = {
+        "model": "gpt-6.1-sol",
+        "mode": "chatgpt",
+        "reasoning_effort": "medium",
+        "output_token_limit": 4000,
+    }
+    try:
+        research_sessions._role_request_payload(record, "investigator", context)
+    except research_sessions.ResearchContextLimitError as exc:
+        message = str(exc)
+        assert "512,000-byte UTF-8 dispatch guard" in message
+        assert "limit 512000B" in message
+        assert "No provider call was made" in message
+        assert "NEVER-OMIT" not in message
+    else:
+        raise AssertionError("Truly oversized mandatory evidence bypassed the guard")
+    assert context["problem"] == content
 
 
 def test_sigma_context_guard_never_echoes_unknown_model_or_thinking() -> None:
@@ -420,6 +498,7 @@ def test_public_recovery_guidance_prioritizes_internal_context_guard_over_model(
     record = {
         "status": "paused",
         "message": message,
+        "model": "gpt-6-luna",
         "mode": "chatgpt",
         "steps": [],
         "artifacts": [],
@@ -428,10 +507,21 @@ def test_public_recovery_guidance_prioritizes_internal_context_guard_over_model(
         "call_limit": 2,
     }
     guidance = research_sessions._public(record)["next_step_guidance"]
-    assert "256,000-byte UTF-8 dispatch guard" in guidance
+    assert "512,000-byte UTF-8 dispatch guard" in guidance
     assert "independent of the selected model" in guidance
     assert "thinking" not in guidance.lower()
     assert "Check that the current connection supports" not in guidance
+
+    legacy_message = message.replace("512,000-byte", "256,000-byte").replace(
+        "limit 512000B", "limit 256000B"
+    )
+    legacy_record = {**record, "message": legacy_message}
+    resume_guidance = research_sessions._public(legacy_record)["next_step_guidance"]
+    assert "older 256,000-byte guard" in resume_guidance
+    assert "up to 512,000 bytes" in resume_guidance
+    assert "Click Resume" in resume_guidance
+    assert "made no provider call" in resume_guidance
+    assert "switching models" not in resume_guidance.lower()
 
 
 def test_source_material_overflow_reports_exact_pre_dispatch_limit() -> None:
@@ -491,7 +581,7 @@ def _preflight_record(question: str, *, source: str = "premise") -> dict[str, An
 
 def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() -> None:
     """59k extracted Unicode chars fit source policy but may exceed byte policy."""
-    record = _preflight_record("q" * 30_000, source="🧪" * 59_000)
+    record = _preflight_record("q" * 300_000, source="🧪" * 59_000)
     original = deepcopy(record)
     packet = research_sessions._mandatory_dispatch_lower_bound(record, record["strategy_runs"][0])
     assert len(record["uploaded_project_evidence"][0]["excerpt"]) < 60_000
@@ -522,7 +612,8 @@ def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() 
     assert stored["strategy_runs"][0]["status"] == "paused"
     assert stored["termination_reason_code"] == "context_limit"
     assert "mandatory_preflight" in stored["message"]
-    assert "SIGMA's 256,000-byte UTF-8 dispatch guard" in stored["message"]
+    assert "SIGMA's 512,000-byte UTF-8 dispatch guard" in stored["message"]
+    assert "limit 512000B" in stored["message"]
     assert "59,000" not in stored["message"]  # No raw source content or characters disclosed
     assert "🧪" not in stored["message"]
     assert stored["calls_used"] == 0
@@ -541,8 +632,27 @@ def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() 
     )
 
 
+def test_reviewed_model_mandatory_preflight_allows_310k_without_compiler_spend() -> None:
+    """The newer 512 kB ceiling must include the earliest pre-provider gate."""
+    record = _preflight_record("q" * 310_000)
+    before = deepcopy(record)
+    mandatory = research_sessions._mandatory_dispatch_lower_bound(
+        record, record["strategy_runs"][0]
+    )
+    assert LIMIT < _size(mandatory) < research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES
+    with (
+        patch.object(research_sessions, "_read", return_value=record),
+        patch.object(research_sessions, "_save") as save,
+    ):
+        assert asyncio.run(
+            research_sessions._ensure_mandatory_dispatch_preflight("context-791", "test")
+        )
+    save.assert_not_called()
+    assert record == before
+
+
 def test_mandatory_preflight_does_not_block_viable_portfolio_peers() -> None:
-    record = _preflight_record("q" * (LIMIT + 1000))
+    record = _preflight_record("q" * (research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES + 1000))
     record["strategy_runs"].append(
         {
             "strategy_id": "strategy-b",
