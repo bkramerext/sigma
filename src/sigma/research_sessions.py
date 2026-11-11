@@ -4765,8 +4765,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         try:
             start = datetime.fromisoformat(record["started_at"])
             end = (
-                datetime.fromisoformat(record["stopped_at"])
-                if record.get("status") == "stopped" and record.get("stopped_at")
+                datetime.fromisoformat(record.get("stopped_at") or record["updated_at"])
+                if record.get("status") in {"stopped", "paused"}
                 else (
                     datetime.fromisoformat(record["updated_at"])
                     if record.get("status") in {"completed", "ended", "failed"}
@@ -7024,6 +7024,39 @@ async def control_session(
     async with state_lock:
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
+            # Historical Source Material blocks (including Session 5) missed
+            # the stopped_at checkpoint. Recover the last saved block time so
+            # time spent unable to dispatch is not charged to active duration.
+            if (
+                record.get("status") == "paused"
+                and not record.get("stopped_at")
+                and "source material" in str(record.get("current_action") or "").lower()
+            ):
+                blocked = next(
+                    (
+                        event
+                        for event in reversed(record.get("events", []))
+                        if isinstance(event, dict)
+                        and event.get("kind") == "source_material.compilation.blocked"
+                    ),
+                    None,
+                )
+                timestamp = (
+                    blocked.get("timestamp") if blocked else record.get("updated_at")
+                )
+                try:
+                    pause_start = datetime.fromisoformat(timestamp)
+                    if pause_start.tzinfo is None or pause_start > datetime.now(UTC):
+                        raise ValueError("Invalid Source Material pause timestamp")
+                    record["stopped_at"] = pause_start.isoformat()
+                except (TypeError, ValueError):
+                    record["stopped_at"] = _now()
+                _event(
+                    record,
+                    "source_material.pause_clock_recovered",
+                    "Recovered the saved Source Material pause boundary; inactive waiting "
+                    "time will not consume the research session duration.",
+                )
             # Browser Resumes remain browser-bound; API/CLI cannot silently
             # remove a previous session requirement when reconnecting.
             if browser_presence_required:
@@ -15857,6 +15890,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material checkpoint invalid"
                     record["message"] = "Saved Source Material compilation failed integrity checks."
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _save(path, record)
                     return False
                 try:
@@ -15865,6 +15900,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material exceeds context limit"
                     record["message"] = str(exc)
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _save(path, record)
                     return False
                 if record["uploaded_project_evidence"] != restored_evidence:
@@ -15909,6 +15946,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                         f"{', '.join(names[:4])}."
                         " Fix retrieval/access and Resume to retry these sources."
                     )
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     stage["reason"] = record["message"]
                     _event(record, "source_material.compilation.blocked", record["message"])
                     _save(path, record)
@@ -15921,6 +15960,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material exceeds context limit"
                     record["message"] = str(exc)
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _event(record, "source_material.compilation.blocked", record["message"])
                     _save(path, record)
                     return False
