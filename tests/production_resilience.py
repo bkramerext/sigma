@@ -222,6 +222,7 @@ def check_memory_sources() -> None:
         patch.object(memory_guard, "_CRITICAL", False),
         patch.object(memory_guard, "_TELEMETRY_DEGRADED", False),
         patch.object(memory_guard, "_LOOP", None),
+        patch.dict(os.environ, {"SIGMA_MEMORY_REQUIRE_METRICS": "true"}),
         patch.object(memory_guard.LOG, "error") as log_error,
     ):
         memory_guard.poll()
