@@ -338,6 +338,8 @@ def _db() -> Iterator[sqlite3.Connection]:
         identity = None
         if db_file:
             info = os.stat(db_file)
+            # The inode alone cannot detect an in-place legacy schema restore.
+            # SQLite bumps schema_version whenever DDL changes the catalog.
             schema_generation = db.execute("PRAGMA schema_version").fetchone()[0]
             identity = (db_file, info.st_dev, info.st_ino, schema_generation)
         if identity is None or identity not in _SCHEMA_READY:
