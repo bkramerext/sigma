@@ -7951,15 +7951,18 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       }
       // Explicit reauthentication is distinct from the browser closing: keep
       // already admitted jobs alive during a bounded identity handoff.
-      let handoffReady = false;
-      try {
-        const handoff = await fetch('/api/projects/research-presence/auth-handoff', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'X-Sigma-Error-Handled': 'true' },
-        });
-        handoffReady = handoff.ok;
-      } catch {
-        // The auxiliary work-preservation request must not veto explicit sign-out.
+      // Authenticated guests cannot run paid work and do not need a handoff.
+      let handoffReady = !!authenticatedGuest;
+      if (!authenticatedGuest) {
+        try {
+          const handoff = await fetch('/api/projects/research-presence/auth-handoff', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'X-Sigma-Error-Handled': 'true' },
+          });
+          handoffReady = handoff.ok;
+        } catch {
+          // The auxiliary work-preservation request must not veto explicit sign-out.
+        }
       }
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
