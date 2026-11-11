@@ -278,6 +278,8 @@ def run_tooling(command: str) -> int:
             elif "tests/crucible_scheduler_evidence.py" in step:
                 owner = 1
             elif "tests/papers_part2.py" in step:
+                owner = 3
+            elif "tests/research_sessions_part2.py" in step:
                 owner = 5
             elif "tests/sage_execution.py" in step:
                 owner = 1
