@@ -55,7 +55,10 @@ INSTRUCTIONS = (
     "Use mathematical notation only where the slash expresses a fraction or quotient in context. "
     "Preserve existing valid Markdown, explicit math delimiters, multiline equations, escaped "
     "delimiters, unmatched delimiter text, inline code, fenced code, links and table structure. "
-    "For Markdown use normal Markdown prose and $...$ or $$...$$ LaTeX mathematics. "
+    "For Markdown use normal Markdown prose; use $...$ or $$...$$ only when an expression "
+    "needs mathematical typesetting. Keep simple numeric equalities such as "
+    "196884 = 196883 + 1 and 2 + 2 = 4 as ordinary text without math delimiters. "
+    "Do not wrap an identity in math solely because it has an equals sign. "
     "Never leave a raw TeX command such as \\Sigma or \\sum outside math delimiters. "
     "Check that each equation has matching braces and complete math delimiters; "
     "do not manufacture commands or concatenate unrelated equations. "
@@ -67,6 +70,51 @@ INSTRUCTIONS = (
     "not a mathematical equivalence proof."
 )
 
+
+# Plain integer arithmetic remains prose; preserve explicitly authored math
+# and avoid touching TeX expressions with variables or commands.
+_INTEGER_ARITHMETIC = r"\d+(?:\s*[+*/=-]\s*\d+)+"
+_SOURCE_INTEGER_EQUALITY = re.compile(
+    rf"(?<![\w$])({_INTEGER_ARITHMETIC})(?![\w$])"
+)
+_INLINE_INTEGER_EQUALITY = re.compile(
+    rf"(?<![\\$])\$({_INTEGER_ARITHMETIC})\$(?!\$)"
+)
+
+
+def _unwrap_redundant_numeric_math(markdown: str, source: str) -> str:
+    """Unwrap only integer equalities that occurred undelimited in the source."""
+    source_equalities = {
+        re.sub(r"\s+", "", match.group(1))
+        for match in _SOURCE_INTEGER_EQUALITY.finditer(source)
+        if "=" in match.group(1)
+    }
+    if not source_equalities:
+        return markdown
+
+    def unwrap(match: re.Match[str]) -> str:
+        expression = match.group(1)
+        if "=" in expression and re.sub(r"\s+", "", expression) in source_equalities:
+            return expression
+        return match.group(0)
+
+    # Respect literal Markdown code and displayed math. Skipping any line with
+    # inline backticks is conservative: it cannot alter code adjacent to prose.
+    lines: list[str] = []
+    fenced = False
+    fence_char = ""
+    for line in markdown.splitlines(keepends=True):
+        fence = re.match(r"^\s*(`{3,}|~{3,})", line)
+        if fence:
+            if not fenced:
+                fenced, fence_char = True, fence.group(1)[0]
+            elif fence.group(1)[0] == fence_char:
+                fenced = False
+        if fenced or fence or "`" in line or line.startswith(("    ", "\t")):
+            lines.append(line)
+        else:
+            lines.append(_INLINE_INTEGER_EQUALITY.sub(unwrap, line))
+    return "".join(lines)
 
 # Only saved researcher-facing narrative fields are eligible for AI conversion.
 # Operational metadata, usage metrics and arbitrary client text are not eligible.
@@ -505,6 +553,8 @@ async def _convert_text(
                     except cloud_research.CloudResearchUnavailable:
                         pass
             body = result.body
+            if target_format == "markdown":
+                body = _unwrap_redundant_numeric_math(body, source_body)
             if (
                 not body.strip()
                 or len(body) > limit
