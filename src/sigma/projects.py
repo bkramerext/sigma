@@ -283,12 +283,14 @@ def project_write_lock(value: str | Path):
                 raise ProjectError("Project write lock must be a regular file")
             from sigma import project_collaboration
 
-            with project_collaboration.write_guard(str(path)):
-                fcntl.flock(lock, fcntl.LOCK_EX)
-                try:
+            # Never hold a global SQLite writer transaction while waiting
+            # for another process to release this project's filesystem lock.
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                with project_collaboration.write_guard(str(path)):
                     yield path
-                finally:
-                    fcntl.flock(lock, fcntl.LOCK_UN)
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
     except OSError as exc:
         raise ProjectError(f"Cannot lock project state: {exc}") from exc
 
