@@ -1130,14 +1130,11 @@ def sync_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-def _reconcile_foreign_shared_job(
-    candidate: sqlite3.Row, project: Path, owner: str
-) -> None:
-    """Fence a dead foreign collaborator in the ledger, never in project data.
+def _reconcile_foreign_job(candidate: sqlite3.Row, project: Path, owner: str) -> None:
+    """Fence a dead foreign worker in the ledger, never in project data.
 
     Only server-owned, path-validated ledger records enter this maintenance
-    path. A browser request cannot select a foreign project or act as its
-    creator. Full checkpoint recovery remains creator-authorized.
+    path. The triggering browser identity never becomes the run creator.
     """
     from sigma import research_sessions
 
@@ -1147,6 +1144,18 @@ def _reconcile_foreign_shared_job(
             return
         with research_sessions._project_manager_lock(str(project)):
             with research_sessions._idle_worker_lock(str(project), candidate["session_id"]):
+                # The admission lock rules out a concurrent unpublished
+                # Session receipt. Retire it only if no provider call exists.
+                if project.suffix == ".json":
+                    from sigma.project_bundle import read_bundle
+
+                    has_session = (
+                        f"research-sessions/{candidate['session_id']}.json"
+                        in read_bundle(str(project))["files"]
+                    )
+                else:
+                    record_path = project / "research-sessions" / f"{candidate['session_id']}.json"
+                    has_session = record_path.is_file() and not record_path.is_symlink()
                 with _transaction() as db:
                     row = db.execute(
                         "SELECT workspace_id,project_id,project_relpath,process_epoch,status "
@@ -1166,7 +1175,18 @@ def _reconcile_foreign_shared_job(
                         "SELECT 1 FROM calls WHERE session_id=? AND status='reserved' LIMIT 1",
                         (candidate["session_id"],),
                     ).fetchone()
-                    if row["status"] == "queued" and not unsettled:
+                    if row["status"] == "queued" and not unsettled and has_session:
+                        return
+                    has_call = db.execute(
+                        "SELECT 1 FROM calls WHERE session_id=? LIMIT 1",
+                        (candidate["session_id"],),
+                    ).fetchone()
+                    if row["status"] == "queued" and not has_session and not has_call:
+                        db.execute(
+                            "DELETE FROM jobs WHERE session_id=? AND workspace_id=? "
+                            "AND status='queued'",
+                            (candidate["session_id"], owner),
+                        )
                         return
                     stamp = _now()
                     db.execute(
@@ -1181,7 +1201,7 @@ def _reconcile_foreign_shared_job(
                     )
 
 
-def reconcile_orphaned_jobs(*, ledger_only_shared: bool = False) -> list[str]:
+def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
     """Reconcile prior-process queued and running session reservations.
 
     The project admission lock closes the prepare_job/_save crash window. If a
@@ -1231,7 +1251,7 @@ def reconcile_orphaned_jobs(*, ledger_only_shared: bool = False) -> list[str]:
             # their own durable Session on reconnect.
             owner_name = relative_path.parts[0] if relative_path.parts else ""
             if (
-                (not ledger_only_shared and cloud_auth.current_principal() is None)
+                (not ledger_only_foreign and cloud_auth.current_principal() is None)
                 or len(relative_path.parts) < 2
                 or len(owner_name) != 32
                 or any(char not in "0123456789abcdef" for char in owner_name)
@@ -1250,9 +1270,10 @@ def reconcile_orphaned_jobs(*, ledger_only_shared: bool = False) -> list[str]:
             project = lexical_project.resolve(strict=True)
             if not project.is_relative_to(base):
                 continue
-            if is_shared and ledger_only_shared:
-                # No foreign identity impersonation or saved-file writes.
-                _reconcile_foreign_shared_job(candidate, project, owner)
+            if ledger_only_foreign:
+                # Cross-account maintenance is ledger-only even for a private
+                # project owned by another workspace.
+                _reconcile_foreign_job(candidate, project, owner)
                 continue
             if is_shared and not project_collaboration.authorized_shared_path(project):
                 continue
@@ -1462,7 +1483,7 @@ def reconcile_all_orphaned_jobs() -> None:
         try:
             # The triggering user is not this creator. Only worker/ledger
             # maintenance is allowed for a foreign shared project.
-            reconcile_orphaned_jobs(ledger_only_shared=True)
+            reconcile_orphaned_jobs(ledger_only_foreign=True)
         finally:
             cloud_workspaces.reset(token)
 
