@@ -422,6 +422,71 @@ class CollaborationTests(TestCase):
             self.assertEqual(authors["paper"]["other-paper"], self.other.email)
             self.assertEqual(authors["paper_draft"]["saved-project"], self.other.email)
 
+    def test_run_reservations_allocate_unique_numbers_under_race(self) -> None:
+        """Two simultaneous admissions receive distinct, durable numbers."""
+        first, second = uuid4().hex, uuid4().hex
+
+        def reserve(run_id: str) -> dict[str, Any]:
+            result = shared.reserve_execution_run(
+                self.path, "paper", run_id, 2, model="paper-model", thinking="high"
+            )
+            assert result is not None
+            return result
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            reservations = list(pool.map(reserve, [first, second]))
+        self.assertEqual({record["number"] for record in reservations}, {3, 4})
+        self.assertEqual({record["creator_email"] for record in reservations}, {self.owner.email})
+
+        # Replaying the same request does not consume a number or replace
+        # the actual model/thinking chosen at its original admission.
+        replay = shared.reserve_execution_run(
+            self.path, "paper", first, 99, model="later-model", thinking="low"
+        )
+        self.assertEqual(replay, reservations[0])
+        third = reserve(uuid4().hex)
+        self.assertEqual(third["number"], 5)
+
+    def test_run_reservations_keep_owner_before_and_after_sharing(self) -> None:
+        """The creator, not the project owner or current lease, owns a run."""
+        with shared._db() as db:
+            db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
+        original = uuid4().hex
+        first = shared.reserve_execution_run(
+            self.path, "session", original, 0, model="owner-model", thinking="high"
+        )
+        self.assertIsNotNone(first)
+        with shared._db() as db:
+            db.execute(
+                "INSERT INTO shared_collaborators(path, email) VALUES (?, ?)",
+                (self.path, self.other.email),
+            )
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            with self.assertRaisesRegex(ProjectError, "original execution creator"):
+                shared.reserve_execution_run(
+                    self.path, "session", original, 0, model="other-model", thinking="low"
+                )
+            second = shared.reserve_execution_run(
+                self.path, "session", uuid4().hex, 0, model="other-model", thinking="low"
+            )
+        self.assertEqual(first["number"], 1)
+        self.assertEqual(first["creator_email"], self.owner.email)
+        self.assertEqual(second["number"], 2)
+        self.assertEqual(second["creator_email"], self.other.email)
+
     def revision(self) -> int:
         with shared._db() as db:
             return int(

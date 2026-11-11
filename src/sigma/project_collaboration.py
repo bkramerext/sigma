@@ -407,6 +407,23 @@ def _db() -> Iterator[sqlite3.Connection]:
                         PRIMARY KEY(path, kind, artifact_id),
                         FOREIGN KEY(path) REFERENCES shared_projects(path)
                     )""")
+                    # Durable admission identity is independent of the temporary
+                    # project execution lease. These rows are never recycled when
+                    # a run fails or is discarded: later runs keep their numbers.
+                    db.execute("""CREATE TABLE IF NOT EXISTS shared_run_reservations (
+                        path TEXT NOT NULL,
+                        kind TEXT NOT NULL CHECK(kind IN ('session', 'paper')),
+                        run_id TEXT NOT NULL,
+                        number INTEGER NOT NULL CHECK(number > 0),
+                        creator_hash TEXT NOT NULL,
+                        creator_email TEXT NOT NULL,
+                        model TEXT NOT NULL,
+                        thinking TEXT NOT NULL,
+                        created_at REAL NOT NULL,
+                        PRIMARY KEY(path, kind, run_id),
+                        UNIQUE(path, kind, number),
+                        FOREIGN KEY(path) REFERENCES shared_projects(path) ON DELETE CASCADE
+                    )""")
                     # Existing hosted databases have the earlier outbox schema.
                     fields = {
                         row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")
@@ -683,6 +700,82 @@ def collaborator_identity(path: str) -> str | None:
             return actor
     except ValueError:
         return None
+
+
+def reserve_execution_run(
+    path: str,
+    kind: str,
+    run_id: str,
+    saved_max_number: int,
+    *,
+    model: str,
+    thinking: str,
+) -> dict[str, Any] | None:
+    """Reserve a stable run identity and display number before provider dispatch.
+
+    This is the admission primitive for per-run Paper/Session persistence.
+    Callers must supply the maximum number in existing saved artifacts, not a
+    client-provided guess. Reservation is idempotent, never reassigns creator
+    or model settings, and never reuses a number from an abandoned run.
+
+    The legacy project-scoped execution guard must remain in place until
+    checkpoints, task registries, controls and API admissions use this ledger.
+    """
+    from uuid import UUID
+
+    from sigma.projects import ProjectError
+
+    if kind not in {"paper", "session"}:
+        raise ValueError("Unsupported execution kind")
+    if not isinstance(run_id, str):
+        raise ValueError("Run identifier must be a UUID")
+    try:
+        UUID(run_id)
+    except ValueError as exc:
+        raise ValueError("Run identifier must be a UUID") from exc
+    if type(saved_max_number) is not int or saved_max_number < 0:
+        raise ValueError("Saved maximum number must be nonnegative")
+    if not isinstance(model, str) or not model or not isinstance(thinking, str):
+        raise ValueError("Actual model and thinking must be provided")
+    if cloud_workspaces.current() is None:
+        return None  # Local single-user storage has its own numbering.
+
+    with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row, email = _membership(db, path)
+        creator_hash = _identity()[0].subject_hash
+        existing = db.execute(
+            """SELECT run_id, number, creator_hash, creator_email, model, thinking
+               FROM shared_run_reservations
+               WHERE path=? AND kind=? AND run_id=?""",
+            (path, kind, run_id),
+        ).fetchone()
+        if existing is not None:
+            if existing["creator_hash"] != creator_hash:
+                raise ProjectError("Only the original execution creator can resume this run.")
+            db.commit()
+            return dict(existing)
+        latest = db.execute(
+            "SELECT MAX(number) FROM shared_run_reservations WHERE path=? AND kind=?",
+            (path, kind),
+        ).fetchone()[0]
+        number = max(saved_max_number, latest or 0) + 1
+        db.execute(
+            """INSERT INTO shared_run_reservations
+               (path, kind, run_id, number, creator_hash, creator_email,
+                model, thinking, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (path, kind, run_id, number, creator_hash, email, model, thinking, time.time()),
+        )
+        db.commit()
+        return {
+            "run_id": run_id,
+            "number": number,
+            "creator_hash": creator_hash,
+            "creator_email": email,
+            "model": model,
+            "thinking": thinking,
+        }
 
 
 def require_execution_operator(
