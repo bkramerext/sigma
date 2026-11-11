@@ -1535,7 +1535,13 @@ class CollaborationTests(TestCase):
         self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0]["creator_email"], self.other.email)
         self.assertEqual(runs[0]["run_id"], paper_run)
-        self.assertEqual(runs[0]["status"], "queued")
+        # The durable ledger records an accepted reservation; the separate
+        # crash-safe Paper sidecar records the queued execution phase.
+        self.assertEqual(runs[0]["status"], "reserved")
+        with papers.paper_run_scope(paper_run):
+            queued = papers._read_queue_status(self.path)
+        self.assertIsNotNone(queued)
+        self.assertEqual(queued["status"], "queued")
 
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:
