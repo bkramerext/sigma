@@ -834,6 +834,19 @@ def project_evidence_remove(evidence_id: str, path: str):
     return {"deleted": evidence_id}
 
 
+@app.get("/api/projects/activity-runs")
+def project_activity_runs_view(path: str):
+    """Run-level activity for the project title and collaborator views."""
+    from sigma.recents import project_activity_runs
+
+    return {"runs": project_activity_runs(path)}
+
+
+@app.get("/api/projects/research-qa/activity")
+def research_qa_activity(path: str):
+    return {"active": research_qa.list_pending_answers(path)}
+
+
 @app.get("/api/projects/research-qa")
 def research_qa_list(path: str):
     return {
@@ -886,6 +899,7 @@ def research_qa_get(qa_id: str, path: str):
 
 @app.delete("/api/projects/research-qa/{qa_id}")
 def research_qa_delete(qa_id: str, path: str):
+    project_collaboration.require_artifact_manager(path, "answer", qa_id)
     research_qa.delete_answer(path, qa_id)
     return {"deleted": qa_id}
 
@@ -916,6 +930,7 @@ def papers_view(path: str):
     available = [paper for paper in saved if paper.get("pdf_available")]
     return {
         "papers": saved,
+        "next_paper_number": papers.next_paper_number_for_activity(path),
         "paper_count": len(available),
         "best_paper_score": paper_scores.best_score(available),
     }
@@ -955,6 +970,9 @@ async def paper_cancel_view(body: PaperCancelRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
+    project_collaboration.require_paper_draft_operator(
+        body.path, body.expected_project_id, controlling_active=True
+    )
     return {"cancelled": await papers.cancel_generation(body.path)}
 
 
@@ -963,11 +981,13 @@ async def papers_discard_view(body: PaperDiscardRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
+    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     return await papers.discard_work(body.path, body.expected_project_id)
 
 
 @app.post("/api/projects/papers/restart")
 async def papers_restart_view(body: PaperRestartRequest):
+    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     return await papers.restart_work(
         body.path,
         body.expected_project_id,
@@ -1092,6 +1112,7 @@ def paper_tex_view(paper_id: str, path: str):
 
 @app.delete("/api/projects/papers/{paper_id}")
 def paper_delete_view(paper_id: str, path: str):
+    project_collaboration.require_artifact_manager(path, "paper", paper_id)
     papers.delete_paper(path, paper_id)
     return {"deleted": paper_id}
 
@@ -1121,6 +1142,15 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     from sigma import project_collaboration
 
     lease = project_collaboration.acquire_lease(body.path, "Paper generation")
+    try:
+        project_collaboration.reserve_paper_draft(
+            body.path,
+            body.expected_project_id,
+            resuming=papers._load_work(body.path) is not None,
+        )
+    except BaseException:
+        project_collaboration.release_lease(body.path, lease)
+        raise
     with project_collaboration.bind_lease(body.path, lease):
         task = asyncio.create_task(
             papers.generate(
@@ -1722,6 +1752,9 @@ async def research_start_view(body: ResearchStartRequest):
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
+    )
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
     if (
@@ -1740,14 +1773,16 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         return simulated
 
     if body.action not in {"resume", "repair"}:
-        result = await research_sessions.control_session(
-            body.path,
-            session_id,
-            body.action,
-            additional_calls=body.additional_calls,
-            browser_presence_required=body.browser_presence_required,
-        )
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        # The original creator may borrow their own live worker's lease to
+        # persist Stop/Pause without taking ownership of somebody else's run.
+        with project_collaboration.bind_session_control_lease(body.path, "Research session"):
+            result = await research_sessions.control_session(
+                body.path,
+                session_id,
+                body.action,
+                additional_calls=body.additional_calls,
+                browser_presence_required=body.browser_presence_required,
+            )
         return result
     lease = project_collaboration.acquire_lease(body.path, "Research session")
     transferred = False
@@ -1773,20 +1808,34 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
 async def research_intervention_view(session_id: str, body: ResearchInterventionRequest):
-    return await research_sessions.submit_intervention(
-        body.path,
-        session_id,
-        body.kind,
-        body.text,
-        body.strategy_ids,
-        body.agent_roles,
-        body.supersedes_intervention_id,
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
     )
+    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
+        return await research_sessions.submit_intervention(
+            body.path,
+            session_id,
+            body.kind,
+            body.text,
+            body.strategy_ids,
+            body.agent_roles,
+            body.supersedes_intervention_id,
+        )
 
 
 @app.delete("/api/projects/research-sessions/{session_id}")
 async def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
-    return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
+    session = research_sessions.get_session(body.path, session_id)
+    project_collaboration.require_artifact_manager(
+        body.path,
+        "session",
+        session_id,
+        owner_terminal=session["status"] in {"completed", "ended"},
+    )
+    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
+        return await research_sessions.remove_session(
+            body.path, session_id, body.expected_updated_at
+        )
 
 
 @app.get("/api/research-tools")

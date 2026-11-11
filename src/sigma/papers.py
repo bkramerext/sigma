@@ -2875,6 +2875,30 @@ def _read_version_sequence(path: str) -> int:
     return max(0, value)
 
 
+def next_paper_number_for_activity(path: str) -> int:
+    """Cheap read-only paper number for activity indicators.
+
+    Modern projects keep a small monotonic version sequence. Only legacy
+    projects lacking that sequence need to inspect older saved paper records.
+    This never allocates a number or mutates a paper.
+    """
+    current = _read_version_sequence(path)
+    if current:
+        return current + 1
+    target = project_path(path)
+    if target.suffix != ".json":
+        directory = _paper_dir(path, create=False)
+        if not directory.exists() or not any(directory.glob("*.json")):
+            return 1
+    return (
+        max(
+            (paper.get("paper_version") or 0 for paper in list_papers(path)),
+            default=0,
+        )
+        + 1
+    )
+
+
 def _write_version_sequence(path: str, version: int) -> None:
     target = project_path(path)
     member = _version_sequence_member(path)
@@ -3964,7 +3988,14 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
     finally:
         staged.unlink(missing_ok=True)
     if isinstance(state.get("progress"), dict):
-        _write_progress_status(path, state["progress"])
+        _write_progress_status(
+            path,
+            {
+                **state["progress"],
+                "model": state.get("model"),
+                "reasoning_effort": state.get("reasoning_effort"),
+            },
+        )
 
 
 @project_collaboration.fenced_checkpoint
@@ -4068,6 +4099,8 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "last_progress_at",
         "output_delta_count",
         "substep_started_at",
+        "model",
+        "reasoning_effort",
     )
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
@@ -4473,6 +4506,12 @@ def progress_status(path: str) -> dict[str, Any] | None:
         "total": state["total"],
         "started_at": state["started_at"],
         "elapsed_seconds": elapsed,
+        **({"model": state["model"]} if isinstance(state.get("model"), str) else {}),
+        **(
+            {"reasoning_effort": state["reasoning_effort"]}
+            if isinstance(state.get("reasoning_effort"), str)
+            else {}
+        ),
         **(
             {
                 "detail": (
