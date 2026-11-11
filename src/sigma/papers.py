@@ -7371,6 +7371,14 @@ async def _provider_structured(
         return parsed_response, config["model"]
     except ProjectError as exc:
         if _retryable_paper_response_failure(exc):
+            if schema_name == "sigma_research_qa":
+                # This shared provider adapter is also used by Research Q/A.
+                # Never claim an unfinished question has completed paper
+                # sections, and never silently retry a possibly billed call.
+                raise ProjectError(
+                    "Research Q/A provider request failed. No automatic retry was attempted; "
+                    "check saved answers before explicitly retrying."
+                ) from exc
             raise PaperTransientFailure(
                 "Temporary paper-stage provider failure; completed sections remain saved."
             ) from exc
