@@ -4706,7 +4706,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 "account and click Resume; saved findings remain intact."
             )
         elif "sigma's" in message and "dispatch guard" in message:
-            saved_guard = re.search(r"sigma's ([\\d,]+)-byte utf-8 dispatch guard", message)
+            saved_guard = re.search(r"sigma's ([\d,]+)-byte utf-8 dispatch guard", message)
             saved_limit = (
                 int(saved_guard.group(1).replace(",", ""))
                 if saved_guard is not None
