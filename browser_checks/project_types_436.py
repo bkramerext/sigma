@@ -1213,36 +1213,40 @@ with sync_playwright() as playwright:
 
     def rewind_fixture(route):
         if route.request.method == "GET":
-            route.fulfill(json={
-                "paper_id": "fixture-paper-1",
-                "paper_version": 1,
-                "source_pdf_sha256": "c" * 64,
-                "snapshot_sha256": "a" * 64,
-                "include_diagrams": True,
-                "stages": [
-                    {
-                        "id": "typesetting",
-                        "label": "Validated manuscript",
-                        "description": "Reuse validated manuscript.",
-                    },
-                    {
-                        "id": "writing",
-                        "label": "Writing",
-                        "description": "Rewrite from the frozen evidence.",
-                    },
-                ],
-            })
+            route.fulfill(
+                json={
+                    "paper_id": "fixture-paper-1",
+                    "paper_version": 1,
+                    "source_pdf_sha256": "c" * 64,
+                    "snapshot_sha256": "a" * 64,
+                    "include_diagrams": True,
+                    "stages": [
+                        {
+                            "id": "typesetting",
+                            "label": "Validated manuscript",
+                            "description": "Reuse validated manuscript.",
+                        },
+                        {
+                            "id": "writing",
+                            "label": "Writing",
+                            "description": "Rewrite from the frozen evidence.",
+                        },
+                    ],
+                }
+            )
         else:
             body = route.request.post_data_json
             rewind_calls.append(body)
-            route.fulfill(json={
-                "created": True,
-                "source_paper_id": "fixture-paper-1",
-                "snapshot_sha256": "a" * 64,
-                "stage": body["stage"],
-                "run_id": body["run_id"],
-                "number": 2,
-            })
+            route.fulfill(
+                json={
+                    "created": True,
+                    "source_paper_id": "fixture-paper-1",
+                    "snapshot_sha256": "a" * 64,
+                    "stage": body["stage"],
+                    "run_id": body["run_id"],
+                    "number": 2,
+                }
+            )
 
     page.route("**/api/projects/papers/fixture-paper-1/rewind**", rewind_fixture)
     heading = paper_row.locator(".saved-paper-title-toggle")

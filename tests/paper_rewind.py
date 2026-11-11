@@ -27,7 +27,7 @@ class SavedPaperRewindTests(TestCase):
         draft = papers.PaperDraft.model_validate(
             {
                 "title": "A published test manuscript",
-                "abstract": "This paper reports a bounded test.",
+                "abstract": "This paper records a bounded, fixture-only investigation of the saved evidence, avoiding any assertion that its conclusions constitute independent verification.",
                 "abstract_claim_ids": ["C1"],
                 "problem_framing": ["The question is bounded."],
                 "problem_framing_claim_ids": ["C1"],
@@ -103,9 +103,15 @@ class SavedPaperRewindTests(TestCase):
             self.assertEqual(saved["snapshot_sha256"], options["snapshot_sha256"])
             self.assertEqual(saved["rewind_origin"]["paper_id"], self.paper_id)
             self.assertFalse(saved["include_diagrams"])
+            self.assertEqual(saved["progress"]["status"], "paused")
+            self.assertIn("ready to resume", saved["progress"]["detail"])
+            self.assertEqual(papers.progress_status(self.path)["status"], "interrupted")
             second = self._new("typesetting")
             self.assertFalse(second["created"])
-            self.assertEqual(papers._load_work(self.path)["validated_draft"], saved["validated_draft"])
+            next_work = papers._load_work(self.path)
+            self.assertIsNotNone(next_work)
+            assert next_work is not None
+            self.assertEqual(next_work["validated_draft"], saved["validated_draft"])
         self.assertEqual(
             (Path(self.path) / "artifacts/papers" / f"{self.paper_id}.json").read_bytes(),
             self.record_bytes,
@@ -142,9 +148,15 @@ class SavedPaperRewindTests(TestCase):
             self._new("typesetting")
         with papers.paper_run_scope(second):
             self._new("writing")
-            self.assertEqual(papers._load_work(self.path)["rewind_origin"]["stage"], "writing")
+            loaded = papers._load_work(self.path)
+            self.assertIsNotNone(loaded)
+            assert loaded is not None
+            self.assertEqual(loaded["rewind_origin"]["stage"], "writing")
         with papers.paper_run_scope(first):
-            self.assertEqual(papers._load_work(self.path)["rewind_origin"]["stage"], "typesetting")
+            loaded = papers._load_work(self.path)
+            self.assertIsNotNone(loaded)
+            assert loaded is not None
+            self.assertEqual(loaded["rewind_origin"]["stage"], "typesetting")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,9 @@ from __future__ import annotations
 import hashlib
 import re
 from typing import Any
+from uuid import uuid4
+
+from sigma.openai_connection import AuthContext
 
 from sigma import papers
 from sigma.projects import ProjectError, inspect_project
@@ -59,10 +62,16 @@ def describe(path: str, paper_id: str, project_id: str) -> dict[str, Any]:
         "source_pdf_sha256": paper["pdf_sha256"],
         "snapshot_sha256": paper["snapshot_sha256"],
         "stages": [
-            {"id": "typesetting", "label": "Validated manuscript",
-             "description": "Keep the saved manuscript; rerun validation, TeX, proofreading and PDF generation."},
-            {"id": "writing", "label": "Writing",
-             "description": "Reuse the original research evidence; write a new manuscript and rebuild the PDF."},
+            {
+                "id": "typesetting",
+                "label": "Validated manuscript",
+                "description": "Keep the saved manuscript; rerun validation, TeX, proofreading and PDF generation.",
+            },
+            {
+                "id": "writing",
+                "label": "Writing",
+                "description": "Reuse the original research evidence; write a new manuscript and rebuild the PDF.",
+            },
         ],
         "include_diagrams": source["generation"].get("include_diagrams", True),
     }
@@ -75,7 +84,7 @@ async def create(
     source_pdf_sha256: str,
     stage: str,
     *,
-    auth: dict[str, Any],
+    auth: AuthContext,
     config: dict[str, Any],
 ) -> dict[str, Any]:
     """Seed the current (newly reserved) run; source publication stays immutable."""
@@ -103,16 +112,16 @@ async def create(
                     "source_paper_id": paper_id,
                     "stage": stage,
                 }
-            raise ProjectError("This run already has unfinished Paper work; use Resume or Start over.")
+            raise ProjectError(
+                "This run already has unfinished Paper work; use Resume or Start over."
+            )
         if papers._read_reset_ledger(path) is not None:
             raise ProjectError("An unfinished Paper reset must be resolved before restarting.")
         if papers._read_queue_status(path) is not None:
             raise ProjectError("A Paper is queued or interrupted; resolve it before restarting.")
         if len(papers.list_papers(path)) >= papers.MAX_PAPERS:
             raise ProjectError("This project has reached the saved Paper version limit.")
-        fingerprint = hashlib.sha256(
-            (auth["mode"] + "\0" + auth["identity"]).encode()
-        ).hexdigest()
+        fingerprint = hashlib.sha256((auth["mode"] + "\0" + auth["identity"]).encode()).hexdigest()
         long_form = source["generation"].get("long_form") is True
         work = papers._new_work(
             paper["snapshot_sha256"],
@@ -128,6 +137,18 @@ async def create(
         if stage == "typesetting":
             work["validated_draft"] = source["draft"].model_dump()
             work["validated_warnings"] = list(paper.get("validation_warnings", []))
+        now = papers._now()
+        work["progress"] = {
+            "run_id": papers._paper_run_id.get() or uuid4().hex,
+            "status": "paused",
+            "stage": "validation" if stage == "typesetting" else "writing",
+            "current": None,
+            "total": None,
+            "started_at": now,
+            "updated_at": now,
+            "elapsed_seconds": 0,
+            "detail": f"Restored from Paper {paper['paper_version']} · ready to resume",
+        }
         papers._save_work(path, work)
         # Re-read the durable checkpoint so a request cannot claim success with
         # a truncated or non-resumable manuscript.

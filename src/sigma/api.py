@@ -1065,15 +1065,14 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
     if source["source_pdf_sha256"] != body.source_pdf_sha256:
         raise ProjectError("Published Paper changed; reopen before restarting.")
     account = await auth_context()
-    config = await papers.configuration(
-        view=inspect_project(body.path), context=account
-    )
+    config = await papers.configuration(view=inspect_project(body.path), context=account)
     if not config["available"]:
         raise ProjectError(config["message"])
     shared = cloud_workspaces.current() is not None
     reservation = None
     run_id = body.run_id or (uuid4().hex if shared else None)
     if shared:
+        assert run_id is not None
         project_collaboration.register_owner(inspect_project(body.path))
         reservation = project_collaboration.reserve_execution_run(
             body.path,
@@ -1108,10 +1107,8 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
         except Exception:
             # Failed rewind admissions must not leave a phantom interrupted
             # collaborator run. Never tombstone a successfully saved checkpoint.
-            if reservation is not None and papers._load_work(body.path) is None:
-                project_collaboration.discard_execution_run(
-                    body.path, "paper", run_id
-                )
+            if reservation is not None and run_id is not None and papers._load_work(body.path) is None:
+                project_collaboration.discard_execution_run(body.path, "paper", run_id)
             raise
     return {
         **result,
