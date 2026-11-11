@@ -346,3 +346,53 @@ def test_post_assembly_guard_rejects_oversized_mandatory_human_input() -> None:
     manifest = dispatch["context_manifest"]["omitted_obligations"]
     assert manifest["count"] == omitted_before
     assert original == _context(128, unique_scope=True)
+
+
+def test_sigma_dispatch_byte_guard_reports_model_as_diagnostic_not_cause() -> None:
+    context = {
+        "problem": "sensitive-evidence-" * 16000,
+        "context_manifest": {"sources": []},
+    }
+    record = {"model": "gpt-6-luna", "reasoning_effort": "low"}
+    message = str(
+        research_sessions._research_context_guard_error(
+            context,
+            record=record,
+            phase="portfolio_dispatch",
+            strategy_id="strategy-1",
+            role="investigator",
+        )
+    )
+    assert "SIGMA's 256,000-byte UTF-8 dispatch guard" in message
+    assert "not the provider model's token context window" in message
+    assert "Context size:" in message
+    assert "limit 256000B" in message
+    assert "selected_model=gpt-6-luna; thinking=low" in message
+    assert "phase=portfolio_dispatch" in message
+    assert "sensitive-evidence" not in message
+    assert "No provider call was made" in message
+
+
+def test_sigma_context_guard_never_echoes_unknown_model_or_thinking() -> None:
+    context = {"problem": "private", "context_manifest": {"sources": []}}
+    message = str(
+        research_sessions._research_context_guard_error(
+            context,
+            record={"model": "private-model-value", "reasoning_effort": "private-thinking"},
+            phase="agent_assembly",
+        )
+    )
+    assert "selected_model=unknown; thinking=unknown" in message
+    assert "private-model-value" not in message
+    assert "private-thinking" not in message
+    assert "private" not in message
+
+
+def test_sigma_manifest_storage_guard_is_not_confused_with_model_window() -> None:
+    context = {"context_manifest": {"sources": ["x" * 12_001]}}
+    message = str(research_sessions._research_context_manifest_guard_error(context))
+    assert "SIGMA context manifest requires" in message
+    assert "limit 12,000 bytes" in message
+    assert "No provider call was made" in message
+    assert "x" * 100 not in message
+

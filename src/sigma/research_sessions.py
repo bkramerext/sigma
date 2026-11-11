@@ -3884,8 +3884,9 @@ def _role_request_payload(
         context["desired_outcomes"] = record["desired_outcomes"]
     input_text = json.dumps(context, ensure_ascii=False)
     if len(input_text.encode("utf-8")) > MAX_AGENT_CONTEXT_BYTES:
-        raise ResearchContextLimitError(
-            "Research context exceeded the 256 KB UTF-8 byte limit; no provider call was made."
+        raise _research_context_guard_error(
+            context, record=record, phase="final_payload", role=role,
+            strategy_id=record.get("strategy_id"),
         )
     payload: dict[str, Any] = {
         "model": record["model"],
@@ -4700,6 +4701,20 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             result["next_step_guidance"] = (
                 "Check that the current connection supports the saved model. "
                 "Once available, click Resume to continue the original session."
+            )
+        elif "sigma's" in message and "dispatch guard" in message:
+            result["next_step_guidance"] = (
+                "SIGMA's 256,000-byte UTF-8 dispatch guard is shared across models and Thinking "
+                "levels. Review the context-size diagnostics. If mandatory source material or the "
+                "frozen question is too large, start a narrower session; the saved session and "
+                "research remain intact. Resume with the same mandatory context will hit the "
+                "same guard, even after switching models."
+            )
+        elif "sigma context manifest" in message:
+            result["next_step_guidance"] = (
+                "The saved research context manifest exceeded SIGMA's separate storage bound. "
+                "Review selected references and start a narrower session; switching models "
+                "does not change the manifest bound. Existing research is preserved."
             )
         elif "context" in message or "storage" in message:
             result["next_step_guidance"] = (
@@ -8751,19 +8766,60 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
-        raise ResearchContextLimitError(
-            "Research context manifest exceeds its storage bound; no provider call was made."
-        )
+        raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
-        raise ResearchContextLimitError(
-            "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
-            "No provider call was made; shorten the project question or critical evidence, "
-            "or start a narrower session. Saved research records were preserved."
-            + _context_byte_breakdown(
-                context, phase="agent_assembly", strategy_id=record.get("strategy_id"), role=role
-            )
+        raise _research_context_guard_error(
+            context, record=record, phase="agent_assembly",
+            strategy_id=record.get("strategy_id"), role=role,
         )
     return context
+
+
+def _research_context_guard_error(
+    context: dict[str, Any],
+    *,
+    record: Mapping[str, Any],
+    phase: str,
+    strategy_id: str | None = None,
+    role: str | None = None,
+) -> ResearchContextLimitError:
+    """Distinguish SIGMA's fixed byte guard from a provider's token window.
+
+    This error is raised only after dispatch-only compaction. The selected
+    model/effort are audit context, not a claim that changing models fixes the
+    packet. No raw project prose or source content is included in diagnostics.
+    """
+    model = record.get("model")
+    effort = record.get("reasoning_effort")
+    safe_model = model if isinstance(model, str) and model in MODEL_OUTPUT_LIMITS else "unknown"
+    safe_effort = (
+        effort
+        if isinstance(effort, str) and effort in {"low", "medium", "high", "xhigh"}
+        else "unknown"
+    )
+    return ResearchContextLimitError(
+        f"Mandatory research context exceeds SIGMA's {MAX_AGENT_CONTEXT_BYTES:,}-byte "
+        "UTF-8 dispatch guard, not the provider model's token context window. "
+        "No provider call was made; saved research is preserved."
+        + _context_byte_breakdown(
+            context,
+            phase=phase,
+            strategy_id=strategy_id,
+            role=role,
+        )
+        + f" selected_model={safe_model}; thinking={safe_effort}."
+    )
+
+
+def _research_context_manifest_guard_error(
+    context: dict[str, Any],
+) -> ResearchContextLimitError:
+    """Report the separate immutable source-manifest storage bound safely."""
+    return ResearchContextLimitError(
+        f"SIGMA context manifest requires {_json_bytes(context['context_manifest']):,} "
+        f"UTF-8 bytes; limit {MAX_CONTEXT_MANIFEST_BYTES:,} bytes. "
+        "No provider call was made; saved research is preserved."
+    )
 
 
 def _context_obligation_count(context: dict[str, Any]) -> int:
@@ -10144,16 +10200,11 @@ def _portfolio_context(
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
-        raise ResearchContextLimitError(
-            "Research context manifest exceeds its storage bound; no provider call was made."
-        )
+        raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
-        raise ResearchContextLimitError(
-            "Mandatory peer and research context exceeds the 256 KB UTF-8 byte limit. "
-            "No provider call was made; session remains recoverable and saved evidence is intact."
-            + _context_byte_breakdown(
-                context, phase="peer_assembly", strategy_id=strategy_id, role=role
-            )
+        raise _research_context_guard_error(
+            context, record=record, phase="peer_assembly",
+            strategy_id=strategy_id, role=role,
         )
     return context
 
@@ -11259,16 +11310,11 @@ async def _portfolio_role_call(
                 context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
                 _bound_context_manifest(context["context_manifest"])
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
-                    raise ResearchContextLimitError(
-                        "Research context manifest exceeds its storage bound; no provider call was made."
-                    )
+                    raise _research_context_manifest_guard_error(context)
                 if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
-                    raise ResearchContextLimitError(
-                        "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
-                        "No provider call was made; saved research records were preserved."
-                        + _context_byte_breakdown(
-                            context, phase="portfolio_dispatch", strategy_id=strategy_id, role=role
-                        )
+                    raise _research_context_guard_error(
+                        context, record=record, phase="portfolio_dispatch",
+                        strategy_id=strategy_id, role=role,
                     )
             except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
                 context_blocked = isinstance(exc, ResearchContextLimitError)
@@ -15842,19 +15888,11 @@ async def _worker(session_id: str, path: str) -> None:
             context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
             _bound_context_manifest(context["context_manifest"])
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
-                raise ResearchContextLimitError(
-                    "Research context manifest exceeds its storage bound; no provider call was made."
-                )
+                raise _research_context_manifest_guard_error(context)
             if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
-                raise ResearchContextLimitError(
-                    "Mandatory research context exceeds the 256 KB UTF-8 byte limit. "
-                    "No provider call was made; saved research records were preserved."
-                    + _context_byte_breakdown(
-                        context,
-                        phase="legacy_dispatch",
-                        strategy_id=record.get("strategy_id"),
-                        role=role,
-                    )
+                raise _research_context_guard_error(
+                    context, record=record, phase="legacy_dispatch",
+                    strategy_id=record.get("strategy_id"), role=role,
                 )
             record["status"] = "queued"
             record["cycle"] = cycle_num
