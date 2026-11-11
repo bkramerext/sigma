@@ -262,3 +262,46 @@ These inputs serve different purposes: attaching source evidence does not replac
 SIGMA remains experimental. Supplied source material can be incomplete or wrong; treating it as an investigation premise is not independent verification. Investigator/Skeptic agreement and paper scores do not establish scientific validity. Review generated findings, citations, and PDFs before relying on or publishing them.
 
 **Status:** These notes describe the proposed v0.3.1 release contents. Merging this documentation does **not** deploy v0.3.1 or certify that every feature has completed production smoke testing.
+
+---
+
+## Version 0.4.0 — Open Exploration and Collaborative Research
+*Release notes draft · November 11, 2026 · Deployment not yet confirmed*
+
+**SIGMA is easier to explore without an account and more capable when researchers work together.** Version 0.4.0 introduces an anonymous hands-on playground, completes major collaborative execution and recovery work, and makes research limitations and progress easier to understand.
+
+### Explore SIGMA without signing in
+
+- **A hands-on Guest Mode.** Visitors can open sample projects, inspect saved research and papers, create and edit their own temporary projects, add strategies, and export their work without signing in.
+- **Start with examples.** Guest Mode opens the Samples collection by default. Available sample research, saved answers, paper PDFs, LaTeX files, and scores can be explored without generating new AI output.
+- **Clear AI-action previews.** Starting a Session or Paper, or selecting Q/A Ask, shows a short, dismissible explanation of the member-only AI feature instead of performing model calls. Other AI-powered actions similarly avoid fabricated output or unexpected provider usage.
+- **Private but temporary workspaces.** Guest projects are isolated from other visitors and signed-in members. They are not permanent account storage: export anything you want to keep before the temporary guest workspace expires.
+
+### Research together in one shared project
+
+- **Independent work by collaborators.** Multiple authorized researchers can run separate Sessions and Research Q/A operations in the same project without mixing answers, progress, or creator identities.
+- **Safe Paper sharing and queues.** Collaborators can start separate numbered Paper runs; queued work remains distinct and published PDFs retain their correct creator attribution. Each participant controls their own executions without stopping another person's work.
+- **Live collaboration awareness.** Project and Home activity indicators show active and queued work, including the creator and Model/Thinking information. Shared changes refresh in other windows, with safeguards against overwriting another person's edits.
+- **Preserved ownership and history.** Creator permissions, collaborator removal, saved research, Paper artifacts, and Q/A provenance are checked throughout the workflow. Older single-user projects remain readable through the collaboration migration.
+
+### Stronger recovery and research safeguards
+
+- **Recovery after interrupted workers.** Session, Paper, and Q/A work retain durable checkpoints. Backend process failures, restarts, and stale-worker recovery are handled without silently replaying uncertain paid AI calls.
+- **Paper restart from saved work.** Shift-click a saved Paper heading to choose a confirmed restart point, such as the validated manuscript or the writing stage. A new attempt preserves the original PDF, manuscript, and frozen research evidence.
+- **More helpful Source Material errors.** Research startup now distinguishes SIGMA's source-size and dispatch-packet guards from a model's context window, reports usable source-size diagnostics where available, and explains how to reduce excessive source input.
+- **Preflight checks before provider work.** Inputs that necessarily exceed SIGMA's dispatch limits can be rejected before unnecessary reference compilation or research calls. SIGMA does not silently truncate the supplied evidence.
+
+### Smaller improvements that add up
+
+- **Consistent controls and attribution.** Cleaner action spacing, activity hover details, model labels, session metadata, and upper-right dismissal controls make the interface easier to navigate.
+- **More predictable account behavior.** New browser windows inherit the appropriate recent sign-in, while sign-out works on the first click and guest access stays separate from member data.
+- **Markdown and mathematical text.** AI Markdown formatting uses the economy model with Medium thinking, independently of the research model. Current Understanding can be formatted, and generated mathematical content receives additional rendering fixes.
+- **Faster, stronger verification.** SIGMA's full core test plan is balanced across eight measured CI shards, while browser acceptance and real two-creator PDF compilation remain mandatory release gates.
+
+### Known limitations and release status
+
+Guest Mode does not grant AI execution or durable account storage. Members must have authorized access and an appropriate ChatGPT connection to generate research, answers, or papers. Live two-real-Google-account collaboration smoke testing remains a separate release-acceptance step; automated test accounts do not substitute for it.
+
+SIGMA remains experimental. Source Materials can contain incorrect premises, Investigator/Skeptic agreement is not independent verification, and a high Paper Score does not establish scientific correctness. Review generated research, citations, and papers critically.
+
+**Status:** Draft release notes for v0.4.0. These notes describe changes targeted from the current merged code, not a confirmed production deployment. The frontend and backend version declarations remain at 0.3.0 until a separate version-bump and release process. A 0.4.0 deployment SHA and production smoke-test result must be recorded before marking this release deployed.
