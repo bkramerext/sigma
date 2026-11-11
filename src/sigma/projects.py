@@ -1,5 +1,6 @@
 """Typed project commands shared by every adapter; reads never change history."""
 
+import asyncio
 import fcntl
 import hashlib
 import json
@@ -7,9 +8,11 @@ import os
 import re
 import stat
 import tempfile
+import threading
 import unicodedata
 from collections.abc import Callable
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
@@ -267,10 +270,44 @@ def project_path(value: str | Path) -> Path:
         raise ProjectError(f"Invalid project path: {exc}") from exc
 
 
+class _HeldFileLock:
+    """Reentrant only within the owning thread/task, never inherited workers."""
+
+    def __init__(self, path: str, owner: tuple[int, int | None]):
+        self.path = path
+        self.owner = owner
+        self.active = True
+
+
+_PROJECT_FILE_LOCK: ContextVar[_HeldFileLock | None] = ContextVar(
+    "sigma_project_file_write_lock", default=None
+)
+
+
+def _file_lock_owner() -> tuple[int, int | None]:
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        task = None
+    return threading.get_ident(), id(task) if task is not None else None
+
+
 @contextmanager
-def project_write_lock(value: str | Path):
-    """Serialize project, session-evidence, and inference-receipt updates."""
+def project_write_lock(value: str | Path, *, advance_revision: bool = True):
+    """Serialize per-project writes before acquiring the global SQLite writer.
+
+    Nested checkpoints in one task reuse the lock; child tasks and worker
+    threads cannot inherit permission to bypass a held file lock.
+    """
     path = project_path(value)
+    from sigma import project_collaboration
+
+    held = _PROJECT_FILE_LOCK.get()
+    if held is not None and held.active and held.path == str(path) and held.owner == _file_lock_owner():
+        with project_collaboration.write_guard(str(path), advance_revision=advance_revision):
+            yield path
+        return
+
     lock_path = (
         path.with_name(f".{path.name}.sigma-write.lock")
         if path.suffix == ".json"
@@ -281,15 +318,17 @@ def project_write_lock(value: str | Path):
         with os.fdopen(fd, "rb") as lock:
             if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
                 raise ProjectError("Project write lock must be a regular file")
-            from sigma import project_collaboration
-
-            # Never hold a global SQLite writer transaction while waiting
-            # for another process to release this project's filesystem lock.
             fcntl.flock(lock, fcntl.LOCK_EX)
+            state = _HeldFileLock(str(path), _file_lock_owner())
+            token = _PROJECT_FILE_LOCK.set(state)
             try:
-                with project_collaboration.write_guard(str(path)):
+                with project_collaboration.write_guard(
+                    str(path), advance_revision=advance_revision
+                ):
                     yield path
             finally:
+                state.active = False
+                _PROJECT_FILE_LOCK.reset(token)
                 fcntl.flock(lock, fcntl.LOCK_UN)
     except OSError as exc:
         raise ProjectError(f"Cannot lock project state: {exc}") from exc
