@@ -450,3 +450,82 @@
   margin-left: 0;
   padding-left: 0;
 }
+
+/* Checkpoint restart reuses the workspace's dark, copper-accented dialog
+   language. The overlay is portaled so clipped Paper sections cannot hide it. */
+.paper-rewind-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 12px;
+  background: rgb(0 0 0 / 62%);
+}
+.paper-rewind-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(540px, 100%);
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  border: 1px solid #54616e;
+  border-radius: 9px;
+  background: #202933;
+  box-shadow: 0 15px 42px rgb(0 0 0 / 40%);
+  color: #dfe8ee;
+  font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.paper-rewind-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #404e5b;
+}
+.paper-rewind-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.paper-rewind-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 18px;
+}
+.paper-rewind-content > p { margin: 0 0 12px; }
+.paper-rewind-choices { display: grid; gap: 8px; margin: 12px 0; padding: 0; border: 0; }
+.paper-rewind-choices legend { font-weight: 600; margin-bottom: 7px; }
+.paper-rewind-choices label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #566574;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.paper-rewind-choices label:has(input:checked) { border-color: #d1a474; }
+.paper-rewind-choices input { margin-top: 4px; accent-color: #d1a474; }
+.paper-rewind-choices label > span { display: grid; gap: 3px; }
+.paper-rewind-choices label > span > span { color: #bac7d1; }
+.paper-rewind-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+  padding: 13px 18px;
+  border-top: 1px solid #404e5b;
+}
+.paper-rewind-footer .text-view-link {
+  border: 0;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.paper-rewind-footer .text-view-link:disabled { opacity: .45; cursor: default; }
+.paper-rewind-footer .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }

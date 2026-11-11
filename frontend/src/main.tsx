@@ -1,4 +1,4 @@
-import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
+import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
@@ -2141,14 +2141,30 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
   return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
 }
-function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
+function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, onRewind, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; onRewind?: (element: HTMLElement) => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  if (inlineTitleActions) return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
+  const hint = onRewind ? `${expanded ? 'Collapse' : 'Expand'} · Shift-click to restart from checkpoint` : undefined;
+  const choose = (event: { shiftKey: boolean; preventDefault: () => void; stopPropagation: () => void; currentTarget: HTMLElement }) => {
+    if (event.shiftKey && onRewind) {
+      event.preventDefault();
+      event.stopPropagation();
+      onRewind(event.currentTarget);
+    } else onToggle();
+  };
+  const onKey = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      choose(event);
+    }
+  };
+  const disclosure = <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={hint} onClick={choose} onKeyDown={event => { if (event.shiftKey && event.key === 'Enter') { event.preventDefault(); choose(event); } }}><DisclosureChevron expanded={expanded}/></button>;
+  const titleButton = <span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={hint} onClick={choose} onKeyDown={onKey}>{title}</span>;
+  if (inlineTitleActions) return <div className="saved-paper-title-line">{disclosure}<h4 className="saved-paper-title">{badge}{titleButton}<span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
   return <div className="saved-paper-title-line">
-    <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button>
+    {disclosure}
     <div className="saved-paper-title-content">
       <div className="saved-paper-title-first-line">
-        <h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span></h4>
+        <h4 className="saved-paper-title">{badge}{titleButton}</h4>
         <span className="saved-paper-title-tools">{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span>
       </div>
       {beforeCopy && <div className="saved-paper-second-line">{beforeCopy}</div>}
@@ -2812,6 +2828,24 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [rewindDialog, setRewindDialog] = useState<{
+    paper: PaperSummary;
+    options: { source_pdf_sha256: string; snapshot_sha256: string; include_diagrams: boolean; stages: Array<{ id: 'writing' | 'typesetting'; label: string; description: string }> } | null;
+  } | null>(null);
+  const [rewindStage, setRewindStage] = useState<'typesetting' | 'writing'>('typesetting');
+  const [rewindBusy, setRewindBusy] = useState(false);
+  const [rewindError, setRewindError] = useState('');
+  const rewindReturnFocus = useRef<HTMLElement | null>(null);
+  const rewindCancelRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (rewindDialog) rewindCancelRef.current?.focus(); }, [rewindDialog?.paper.paper_id]);
+  useEffect(() => {
+    if (!rewindDialog) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !rewindBusy) { event.preventDefault(); setRewindDialog(null); rewindReturnFocus.current?.focus(); }
+    };
+    document.addEventListener('keydown', dismiss);
+    return () => document.removeEventListener('keydown', dismiss);
+  }, [rewindDialog, rewindBusy]);
   const [eli5Id, setEli5Id] = useState('');
   const [explainingId, setExplainingId] = useState('');
   const [eli5Error, setEli5Error] = useState('');
@@ -3059,6 +3093,56 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
     }));
   }, [loading, papers, path, onSectionOpened]);
+  async function openPaperRewind(paper: PaperSummary, element: HTMLElement) {
+    if (guest || rewindBusy) return;
+    rewindReturnFocus.current = element;
+    setRewindDialog({ paper, options: null });
+    setRewindStage('typesetting');
+    setRewindError('');
+    try {
+      const response = await fetch(
+        `/api/projects/papers/${encodeURIComponent(paper.paper_id)}/rewind?${new URLSearchParams({ path })}`,
+        { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } },
+      );
+      const info = await readPaperResponse(response, 'Checking Paper checkpoints');
+      if (info.source_pdf_sha256 !== paper.pdf_sha256) throw new Error('Paper changed; refresh before restarting.');
+      setRewindDialog(current => current?.paper.paper_id === paper.paper_id ? { paper, options: info } : current);
+    } catch (cause) { setRewindError(errorMessage(cause)); }
+  }
+  async function confirmPaperRewind() {
+    const dialog = rewindDialog;
+    if (!dialog?.options || rewindBusy) return;
+    if (!binding) { setRewindError('Connect an AI provider before restoring a Paper checkpoint.'); return; }
+    setRewindBusy(true);
+    setRewindError('');
+    try {
+      const runId = crypto.randomUUID().replaceAll('-', '');
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(dialog.paper.paper_id)}/rewind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({
+          path, expected_project_id: projectId, expected_binding: binding,
+          source_pdf_sha256: dialog.options.source_pdf_sha256,
+          stage: rewindStage, confirm_restart: true, run_id: runId,
+        }),
+      });
+      const restored = await readPaperResponse(response, 'Restoring Paper checkpoint');
+      if (restored.snapshot_sha256 !== dialog.options.snapshot_sha256) throw new Error('Paper restart evidence changed.');
+      selectPaperRun(restored.run_id ?? null);
+      setNewPaperRequested(true);
+      setDraftPaperExpanded(true);
+      setCheckpointMismatch(null);
+      setRestartableCheckpoint(null);
+      setContinuationAvailable(false);
+      setIncludeDiagramsAndTables(dialog.options.include_diagrams);
+      window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(dialog.options.include_diagrams));
+      setRewindDialog(null);
+      rewindReturnFocus.current?.focus();
+      await refresh(undefined, true);
+      setSuccess(`Restored Paper ${dialog.paper.paper_version} at ${rewindStage === 'typesetting' ? 'validated manuscript' : 'writing'}. Press Play to start a new Paper; the original is unchanged.`);
+    } catch (cause) { setRewindError(errorMessage(cause)); }
+    finally { setRewindBusy(false); }
+  }
   async function openPaper(id: string) {
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
@@ -3566,6 +3650,23 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <div className="ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
 
+      {rewindDialog && createPortal(<div className="paper-rewind-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !rewindBusy) { setRewindDialog(null); rewindReturnFocus.current?.focus(); } }}>
+        <div className="paper-rewind-dialog" role="dialog" aria-modal="true" aria-labelledby="paper-rewind-title" aria-describedby="paper-rewind-description">
+          <div className="paper-rewind-header"><h3 id="paper-rewind-title">Restart from checkpoint · Paper {rewindDialog.paper.paper_version}</h3><DialogDismissButton label="Close checkpoint restart" onClick={() => { if (!rewindBusy) { setRewindDialog(null); rewindReturnFocus.current?.focus(); } }}/></div>
+          <div className="paper-rewind-content">
+            <p id="paper-rewind-description">Start a new Paper using the saved version's verified evidence. The published Paper {rewindDialog.paper.paper_version} will remain unchanged.</p>
+            {rewindDialog.options ? <fieldset disabled={rewindBusy} className="paper-rewind-choices"><legend>Restart at</legend>
+              {rewindDialog.options.stages.map(stage => <label key={stage.id}><input type="radio" name="paper-rewind-stage" value={stage.id} checked={rewindStage === stage.id} onChange={() => setRewindStage(stage.id)}/><span><strong>{stage.label}</strong><span>{stage.description}</span></span></label>)}
+            </fieldset> : !rewindError && <p role="status">Checking saved checkpoints…</p>}
+            <p className="settings-hint">The next Play may consume AI allowance for writing, proofreading or scoring. No provider call is made when restoring the checkpoint.</p>
+            {rewindError && <p role="alert" className="error">{rewindError}</p>}
+          </div>
+          <div className="paper-rewind-footer">
+            <button ref={rewindCancelRef} type="button" className="text-view-link" disabled={rewindBusy} onClick={() => { setRewindDialog(null); rewindReturnFocus.current?.focus(); }}>Cancel</button>
+            <button type="button" className="text-view-link" disabled={!rewindDialog.options || rewindBusy || !binding} onClick={() => void confirmPaperRewind()}>{rewindBusy ? 'Restoring…' : 'Confirm restart'}</button>
+          </div>
+        </div>
+      </div>, document.body)}
       {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
       {loading && <p>Loading saved versions…</p>}
 
@@ -3663,7 +3764,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} onRewind={!guest ? element => void openPaperRewind(paper, element) : undefined} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
