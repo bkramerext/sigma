@@ -232,7 +232,15 @@ def fenced_checkpoint(func: Callable[..., _T]) -> Callable[..., _T]:
 
     @wraps(func)
     def guarded(path: str, *args: Any, **kwargs: Any) -> _T:
-        with write_guard(path, advance_revision=not transient_status):
+        if _WRITE_CONTEXT.get() is not None:
+            # Already inside a caller's serialized project mutation.
+            with write_guard(path, advance_revision=not transient_status):
+                return func(path, *args, **kwargs)
+        # Ordinary checkpoint writes must not hold a global SQLite writer
+        # while waiting for this project's filesystem lock.
+        from sigma.projects import project_write_lock
+
+        with project_write_lock(path, advance_revision=not transient_status):
             return func(path, *args, **kwargs)
 
     return guarded
