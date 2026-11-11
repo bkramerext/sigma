@@ -15657,6 +15657,46 @@ async def _await_session_execution_slot(session_id: str, path: str) -> bool:
                 latest = _read(path, session_id)
                 if latest.get("status") != "queued":
                     return False
+                deadline = latest.get("deadline_at")
+                if isinstance(deadline, str):
+                    try:
+                        expired = datetime.fromisoformat(deadline) <= datetime.now(UTC)
+                    except ValueError as exc:
+                        raise ProjectError(
+                            "Queued research session has an invalid deadline."
+                        ) from exc
+                    if expired:
+                        # A queued Session has not dispatched provider work.
+                        # Never let a capacity-waiting worker start a call
+                        # after the saved session duration has elapsed.
+                        latest["status"] = "paused"
+                        latest["stopped_at"] = _now()
+                        latest["current_action"] = "Paused · waiting deadline"
+                        latest["message"] = (
+                            "Session duration expired while queued; no provider call was made. "
+                            "Resume to request a new execution window."
+                        )
+                        for branch in latest.get("strategy_runs", []):
+                            if branch.get("status") == "queued":
+                                branch["status"] = "paused"
+                                branch["current_action"] = latest["current_action"]
+                                branch["reason"] = latest["message"]
+                        _event(latest, "paused_before_dispatch", latest["message"])
+                        _save(path, latest)
+                        return False
+                if cloud_research.billing_enabled():
+                    # An interrupted or already-claimed ledger reservation
+                    # cannot be silently retried, even when project capacity
+                    # remains occupied by another collaborator.
+                    try:
+                        job_state = cloud_research.job_status(session_id)
+                    except cloud_research.CloudResearchUnavailable as exc:
+                        raise ProjectError(str(exc)) from exc
+                    if job_state != "queued":
+                        raise ProjectError(
+                            "Queued research reservation cannot be claimed; "
+                            "recover the saved session before resuming."
+                        )
                 limit = get_limits(path)["max_concurrent_sessions"]
                 occupied = sum(
                     item.get("id") != session_id and item.get("status") == "running"

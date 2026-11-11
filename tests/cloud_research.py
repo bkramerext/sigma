@@ -3723,8 +3723,11 @@ def main() -> None:
                     research_sessions._save(stale_worker_project.path, stale_worker)
                     try:
                         asyncio.run(
-                            research_sessions._await_session_execution_slot(
-                                stale_worker["id"], stale_worker_project.path
+                            asyncio.wait_for(
+                                research_sessions._await_session_execution_slot(
+                                    stale_worker["id"], stale_worker_project.path
+                                ),
+                                timeout=5,
                             )
                         )
                     except ProjectError as exc:
@@ -3775,8 +3778,11 @@ def main() -> None:
                     research_sessions._save(expiry_project.path, expired)
                     assert (
                         asyncio.run(
-                            research_sessions._await_session_execution_slot(
-                                expired["id"], expiry_project.path
+                            asyncio.wait_for(
+                                research_sessions._await_session_execution_slot(
+                                    expired["id"], expiry_project.path
+                                ),
+                                timeout=5,
                             )
                         )
                         is False

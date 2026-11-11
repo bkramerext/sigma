@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import secrets
-from uuid import uuid4
 import socket
 import subprocess
 import time
@@ -17,6 +16,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import quote
 from urllib.request import urlopen
+from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
