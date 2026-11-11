@@ -520,6 +520,26 @@ with sync_playwright() as playwright:
     legacy = project(page, "Legacy default project", "default")
     open_project(page, legacy["path"])
     expect(page.get_by_role("heading", name="Legacy default project")).to_be_visible()
+    # The over-limit notice links directly to Project > Source Material.
+    # Verify a collapsed parent and subsection are both revealed, scrolled
+    # and focused; repeated navigation may not toggle the subsection shut.
+    project_section = page.locator(".project-pane-heading").get_by_role(
+        "button", name="Project", exact=True
+    )
+    source_section = page.get_by_role("button", name="Source Material", exact=True)
+    if project_section.get_attribute("aria-expanded") == "false":
+        project_section.click()
+    if source_section.get_attribute("aria-expanded") == "true":
+        source_section.click()
+    project_section.click()
+    expect(project_section).to_have_attribute("aria-expanded", "false")
+    page.evaluate("window.dispatchEvent(new Event('sigma-reveal-source-material'))")
+    expect(project_section).to_have_attribute("aria-expanded", "true")
+    expect(source_section).to_have_attribute("aria-expanded", "true")
+    expect(page.locator("#sigma-supplied-evidence-content")).to_be_visible()
+    expect(source_section).to_be_focused()
+    page.evaluate("window.dispatchEvent(new Event('sigma-reveal-source-material'))")
+    expect(source_section).to_have_attribute("aria-expanded", "true")
     header = page.locator(".project-art-header")
     expect(header.get_by_role("button", name="About SIGMA")).to_have_text("About SIGMA")
     # New Paper offers two side-by-side underline actions (not an X), with

@@ -10,6 +10,7 @@ import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
+import { sourceMaterialOverflowCopy } from './source-material-error';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -377,19 +378,15 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
       next: 'Review the selected source material and start a narrower session. Changing models does not increase SIGMA’s manifest storage limit.',
     };
   }
-  // Source Material has its own exact extracted-character budget. This is a
-  // local pre-dispatch guard, not a provider model's context window. The
-  // message contains bounded counts, never the actual source document text.
-  if (/source material contains|source material exceeds context limit/i.test(evidence) &&
-      /extracted characters|source material exceeds context limit/i.test(evidence)) {
-    const match = /Source Material contains\s*([\d,]+)\s*extracted characters;\s*the session supports at most\s*([\d,]+)/i.exec(message);
-    const amounts = match
-      ? `Extracted Source Material: ${Number(match[1].replaceAll(',', '')).toLocaleString('en-US')} characters; SIGMA limit: ${Number(match[2].replaceAll(',', '')).toLocaleString('en-US')}.`
-      : 'The selected Source Material exceeded SIGMA’s extracted-text budget.';
-    return {
-      cause: `SIGMA stopped before research dispatch because the selected Source Material is too large. ${amounts} This is independent of the selected model and Thinking level. Saved research is preserved.`,
-      next: 'Shorten or split the selected source documents before starting a new session. The original saved sources are not truncated. Switching models or repeating Resume with unchanged Source Material will not remove this guard.',
-    };
+  // A frozen Source Material overflow is not a model context failure. Use
+  // the saved backend measurement (or its historical blocked event) so users
+  // can see the size and reduce their source selection before a new session.
+  if (/source material contains|source material exceeds context limit/i.test(evidence)) {
+    return sourceMaterialOverflowCopy(
+      session.message,
+      session.events,
+      session.strategy_runs?.map(branch => branch.reason || ''),
+    );
   }
   if (/context|token limit/.test(evidence))
     return { cause: `Research stopped because a context limit was reached. Selected model: ${modelSelection}. Saved research is preserved; the exact limit source has not been established.`, next: 'Inspect session diagnostics to determine whether SIGMA or the provider enforced the limit before choosing a recovery action.' };
@@ -428,11 +425,24 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
     </SessionNotice>;
   }
   const guidance = stoppedSessionGuidance(session);
+  // Only the second Source Material mention (in the Next instruction) links
+  // to the editable project sources; the cause remains plain explanation.
+  const sourceLinkAt = guidance.cause.startsWith('Too much Source Material.')
+    ? guidance.next.indexOf('Source Material') : -1;
+  const nextGuidance = sourceLinkAt < 0 ? guidance.next : <>
+    {guidance.next.slice(0, sourceLinkAt)}
+    <a href="#sigma-supplied-evidence-heading" className="session-notice-source-link"
+      onClick={event => {
+        event.preventDefault();
+        window.dispatchEvent(new Event('sigma-reveal-source-material'));
+      }}>Source Material</a>
+    {guidance.next.slice(sourceLinkAt + 'Source Material'.length)}
+  </>;
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
   const title = session.status === 'failed' ? 'Session failed' : 'Stopped';
   return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
-    <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {guidance.next}</p>
+    <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {nextGuidance}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
   </SessionNotice>;
 }
@@ -7137,6 +7147,17 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const sectionOpen = useCallback((section: 'project' | 'strategies' | 'sessions' | 'papers') => {
     if (exclusiveSections) window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: section }));
   }, [exclusiveSections]);
+  useEffect(() => {
+    // Error-card Source Material links can originate from a collapsed Sessions
+    // pane. Reveal Project even in the exclusive-one-section layout.
+    const reveal = () => {
+      sectionOpen('project');
+      setProjectExpanded(true);
+      window.localStorage.setItem(`sigma.projectPane:${path}`, 'true');
+    };
+    window.addEventListener('sigma-reveal-source-material', reveal);
+    return () => window.removeEventListener('sigma-reveal-source-material', reveal);
+  }, [path, sectionOpen]);
   useEffect(() => {
     const opened = (event: Event) => {
       const section = (event as CustomEvent<string>).detail;

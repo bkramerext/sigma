@@ -225,7 +225,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
   }
 
   return <section className="sigma-description-field sigma-supplied-evidence">
-    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle"
+    <div className="sigma-evidence-heading"><h4><button id="sigma-supplied-evidence-heading" type="button" className="workspace-section-disclosure sigma-subsection-toggle"
       data-tooltip={(expanded ? 'Collapse' : 'Expand') + ' Source Material'}
       aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}>
       <EvidenceChevron expanded={expanded}/>Source Material
@@ -322,6 +322,33 @@ export default function ProjectDescriptionEditor({
       return [key, previous === null ? true : previous === 'true'];
     }));
   });
+  const [sourceRevealRequest, setSourceRevealRequest] = useState(0);
+  useEffect(() => {
+    const reveal = () => {
+      // A guidance link always expands this subsection, never toggles it
+      // closed. Keep manual disclosure preference consistent with the result.
+      window.localStorage.setItem(`sigma.projectSubsection:${view.path}:supplied_evidence`, 'true');
+      setExpandedFields(current => ({ ...current, supplied_evidence: true }));
+      setSourceRevealRequest(request => request + 1);
+    };
+    window.addEventListener('sigma-reveal-source-material', reveal);
+    return () => window.removeEventListener('sigma-reveal-source-material', reveal);
+  }, [view.path]);
+  useEffect(() => {
+    if (!sourceRevealRequest || !(expandedFields.supplied_evidence ?? true)) return;
+    // Let React expose the Project pane and this subsection before scrolling.
+    const frame = requestAnimationFrame(() => {
+      const heading = document.getElementById('sigma-supplied-evidence-heading');
+      if (!heading) return;
+      heading.scrollIntoView({
+        block: 'center',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      });
+      heading.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sourceRevealRequest, expandedFields.supplied_evidence]);
+
   const toggleField = (key: string) => {
     setExpandedFields(previous => {
       const next = !(previous[key] ?? true);

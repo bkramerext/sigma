@@ -4765,8 +4765,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         try:
             start = datetime.fromisoformat(record["started_at"])
             end = (
-                datetime.fromisoformat(record["stopped_at"])
-                if record.get("status") == "stopped" and record.get("stopped_at")
+                datetime.fromisoformat(record.get("stopped_at") or record["updated_at"])
+                if record.get("status") in {"stopped", "paused"}
                 else (
                     datetime.fromisoformat(record["updated_at"])
                     if record.get("status") in {"completed", "ended", "failed"}
@@ -7024,6 +7024,39 @@ async def control_session(
     async with state_lock:
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
+            # Historical Source Material blocks (including Session 5) missed
+            # the stopped_at checkpoint. Recover the last saved block time so
+            # time spent unable to dispatch is not charged to active duration.
+            if (
+                record.get("status") == "paused"
+                and not record.get("stopped_at")
+                and "source material" in str(record.get("current_action") or "").lower()
+            ):
+                blocked = next(
+                    (
+                        event
+                        for event in reversed(record.get("events", []))
+                        if isinstance(event, dict)
+                        and event.get("kind") == "source_material.compilation.blocked"
+                    ),
+                    None,
+                )
+                timestamp = blocked.get("timestamp") if blocked else record.get("updated_at")
+                try:
+                    if not isinstance(timestamp, str):
+                        raise TypeError("Missing Source Material pause timestamp")
+                    pause_start = datetime.fromisoformat(timestamp)
+                    if pause_start.tzinfo is None or pause_start > datetime.now(UTC):
+                        raise ValueError("Invalid Source Material pause timestamp")
+                    record["stopped_at"] = pause_start.isoformat()
+                except (TypeError, ValueError):
+                    record["stopped_at"] = _now()
+                _event(
+                    record,
+                    "source_material.pause_clock_recovered",
+                    "Recovered the saved Source Material pause boundary; inactive waiting "
+                    "time will not consume the research session duration.",
+                )
             # Browser Resumes remain browser-bound; API/CLI cannot silently
             # remove a previous session requirement when reconnecting.
             if browser_presence_required:
@@ -7660,6 +7693,11 @@ async def control_session(
                     "while its full budget reservation remains held."
                 )
                 _event(record, "references.compilation.recovered", compiler["reason"])
+            # The user may have disabled or deleted oversized Source Material
+            # after a pre-dispatch block. On explicit Resume, use the *current*
+            # enabled set without replaying reference-compiler or role attempts.
+            # Research-role attempts freeze their already delivered premises.
+            _refresh_supplied_evidence_on_resume(path, record)
             record["status"] = "queued"
             record.pop("stop_advisory", None)
             for branch in record.get("strategy_runs", []):
@@ -15714,6 +15752,104 @@ async def _ensure_mandatory_dispatch_preflight(session_id: str, path: str) -> bo
         return False
 
 
+def _source_selection_key(item: dict[str, Any]) -> tuple[str, str]:
+    """Identify a selected source by immutable PDF digest or edited link URL."""
+    identifier = str(item.get("id") or "")
+    value = item.get("sha256") if identifier.startswith("uploaded-pdf:") else item.get("url")
+    return identifier, str(value or "")
+
+
+def _refresh_supplied_evidence_on_resume(path: str, record: dict[str, Any]) -> bool:
+    """Rebind edited Source Material only before the first research-role attempt.
+
+    Source Material is initially frozen for provenance. An explicit Resume
+    after enabling/disabling/removing project sources may replace that
+    selection *only* if no Investigator/Skeptic call or finding exists.
+    Methodology compilation and its paid-call accounting are independent and
+    must never be reset. Preserved unchanged extracts are verified by digest.
+    """
+    previous = record.get("uploaded_project_evidence") or []
+    if not isinstance(previous, list):
+        raise ProjectError("Saved Source Material selection is invalid.")
+    current = project_evidence.evidence_context(path, limit=6000)
+    old_keys = [_source_selection_key(item) for item in previous]
+    new_keys = [_source_selection_key(item) for item in current]
+    if old_keys == new_keys:
+        return False
+
+    role_attempted = (
+        int(record.get("calls_used") or 0) > 0
+        or bool(record.get("artifacts"))
+        or any(
+            isinstance(step, dict) and step.get("role") in {"investigator", "skeptic"}
+            for step in record.get("steps", [])
+        )
+        or any(
+            branch.get("artifacts") or branch.get("pending_investigation")
+            for branch in record.get("strategy_runs", [])
+            if isinstance(branch, dict)
+        )
+    )
+    if role_attempted:
+        # A normal saved session must keep its original research premises.
+        # Editing project Source Material must not retroactively alter
+        # completed, failed or unknown paid Investigator/Skeptic attempts.
+        return False
+
+    previous_stage = record.get("supplied_evidence_compilation")
+    cached = (
+        previous_stage.get("sources", [])
+        if isinstance(previous_stage, dict) and isinstance(previous_stage.get("sources"), list)
+        else []
+    )
+    reusable: dict[tuple[str, str], dict] = {}
+    old_key_set = set(old_keys)
+    for item in cached:
+        if not isinstance(item, dict):
+            continue
+        key = _source_selection_key(item)
+        if key not in old_key_set or item.get("status") != "retrieved":
+            continue
+        excerpt = item.get("excerpt")
+        if (
+            not isinstance(excerpt, str)
+            or item.get("incomplete_extract")
+            or hashlib.sha256(excerpt.encode("utf-8")).hexdigest() != item.get("excerpt_sha256")
+        ):
+            continue
+        reusable[key] = item
+
+    # A removed or disabled source is no longer part of the session context.
+    # A changed PDF digest or link URL invalidates the prior extract. Nothing
+    # is deleted from historical logs or already-recorded provider usage.
+    retained = [reusable[key] for key in new_keys if key in reusable]
+    record["uploaded_project_evidence"] = current
+    record["supplied_evidence_compilation"] = {
+        "status": "pending" if current else "completed",
+        "sources": retained,
+        "total": len(current),
+        "completed_count": len(retained),
+        **({"finished_at": _now()} if not current else {}),
+    }
+    record.setdefault("source_material_selection_history", []).append(
+        {
+            "at": _now(),
+            "reason": "user_resume_before_research_dispatch",
+            "previous_source_ids": [key[0] for key in old_keys],
+            "selected_source_ids": [key[0] for key in new_keys],
+            "reused_verified_extracts": len(retained),
+        }
+    )
+    _event(
+        record,
+        "source_material.selection_refreshed",
+        f"Resume refreshed Source Material from {len(previous)} to {len(current)} "
+        f"enabled items before the first Investigator/Skeptic call; "
+        f"{len(retained)} verified extracts reused. Previous provider usage is preserved.",
+    )
+    return True
+
+
 async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> bool:
     """Checkpoint all document reads and fail closed before role dispatch.
 
@@ -15754,6 +15890,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material checkpoint invalid"
                     record["message"] = "Saved Source Material compilation failed integrity checks."
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _save(path, record)
                     return False
                 try:
@@ -15762,6 +15900,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material exceeds context limit"
                     record["message"] = str(exc)
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _save(path, record)
                     return False
                 if record["uploaded_project_evidence"] != restored_evidence:
@@ -15806,6 +15946,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                         f"{', '.join(names[:4])}."
                         " Fix retrieval/access and Resume to retry these sources."
                     )
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     stage["reason"] = record["message"]
                     _event(record, "source_material.compilation.blocked", record["message"])
                     _save(path, record)
@@ -15818,6 +15960,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material exceeds context limit"
                     record["message"] = str(exc)
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _event(record, "source_material.compilation.blocked", record["message"])
                     _save(path, record)
                     return False
