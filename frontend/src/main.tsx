@@ -360,7 +360,7 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
       : 'SIGMA enforces an internal UTF-8 dispatch limit after non-destructive compaction.';
     return {
       cause: `SIGMA blocked the next research call because mandatory context exceeds its internal byte limit. ${sizes} Selected model: ${modelSelection}. This is not a model-specific context-window limit. Saved research is preserved.`,
-      next: 'Review the context-size diagnostics. Reduce the project question or mandatory source material and start a narrower session; this one remains saved. Switching models or retrying Resume with unchanged context cannot bypass SIGMA’s byte guard.',
+      next: 'Review the context-size diagnostics. If this error was saved under an older SIGMA guard, updating and clicking Resume may permit the preserved context to proceed; a successful dispatch can consume allowance. If it still exceeds the current bound, narrow mandatory source material for a new session. Switching models alone does not change SIGMA’s guard.',
     };
   }
   if (/SIGMA context manifest requires|research context manifest exceeds its storage bound/i.test(message)) {
