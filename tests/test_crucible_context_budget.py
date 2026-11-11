@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 from copy import deepcopy
-from unittest.mock import patch
 from typing import Any
+from unittest.mock import patch
 
 from sigma import research_sessions
 from sigma.projects import ProjectError
@@ -493,9 +493,7 @@ def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() 
     """59k extracted Unicode chars fit source policy but may exceed byte policy."""
     record = _preflight_record("q" * 30_000, source="🧪" * 59_000)
     original = deepcopy(record)
-    packet = research_sessions._mandatory_dispatch_lower_bound(
-        record, record["strategy_runs"][0]
-    )
+    packet = research_sessions._mandatory_dispatch_lower_bound(record, record["strategy_runs"][0])
     assert len(record["uploaded_project_evidence"][0]["excerpt"]) < 60_000
     assert _size(packet) > LIMIT
     assert packet["uploaded_project_evidence"] == original["uploaded_project_evidence"]
@@ -533,27 +531,36 @@ def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() 
     assert stored["uploaded_project_evidence"] == original["uploaded_project_evidence"]
     assert stored["events"][-1]["kind"] == "research.context_blocked"
     # Re-evaluation of the original frozen inputs cannot trigger provider work.
-    assert _size(research_sessions._mandatory_dispatch_lower_bound(
-        original, original["strategy_runs"][0]
-    )) > LIMIT
+    assert (
+        _size(
+            research_sessions._mandatory_dispatch_lower_bound(
+                original, original["strategy_runs"][0]
+            )
+        )
+        > LIMIT
+    )
 
 
 def test_mandatory_preflight_does_not_block_viable_portfolio_peers() -> None:
     record = _preflight_record("q" * (LIMIT + 1000))
-    record["strategy_runs"].append({
-        "strategy_id": "strategy-b",
-        "strategy_title": "Independent approach",
-        "strategy_text": "Proceed with the bounded inputs.",
-        "current_question": "Check a short counterexample.",
-        "status": "queued",
-    })
+    record["strategy_runs"].append(
+        {
+            "strategy_id": "strategy-b",
+            "strategy_title": "Independent approach",
+            "strategy_text": "Proceed with the bounded inputs.",
+            "current_question": "Check a short counterexample.",
+            "status": "queued",
+        }
+    )
     original = deepcopy(record)
-    assert _size(research_sessions._mandatory_dispatch_lower_bound(
-        record, record["strategy_runs"][0]
-    )) > LIMIT
-    assert _size(research_sessions._mandatory_dispatch_lower_bound(
-        record, record["strategy_runs"][1]
-    )) < LIMIT
+    assert (
+        _size(research_sessions._mandatory_dispatch_lower_bound(record, record["strategy_runs"][0]))
+        > LIMIT
+    )
+    assert (
+        _size(research_sessions._mandatory_dispatch_lower_bound(record, record["strategy_runs"][1]))
+        < LIMIT
+    )
 
     with (
         patch.object(research_sessions, "_read", return_value=record),
