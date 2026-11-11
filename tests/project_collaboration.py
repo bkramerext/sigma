@@ -119,6 +119,32 @@ class CollaborationTests(TestCase):
             holder.rollback()
             holder.close()
 
+    def test_open_project_settings_does_not_take_writer_for_unchanged_digest(self) -> None:
+        """Revision verification is read-only until the project actually drifts."""
+        known = "a" * 64
+        with shared._db() as db:
+            db.execute(
+                "UPDATE shared_projects SET project_sha256=? WHERE path=?",
+                (known, self.path),
+            )
+        holder = sqlite3.connect(
+            self.root / "collaboration.sqlite3", timeout=5, isolation_level=None
+        )
+        try:
+            holder.execute("BEGIN IMMEDIATE")
+            with patch.object(shared, "_project_digest", return_value=known):
+                start = time.monotonic()
+                summary = shared.summary(self.path, verify_revision=True)
+            self.assertEqual(summary["revision"], 0)
+            self.assertLess(
+                time.monotonic() - start,
+                1.0,
+                "Opening Project Settings took the global SQLite writer lock",
+            )
+        finally:
+            holder.rollback()
+            holder.close()
+
     def test_waiting_project_lock_does_not_hold_global_writer(self) -> None:
         """The file-lock waiter must not block independent SQLite writes."""
         from sigma.projects import project_write_lock
