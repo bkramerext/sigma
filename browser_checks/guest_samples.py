@@ -271,12 +271,16 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             has_text="Did Jesus Use Cannabis?"
         )
         sample_group.evaluate("element => { element.open = true; }")
-        sample_group.locator("button.sample-open").click()
+        with page.expect_response(
+            lambda response: response.url.endswith("/api/projects/samples/open")
+            and response.request.method == "POST"
+        ) as opened_response:
+            sample_group.locator("button.sample-open").click()
         expect(
-            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\\? v[12]"))
         ).to_be_visible(timeout=15000)
-        assert opened_projects
-        sandbox_path = opened_projects[-1]["path"]
+        assert opened_response.value.ok, opened_response.value.status
+        sandbox_path = opened_response.value.json()["path"]
         assert Path(sandbox_path).is_dir()
         assert not Path(sandbox_path).is_relative_to(root / "saved-projects")
         expect(page.locator(".project-pane .project-description-toolbar-edit")).to_be_enabled()
