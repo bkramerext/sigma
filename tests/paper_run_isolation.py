@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
@@ -109,6 +111,35 @@ class PaperRunIsolationTests(TestCase):
 
         with patch("sigma.memory_guard.require_capacity"):
             asyncio.run(exercise())
+
+    def test_fresh_process_recovers_two_independent_paper_checkpoints(self) -> None:
+        """A restart retains both creator run scopes without replaying providers."""
+        for run_id, model in ((self.first, "N"), (self.second, "Z")):
+            with papers.paper_run_scope(run_id):
+                papers._save_work(self.path, self.saved_work(model))
+                papers._write_queue_status(self.path, "queued", papers._now())
+
+        script = """
+import sys
+from sigma import papers
+
+path, first, second = sys.argv[1:]
+for run_id, expected in ((first, "N"), (second, "Z")):
+    with papers.paper_run_scope(run_id):
+        saved = papers._load_work(path)
+        receipt = papers._read_queue_status(path)
+        assert saved and saved["model"] == expected
+        assert receipt and receipt["status"] == "queued"
+"""
+        child = subprocess.run(
+            [sys.executable, "-c", script, self.path, self.first, self.second],
+            cwd=Path(__file__).resolve().parents[1],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        self.assertEqual(child.returncode, 0, child.stderr)
 
     def test_invalid_or_symlinked_run_directory_is_rejected(self) -> None:
         for bad in ("../escape", "a" * 31, "A" * 32, "", None):
