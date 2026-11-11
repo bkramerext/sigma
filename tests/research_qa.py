@@ -17,17 +17,18 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
 
-from sigma import api, project_collaboration as shared, research_qa
+from sigma import api, research_qa
+from sigma import project_collaboration as shared
 from sigma.cloud_auth import Principal
 from sigma.cloud_workspaces import Workspace
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
     ProjectError,
-    project_settings,
-    update_project,
     export_complete_project,
     initialize_project,
     inspect_project,
+    project_settings,
+    update_project,
 )
 
 
@@ -213,6 +214,7 @@ def check_two_creators_answer_same_project_concurrently() -> None:
             db.row_factory = sqlite3.Row
             db.execute("PRAGMA busy_timeout=10000")
             return db
+
         provider_started: set[str] = set()
         provider_calls = 0
 
@@ -303,14 +305,24 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                     await asyncio.wait_for(both_entered.wait(), timeout=5)
                     # Source work and shared project editing cannot wait for
                     # either outstanding provider call to release its lock.
-                    modified = api.create_strategy_view(
-                        api.CreateStrategyRequest(
-                            path=str(path),
-                            title="Edited while Q/A was running",
-                            approach="Independent collaborator edit",
+                    token = user.set(identities[1])
+                    try:
+                        modified = api.create_strategy_view(
+                            api.CreateStrategyRequest(
+                                path=str(path),
+                                title="Edited while Q/A was running",
+                                approach="Independent collaborator edit",
+                            )
                         )
-                    )
+                    finally:
+                        user.reset(token)
                     assert len(modified["project"]["strategies"]) == 1
+                    assert (
+                        shared.summary(str(path))["artifact_authors"]["strategy"][
+                            modified["project"]["strategies"][0]["id"]
+                        ]
+                        == identities[1]
+                    )
                 finally:
                     allow_completion.set()
                 first, second = await asyncio.wait_for(
@@ -352,6 +364,21 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                     user.reset(token)
                 settings = project_settings(inspect_project(path).project)
                 revision = shared.summary(str(path))["revision"]
+                # This is an actual project-document change: it MUST remain
+                # fenced even when membership-only settings can be saved.
+                try:
+                    api.create_strategy_view(
+                        api.CreateStrategyRequest(
+                            path=str(path),
+                            title="Fenced during Paper execution",
+                            approach="Must not commit under Z's lease",
+                        )
+                    )
+                except ProjectError as exc:
+                    assert "being used" in str(exc)
+                else:
+                    raise AssertionError("Project edit bypassed Z's execution lease")
+                assert shared.summary(str(path))["revision"] == revision
                 updated = update_project(
                     path,
                     settings.title,
