@@ -754,10 +754,8 @@ def project_evidence_list(path: str):
     from sigma import project_evidence
 
     principal = cloud_auth.current_principal()
-    # Public sample guests can view the project but have no private evidence
-    # directory and must not make unauthorized evidence requests.
-    if principal is not None and principal.role == "guest":
-        return {"files": []}
+    # Guest reads are safe because the request is already bound to the unique
+    # cookie's temporary workspace. Guest writes/uploads remain forbidden.
     files = project_evidence.list_evidence(path)
     # Once project access has been checked, every authorized collaborator can
     # remove Source Material, including attachments uploaded by another member.
@@ -2353,8 +2351,38 @@ def destination_view(title: str = ""):
     return asdict(project_destination(title))
 
 
+def _limit_anonymous_demo_projects() -> None:
+    """Bound anonymous server-side storage before allocating another copy.
+
+    This does not grant an identity, sharing, execution or provider entitlement.
+    Guests can export their private temporary work before expiry.
+    """
+    workspace = cloud_workspaces.current()
+    if workspace is None or not workspace.guest:
+        return
+
+    # Only server-managed temporary roots can be used here; reject forged
+    # project names or attempts to select an external destination.
+    root = workspace.path
+    count = sum(
+        1
+        for item in root.iterdir()
+        if not item.is_symlink()
+        and (
+            (item.is_dir() and item.suffix == ".sigma")
+            or (item.is_file() and item.suffix == ".json" and not item.name.startswith("."))
+        )
+    )
+    if count >= 12:
+        raise HTTPException(
+            429,
+            "Guest preview limit: 12 projects. Export or remove one to continue.",
+        )
+
+
 @app.post("/api/projects/create", status_code=201)
 def create_project_view(body: CreateProjectRequest):
+    _limit_anonymous_demo_projects()
     if (
         body.investigation_type != "default"
         and project_types.get_type(body.investigation_type) is None
@@ -2388,6 +2416,7 @@ class SaveProjectAsRequest(OpenRequest):
 
 @app.post("/api/projects/save-as", status_code=201)
 def save_project_as_view(body: SaveProjectAsRequest):
+    _limit_anonymous_demo_projects()
     return asdict(save_project_as(body.path, body.title))
 
 
@@ -2849,6 +2878,16 @@ async def delete_project_view(body: DeleteProjectRequest):
 def update_project_view(body: UpdateProjectRequest):
     from sigma import project_collaboration
 
+    workspace = cloud_workspaces.current()
+    if (
+        workspace is not None
+        and workspace.guest
+        and (body.collaborators is not None or body.expected_revision is not None)
+    ):
+        raise HTTPException(
+            403, "Temporary guest projects cannot be shared or invite collaborators."
+        )
+
     current_view = inspect_project(body.path)
     project_collaboration.register_owner(current_view)
     current = current_view.project
@@ -3149,6 +3188,7 @@ class SampleOpenRequest(BaseModel):
 def sample_open_view(body: SampleOpenRequest):
     from sigma.samples import open_sample_project
 
+    _limit_anonymous_demo_projects()
     return asdict(open_sample_project(body.sample_id))
 
 

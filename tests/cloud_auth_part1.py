@@ -959,7 +959,130 @@ class CloudAuthTests(CloudAuthFixture):
         # in as another Google identity will be checked against the binding.
         self.assertEqual(cloud_workspaces.guest_workspace(token_value), owner)
 
-    def test_guest_sample_projects_use_temporary_workspace_without_recents(self):
+    def test_anonymous_private_demo_can_edit_without_google_or_provider_access(self):
+        """Guest A gets temporary private drafts; B cannot enumerate or change them."""
+        with (
+            TestClient(app, base_url="https://testserver") as guest_a,
+            TestClient(app, base_url="https://testserver") as guest_b,
+        ):
+            self.assertFalse(guest_a.get("/api/cloud-auth/status").json()["authenticated"])
+            self.assertEqual(guest_a.get("/api/projects/recent").json(), {"projects": []})
+            # A direct My Work visit must provision the private guest cookie.
+            self.assertTrue(any("sigma_guest" in key for key in guest_a.cookies))
+            self.assertEqual(guest_a.get("/api/projects/samples").status_code, 200)
+            self.assertEqual(guest_a.get("/api/projects/recent").json(), {"projects": []})
+            created = guest_a.post(
+                "/api/projects/create",
+                json={
+                    "title": "Private guest experiment",
+                    "problem": "A sandbox hypothesis to test without inference",
+                },
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(created.status_code, 201, created.text)
+            owned = created.json()
+            path = owned["path"]
+            self.assertEqual(
+                guest_a.get("/api/projects/recent").json()["projects"][0]["path"], path
+            )
+
+            strategy = guest_a.post(
+                "/api/projects/strategies",
+                json={
+                    "path": path,
+                    "title": "Manual approach",
+                    "approach": "Check edge cases",
+                },
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(strategy.status_code, 201, strategy.text)
+            self.assertEqual(len(strategy.json()["project"]["strategies"]), 1)
+            reopened = guest_a.post(
+                "/api/projects/open", json={"path": path}, headers={"Origin": ORIGIN}
+            )
+            self.assertEqual(reopened.status_code, 200, reopened.text)
+            self.assertEqual(
+                reopened.json()["project"]["strategies"][0]["title"], "Manual approach"
+            )
+
+            before = reopened.json()["project"]
+            settings = {
+                key: before.get(key)
+                for key in (
+                    "title",
+                    "problem",
+                    "desired_outcomes",
+                    "paper_requirements",
+                    "investigation_type",
+                    "ai_model",
+                    "reasoning_effort",
+                    "difficulty",
+                    "show_advanced_outcome_details",
+                )
+            }
+            updated = guest_a.post(
+                "/api/projects/update",
+                json={
+                    **settings,
+                    "title": "Edited private guest experiment",
+                    "path": path,
+                    "expected": settings,
+                },
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(updated.status_code, 200, updated.text)
+            self.assertEqual(updated.json()["project"]["title"], "Edited private guest experiment")
+            forbidden_sharing = guest_a.post(
+                "/api/projects/update",
+                json={
+                    **settings,
+                    "title": "Share this guest experiment",
+                    "path": path,
+                    "expected": settings,
+                    "expected_revision": 0,
+                    "collaborators": ["external@example.org"],
+                },
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(forbidden_sharing.status_code, 403, forbidden_sharing.text)
+            self.assertEqual(
+                guest_a.get("/api/projects/inspect", params={"path": path}).json()["project"][
+                    "title"
+                ],
+                "Edited private guest experiment",
+            )
+
+            # A fresh browser receives a distinct opaque cookie and private root.
+            self.assertEqual(guest_b.get("/api/projects/recent").json(), {"projects": []})
+            self.assertEqual(guest_b.get("/api/projects/samples").status_code, 200)
+            self.assertEqual(guest_b.get("/api/projects/recent").json(), {"projects": []})
+            leaked = guest_b.get("/api/projects/inspect", params={"path": path})
+            self.assertEqual(leaked.status_code, 404, leaked.text)
+            leaked_export = guest_b.get("/api/projects/download", params={"path": path})
+            self.assertEqual(leaked_export.status_code, 404, leaked_export.text)
+            self.assertEqual(
+                guest_b.post(
+                    "/api/projects/open",
+                    json={"path": path},
+                    headers={"Origin": ORIGIN},
+                ).status_code,
+                404,
+            )
+
+            # No API path for a visitor may call ChatGPT, even if a project exists.
+            for route in (
+                "/api/projects/research-sessions/start",
+                "/api/projects/papers",
+                "/api/projects/research-qa",
+                "/api/projects/text/convert",
+                "/api/projects/strategy-inference",
+            ):
+                denied = guest_a.post(route, json={"path": path}, headers={"Origin": ORIGIN})
+                self.assertEqual(denied.status_code, 403, (route, denied.text))
+            self.assertEqual(guest_a.get("/api/ai/connection").status_code, 401)
+            self.assertEqual(guest_b.get("/api/projects/recent").json(), {"projects": []})
+
+    def test_guest_sample_projects_use_temporary_workspace_with_my_work(self):
         from sigma import cloud_workspaces
 
         with TestClient(app, base_url="https://testserver") as guest:
@@ -998,7 +1121,9 @@ class CloudAuthTests(CloudAuthFixture):
             self.assertEqual(copied["problem"], source["problem"])
             self.assertEqual(copied["project_type_snapshot"]["name"], "Physics")
             self.assertEqual(copied["project_type_snapshot"]["icon"]["key"], "physics")
-            self.assertEqual(guest.get("/api/projects/recent").json(), {"projects": []})
+            saved = guest.get("/api/projects/recent").json()["projects"]
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(saved[0]["path"], str(project_path))
             inspected = guest.get("/api/projects/inspect", params={"path": str(project_path)})
             self.assertEqual(inspected.status_code, 200, inspected.text)
             self.assertEqual(
@@ -1019,7 +1144,9 @@ class CloudAuthTests(CloudAuthFixture):
             )
         self.assertTrue(project_path.exists(), "Guest files remain until expiry, not as projects")
         with TestClient(app, base_url="https://testserver") as another_guest:
-            self.assertEqual(another_guest.get("/api/projects/recent").status_code, 401)
+            self.assertEqual(another_guest.get("/api/projects/recent").json(), {"projects": []})
+            self.assertEqual(another_guest.get("/api/projects/samples").status_code, 200)
+            self.assertEqual(another_guest.get("/api/projects/recent").json(), {"projects": []})
 
     def test_guest_play_signin_and_project_signout_keep_the_project_page(self):
         from sigma import cloud_workspaces
@@ -1244,7 +1371,7 @@ class CloudAuthTests(CloudAuthFixture):
                 ("google-sub-member",),
             ).fetchone()
         self.assertEqual(member_state, (0, 0))
-        self.assertEqual(member.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(member.get("/api/projects/recent").json(), {"projects": []})
         self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").json()["grants"], [])
         self.assertEqual(
             self.client.post("/api/ai/disconnect", headers={"Origin": ORIGIN}).status_code, 403
@@ -1297,14 +1424,14 @@ class CloudAuthTests(CloudAuthFixture):
         self.assertIn('__Host-sigma_session="";', signed_out.headers["set-cookie"])
         self.assertIn("Max-Age=0", signed_out.headers["set-cookie"])
         self.assertIsNone(cloud_auth.resolve_session(raw))
-        self.assertEqual(restarted.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(restarted.get("/api/projects/recent").json(), {"projects": []})
 
         # A copied/stale cookie cannot restore access from another client.
         stale_context = TestClient(app)
         stale = stale_context.__enter__()
         self.addCleanup(stale_context.__exit__, None, None, None)
         stale.cookies.set(cloud_auth.SESSION_COOKIE, raw)
-        self.assertEqual(stale.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(stale.get("/api/projects/recent").json(), {"projects": []})
 
     def test_admin_contact_is_designated_admin_and_subject_binding_is_enforced(self):
         response = self.finish(email="admin@example.org", subject="first-admin-subject")
@@ -2287,7 +2414,7 @@ class CloudAuthTests(CloudAuthFixture):
                     json={"path": member_path, "title": "Overwritten"},
                     headers={"Origin": local_origin},
                 ).status_code,
-                403,
+                422,  # Missing required fields; middleware now permits local edits.
             )
             for route in (
                 "/api/projects/audit",
@@ -2297,7 +2424,7 @@ class CloudAuthTests(CloudAuthFixture):
             ):
                 self.assertEqual(
                     guest.get(route, params={"path": guest_path}).status_code,
-                    403,
+                    200,
                     route,
                 )
             member_project_after = self.client.get(
@@ -2313,7 +2440,7 @@ class CloudAuthTests(CloudAuthFixture):
             public_sample_routes = set()
             for route in app.routes:
                 route_path = getattr(route, "path", "")
-                if not route_path.startswith("/api/projects/"):
+                if route_path != "/api/projects" and not route_path.startswith("/api/projects/"):
                     continue
                 for method in getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}:
                     concrete_path = re.sub(r"\{[^}]+\}", "audit-probe", route_path)
@@ -2341,24 +2468,28 @@ class CloudAuthTests(CloudAuthFixture):
                 public_sample_routes,
                 {("GET", "/api/projects/samples/{sample_id}/top-paper/pdf")},
             )
-            expected_guest_routes = {
-                ("GET", path)
-                for path in cloud_auth._GUEST_PROJECT_READ_PATHS | {"/api/projects/samples"}
-            } | {
-                ("GET", "/api/projects/research-sessions/{session_id}"),
-                ("GET", "/api/projects/research-executions/{execution_id}"),
-                (
-                    "GET",
-                    "/api/projects/research-executions/{execution_id}/artifacts/{filename}",
-                ),
-                ("GET", "/api/projects/papers/{paper_id}"),
-                ("GET", "/api/projects/papers/{paper_id}/pdf"),
-                ("GET", "/api/projects/papers/{paper_id}/txt"),
-                ("GET", "/api/projects/papers/{paper_id}/tex"),
-                ("POST", "/api/projects/samples/open"),
-                ("POST", "/api/projects/open"),
-                ("POST", "/api/projects/close"),
-            }
+            expected_guest_routes = (
+                {
+                    ("GET", path)
+                    for path in cloud_auth._GUEST_PROJECT_READ_PATHS | {"/api/projects/samples"}
+                }
+                | {
+                    ("GET", "/api/projects/research-sessions/{session_id}"),
+                    ("GET", "/api/projects/research-executions/{execution_id}"),
+                    (
+                        "GET",
+                        "/api/projects/research-executions/{execution_id}/artifacts/{filename}",
+                    ),
+                    ("GET", "/api/projects/papers/{paper_id}"),
+                    ("GET", "/api/projects/papers/{paper_id}/pdf"),
+                    ("GET", "/api/projects/papers/{paper_id}/txt"),
+                    ("GET", "/api/projects/papers/{paper_id}/tex"),
+                    ("POST", "/api/projects/samples/open"),
+                    ("POST", "/api/projects/open"),
+                    ("POST", "/api/projects/close"),
+                }
+                | cloud_auth._GUEST_MANUAL_PROJECT_WRITES
+            )
             self.assertEqual(allowed_routes, expected_guest_routes)
             self.assertEqual(
                 guest.get("/api/cloud-auth/local-sponsored-allowance").status_code, 403

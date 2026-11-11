@@ -46,21 +46,76 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install locked dependencies
-        run: ./sigma setup
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          started=$SECONDS
+          # Only Parts 1 and 7 run frontend typecheck/build; other shards
+          # still install the exact locked Python dependencies and native zstd.
+          if [[ "$SHARD" == "1" || "$SHARD" == "7" ]]; then
+            ./sigma setup
+          else
+            SIGMA_SETUP_SKIP_NPM=1 ./sigma setup
+          fi
+          echo "SIGMA_CI_SETUP_SECONDS shard=$SHARD seconds=$((SECONDS-started))"
+          echo "- Shard $SHARD setup: $((SECONDS-started))s" >> "$GITHUB_STEP_SUMMARY"
       - name: Check host safety and environment-isolated lifecycle tests
         run: |
           test "$(id -u)" -ne 0
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/gce_host.py
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/tooling.py
       - name: Run full repository verification
+        shell: bash
         env:
           SIGMA_CI_SEPARATE_RUFF: "1"
           SIGMA_CI_TEST_SHARD: ${{ matrix.shard }}
-        run: ./sigma test
+          SIGMA_CI_TIMINGS_FILE: ${{ runner.temp }}/sigma-test-timing.json
+        run: |
+          set -uo pipefail
+          ./sigma test
+          status=$?
+          set -e
+          if [[ -f "$SIGMA_CI_TIMINGS_FILE" ]]; then
+            python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["SIGMA_CI_TIMINGS_FILE"]).read_text())
+          duration = report["duration_seconds"]
+          shard = report["shard"]
+          worst = sorted(report["steps"], key=lambda s: s["duration_seconds"], reverse=True)[:5]
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as out:
+              out.write(f"\n### SIGMA shard {shard} test performance\n\n")
+              out.write(
+                  f"**Test duration:** {duration:.1f}s / 120s budget; "
+                  f"failures: {report['failures']}\n\n"
+              )
+              out.write("| Slowest check | Seconds |\n|---|---:|\n")
+              for step in worst:
+                  out.write(f"| {step['command']} | {step['duration_seconds']:.1f} |\n")
+          if duration > 120:
+              print(f"::warning title=SIGMA core test budget::Shard {shard} took "
+                    f"{duration:.1f}s, exceeding the 120s target")
+          PY
+          else
+            echo "::warning title=SIGMA timing unavailable::Test timing JSON was not produced"
+          fi
+          exit "$status"
+      - name: Upload per-shard test timing
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sigma-test-timing-${{ matrix.shard }}
+          path: ${{ runner.temp }}/sigma-test-timing.json
+          if-no-files-found: warn
+          retention-days: 14
 
 
   real-paper-pdf:
-    name: Two-creator real PDF acceptance (no stub/skip)
+    name: Two-creator real PDF acceptance
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -80,14 +135,14 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+      # The CLI needs npm on PATH, but this backend-only PDF acceptance does
+      # not execute frontend commands or need to restore the npm tarball cache.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
       - name: Install locked dependencies
-        run: ./sigma setup
+        run: SIGMA_SETUP_SKIP_NPM=1 ./sigma setup
       # Do not depend on the runner having a TeX engine: the existing Paper
       # test explicitly skips without one, masking the real-PDF release gate.
       # Pinned upstream prebuilt artifact, checksum verified before execution.
@@ -109,5 +164,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          started=$SECONDS
           tectonic --version
           uv run --locked --no-sync python tests/paper_collaboration_acceptance.py
+          echo "- Two-creator real TeX-to-PDF acceptance: $((SECONDS-started))s" >> "$GITHUB_STEP_SUMMARY"

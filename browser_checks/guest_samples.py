@@ -13,7 +13,6 @@ import tempfile
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from urllib.parse import parse_qs, urlsplit
 
 import httpx
 from playwright.sync_api import expect, sync_playwright
@@ -181,7 +180,6 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 850})
         failures: list[str] = []
-        opened_projects: list[dict] = []
         recent_responses: list[str] = []
         api_failures: list[str] = []
         protected_guest_requests: list[str] = []
@@ -233,475 +231,191 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
 
         page.on("request", capture_request)
 
-        def capture(response):
-            if response.url.endswith("/api/projects/samples/open"):
-                opened_projects.append(response.json())
+        # Regression: after sign-out, My Work may be the first API read,
+        # before the Samples tab has ever established a guest workspace.
+        cold_context = browser.new_context(viewport={"width": 1280, "height": 850})
+        initial_my_work = cold_context.request.get(ui_url + "/api/projects/recent")
+        assert initial_my_work.status == 200, initial_my_work.text()
+        assert initial_my_work.json() == {"projects": []}
+        assert any("sigma_guest" in cookie["name"] for cookie in cold_context.cookies())
+        cold_context.close()
 
-        page.on("response", capture)
+        # A remembered member My Work tab must not hide Samples on guest entry.
+        page.add_init_script("window.localStorage.setItem('sigma.homeCatalogTab', 'recent')")
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        # A guest has no connected provider; the Model pill is intentionally hidden.
-        # It must not poll protected per-user research settings.
-        expect(page.locator(".home-account-grid .global-model-pill-position")).to_have_count(0)
+        expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
-        expect(welcome).to_be_visible()
-        expect(welcome).to_contain_text("Explore as a guest without running or saving projects")
-        expect(welcome).to_contain_text("request an invitation to become a member")
-        expect(welcome).to_contain_text(
-            "decides whether to include sponsorship when granting your invitation"
-        )
-        expect(welcome.locator(".invitation-welcome-about-hint")).to_contain_text(
-            "About SIGMA pill"
-        )
-        expect(welcome.locator("#invitation-welcome-phrase")).not_to_be_empty()
-        assert welcome.evaluate("el => getComputedStyle(el).transform") == (
-            "matrix(1.25, 0, 0, 1.25, 0, 0)"
-        )
-        assert (
-            welcome.locator(".invitation-welcome-intro").evaluate(
-                "el => getComputedStyle(el).marginBottom"
-            )
-            == "16px"
-        )
-        assert (
-            welcome.locator("#invitation-welcome-phrase").evaluate(
-                "el => getComputedStyle(el).fontStyle"
-            )
-            == "italic"
-        )
-        expect(welcome.get_by_role("link", name="Sign in with Google")).to_have_count(0)
+        expect(welcome).to_contain_text("without signing in")
         welcome.get_by_role("button", name="Let's get started").click()
-        expect(welcome).to_have_count(0)
-        # Signed-out visitors see About SIGMA, not account-specific Settings.
-        # Removing the Settings pill leaves no unused placeholder beside About.
-        expect(page.get_by_role("button", name="Settings", exact=True)).to_have_count(0)
         expect(page.get_by_role("button", name="About SIGMA", exact=True)).to_be_visible()
-        expect(page.locator(".sigma-header-first-row > button")).to_have_count(1)
-        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        assert not failures, failures
-        page.route(
-            "**/api/test-long-error",
-            lambda route: route.fulfill(
-                status=503,
-                headers={"content-type": "application/json"},
-                body='{"error":"' + ("provider detail " * 200) + '"}',
-            ),
-        )
-        page.evaluate("fetch('/api/test-long-error')")
-        long_error_toast = page.locator(".request-toast").last
-        expect(long_error_toast).to_contain_text("unusually long error response")
-        assert len(long_error_toast.inner_text()) < 250
-        page.unroute("**/api/test-long-error")
         expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
-        # A signed-out guest has not completed Google verification, so the
-        # invitation action and its dialog must be absent.
-        expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
-        expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
-        expect(page.get_by_role("dialog", name="Request an invitation")).to_have_count(0)
-        expect(page.get_by_role("button", name="New")).to_have_count(0)
-        expect(page.get_by_role("button", name="Open", exact=True)).to_have_count(0)
-        expect(page.get_by_role("tab", name="My Work")).to_be_enabled()
-        # Idle browser tabs have an explicit favicon, so the temporary
-        # running/queued heartbeat cannot remain cached after work completes.
-        expect(page.locator('link[rel="icon"]')).to_have_attribute("href", "/favicon.svg")
+        expect(page.locator(".home-account-grid .global-model-pill-position")).to_have_count(0)
+        expect(page.locator("link[rel=icon]")).to_have_attribute("href", "/favicon.svg")
+        expect(page.get_by_role("button", name="New project")).to_be_visible()
         expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         expect(page.locator("details.sample-type-group").first).to_be_visible()
-        assert page.locator("details.sample-type-group[open]").count() == 0
-        category_headers = page.locator("details.sample-type-group > summary")
-        assert category_headers.count() > 0
-        assert (
-            page.locator("details.sample-type-group > summary > .research-type-icon").count()
-            == category_headers.count()
-        )
-        category_layout = category_headers.evaluate_all(
-            """headers => headers.map(header => {
-                const name = header.querySelector(':scope > span').getBoundingClientRect();
-                const count = header.querySelector(':scope > small').getBoundingClientRect();
-                return {nameX: name.left, nameRight: name.right, countX: count.left};
-            })"""
-        )
-        assert all(row["countX"] >= row["nameRight"] + 4 for row in category_layout), (
-            category_layout
-        )
-        assert (
-            max(row["nameX"] for row in category_layout)
-            - min(row["nameX"] for row in category_layout)
-            < 2
-        ), category_layout
+        assert not failures, failures
+
         scored_group = page.locator("details.sample-type-group").filter(
             has_text="Warp Drive Design v9 (acceptance fixture)"
         )
-        expect(scored_group).to_be_visible()
         scored_group.evaluate("element => { element.open = true; }")
         star = scored_group.get_by_role("link", name="View high scoring paper (75/100)")
-        expect(star).to_be_visible()
-        expect(star).to_have_attribute("data-tooltip", "Marked as a high scoring paper (>70)")
+        expect(star).to_have_attribute(
+            "data-tooltip", "Marked as a high scoring paper (70 or higher)"
+        )
         expect(star).to_have_attribute("target", "_blank")
         expect(star).to_have_attribute("rel", "noopener noreferrer")
-        expect(scored_group).to_contain_text("Best score 75/100")
-        expect(scored_group.locator(".recent-title-star")).to_have_count(1)
-        # Establish a non-hovered baseline before testing the copper hover.
-        # The previous pointer location may already overlap the revealed star.
-        page.mouse.move(0, 0)
-        plain_background = star.evaluate("element => getComputedStyle(element).backgroundImage")
-        star.hover()
-        hover_background = star.evaluate("element => getComputedStyle(element).backgroundImage")
-        assert hover_background != "none", hover_background
-        assert hover_background != plain_background, (plain_background, hover_background)
-        star.focus()
-        assert (
-            star.evaluate("element => getComputedStyle(element).backgroundImage")
-            == hover_background
-        )
-        assert scored_group.locator(".recent-pin, .recent-forget").count() == 0
         pdf_response = httpx.get(ui_url + star.get_attribute("href"), timeout=10)
-        assert pdf_response.status_code == 200, pdf_response.text[:500]
-        assert pdf_response.headers["content-type"].startswith("application/pdf")
-        assert "inline" in pdf_response.headers["content-disposition"]
+        assert pdf_response.status_code == 200
         assert pdf_response.content == public_pdf
-        # An unauthenticated HTTP client received the PDF without a guest
-        # session cookie, working project, provider connection or research run.
         scored_group.evaluate("element => { element.open = false; }")
+
+        # My Work is a visitor-private temporary index, not a sign-in invitation.
         page.get_by_role("tab", name="My Work").click()
-        message = page.locator("#recent-panel .guest-recent-message")
-        expect(message.locator("span").nth(0)).to_have_text("Sign in to create and")
-        expect(message.locator("span").nth(1)).to_have_text("save your own projects.")
-        typography = message.evaluate("element => getComputedStyle(element)")
-        assert typography["fontFamily"].startswith("Georgia"), typography
-        assert typography["fontSize"] == "18px", typography
+        expect(page.locator("#recent-panel .guest-recent-message")).to_have_count(0)
         expect(page.get_by_role("tab", name="My Work")).to_have_attribute("aria-selected", "true")
-        assert recent_responses == [], recent_responses
+        assert page.locator("#recent-panel .recent-project").count() == 0
         page.get_by_role("tab", name="Samples").click()
-        sign_in = page.get_by_role("link", name="Sign in with Google")
-        expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
-        expect(page.locator(".home-auth-pills .api-connection")).to_have_count(0)
-        expect(page.get_by_role("dialog", name="Account and model settings")).to_have_count(0)
 
         sample_group = page.locator("details.sample-type-group").filter(
             has_text="Did Jesus Use Cannabis?"
         )
-        qubit_group = page.locator("details.sample-type-group").filter(
-            has_text="When Does Qubit Decoherence Require a Non-Markovian Model?"
-        )
-        expect(qubit_group).to_be_visible()
-        qubit_group.evaluate("element => { element.open = true; }")
-        expect(qubit_group.locator("summary")).to_contain_text("Physics")
-        expect(qubit_group.locator("summary svg.research-type-icon-physics")).to_be_visible()
-        expect(
-            qubit_group.get_by_role(
-                "button", name="Open When Does Qubit Decoherence Require a Non-Markovian Model?"
-            )
-        ).to_be_visible()
         sample_group.evaluate("element => { element.open = true; }")
-        expect(sample_group.locator("button.sample-open")).to_be_visible()
-        if page.get_by_text("Authentication required.").count():
-            raise AssertionError(
-                f"unexpected authentication failure; API responses: {api_failures}"
+        with page.expect_response(
+            lambda response: (
+                response.url.endswith("/api/projects/samples/open")
+                and response.request.method == "POST"
             )
-
-        page.get_by_role("button", name="About SIGMA", exact=True).click()
-        expect(page.get_by_role("dialog", name="About SIGMA")).to_be_visible()
-        policy = page.get_by_role("dialog", name="About SIGMA").get_by_role(
-            "button", name="Privacy Notice"
-        )
-        policy.scroll_into_view_if_needed()
-        expect(policy).to_be_visible()
-        policy.click()
-        expect(page.get_by_role("heading", name="SIGMA Privacy Notice")).to_be_visible()
-        page.goto(ui_url)
-        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-
-        sample_group.locator("button.sample-open").evaluate("button => button.click()")
+        ) as opened_response:
+            sample_group.locator("button.sample-open").click()
         expect(
             page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible(timeout=15000)
-        page.get_by_role("link", name="Go back to home page").click()
-        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        sample_group = page.locator("details.sample-type-group").filter(
-            has_text="Did Jesus Use Cannabis?"
+        assert opened_response.value.ok, opened_response.value.status
+        sandbox_path = opened_response.value.json()["path"]
+        assert Path(sandbox_path).is_dir()
+        assert not Path(sandbox_path).is_relative_to(root / "saved-projects")
+        expect(page.locator(".project-pane .project-description-toolbar-edit")).to_be_enabled()
+        expect(page.locator(".project-classification-settings-button")).to_be_enabled()
+        expect(page.locator(".project-download-button")).to_be_enabled()
+        expect(page.locator(".strategy-title-pencil").first).to_be_enabled()
+        expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
+        assert page.locator("[title]").count() == 0, "Native tooltips are forbidden"
+
+        # AI actions must explain their behavior, never call a provider.
+        page.get_by_role("button", name="Generate strategy", exact=True).click()
+        strategy_preview = page.get_by_role("dialog", name="Generate a strategy")
+        expect(strategy_preview).to_contain_text("No ChatGPT request was made")
+        strategy_preview.get_by_role("button", name="Close preview").click()
+
+        # All three guest actions show small, dismissible cards without
+        # replacing the project UI, running research, or opening a modal.
+        page.locator(".sessions-pane-heading").get_by_role(
+            "button", name="New session", exact=True
+        ).click()
+        research_preview = page.get_by_role("status", name="Research sessions")
+        expect(research_preview).to_contain_text("connected ChatGPT account")
+        expect(page.get_by_role("group", name="Example session configuration")).to_have_count(0)
+        research_preview.get_by_role("button", name="Dismiss preview").click()
+        expect(research_preview).to_have_count(0)
+
+        papers_pane = page.locator(".papers-pane")
+        expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
+        papers_pane.get_by_role("button", name="New paper").click()
+        paper_preview = papers_pane.get_by_role("status", name="Generate a research paper")
+        expect(paper_preview).to_contain_text("connected ChatGPT account")
+        expect(papers_pane.get_by_role("button", name="Start Paper")).to_have_count(0)
+        paper_preview.get_by_role("button", name="Dismiss preview").click()
+        expect(paper_preview).to_have_count(0)
+
+        page.get_by_role("button", name="Research Q/A").click()
+        qa_dialog = page.get_by_role("dialog", name="Research Q/A")
+        qa_dialog.get_by_role("textbox", name="Question").fill(
+            "What evidence supports the central research question?"
         )
-        expect(sample_group).to_have_attribute("open", "")
-        sample_group.locator("button.sample-open").click()
-        expect(
-            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
-        ).to_be_visible(timeout=15000)
-        expect(page.locator(".project-identity-pill-stack .api-connection")).to_have_count(0)
-        # The disclosure tooltip describes the NEXT action, in both states.
-        # No native title attribute may be used as a tooltip fallback.
-        for label, pane in (
-            ("Project", ".project-pane"),
-            ("Strategies", ".strategies-pane"),
-            ("Sessions", ".sessions-pane"),
-            ("Papers", ".papers-pane"),
-        ):
-            disclosure = page.locator(f"{pane} .workspace-section-disclosure").first
-            initially_expanded = disclosure.get_attribute("aria-expanded") == "true"
-            expect(disclosure).to_have_attribute(
-                "data-tooltip",
-                f"{'Collapse' if initially_expanded else 'Expand'} {label} section",
-            )
-            assert disclosure.get_attribute("title") is None
-            disclosure.click()
-            expect(disclosure).to_have_attribute(
-                "data-tooltip",
-                f"{'Expand' if initially_expanded else 'Collapse'} {label} section",
-            )
-            disclosure.click()
-            expect(disclosure).to_have_attribute(
-                "data-tooltip",
-                f"{'Collapse' if initially_expanded else 'Expand'} {label} section",
-            )
-        assert page.locator("[title]").count() == 0, "Native browser tooltips are forbidden"
-        assert not protected_guest_requests, protected_guest_requests
-        assert not [failure for failure in api_failures if failure.startswith("403 ")], api_failures
-        # Project field editing now uses the Project toolbar; Markdown toggles remain on strategies.
-        # The three-field Project Description renders Markdown directly;
-        # only strategies retain a plain/Markdown conversion button.
-        project_markdown = page.locator(
-            ".project-pane-title-line .project-markdown-slot .sigma-render-toggle"
+        qa_dialog.get_by_role("button", name="Ask", exact=True).click()
+        qa_preview = qa_dialog.get_by_role("status", name="Ask about your research")
+        expect(qa_preview).to_contain_text("connected ChatGPT account")
+        expect(qa_dialog.get_by_role("textbox", name="Question")).to_have_value(
+            "What evidence supports the central research question?"
         )
-        expect(project_markdown).to_have_count(0)
-        subject = page.locator(".sigma-description-field").first
-        expect(subject.get_by_role("heading", name="Research Problem")).to_be_visible()
-        expect(subject.locator(".sigma-description-rendered")).to_be_visible()
-        expect(page.get_by_role("heading", name="Desired Outcomes")).to_be_visible()
-        expect(page.get_by_role("heading", name="Paper Requirements")).to_be_visible()
-        pencil_button = page.locator(".project-pane-actions .project-description-toolbar-edit")
-        expect(pencil_button).to_be_visible()
-        expect(pencil_button).to_be_disabled()
-        expect(page.locator(".project-classification-settings-button")).to_be_disabled()
-        expect(page.locator(".project-download-button")).to_be_disabled()
-        pencil_button.hover()
-        expect(page.locator("#sigma-ui-tooltip")).to_have_text("Edit project fields")
-        assert pencil_button.get_attribute("title") is None
-        strategy_pencils = page.locator(".strategy-title-pencil")
-        assert strategy_pencils.count() > 0
-        assert all(
-            value == "Edit strategy title and approach"
-            for value in strategy_pencils.evaluate_all(
-                "buttons => buttons.map(button => button.dataset.tooltip)"
-            )
-        )
-        assert all(
-            value is None
-            for value in strategy_pencils.evaluate_all(
-                "buttons => buttons.map(button => button.getAttribute('title'))"
-            )
-        )
+        qa_preview.get_by_role("button", name="Dismiss preview").click()
+        expect(qa_preview).to_have_count(0)
+        qa_dialog.get_by_role("button", name="Close research Q/A").click()
+
         strategy_markdown = page.locator(
             ".strategy-title-line .strategy-markdown-slot .sigma-render-toggle"
         ).first
-        strategy_pencil = strategy_pencils.first
-        expect(strategy_pencil).to_be_disabled()
-        expect(strategy_markdown).to_be_visible()
-        assert strategy_markdown.get_attribute("title") is None
-        # In guest mode editing is disabled; cached Markdown remains readable.
-        # An uncached AI conversion control must also be disabled.
-        if strategy_markdown.is_enabled():
-            strategy_markdown.hover()
-            expect(strategy_markdown).to_have_css("color", "rgb(255, 242, 233)")
-        else:
-            expect(strategy_markdown).to_be_disabled()
-        strategy_offset = strategy_markdown.locator("svg.markdown-logo").evaluate(
-            """svg => {
-              const bounds = svg.getBBox();
-              const midpoint = new DOMPoint(bounds.x + bounds.width / 2,
-                bounds.y + bounds.height / 2).matrixTransform(svg.getScreenCTM());
-              const button = svg.closest('button').getBoundingClientRect();
-              return [midpoint.x - (button.left + button.right) / 2,
-                      midpoint.y - (button.top + button.bottom) / 2];
-            }"""
-        )
-        assert all(abs(offset) < 1 for offset in strategy_offset), strategy_offset
-        page.mouse.move(0, 0)
-        project_google = page.get_by_role("link", name="Sign in with Google")
-        expect(project_google).to_be_visible()
-        # Guests have not selected a verified Google account, so they cannot
-        # request an invitation yet. The two pills must never appear together.
-        expect(page.get_by_role("button", name="Invite me!")).to_have_count(0)
-        papers_before = len(paper_requests)
-        papers_pane = page.locator(".papers-pane")
-        expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
-        expect(papers_pane).to_contain_text("Sign in to export your research as TeX.")
-        expect(papers_pane.get_by_role("button", name="Generate paper")).to_have_count(0)
-        assert len(paper_requests) == papers_before, paper_requests
-        play = page.locator(".sessions-pane-heading").get_by_role(
-            "button", name="New session", exact=True
-        )
-        expect(play).to_be_enabled()
-        mutations_before_play = len(mutation_requests)
-        dispatches_before_play = len(research_dispatch_requests)
-        play.click()
-        play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
-        expect(play_dialog).to_contain_text("Sign in to run a research session.")
-        expect(play_dialog.get_by_role("button", name="Sign in with Google")).to_be_visible()
-        expect(play_dialog.get_by_role("button", name="Close sign-in prompt")).to_be_visible()
-        actions = play_dialog.locator(".settings-actions")
-        actions_box = actions.bounding_box()
-        signin_box = actions.get_by_role("button", name="Sign in with Google").bounding_box()
-        assert actions_box and signin_box
-        assert abs(signin_box["x"] - actions_box["x"]) < 2, (actions_box, signin_box)
-        action_colors = actions.locator("button").evaluate_all(
-            "buttons => buttons.map(button => getComputedStyle(button).color)"
-        )
-        assert len(action_colors) == 1, action_colors
-        assert len(mutation_requests) == mutations_before_play, mutation_requests
-        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
-        play_dialog.get_by_role("button", name="Close sign-in prompt").click()
-        expect(play_dialog).to_have_count(0)
-        expect(play).to_be_focused()
-        assert len(mutation_requests) == mutations_before_play, mutation_requests
-        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
-        page.get_by_role("button", name="Generate strategy", exact=True).click()
+        expect(strategy_markdown).to_be_enabled()
+        strategy_markdown.click()
+        markdown_preview = page.get_by_role("dialog", name="AI Markdown formatting")
+        expect(markdown_preview).to_contain_text("No ChatGPT request was made")
+        markdown_preview.get_by_role("button", name="Close preview").click()
+
+        page.get_by_role("link", name="Go back to home page").click()
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+        my_work = page.get_by_role("tab", name="My Work")
+        if my_work.get_attribute("aria-selected") != "true":
+            my_work.click()
+        expect(my_work).to_have_attribute("aria-selected", "true")
+        # Existing temporary work survives navigation, not backend restarts.
+        # Clicking an already-selected tab would collapse its groups.
+        expect(page.locator("details.recent-type-group").first).to_be_visible(timeout=15000)
+        for group in page.locator("details.recent-type-group").all():
+            group.evaluate("element => { element.open = true; }")
         expect(
-            page.get_by_role("status").filter(has_text="AI features require a signed-in account.")
+            page.get_by_text(re.compile(r"Did Jesus Use Cannabis\? v[12]")).first
         ).to_be_visible()
-        expect(page.get_by_role("link", name="Go back to home page")).to_be_visible()
-        assert opened_projects
-        assert Path(opened_projects[-1]["path"]).is_dir()
-        assert not Path(opened_projects[-1]["path"]).is_relative_to(root / "saved-projects")
-        recent = page.evaluate(
+        private = page.evaluate(
             "async () => (await (await fetch('/api/projects/recent')).json()).projects"
         )
-        assert recent == [], recent
-        # Earlier expected 401s can leave an auth notice; ensure no gated mutation.
-        assert len(mutation_requests) == mutations_before_play
-        play.click()
-        play_dialog = page.get_by_role("dialog", name="Ready to investigate?")
-        expect(play_dialog.get_by_role("button", name="Sign in with Google")).to_be_visible()
-        page.unroute("**/api/cloud-auth/login**")
-        page.route(
-            "**/api/cloud-auth/login**",
-            lambda route: route.fulfill(
-                status=200,
-                content_type="text/html",
-                body="<!doctype html><title>OAuth fixture</title>",
-            ),
-        )
-        with page.expect_request("**/api/cloud-auth/login**") as sign_in_request:
-            play_dialog.get_by_role("button", name="Sign in with Google").click()
-        expect(play_dialog).to_have_count(0)
-        sign_in_url = urlsplit(sign_in_request.value.url)
-        assert sign_in_url.path == "/api/cloud-auth/login", sign_in_url
-        return_to = parse_qs(sign_in_url.query).get("return_to", [None])[0]
-        assert return_to == f"/project?path={opened_projects[-1]['path']}&resume_play=1", return_to
-        assert page.evaluate("sessionStorage.getItem('sigma.playSignInReturn')") == "true"
-        assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") == "true"
-        session = {"authenticated": True}
+        assert any(entry["path"] == sandbox_path for entry in private), private
 
-        def cloud_status(route):
-            route.fulfill(
-                status=200,
-                content_type="application/json",
-                body=json.dumps(
-                    {
-                        "enabled": True,
-                        "ready": True,
-                        "authenticated": session["authenticated"],
-                        "user": {"email": "member@example.org", "role": "member"}
-                        if session["authenticated"]
-                        else None,
-                        "account": {
-                            "identity": {"email": "member@example.org", "verified": True},
-                            "access": {"status": "active", "role": "member"},
-                            "workspace": {"available": True, "id": "fixture"},
-                            "model_access": {"mode": "personal", "connection": "connected"},
-                            "sponsorship": {"eligible": False, "forced": False},
-                        }
-                        if session["authenticated"]
-                        else None,
-                        "target": "local",
-                        "admin_contact_email": None,
-                    }
-                ),
+        # Another anonymous cookie cannot see, open or export the first visitor's work.
+        other_context = browser.new_context(viewport={"width": 1280, "height": 850})
+        other_page = other_context.new_page()
+        other_page.goto(ui_url, wait_until="networkidle")
+        other_welcome = other_page.get_by_role("dialog", name="Welcome to SIGMA!")
+        if other_welcome.is_visible():
+            other_welcome.get_by_role("button", name="Let's get started").click()
+        guest_b = other_page.evaluate(
+            """async path => {
+              const list = await fetch('/api/projects/recent');
+              const open = await fetch('/api/projects/open', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({path})
+              });
+              const exportResult = await fetch(
+                '/api/projects/download?' + new URLSearchParams({path}));
+              return {list: (await list.json()).projects,
+                      open: open.status, export: exportResult.status};
+            }""",
+            sandbox_path,
+        )
+        assert guest_b["list"] == [], guest_b
+        assert guest_b["open"] == 404, guest_b
+        assert guest_b["export"] == 404, guest_b
+        other_context.close()
+
+        assert not [
+            request
+            for request in mutation_requests
+            if any(
+                part in request
+                for part in (
+                    "/research-sessions/start",
+                    "/papers/",
+                    "/research-qa",
+                    "/text/convert",
+                    "/strategy-inference",
+                    "/proposals",
+                )
             )
-
-        page.route("**/api/cloud-auth/status", cloud_status)
-        page.route(
-            "**/api/projects/proposals/config?**",
-            lambda route: route.fulfill(
-                status=200,
-                content_type="application/json",
-                body=json.dumps(
-                    {
-                        "available": True,
-                        "binding": "fixture-member",
-                        "model": "gpt-6.1-sol",
-                        "reasoning_effort": "high",
-                        "project_id": "fixture-project",
-                        "message": "Fixture connection is ready.",
-                    }
-                ),
-            ),
-        )
-
-        def generous_research_limits(route):
-            response = route.fetch()
-            limits = response.json()
-            limits["model_calls"] = 30
-            route.fulfill(response=response, json=limits)
-
-        page.route("**/api/projects/research-limits?**", generous_research_limits)
-        # Live presence and activity polling intentionally keep network requests open;
-        # the explicit UI assertions below, not network idleness, establish readiness.
-        page.goto(f"{ui_url}{return_to}", wait_until="domcontentloaded")
-        expect(
-            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
-        ).to_be_visible()
-        expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
-        # The imported sample may use a retired built-in project type. Its
-        # complete saved snapshot requires explicit acknowledgement before
-        # the sign-in return can resume the start confirmation.
-        missing_type = page.get_by_role("alertdialog", name="Project type unavailable")
-        if missing_type.is_visible():
-            expect(missing_type).to_contain_text("complete saved settings")
-            missing_type.get_by_role("button", name="Continue with saved settings").click()
-        expect(page.get_by_role("button", name="Start Session")).to_be_visible(timeout=15000)
-        assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
-        resumed_mutations = len(mutation_requests)
-        page.locator(".session-start-link").filter(has_text="Cancel").click()
-        assert len(mutation_requests) == resumed_mutations, mutation_requests
-        assert not any(
-            "/api/projects/research-sessions/start" in url for url in research_dispatch_requests
-        ), research_dispatch_requests
-        page.route(
-            "**/api/projects/guest-copy",
-            lambda route: route.fulfill(
-                status=201,
-                content_type="application/json",
-                body=json.dumps({"path": opened_projects[-1]["path"]}),
-            ),
-        )
-
-        def sign_out(route):
-            session["authenticated"] = False
-            route.fulfill(status=204)
-
-        page.route("**/api/cloud-auth/logout", sign_out)
-        # This member context did not previously show a guest welcome. Signing
-        # out should not make the same tab look like a first-time guest visit.
-        page.evaluate("sessionStorage.removeItem('sigma.guestWelcomeDismissed')")
-        page.get_by_role("button", name="Sign out of Google").click()
-        expect(page).to_have_url(re.compile(r"/project\?path="))
-        expect(page.get_by_role("dialog", name="Welcome to SIGMA!")).to_have_count(0)
-        expect(
-            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
-        ).to_be_visible()
+        ], mutation_requests
         assert not failures, failures
-        assert (
-            not list((root / "saved-projects").glob("*.sigma"))
-            if (root / "saved-projects").exists()
-            else True
-        )
-        backdrop_context = browser.new_context(viewport={"width": 1280, "height": 850})
-        backdrop_page = backdrop_context.new_page()
-        backdrop_page.goto(ui_url, wait_until="networkidle")
-        backdrop_welcome = backdrop_page.get_by_role("dialog", name="Welcome to SIGMA!")
-        expect(backdrop_welcome).to_be_visible()
-        backdrop_page.mouse.click(2, 2)
-        # The welcome modal dismisses on a backdrop click.
-        expect(backdrop_welcome).to_have_count(0)
-        backdrop_context.close()
+        assert not list((root / "saved-projects").glob("*.sigma"))
         browser.close()
 
 

@@ -4736,6 +4736,13 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 "Review selected references and start a narrower session; switching models "
                 "does not change the manifest bound. Existing research is preserved."
             )
+        elif message.startswith("source material contains ") and "extracted characters" in message:
+            result["next_step_guidance"] = (
+                "The selected Source Material exceeded SIGMA's extracted-text limit before "
+                "an Investigator/Skeptic call. Shorten or split the source documents and "
+                "start a new research session. Saved sources and prior work remain intact; "
+                "switching models or Thinking levels will not increase this limit."
+            )
         elif "model" in message and ("available" in message or "selected" in message):
             result["next_step_guidance"] = (
                 "Check that the current connection supports the saved model. "
@@ -4780,8 +4787,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         try:
             start = datetime.fromisoformat(record["started_at"])
             end = (
-                datetime.fromisoformat(record["stopped_at"])
-                if record.get("status") == "stopped" and record.get("stopped_at")
+                datetime.fromisoformat(record.get("stopped_at") or record["updated_at"])
+                if record.get("status") in {"stopped", "paused"}
                 else (
                     datetime.fromisoformat(record["updated_at"])
                     if record.get("status") in {"completed", "ended", "failed"}
@@ -7043,6 +7050,39 @@ async def control_session(
     async with state_lock:
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
+            # Historical Source Material blocks (including Session 5) missed
+            # the stopped_at checkpoint. Recover the last saved block time so
+            # time spent unable to dispatch is not charged to active duration.
+            if (
+                record.get("status") == "paused"
+                and not record.get("stopped_at")
+                and "source material" in str(record.get("current_action") or "").lower()
+            ):
+                blocked = next(
+                    (
+                        event
+                        for event in reversed(record.get("events", []))
+                        if isinstance(event, dict)
+                        and event.get("kind") == "source_material.compilation.blocked"
+                    ),
+                    None,
+                )
+                timestamp = blocked.get("timestamp") if blocked else record.get("updated_at")
+                try:
+                    if not isinstance(timestamp, str):
+                        raise TypeError("Missing Source Material pause timestamp")
+                    pause_start = datetime.fromisoformat(timestamp)
+                    if pause_start.tzinfo is None or pause_start > datetime.now(UTC):
+                        raise ValueError("Invalid Source Material pause timestamp")
+                    record["stopped_at"] = pause_start.isoformat()
+                except (TypeError, ValueError):
+                    record["stopped_at"] = _now()
+                _event(
+                    record,
+                    "source_material.pause_clock_recovered",
+                    "Recovered the saved Source Material pause boundary; inactive waiting "
+                    "time will not consume the research session duration.",
+                )
             # Browser Resumes remain browser-bound; API/CLI cannot silently
             # remove a previous session requirement when reconnecting.
             if browser_presence_required:
@@ -7679,6 +7719,11 @@ async def control_session(
                     "while its full budget reservation remains held."
                 )
                 _event(record, "references.compilation.recovered", compiler["reason"])
+            # The user may have disabled or deleted oversized Source Material
+            # after a pre-dispatch block. On explicit Resume, use the *current*
+            # enabled set without replaying reference-compiler or role attempts.
+            # Research-role attempts freeze their already delivered premises.
+            _refresh_supplied_evidence_on_resume(path, record)
             record["status"] = "queued"
             record.pop("stop_advisory", None)
             for branch in record.get("strategy_runs", []):
@@ -15655,6 +15700,204 @@ def _bounded_supplied_evidence(sources: list[dict], limit: int = 60000) -> list[
     return sources
 
 
+def _mandatory_dispatch_lower_bound(
+    record: dict[str, Any], branch: dict[str, Any]
+) -> dict[str, Any]:
+    """Exact mandatory fields that a first Investigator dispatch must contain.
+
+    This is a conservative *lower bound*, not a substitute for actual context
+    assembly. Optional methodology, history, runtime tools, and manifests are
+    absent, so exceeding the byte guard here cannot be repaired by dropping
+    optional context. Never mutate or shorten frozen scientific input.
+    """
+    context: dict[str, Any] = {
+        "problem": record["problem"],
+        "question": branch["current_question"],
+        "strategy": {
+            "id": branch["strategy_id"],
+            "title": branch["strategy_title"],
+            "approach": branch["strategy_text"],
+        },
+    }
+    for field in ("uploaded_project_evidence", "desired_outcomes"):
+        if record.get(field):
+            context[field] = record[field]
+    packets = record.get("approved_continuations")
+    if isinstance(packets, dict):
+        packet = packets.get(branch["strategy_id"])
+        # An experimental alias representation is not an exact lower bound for
+        # the frozen literal packet. The shipped representation remains literal.
+        if packet and not EXPERIMENTAL_EXACT_TEXT_POOL:
+            context["approved_continuation"] = packet
+    return context
+
+
+async def _ensure_mandatory_dispatch_preflight(session_id: str, path: str) -> bool:
+    """Avoid paid reference compilation when *every* branch is impossible.
+
+    The real post-assembly guard is still authoritative. Mixed portfolios
+    proceed: a single oversized branch must not strand independent strategies.
+    This reads only persisted, compiled Source Material and creates no provider
+    reservation or attempt.
+    """
+    async with _session_state_lock(session_id):
+        record = _read(path, session_id)
+        if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+            return False
+        active = [
+            branch
+            for branch in record.get("strategy_runs", [])
+            if branch.get("status") in {"queued", "running"}
+        ]
+        if not active:
+            # Do not leave a workerless Session falsely running. A fully
+            # paused/completed portfolio also cannot justify a new compiler call.
+            record["status"] = "paused"
+            record["current_action"] = "Paused · no runnable strategies"
+            record["message"] = (
+                "No runnable research strategy remains. Review saved strategy "
+                "statuses before resuming. No provider request was dispatched."
+            )
+            record["stopped_at"] = record.get("stopped_at") or _now()
+            record["updated_at"] = _now()
+            _event(record, "research.no_runnable_strategies", record["message"])
+            _save(path, record)
+            return False
+        oversized: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for branch in active:
+            mandatory = _mandatory_dispatch_lower_bound(record, branch)
+            if _json_bytes(mandatory) > _agent_dispatch_guard_bytes(record):
+                oversized.append((branch, mandatory))
+        if len(oversized) != len(active):
+            return True
+        for branch, mandatory in oversized:
+            reason = (
+                f"Mandatory inputs alone exceed SIGMA's {_agent_dispatch_guard_bytes(record):,}-byte "
+                "UTF-8 dispatch guard, independently of the provider model. "
+                "This is a conservative mandatory-only preflight: removing all "
+                "optional history and methods still cannot make the packet fit. "
+                "No Investigator/Skeptic request was dispatched by this check; "
+                "saved sources and prior compiler-attempt accounting are unchanged."
+                + _context_byte_breakdown(
+                    mandatory,
+                    phase="mandatory_preflight",
+                    strategy_id=branch.get("strategy_id"),
+                    role="investigator",
+                )
+            )
+            branch["status"] = "paused"
+            branch["current_action"] = "Paused · mandatory dispatch packet too large"
+            branch["termination_reason_code"] = "context_limit"
+            branch["reason"] = reason
+        record["status"] = "paused"
+        record["current_action"] = "Paused · mandatory dispatch packet too large"
+        record["termination_reason_code"] = "context_limit"
+        record["message"] = oversized[0][0]["reason"]
+        record["stopped_at"] = record.get("stopped_at") or _now()
+        record["updated_at"] = _now()
+        _event(record, "research.context_blocked", record["message"])
+        _save(path, record)
+        return False
+
+
+def _source_selection_key(item: dict[str, Any]) -> tuple[str, str]:
+    """Identify a selected source by immutable PDF digest or edited link URL."""
+    identifier = str(item.get("id") or "")
+    value = item.get("sha256") if identifier.startswith("uploaded-pdf:") else item.get("url")
+    return identifier, str(value or "")
+
+
+def _refresh_supplied_evidence_on_resume(path: str, record: dict[str, Any]) -> bool:
+    """Rebind edited Source Material only before the first research-role attempt.
+
+    Source Material is initially frozen for provenance. An explicit Resume
+    after enabling/disabling/removing project sources may replace that
+    selection *only* if no Investigator/Skeptic call or finding exists.
+    Methodology compilation and its paid-call accounting are independent and
+    must never be reset. Preserved unchanged extracts are verified by digest.
+    """
+    previous = record.get("uploaded_project_evidence") or []
+    if not isinstance(previous, list):
+        raise ProjectError("Saved Source Material selection is invalid.")
+    current = project_evidence.evidence_context(path, limit=6000)
+    old_keys = [_source_selection_key(item) for item in previous]
+    new_keys = [_source_selection_key(item) for item in current]
+    if old_keys == new_keys:
+        return False
+
+    role_attempted = (
+        int(record.get("calls_used") or 0) > 0
+        or bool(record.get("artifacts"))
+        or any(
+            isinstance(step, dict) and step.get("role") in {"investigator", "skeptic"}
+            for step in record.get("steps", [])
+        )
+        or any(
+            branch.get("artifacts") or branch.get("pending_investigation")
+            for branch in record.get("strategy_runs", [])
+            if isinstance(branch, dict)
+        )
+    )
+    if role_attempted:
+        # A normal saved session must keep its original research premises.
+        # Editing project Source Material must not retroactively alter
+        # completed, failed or unknown paid Investigator/Skeptic attempts.
+        return False
+
+    previous_stage = record.get("supplied_evidence_compilation")
+    cached = (
+        previous_stage.get("sources", [])
+        if isinstance(previous_stage, dict) and isinstance(previous_stage.get("sources"), list)
+        else []
+    )
+    reusable: dict[tuple[str, str], dict] = {}
+    old_key_set = set(old_keys)
+    for item in cached:
+        if not isinstance(item, dict):
+            continue
+        key = _source_selection_key(item)
+        if key not in old_key_set or item.get("status") != "retrieved":
+            continue
+        excerpt = item.get("excerpt")
+        if (
+            not isinstance(excerpt, str)
+            or item.get("incomplete_extract")
+            or hashlib.sha256(excerpt.encode("utf-8")).hexdigest() != item.get("excerpt_sha256")
+        ):
+            continue
+        reusable[key] = item
+
+    # A removed or disabled source is no longer part of the session context.
+    # A changed PDF digest or link URL invalidates the prior extract. Nothing
+    # is deleted from historical logs or already-recorded provider usage.
+    retained = [reusable[key] for key in new_keys if key in reusable]
+    record["uploaded_project_evidence"] = current
+    record["supplied_evidence_compilation"] = {
+        "status": "pending" if current else "completed",
+        "sources": retained,
+        "total": len(current),
+        "completed_count": len(retained),
+        **({"finished_at": _now()} if not current else {}),
+    }
+    record.setdefault("source_material_selection_history", []).append(
+        {
+            "at": _now(),
+            "reason": "user_resume_before_research_dispatch",
+            "previous_source_ids": [key[0] for key in old_keys],
+            "selected_source_ids": [key[0] for key in new_keys],
+            "reused_verified_extracts": len(retained),
+        }
+    )
+    _event(
+        record,
+        "source_material.selection_refreshed",
+        f"Resume refreshed Source Material from {len(previous)} to {len(current)} "
+        f"enabled items before the first Investigator/Skeptic call; "
+        f"{len(retained)} verified extracts reused. Previous provider usage is preserved.",
+    )
+    return True
+
+
 async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> bool:
     """Checkpoint all document reads and fail closed before role dispatch.
 
@@ -15695,6 +15938,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material checkpoint invalid"
                     record["message"] = "Saved Source Material compilation failed integrity checks."
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _save(path, record)
                     return False
                 try:
@@ -15703,6 +15948,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material exceeds context limit"
                     record["message"] = str(exc)
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _save(path, record)
                     return False
                 if record["uploaded_project_evidence"] != restored_evidence:
@@ -15747,6 +15994,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                         f"{', '.join(names[:4])}."
                         " Fix retrieval/access and Resume to retry these sources."
                     )
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     stage["reason"] = record["message"]
                     _event(record, "source_material.compilation.blocked", record["message"])
                     _save(path, record)
@@ -15759,6 +16008,8 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material exceeds context limit"
                     record["message"] = str(exc)
+                    record["stopped_at"] = record.get("stopped_at") or _now()
+                    record["updated_at"] = _now()
                     _event(record, "source_material.compilation.blocked", record["message"])
                     _save(path, record)
                     return False
@@ -15918,6 +16169,14 @@ async def _worker(session_id: str, path: str) -> None:
         # one-strategy session. The legacy worker below remains only for
         # persisted records created before per-strategy state existed.
         if initial.get("strategy_runs"):
+            # Source Material is a mandatory precondition. Verify every
+            # frozen source before optionally spending a provider call on
+            # research-reference compilation. An oversized/unavailable source
+            # must not consume compiler allowance for an impossible session.
+            if not await _ensure_supplied_evidence_compilation(session_id, path):
+                return
+            if not await _ensure_mandatory_dispatch_preflight(session_id, path):
+                return
             if not await _ensure_reference_compilation(session_id, path):
                 return
             # Keep this gate after the final settled compilation attempt,
@@ -15947,8 +16206,6 @@ async def _worker(session_id: str, path: str) -> None:
                         _event(latest, "references.compilation.acceptance_blocked", blocked)
                         _save(path, latest)
                     return
-            if not await _ensure_supplied_evidence_compilation(session_id, path):
-                return
             await _portfolio_worker(session_id, path)
             return
         while True:

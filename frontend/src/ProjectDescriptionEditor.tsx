@@ -59,9 +59,10 @@ function sourceUrlError(value: string): string | null {
   }
 }
 
-function SourceMaterialLink({ url }: { url: string }) {
+function SourceMaterialLink({ url, guest }: { url: string; guest: boolean }) {
   const [title, setTitle] = useState<string | null>(null);
   useEffect(() => {
+    if (guest) return; // No external metadata requests from anonymous sample browsing.
     const controller = new AbortController();
     setTitle(null);
     void fetch('/api/reference-title?url=' + encodeURIComponent(url), {
@@ -71,7 +72,7 @@ function SourceMaterialLink({ url }: { url: string }) {
         if (!controller.signal.aborted) setTitle(result?.title?.trim() || null);
       }).catch(() => {});
     return () => controller.abort();
-  }, [url]);
+  }, [url, guest]);
   return <a className="sigma-evidence-link" href={url} target="_blank" rel="noopener noreferrer">{title || url}</a>;
 }
 
@@ -88,9 +89,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
   const saving = useRef(false);
   const cancelled = useRef(false);
   const currentPath = useRef(path);
-  const currentGuest = useRef(guest);
   currentPath.current = path;
-  currentGuest.current = guest;
 
   async function reload() {
     const response = await fetch('/api/projects/evidence?' + new URLSearchParams({ path }), {
@@ -98,7 +97,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not load Source Material.');
-    if (currentPath.current === path && !currentGuest.current) {
+    if (currentPath.current === path) {
       const latest = result.files as EvidenceRow[];
       if (editingId) {
         const current = latest.find(row => row.id === editingId);
@@ -116,7 +115,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
 
   useEffect(() => {
     setRows([]); setError(''); setAdding(false); setEditingId(null); setUrl('');
-    if (!guest) void reload().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+    void reload().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
   }, [path, guest]);
 
   useEffect(() => { if (adding || editingId) linkInput.current?.focus(); }, [adding, editingId]);
@@ -226,7 +225,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
   }
 
   return <section className="sigma-description-field sigma-supplied-evidence">
-    <div className="sigma-evidence-heading"><h4><button type="button" className="workspace-section-disclosure sigma-subsection-toggle"
+    <div className="sigma-evidence-heading"><h4><button id="sigma-supplied-evidence-heading" type="button" className="workspace-section-disclosure sigma-subsection-toggle"
       data-tooltip={(expanded ? 'Collapse' : 'Expand') + ' Source Material'}
       aria-expanded={expanded} aria-controls="sigma-supplied-evidence-content" onClick={onToggle}>
       <EvidenceChevron expanded={expanded}/>Source Material
@@ -251,7 +250,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
       {rows.map(entry => <div className="sigma-evidence-row" key={entry.id}>
         <div className={'sigma-evidence-item' + (entry.enabled === false ? ' is-disabled' : '')}>
           {entry.kind === 'link'
-            ? editingId === entry.id ? linkEditor() : <SourceMaterialLink url={entry.url || ''}/>
+            ? editingId === entry.id ? linkEditor() : <SourceMaterialLink url={entry.url || ''} guest={guest}/>
             : <a className="sigma-evidence-attachment" href={'/api/projects/evidence/' + encodeURIComponent(entry.id) + '/pdf?' + new URLSearchParams({ path })}
                 target="_blank" rel="noopener noreferrer"><EvidenceClipIcon/><span>{entry.filename}</span></a>}
           {editingId === entry.id && error && <span className="sigma-evidence-url-error" role="alert">{error}</span>}
@@ -323,6 +322,33 @@ export default function ProjectDescriptionEditor({
       return [key, previous === null ? true : previous === 'true'];
     }));
   });
+  const [sourceRevealRequest, setSourceRevealRequest] = useState(0);
+  useEffect(() => {
+    const reveal = () => {
+      // A guidance link always expands this subsection, never toggles it
+      // closed. Keep manual disclosure preference consistent with the result.
+      window.localStorage.setItem(`sigma.projectSubsection:${view.path}:supplied_evidence`, 'true');
+      setExpandedFields(current => ({ ...current, supplied_evidence: true }));
+      setSourceRevealRequest(request => request + 1);
+    };
+    window.addEventListener('sigma-reveal-source-material', reveal);
+    return () => window.removeEventListener('sigma-reveal-source-material', reveal);
+  }, [view.path]);
+  useEffect(() => {
+    if (!sourceRevealRequest || !(expandedFields.supplied_evidence ?? true)) return;
+    // Let React expose the Project pane and this subsection before scrolling.
+    const frame = requestAnimationFrame(() => {
+      const heading = document.getElementById('sigma-supplied-evidence-heading');
+      if (!heading) return;
+      heading.scrollIntoView({
+        block: 'center',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      });
+      heading.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sourceRevealRequest, expandedFields.supplied_evidence]);
+
   const toggleField = (key: string) => {
     setExpandedFields(previous => {
       const next = !(previous[key] ?? true);

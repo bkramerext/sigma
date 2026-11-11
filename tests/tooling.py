@@ -1,5 +1,6 @@
 """Check maintenance failure handling without installing or changing dependencies."""
 
+import json
 import os
 import signal
 import subprocess
@@ -102,6 +103,47 @@ def check_failures() -> None:
         assert any("pyright" in command for command in commands)
         assert any("tests/lifecycle.py" in command for command in commands)
 
+    # CI may skip npm installation on shards that run no frontend build/typecheck.
+    with (
+        patch.dict(os.environ, {"SIGMA_SETUP_SKIP_NPM": "1"}),
+        patch("sigma.tooling.shutil.which", return_value="tool"),
+        patch(
+            "sigma.tooling.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0),
+        ) as run,
+    ):
+        assert run_tooling("setup") == 0
+        setup_commands = [item.args[0] for item in run.call_args_list]
+        assert ["uv", "sync", "--locked", "--group", "dev"] in setup_commands
+        assert not any(command[0] == "npm" for command in setup_commands)
+
+    # A successful shard emits actual per-check and shard timings as machine-readable JSON.
+    with (
+        TemporaryDirectory() as directory,
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CI_TEST_SHARD": "1",
+                "SIGMA_CI_SEPARATE_RUFF": "1",
+                "SIGMA_CI_TIMINGS_FILE": str(Path(directory) / "timing.json"),
+            },
+        ),
+        patch("sigma.tooling.shutil.which", return_value="tool"),
+        patch(
+            "sigma.tooling.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0),
+        ) as run,
+    ):
+        assert run_tooling("test") == 0
+        report = json.loads((Path(directory) / "timing.json").read_text(encoding="utf-8"))
+        assert report["shard"] == "1"
+        assert report["schema_version"] == 1
+        assert report["failures"] == 0
+        assert len(report["steps"]) == run.call_count
+        assert report["duration_seconds"] >= 0
+        assert all(step["duration_seconds"] >= 0 for step in report["steps"])
+        assert all("SIGMA_CI_TIMINGS_FILE" not in c.kwargs["env"] for c in run.call_args_list)
+
     # All eight CI shards must be exhaustive together, disjoint, and independent.
     plans: dict[str, list[list[str]]] = {}
     shard_names = tuple(str(index) for index in range(1, 9))
@@ -133,7 +175,26 @@ def check_failures() -> None:
         extra_half_b = "tests/research_sessions_part3b.py" in step
         extra_half_c = "tests/research_sessions_part3c.py" in step
         extra_half = extra_half_b or extra_half_c
-        owner = ("8" if extra_half_b else "6") if extra_half else shard_names[regular_index % 8]
+        if step == ["npm", "--prefix", "frontend", "run", "typecheck"]:
+            owner = "1"
+        elif step == ["npm", "--prefix", "frontend", "run", "build"]:
+            owner = "7"
+        elif "tests/crucible_scheduler_evidence.py" in step:
+            owner = "1"
+        elif "tests/papers_part2.py" in step:
+            owner = "3"
+        elif "tests/research_sessions_part2.py" in step:
+            owner = "5"
+        elif "tests/sage_execution.py" in step:
+            owner = "1"
+        elif "tests/storage.py" in step:
+            owner = "2"
+        elif "pyright" in step:
+            owner = "4"
+        elif extra_half:
+            owner = "8" if extra_half_b else "6"
+        else:
+            owner = shard_names[regular_index % 8]
         assert step in plans[owner]
         if not extra_half:
             regular_index += 1
@@ -150,6 +211,24 @@ def check_failures() -> None:
     assert sum("tests/research_sessions_part3c.py" in step for step in combined) == 1
     assert any("scripts/increment15_offline_pairs.py" in step for step in combined)
     assert any(step[-2:] == ["run", "build"] for step in combined)
+    # Runtime-based moves must remain disjoint, exhaustive and intentional.
+    for shard, filename in (
+        ("1", "tests/crucible_scheduler_evidence.py"),
+        ("3", "tests/papers_part2.py"),
+        ("5", "tests/research_sessions_part2.py"),
+        ("1", "tests/sage_execution.py"),
+        ("2", "tests/storage.py"),
+        ("4", "pyright"),
+    ):
+        assert sum(filename in step for step in combined) == 1
+        assert any(filename in step for step in plans[shard])
+    # If frontend commands move shards, the workflow's npm-skip configuration
+    # must be updated rather than silently running without dependencies.
+    assert all(
+        not any(command[:4] == ["npm", "--prefix", "frontend", "run"] for command in plans[shard])
+        for shard in shard_names
+        if shard not in {"1", "7"}
+    )
     with (
         patch.dict(os.environ, {"SIGMA_CI_TEST_SHARD": "invalid"}),
         patch("sigma.tooling.shutil.which", return_value="tool"),
@@ -597,10 +676,52 @@ def check_shutdown_and_suspended() -> None:
         cleanup.assert_called_once_with()
 
 
+def check_browser_pdf_ci_distribution() -> None:
+    """Keep every browser suite and the mandatory real-PDF gate during rebalancing."""
+    browser_workflow = (ROOT / ".github/workflows/browser-verification.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "group: ['1', '2', '3']" in browser_workflow
+    assert "Browser acceptance (${{ matrix.group }}/3)" in browser_workflow
+    assert "Require all three browser groups to pass" in browser_workflow
+    assert "needs: browser" in browser_workflow
+    assert "matrix.group == '3'" in browser_workflow
+    scripts = (
+        "issue525_project_diagnostics.py",
+        "guest_samples.py",
+        "t47_conclusion.py",
+        "project_types_436.py",
+        "project_email.py",
+        "collaboration_settings.py",
+        "collaboration_local_accounts.py",
+        "research_qa.py",
+        "model_availability.py",
+        "t201_overflow.py",
+        "t81_public_legal_pages.py",
+        "t92_recent_running.py",
+        "save_as_contract.py",
+    )
+    for filename in scripts:
+        assert browser_workflow.count(f"python browser_checks/{filename}") == 1, filename
+    # Both evidence uploads must include third-group collaboration output.
+    assert browser_workflow.count("            /tmp/collaboration-local-accounts.log") == 2
+    assert "pipefail" in browser_workflow
+
+    pdf_workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
+    assert "Two-creator real PDF acceptance" in pdf_workflow
+    assert 'SIGMA_REQUIRE_REAL_PAPER_PDF: "1"' in pdf_workflow
+    assert "SIGMA_SETUP_SKIP_NPM=1 ./sigma setup" in pdf_workflow
+    assert (
+        "uv run --locked --no-sync python tests/paper_collaboration_acceptance.py" in pdf_workflow
+    )
+    assert "sha256sum --check --strict" in pdf_workflow
+
+
 def main() -> None:
     output = StringIO()
     with redirect_stdout(output), redirect_stderr(output):
         check_failures()
+        check_browser_pdf_ci_distribution()
         check_start_cli()
         check_command_help()
         check_ui()

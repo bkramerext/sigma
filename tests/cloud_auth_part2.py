@@ -385,7 +385,7 @@ class CloudAuthTests(CloudAuthFixture):
         )
         self.assertIn('__Host-sigma_denied="";', restart.headers["set-cookie"])
         self.assertEqual(self.client.get("/api/cloud-auth/denied").status_code, 404)
-        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
         self.assertNotIn(cloud_auth.SESSION_COOKIE, restart.cookies)
         with cloud_auth._db(cloud_auth.config()) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 0)
@@ -403,14 +403,14 @@ class CloudAuthTests(CloudAuthFixture):
         with cloud_auth._db(cloud_auth.config()) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 0)
         self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 401)
-        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
 
         denied = self.finish("visitor@example.org", "visitor-sub")
         self.assertEqual(denied.status_code, 303)
         self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
         self.assertIn('__Host-sigma_session="";', denied.headers["set-cookie"])
         self.assertIsNone(cloud_auth.resolve_session(first_raw))
-        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
         self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 401)
 
     def test_account_switch_authorized_to_authorized_replaces_session(self):
@@ -428,7 +428,7 @@ class CloudAuthTests(CloudAuthFixture):
         begin = self.client.get("/api/cloud-auth/login", follow_redirects=False)
         self.assertIn('__Host-sigma_session="";', begin.headers["set-cookie"])
         self.assertIsNone(cloud_auth.resolve_session(first_raw))
-        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
 
         second = self.finish("member@example.org", "member-sub")
         second_raw = second.cookies[cloud_auth.SESSION_COOKIE]
@@ -2560,7 +2560,7 @@ class CloudAuthTests(CloudAuthFixture):
         with patch.object(cloud_auth, "_now", return_value=expiry):
             self.assertIsNone(cloud_auth.resolve_session(raw))
             self.client.cookies.set(cloud_auth.SESSION_COOKIE, raw)
-            self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+            self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
 
     def test_invalid_identity_claims_nonce_and_state_replay(self):
         invalid = [
@@ -2613,9 +2613,11 @@ class CloudAuthTests(CloudAuthFixture):
             f"/api/projects/inspect?path={self.project_path}",
             f"/api/projects/research-sessions?path={self.project_path}",
             f"/api/projects/research-executions?path={self.project_path}",
-            "/api/projects/recent",
         ]:
             self.assertEqual(self.client.get(path).status_code, 401, path)
+        # My Work is an isolated, empty guest workspace; protected member
+        # endpoints above must still reject the anonymous caller.
+        self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
         rejected = self.client.post(
             "/api/projects/close",
             json={"path": str(self.project_path)},

@@ -1250,6 +1250,16 @@
 .workspace-page .session-notice-dismiss:focus-visible {
   outline: 2px solid #edbc77; outline-offset: 3px;
 }
+.workspace-page .stopped-session-guidance .session-notice-source-link {
+  color: var(--sigma-copper-foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.workspace-page .stopped-session-guidance .session-notice-source-link:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
 
 /* Outcome Markdown actions share the title buttons' compact copper hover. */
 .workspace-page :is(.outcome-heading-title, .outcome-conclusion-actions, .outcome-summary-title, .outcome-subsection.has-markdown-control) > .sigma-render-toggle {

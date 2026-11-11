@@ -691,7 +691,9 @@ def note_artifact_author(
     """
     if kind not in {"strategy", "session", "paper", "answer"} or not artifact_id:
         raise ValueError("Invalid artifact attribution")
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         return
     with _db() as db:
         # Private/unregistered projects do not have collaboration provenance.
@@ -717,7 +719,9 @@ def require_project_classification_owner(path: str) -> None:
     """Only the verified owner may change the project's category or difficulty."""
     from sigma.projects import ProjectError
 
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         return
     with _db() as db:
         row, _actor = _membership(db, path)
@@ -735,7 +739,9 @@ def require_project_title_owner(path: str) -> None:
     """
     from sigma.projects import ProjectError
 
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         return
     with _db() as db:
         row, _actor = _membership(db, path)
@@ -745,7 +751,9 @@ def require_project_title_owner(path: str) -> None:
 
 def collaborator_identity(path: str) -> str | None:
     """Verified collaborator email for durable, human-authored output metadata."""
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         return None
     try:
         with _db() as db:
@@ -1022,7 +1030,9 @@ def require_execution_operator(
 
 def paper_draft_creator(path: str, project_id: str) -> str | None:
     """Server-owned original draft identity, independent of the resumed account."""
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         return None
     with _db() as db:
         if db.execute("SELECT 1 FROM shared_projects WHERE path=?", (path,)).fetchone() is None:
@@ -1252,7 +1262,9 @@ def bind_session_control_lease(
 
 
 def model_settings(path: str) -> dict[str, str] | None:
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         return None
     with _db() as db:
         # Unregistered private projects have no shared model configuration.
@@ -1501,7 +1513,8 @@ def shared_with_me() -> list[dict[str, str]]:
 
 def acquire_lease(path: str, activity: str) -> str | None:
     """Atomic, renewable per-project single-operator admission. Unshared projects retain normal behavior."""
-    if cloud_workspaces.current() is None:
+    workspace = cloud_workspaces.current()
+    if workspace is None or workspace.guest:
         return None
     from sigma.projects import inspect_project
 
@@ -1604,7 +1617,8 @@ def keep_lease(path: str, token: str | None) -> Iterator[None]:
 
 
 def require_not_leased(path: str) -> None:
-    if cloud_workspaces.current() is None:
+    workspace = cloud_workspaces.current()
+    if workspace is None or workspace.guest:
         return
     from sigma.projects import ProjectError
 
@@ -1645,7 +1659,9 @@ def _forget_project_locked(
 
 def forget_project(path: str, title: str | None = None) -> None:
     """Revoke the owner's deleted project and queue removal notices."""
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         return
     from sigma.projects import ProjectError
 
@@ -1666,7 +1682,9 @@ def finalize_deletion(path: str, title: str) -> Iterator[None]:
     Session shutdown happens before entry. Nobody can acquire a new lease
     between the final token check, filesystem removal, and ACL revocation.
     """
-    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
         yield
         return
     from sigma.projects import ProjectError

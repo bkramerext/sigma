@@ -977,6 +977,13 @@ _GUEST_PROJECT_READ_PATHS = {
     "/api/projects/proposals/config",
     "/api/projects/text",
     "/api/projects/recent",
+    "/api/projects/research-qa",
+    "/api/projects/evidence",
+    "/api/projects/audit",
+    "/api/projects/export",
+    "/api/projects/download",
+    "/api/projects/export/report",
+    "/api/projects/destination",
 }
 
 
@@ -992,8 +999,34 @@ def public_sample_paper_path(method: str, path: str) -> bool:
     )
 
 
+# These operations are intentionally manual and confined to the server-owned
+# ephemeral guest workspace. This is NOT a general guest write permission.
+_GUEST_MANUAL_PROJECT_WRITES = {
+    ("POST", "/api/projects/create"),
+    ("POST", "/api/projects/update"),
+    ("POST", "/api/projects/save-as"),
+    ("POST", "/api/projects/strategies"),
+    ("POST", "/api/projects/strategies/edit"),
+    ("POST", "/api/projects/strategies/remove"),
+    ("POST", "/api/projects/strategies/enabled"),
+    ("POST", "/api/projects/strategies/stage"),
+    ("POST", "/api/projects/strategies/reorder"),
+    ("POST", "/api/projects/text/source"),
+    ("POST", "/api/projects/recent/forget"),
+    ("DELETE", "/api/projects"),
+}
+
+
 def _guest_project_route_allowed(method: str, path: str) -> bool:
-    """Explicitly allow sample browsing and project reads inside a guest workspace."""
+    """Allow safe manual exploration; model and collaboration actions stay denied."""
+    if (method, path) in _GUEST_MANUAL_PROJECT_WRITES:
+        return True
+    if method == "GET" and re.fullmatch(
+        r"/api/projects/research-qa/[0-9a-f]{32}(?:/browser|/markdown)?", path
+    ):
+        return True
+    if method == "GET" and re.fullmatch(r"/api/projects/evidence/[0-9a-f]{32}/pdf", path):
+        return True
     if method == "GET" and (path == "/api/projects/samples" or path in _GUEST_PROJECT_READ_PATHS):
         return True
     if method == "POST" and path in {
@@ -1162,10 +1195,18 @@ async def middleware(request: Request, call_next):
             from sigma import cloud_workspaces
 
             guest_workspace = cloud_workspaces.guest_workspace(guest_token)
-        create_guest = (path == "/api/projects/samples" and request.method == "GET") or (
-            path == "/api/projects/samples/open" and request.method == "POST"
+        create_guest = (
+            (path == "/api/projects/samples" and request.method == "GET")
+            or (path == "/api/projects/samples/open" and request.method == "POST")
+            or (path == "/api/projects/create" and request.method == "POST")
+            # My Work may be the first request after a member signs out or a
+            # visitor restores that tab. Establish a private empty workspace
+            # rather than returning a member-only 401.
+            or (path == "/api/projects/recent" and request.method == "GET")
         )
-        if path.startswith("/api/projects/") and (guest_workspace is not None or create_guest):
+        if (path == "/api/projects" or path.startswith("/api/projects/")) and (
+            guest_workspace is not None or create_guest
+        ):
             if not _guest_project_route_allowed(request.method, path):
                 return _guest_secure_response(
                     JSONResponse(
@@ -1185,7 +1226,7 @@ async def middleware(request: Request, call_next):
         }
         if path == "/api/project-types" and request.method == "GET":
             return await call_next(request)
-        if path.startswith("/api/projects/"):
+        if path == "/api/projects" or path.startswith("/api/projects/"):
             if not _guest_project_route_allowed(request.method, path):
                 return _guest_secure_response(
                     JSONResponse(
@@ -1253,7 +1294,9 @@ async def middleware(request: Request, call_next):
             "/api/projects/research-sessions/mock",
             "/api/projects/guest-copy",
         }
-        project_write = path.startswith("/api/projects/") and request.method not in {
+        project_write = (
+            path == "/api/projects" or path.startswith("/api/projects/")
+        ) and request.method not in {
             "GET",
             "HEAD",
             "OPTIONS",

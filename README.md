@@ -14,6 +14,8 @@ SIGMA does **not** establish that an answer is correct. Investigator and Skeptic
 
 ## Using SIGMA
 
+**Explore without signing in:** Public visitors can open an immutable sample into a private, temporary browser-cookie workspace, create or edit their own drafts and strategies, inspect saved sample research and papers, and export their work. Their temporary projects appear only in their browser's **My Work**; they are not shared with other visitors. A guest workspace expires after eight hours of inactivity and may disappear earlier on a backend restart or if cookies are cleared. Export anything you want to keep. Starting research Sessions, generating Papers, asking model-backed Q/A, AI Markdown formatting, and Score/Rescore explain what they would do instead of invoking a model. Sign-in is **not required** to explore; Google sign-in and ChatGPT execution remain for authorized Members/Admins.
+
 Create a project or start from a sample, then invite collaborators to investigate the question together. Everyone authorized for a shared project works with the **same ongoing research record**—strategies, sessions, evidence, and papers—across their own signed-in accounts. You can also work privately. The overview below shows how SIGMA preserves findings and can optionally develop saved research into a paper. For session controls and limits, see [Connect AI and investigate](docs/GETTING_STARTED.md#connect-ai-and-investigate).
 
 ## Workflow
