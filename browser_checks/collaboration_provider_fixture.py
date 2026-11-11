@@ -135,12 +135,8 @@ def unfreeze_mock_sessions():
 # Q/A handler, including task idempotency and creator-scoped authorization,
 # behind a fixture-only alias. This module cannot load outside mock auth, and
 # its provider is replaced with deterministic, no-network inference.
-app.add_api_route(
-    "/api/__fixture/collaboration-qa-ask", research_qa_answer, methods=["POST"]
-)
-app.add_api_route(
-    "/api/__fixture/collaboration-qa/{qa_id}", research_qa_delete, methods=["DELETE"]
-)
+app.add_api_route("/api/__fixture/collaboration-qa-ask", research_qa_answer, methods=["POST"])
+app.add_api_route("/api/__fixture/collaboration-qa/{qa_id}", research_qa_delete, methods=["DELETE"])
 
 
 @app.get("/api/__fixture/collaboration-qa-state")

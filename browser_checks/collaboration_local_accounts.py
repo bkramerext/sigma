@@ -536,6 +536,22 @@ def exercise(ui: str, workspaces: Path) -> None:
             "Which skeptic objections can the collaborator assess?",
         )
         request_ids = (uuid4().hex, uuid4().hex)
+        # The public mock walkthrough route must keep refusing potential
+        # provider calls. Only the import-guarded deterministic fixture alias
+        # can exercise the actual Q/A handler in this acceptance run.
+        prohibited = owner_context.request.post(
+            ui + "/api/projects/research-qa",
+            headers={"Origin": ui},
+            data={
+                "path": path,
+                "expected_project_id": project_id,
+                "expected_binding": "fixture:collaboration-qa",
+                "question": qa_questions[0],
+                "request_id": uuid4().hex,
+            },
+        )
+        assert prohibited.status == 403, prohibited.text()
+        assert get_json(prohibited).get("simulated") is True
         submit_qa = """({path, projectId, question, requestId}) => {
             window.sigmaCollaborationQA = fetch('/api/__fixture/collaboration-qa-ask', {
                 method: 'POST', headers: {'Content-Type':'application/json'},
