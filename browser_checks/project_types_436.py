@@ -497,7 +497,7 @@ with sync_playwright() as playwright:
     warning.get_by_role("button", name="Continue with saved settings").click()
     expect(warning).not_to_be_visible()
     start_button = page.locator(".sessions-pane-heading").get_by_role(
-        "button", name="Start Session 1"
+        "button", name="Start Session"
     )
     expect(start_button).to_be_visible(timeout=15000)
     expect(start_button).to_be_visible()
@@ -1003,7 +1003,7 @@ with sync_playwright() as playwright:
         ),
     )
     page.reload()
-    play = page.get_by_role("button", name="Resume Paper 2")
+    play = page.get_by_role("button", name="Resume paper")
     expect(play).to_be_enabled(timeout=10000)
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
     restart = page.get_by_role("button", name="Start over on paper generation")
@@ -1034,7 +1034,7 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers", simulate_generation)
     play.click()
-    expect(page.get_by_role("button", name="Resume Paper 2")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Resume paper")).to_be_enabled(timeout=10000)
     assert dispatched == ["POST"], dispatched
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
 
@@ -1069,16 +1069,16 @@ with sync_playwright() as playwright:
     assert reset_calls == [], reset_calls
     restart.click()
     confirm_restart.get_by_role("button", name="Confirm").click()
-    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     assert reset_calls == ["POST"], reset_calls
     assert dispatched == ["POST"], dispatched
     expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
     # A real reload must not resurrect Start over from the reset receipt.
     page.reload()
-    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
     # Play and subsequent Stop can create new discardable work.
-    page.get_by_role("button", name="Generate Paper 2").click()
+    page.get_by_role("button", name="Generate paper").click()
     # The frontend refreshes preflight before dispatch; wait for the
     # intercepted request rather than racing React's async handler.
     for _ in range(50):
@@ -1086,7 +1086,7 @@ with sync_playwright() as playwright:
             break
         page.wait_for_timeout(100)
     assert dispatched == ["POST", "POST"], dispatched
-    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     paper_fixture["reset_ready"] = False
     paper_fixture["checkpoint"] = True
     paper_fixture["stopped"] = True
@@ -1115,7 +1115,7 @@ with sync_playwright() as playwright:
     expect(queued_confirm).to_be_visible()
     assert discard_calls == [], discard_calls
     queued_confirm.get_by_role("button", name="Confirm").click()
-    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     assert discard_calls == ["POST"], discard_calls
     assert dispatched == ["POST", "POST"], dispatched
 
@@ -1127,7 +1127,7 @@ with sync_playwright() as playwright:
     paper_fixture["stopped"] = True
     paper_fixture["reset_ready"] = False
     page.reload()
-    fresh_play = page.get_by_role("button", name="Generate Paper 2")
+    fresh_play = page.get_by_role("button", name="Generate paper")
     expect(fresh_play).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_be_enabled()
     assert "confirmation required" in fresh_play.locator("xpath=..").get_attribute("data-tooltip")
@@ -1172,7 +1172,7 @@ with sync_playwright() as playwright:
         page.wait_for_timeout(100)
     assert reset_calls == ["POST", "POST"], reset_calls
     assert dispatched == ["POST", "POST", "POST"], dispatched
-    expect(page.get_by_role("button", name="Generate Paper 2")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
 
     # Score stays clickable even when the PDF is unavailable; the user gets

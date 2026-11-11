@@ -42,11 +42,11 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="New session").click()
     expect(
-        page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 2")
+        page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session")
     ).to_be_visible()
     page.set_viewport_size({"width": 390, "height": 844})
     for button in (
-        page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 2"),
+        page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session"),
         page.locator(".sessions-pane-heading").get_by_role("button", name="Cancel"),
     ):
         box = button.bounding_box()
@@ -55,7 +55,7 @@ with sync_playwright() as playwright:
             f"Research start action overflows narrow viewport: {box}"
         )
     page.set_viewport_size({"width": 1440, "height": 900})
-    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 2").click()
+    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session").click()
     row = page.locator(".session-row").filter(has_text="Session 2")
     expect(row).to_be_visible(timeout=15000)
     expect(row.locator(".session-status")).to_have_text(
@@ -90,7 +90,7 @@ with sync_playwright() as playwright:
 
     # The same eligible strategy remains usable, with its durable history intact.
     page.get_by_role("button", name="New session").click()
-    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session 3").click()
+    page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session").click()
     second_row = page.locator(".session-row").filter(has_text="Session 3")
     expect(second_row).to_be_visible(timeout=15000)
     expect(second_row.locator(".session-status")).to_have_text(

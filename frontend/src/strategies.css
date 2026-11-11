@@ -1455,3 +1455,11 @@
 .workspace-page .strategy-title-line .strategy-inline-commands .strategy-icon-action:is(:hover:not(:disabled), :focus-visible) svg {
   color: #fff2e9;
 }
+
+/* Session detail lines, including attribution, share one text origin. */
+.workspace-page .session-summary > .session-run-metadata {
+  display: block;
+  min-width: 0;
+  margin: 4px 0 0 18px;
+  overflow-wrap: anywhere;
+}

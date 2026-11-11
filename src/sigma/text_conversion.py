@@ -10,14 +10,18 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma import cloud_research, cloud_workspaces
+from sigma.model_catalog import validate_pair
 from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
 from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
 from sigma.proposals import configuration
 from sigma.text_views import Format, _format, digest, inspect_text, store_conversion
 
-# Long high-reasoning Markdown conversions routinely exceed one minute.
-# Allow up to ten minutes for the complete provider operation (including SSE).
+# Formatting always uses the reviewed inexpensive model, irrespective of research settings.
+# Keep cancellation and the existing provider-completion safeguards.
+FORMAT_MODEL = "gpt-6-luna"
+FORMAT_EFFORT = "medium"
+validate_pair(FORMAT_MODEL, FORMAT_EFFORT)
 CALL_SECONDS = 10 * 60
 MAX_CONVERSION_RESPONSE_BYTES = MAX_STREAM_BYTES
 _gate = asyncio.Lock()
@@ -52,6 +56,9 @@ INSTRUCTIONS = (
     "Preserve existing valid Markdown, explicit math delimiters, multiline equations, escaped "
     "delimiters, unmatched delimiter text, inline code, fenced code, links and table structure. "
     "For Markdown use normal Markdown prose and $...$ or $$...$$ LaTeX mathematics. "
+    "Never leave a raw TeX command such as \\Sigma or \\sum outside math delimiters. "
+    "Check that each equation has matching braces and complete math delimiters; "
+    "do not manufacture commands or concatenate unrelated equations. "
     "Break long mixed prose-and-equation lines into readable paragraphs; put substantial "
     "equations in standalone display-math blocks and keep brief symbols inline. "
     "For Plain use readable ASCII mathematics such as a_n, >=, F_{n+2}, 1/3, never raw "
@@ -71,6 +78,37 @@ RESEARCH_BLOCK_PATH = re.compile(
     r"coordinator_decision|next_question)|"
     r"strategy_assessments\.[0-9]{1,3}\.rationale)$"
 )
+
+
+CURRENT_UNDERSTANDING_PATH = re.compile(
+    r"^(?:scope_note|findings\.[0-9]{1,4}\.(?:text|investigated_claim)|"
+    r"changes\.[0-9]{1,4}\.(?:text|caution)|"
+    r"obligations\.[0-9]{1,4}\.(?:text|note)|"
+    r"next_investigations\.[0-9]{1,4}\.(?:question|qualification)|"
+    r"limitations\.[0-9]{1,4}|failures\.[0-9]{1,4}\.note)$"
+)
+
+
+def _understanding_block(path: str, field_path: str) -> str:
+    """Resolve an allowlisted projection field from the current authoritative state."""
+    from sigma.research_state import current_understanding
+
+    if not CURRENT_UNDERSTANDING_PATH.fullmatch(field_path):
+        raise ProjectError("This Current Understanding field cannot be converted")
+    value: Any = current_understanding(path)
+    for part in field_path.split("."):
+        if isinstance(value, list) and part.isdecimal():
+            index = int(part)
+            value = value[index] if index < len(value) else None
+        elif isinstance(value, dict):
+            value = value.get(part)
+        else:
+            value = None
+        if value is None:
+            break
+    if not isinstance(value, str) or not value.strip():
+        raise ProjectError("Current Understanding text is unavailable")
+    return value
 
 
 def _saved_research_block(path: str, session_id: str, field_path: str) -> str:
@@ -180,6 +218,26 @@ async def _convert_text(
                     and record["markdown_answer"].strip()
                     else None,
                 }
+            elif scope == "current-understanding":
+                if (
+                    session_id is not None
+                    or strategy_id is not None
+                    or qa_id is not None
+                    or target_format != "markdown"
+                    or not field_path
+                    or expected_digest is None
+                    or expected_project_id is None
+                ):
+                    raise ProjectError(
+                        "Current Understanding conversion requires a field and project binding"
+                    )
+                raw_block = _understanding_block(path, field_path)
+                source = {
+                    "source_format": "plain",
+                    "source_digest": digest(raw_block),
+                    "plain": {"body": raw_block},
+                    "markdown": None,
+                }
             elif scope == "research-block":
                 if (
                     not session_id
@@ -240,7 +298,14 @@ async def _convert_text(
             source_body: str = source[source_format]["body"]
             limit = (
                 20000
-                if scope in {"project", "research-conclusion", "research-block", "research-qa"}
+                if scope
+                in {
+                    "project",
+                    "research-conclusion",
+                    "research-block",
+                    "research-qa",
+                    "current-understanding",
+                }
                 else MAX_STRATEGY_APPROACH
             )
             if len(source_body) > limit:
@@ -250,7 +315,12 @@ async def _convert_text(
                 raise ProjectError(
                     "AI account/billing mode changed. Review the connection and retry"
                 )
-            config = await configuration(view=view, context=binding)
+            config = await configuration(
+                view=view,
+                context=binding,
+                frozen_model=FORMAT_MODEL,
+                frozen_effort=FORMAT_EFFORT,
+            )
             if not config["available"]:
                 raise ProjectError(config["message"])
             context = json.dumps(
@@ -456,8 +526,26 @@ async def _convert_text(
                 raise ProjectError(
                     "AI account/billing mode changed during conversion; nothing was saved"
                 )
-            # The user may change Model/Thinking while this request runs. The
-            # conversion retains the model and effort used in its provenance.
+            # Formatting uses an explicit fixed model/effort; the selected research
+            # model can change during this request without changing provenance.
+            if scope == "current-understanding":
+                if (
+                    field_path is None
+                    or digest(_understanding_block(path, field_path)) != source["source_digest"]
+                ):
+                    raise ProjectError(
+                        "Current Understanding changed during conversion; reopen before retrying"
+                    )
+                return {
+                    "body": body,
+                    "warnings": result.warnings,
+                    "source_digest": source["source_digest"],
+                    "provenance": {
+                        "provider": "openai",
+                        "model": config["model"],
+                        "reasoning_effort": config["reasoning_effort"],
+                    },
+                }
             if scope in {"research-conclusion", "research-block", "research-qa"}:
                 if scope == "research-qa":
                     from sigma.research_qa import saved_answer_text, store_markdown_answer

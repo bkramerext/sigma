@@ -645,3 +645,43 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 
 /* Run-attribution hovertext uses one line per active execution. */
 .sigma-ui-tooltip { white-space: pre-line; }
+
+/* Current Understanding uses the same Markdown affordance as Outcome while
+   preserving its summary disclosure, its inference action and pill heights. */
+.workspace-page .outcome-subsection.current-understanding > summary > .current-understanding-markdown {
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0 0 0 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #aab4ba;
+  cursor: pointer;
+}
+.workspace-page .outcome-subsection.current-understanding > summary > .current-understanding-markdown:hover:not(:disabled),
+.workspace-page .outcome-subsection.current-understanding > summary > .current-understanding-markdown[aria-pressed="true"] {
+  color: var(--sigma-copper-foreground);
+}
+.workspace-page .outcome-subsection.current-understanding > summary > .current-understanding-markdown:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
+.workspace-page .current-understanding-markdown .markdown-logo {
+  display: block;
+  width: 24px;
+  height: 20px;
+}
+.workspace-page .current-understanding-rendered {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workspace-page .current-understanding-rendered > :first-child { margin-top: 0; }
+.workspace-page .current-understanding-rendered > :last-child { margin-bottom: 0; }

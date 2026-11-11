@@ -2437,7 +2437,7 @@ class ProposalCancelRequest(BaseModel):
 
 
 @app.get("/api/projects/proposals/config")
-async def proposal_config(path: str | None = None):
+async def proposal_config(path: str | None = None, purpose: str | None = None):
     principal = cloud_auth.current_principal()
     if principal is not None and principal.role == "guest":
         view = inspect_project(path) if path else None
@@ -2452,6 +2452,12 @@ async def proposal_config(path: str | None = None):
             "message": "Sign in as a member to use AI features.",
             "connection": {"status": "unavailable", "guidance": "Member access is required."},
         }
+    if purpose is not None and purpose != "markdown":
+        raise ProjectError("Unknown proposal configuration purpose")
+    if purpose == "markdown":
+        from sigma.text_conversion import FORMAT_EFFORT, FORMAT_MODEL
+
+        return await configuration(path, frozen_model=FORMAT_MODEL, frozen_effort=FORMAT_EFFORT)
     return await configuration(path)
 
 

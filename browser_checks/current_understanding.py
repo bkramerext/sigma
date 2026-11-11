@@ -210,6 +210,11 @@ from sigma.api import app
                 assert title.inner_text().strip() == "Current understanding"
                 assert "saved session" not in header.inner_text().lower()
                 assert chevron.count() == 1
+                markdown_button = header.get_by_role(
+                    "button", name="Format Current Understanding as Markdown"
+                )
+                expect(markdown_button).to_be_visible()
+                expect(markdown_button).to_have_attribute("aria-pressed", "false")
                 assert (
                     float(
                         header.evaluate("element => parseFloat(getComputedStyle(element).fontSize)")
