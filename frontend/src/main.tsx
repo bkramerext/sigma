@@ -4833,7 +4833,7 @@ function GuestFeatureCard({ title, message, onClose }: { title: string; message:
   return <section className="research-pause-guidance guest-feature-card" role="status" aria-label={title}>
     <div className="guest-feature-card-header"><strong>{title}</strong><DialogDismissButton label="Dismiss preview" onClick={onClose}/></div>
     <p>{message}</p>
-    <p className="settings-hint">Member access and a connected ChatGPT account are required. No AI request was made.</p>
+    <p className="guest-feature-access-note">Member access and a connected ChatGPT account are required. No AI request was made.</p>
   </section>;
 }
 
@@ -6539,7 +6539,6 @@ function Home({ initialPath, onOpen }: {
           {(!cloud?.enabled || cloud.authenticated) && <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>}
           </>}
         </div>
-        {cloud?.enabled && !cloud.authenticated && <p className="settings-hint" role="status">Guest preview: your projects are private to this browser session and temporary. Export any work you wish to keep. AI execution requires member access.</p>}
         <HomeCatalog onOpen={onOpen} onTabChange={setCatalogTab} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>

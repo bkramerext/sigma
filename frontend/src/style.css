@@ -631,3 +631,8 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
 .guest-feature-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .guest-feature-card-header > strong { flex: 1; }
 .guest-feature-card > p { margin: 8px 0 0; }
+.guest-feature-card > .guest-feature-access-note {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  opacity: 0.8;
+}
