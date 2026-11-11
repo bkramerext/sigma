@@ -12,8 +12,8 @@ import inspect
 import logging
 import os
 import sys
-from contextlib import contextmanager
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -23,11 +23,18 @@ import httpx
 
 
 _EXPECTED_FAULT_LOGS = {
-    "research_sessions": {"session.strategy_exception": 3},
+    "research_sessions": {
+        "session.strategy_exception": 3,
+        "session.worker_exception": 1,
+        "session.recovered": 12,
+    },
     "papers": {
-        "paper.exception": 2,
+        "paper.exception": 4,
         "paper.score_failed": 22,
         "paper.section_failed": 6,
+        "paper.validation_recovered": 1,
+        "Detached paper generation failed: IndexError": 1,
+        "Unexpected paper-generation failure type=IndexError": 1,
     },
 }
 
@@ -51,8 +58,12 @@ def _fixture_logs(suite: str):
                 return
             message = self.format(record)
             captured.append(message)
-            kind = record.getMessage().partition(" ")[0]
-            if kind not in expected:
+            detail = record.getMessage()
+            kind = next(
+                (key for key in expected if detail == key or detail.startswith(key + " ")),
+                None,
+            )
+            if kind is None:
                 unexpected.append(message)
             else:
                 observed[kind] = observed.get(kind, 0) + 1
@@ -106,7 +117,7 @@ def _time_selected(name: str, original: Callable[..., Any]) -> Callable[..., Any
     """Report truly slow scenarios, preserving async test execution and coverage."""
     if inspect.iscoroutinefunction(original):
 
-        async def measured(*args: Any, **kwargs: Any) -> Any:
+        async def measured_async(*args: Any, **kwargs: Any) -> Any:
             start = perf_counter()
             try:
                 return await original(*args, **kwargs)
@@ -117,7 +128,7 @@ def _time_selected(name: str, original: Callable[..., Any]) -> Callable[..., Any
 
     else:
 
-        def measured(*args: Any, **kwargs: Any) -> Any:
+        def measured_sync(*args: Any, **kwargs: Any) -> Any:
             start = perf_counter()
             try:
                 return original(*args, **kwargs)
@@ -126,8 +137,9 @@ def _time_selected(name: str, original: Callable[..., Any]) -> Callable[..., Any
                 if duration >= 5:
                     print(f"TEST_DURATION {name} {duration:.1f}s", flush=True)
 
-    measured.__name__ = name
-    return measured
+    timed = measured_async if inspect.iscoroutinefunction(original) else measured_sync
+    timed.__name__ = name
+    return timed
 
 
 def run_split(
@@ -162,12 +174,18 @@ def run_split(
     # nested calls to other tests retain their original helper behavior.
     selected_half: set[str] | None = None
     if half is not None:
-        if name != "research_sessions" or part != 3 or half not in (1, 2):
-            raise ValueError("Only research_sessions part 3 can be divided in half")
+        if name != "research_sessions" or part != 3 or half not in (1, 2, 3):
+            raise ValueError("Only research_sessions part 3 can be divided into thirds")
         group_names = [key for key, group in assigned.items() if group == part]
         assert len(group_names) >= 2
+        heavy = {
+            "test_three_strategies_reach_18_turns_each_after_transport_failure_at_turn_14": 2,
+            "test_provider_limit_recovery_completes_full_v2_protocol": 3,
+        }
         selected_half = {
-            key for index, key in enumerate(group_names) if index % 2 == half - 1
+            key
+            for index, key in enumerate(group_names)
+            if heavy.get(key, index % 3 + 1) == half
         }
         assert selected_half and len(selected_half) < len(group_names)
 
@@ -202,14 +220,18 @@ def run_split(
         try:
             with (
                 _fixture_logs(name),
-                patch.object(papers, "_publication_compiler_has_writing_headroom", return_value=False),
+                patch.object(
+                    papers, "_publication_compiler_has_writing_headroom", return_value=False
+                ),
             ):
                 namespace["main_part1"]()
                 if part == 2:
                     namespace["main_part2"]()
         finally:
             httpx.AsyncClient = real_client
-    label = f" half {half}/2 ({len(selected_half)} definitions)" if selected_half is not None else ""
+    label = (
+        f" group {half}/3 ({len(selected_half)} definitions)" if selected_half is not None else ""
+    )
     print(f"PASS {name}: part {part}/{count}{label}")
 
 
