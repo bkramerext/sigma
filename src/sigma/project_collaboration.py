@@ -1335,9 +1335,7 @@ def save_settings(
         raise ProjectError(str(exc)) from exc
     if len(set(emails)) != len(emails):
         raise ProjectError("Each collaborator may appear only once.")
-    with write_guard(
-        path, expected, allow_membership_change_during_execution=True
-    ) as db:
+    with write_guard(path, expected, allow_membership_change_during_execution=True) as db:
         if db is None:
             raise ProjectError("Collaboration is not available for this project.")
         row, actor = _membership(db, path)
