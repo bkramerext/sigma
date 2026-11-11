@@ -30,6 +30,6 @@ export function sourceMaterialOverflowCopy(
   if (!measurement) measurement = 'The selected documents and links exceed SIGMA’s extracted-text limit.';
   return {
     cause: `Too much Source Material. ${measurement} This is SIGMA’s source-size limit, not the selected model’s context window. Saved project material and research are preserved.`,
-    next: 'Open this project’s Source Material list and disable or remove unneeded files and links, or replace long documents with shorter excerpts. Then start a new session with the reduced selection. Resume uses this session’s frozen sources and will hit the same limit.',
+    next: 'Open this project’s Source Material list and disable or remove unneeded files and links, or replace long documents with shorter excerpts. Then click Resume. Before the first Investigator/Skeptic call, SIGMA will reload the current enabled sources and recheck the limit. Saved findings and any prior provider usage remain preserved.',
   };
 }
