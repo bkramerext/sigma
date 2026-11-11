@@ -22,11 +22,15 @@ _READ_FAILURES: set[str] = set()
 _READ_FAILURES_LOCK = threading.Lock()
 
 
-def _read_text(path: Path) -> str | None:
+def _read_text(path: Path, *, missing_ok: bool = False) -> str | None:
     """Read kernel counters, reporting failures instead of hiding them as None."""
     try:
         content = path.read_text(encoding="ascii")
     except (OSError, UnicodeError) as exc:
+        # Optional cgroup controllers are genuinely absent on many CI hosts
+        # and local Linux machines. Missing support is not a failed read.
+        if missing_ok and isinstance(exc, FileNotFoundError):
+            return None
         key = str(path)
         with _READ_FAILURES_LOCK:
             first = key not in _READ_FAILURES
@@ -44,8 +48,8 @@ def _read_text(path: Path) -> str | None:
     return content
 
 
-def _integer(path: Path) -> int | None:
-    content = _read_text(path)
+def _integer(path: Path, *, missing_ok: bool = False) -> int | None:
+    content = _read_text(path, missing_ok=missing_ok)
     if content is None:
         return None
     value = content.strip()
@@ -136,15 +140,21 @@ def memory_snapshot() -> dict[str, int | None]:
         }
 
     group = Path("/sys/fs/cgroup")
-    usage = _integer(group / "memory.current")
-    limit = _integer(group / "memory.max")
-    peak = _integer(group / "memory.peak")
+    # Standalone CI/local Linux processes do not necessarily have a memory
+    # controller. Hosted deployments require the metrics for admission and
+    # should retain actionable diagnostics if the expected controller is gone.
+    optional_controller = os.getenv("SIGMA_MEMORY_REQUIRE_METRICS", "").lower() != "true"
+    # Probe v2 first and v1 only when needed. A missing controller is not
+    # a failure if the other version supplies the required measurement.
+    usage = _integer(group / "memory.current", missing_ok=True)
+    limit = _integer(group / "memory.max", missing_ok=True)
+    peak = _integer(group / "memory.peak", missing_ok=True)
     if usage is None:
-        usage = _integer(group / "memory" / "memory.usage_in_bytes")
+        usage = _integer(group / "memory" / "memory.usage_in_bytes", missing_ok=optional_controller)
     if limit is None:
-        limit = _integer(group / "memory" / "memory.limit_in_bytes")
+        limit = _integer(group / "memory" / "memory.limit_in_bytes", missing_ok=optional_controller)
     if peak is None:
-        peak = _integer(group / "memory" / "memory.max_usage_in_bytes")
+        peak = _integer(group / "memory" / "memory.max_usage_in_bytes", missing_ok=True)
     # Linux cgroup-v1 uses a huge sentinel to mean "unlimited".
     if limit is not None and limit >= (1 << 60):
         limit = None

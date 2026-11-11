@@ -124,6 +124,8 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/research_sessions_part1.py"],
             [*python, "python", "tests/research_sessions_part2.py"],
             [*python, "python", "tests/research_sessions_part3.py"],
+            [*python, "python", "tests/research_sessions_part3b.py"],
+            [*python, "python", "tests/research_sessions_part3c.py"],
             [*python, "python", "tests/research_sessions_part4.py"],
             [*python, "python", "tests/crucible_scheduler_evidence.py"],
             [*python, "python", "tests/reference_compiler_integration.py"],
@@ -204,6 +206,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/gce_host.py"],
             [*python, "python", "tests/state_backup.py"],
             [*python, "python", "tests/host_monitor.py"],
+            [*python, "python", "tests/memory_telemetry_ci.py"],
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_registry.py"],
             [*python, "python", "tests/ui_orphans.py"],
@@ -256,7 +259,21 @@ def run_tooling(command: str) -> int:
         if shard not in {str(index) for index in range(1, 9)}:
             print("SIGMA_CI_TEST_SHARD must be an integer from 1 to 8.", file=sys.stderr)
             return 2
-        steps = [step for index, step in enumerate(steps) if index % 8 == int(shard) - 1]
+        # Keep the existing eight-shard mapping stable. The additional half of
+        # research group 3 goes to the lightest shard instead of shifting every
+        # subsequent test into another shard.
+        selected: list[list[str]] = []
+        regular_index = 0
+        for step in steps:
+            extra_half_b = "tests/research_sessions_part3b.py" in step
+            extra_half_c = "tests/research_sessions_part3c.py" in step
+            extra_half = extra_half_b or extra_half_c
+            owner = (8 if extra_half_b else 6) if extra_half else regular_index % 8 + 1
+            if not extra_half:
+                regular_index += 1
+            if owner == int(shard):
+                selected.append(step)
+        steps = selected
     unsupported_steps = [step for step in steps if not _test_step_allowed(step)]
     if command == "test" and unsupported_steps:
         print(

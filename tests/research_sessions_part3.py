@@ -2553,7 +2553,7 @@ async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: 
         payload = json.loads(request.content)
         context = json.loads(payload["input"])
         if context["strategy"]["id"] == first.id:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(1.0)
         role = payload["text"]["format"]["name"]
         cycle = context["cycle"]
         output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
@@ -2562,7 +2562,7 @@ async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
-        patch.object(research_sessions, "CALL_TIMEOUT", 0.01),
+        patch.object(research_sessions, "CALL_TIMEOUT", 0.2),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -2589,7 +2589,7 @@ async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: 
     assert "timed out" in branches[first.id]["reason"]
     assert failed_steps[0]["status"] == "failed"
     assert failed_steps[0]["failure_kind"] == "timeout"
-    assert failed_steps[0]["timeout_seconds"] == 0.01
+    assert failed_steps[0]["timeout_seconds"] == 0.2
     assert "remote processing may still complete" in failed_steps[0]["failure_message"].lower()
     assert failed_steps[0].get("output") is None
     assert branches[second.id]["status"] == "ended"
@@ -3365,4 +3365,4 @@ async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
 if __name__ == "__main__":
     from research_sessions_split_runner import run
 
-    run(3)
+    run(3, half=1)

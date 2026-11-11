@@ -181,7 +181,8 @@ def poll() -> None:
     global _CRITICAL, _TELEMETRY_DEGRADED
     snapshot = memory_snapshot()
     verified = capacity_verified(snapshot)
-    if not verified and not _TELEMETRY_DEGRADED:
+    strict_metrics = os.getenv("SIGMA_MEMORY_REQUIRE_METRICS", "").lower() == "true"
+    if not verified and strict_metrics and not _TELEMETRY_DEGRADED:
         LOG.error(
             "memory.telemetry_degraded cgroup_used_mib=%s cgroup_limit_mib=%s "
             "new_ai_admission=blocked active_work=preserved",

@@ -180,7 +180,7 @@ def check_memory_sources() -> None:
     assert stats["cgroup_limit_mib"] == 8192
     assert stats["cgroup_peak_mib"] == 4096
     assert stats["host_available_mib"] == 2048
-    assert warning.called, "Unavailable v2 counters must be reported, not silently swallowed"
+    warning.assert_not_called()  # Valid v1 fallback is not a monitoring failure.
 
     # When both procfs and cgroupfs are unreadable, peak RSS still has a
     # standard-library fallback and the new-work admission gate fails closed.
@@ -222,6 +222,7 @@ def check_memory_sources() -> None:
         patch.object(memory_guard, "_CRITICAL", False),
         patch.object(memory_guard, "_TELEMETRY_DEGRADED", False),
         patch.object(memory_guard, "_LOOP", None),
+        patch.dict(os.environ, {"SIGMA_MEMORY_REQUIRE_METRICS": "true"}),
         patch.object(memory_guard.LOG, "error") as log_error,
     ):
         memory_guard.poll()
