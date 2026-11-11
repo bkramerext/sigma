@@ -728,7 +728,7 @@ def reserve_execution_run(
     if kind not in {"paper", "session"}:
         raise ValueError("Unsupported execution kind")
     if not isinstance(run_id, str):
-        raise ValueError("Run identifier must be a UUID")
+        raise TypeError("Run identifier must be a UUID")
     try:
         UUID(run_id)
     except ValueError as exc:

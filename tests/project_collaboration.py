@@ -11,13 +11,15 @@ import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 from sigma import project_bundle
 from sigma import project_collaboration as shared
@@ -228,7 +230,6 @@ class CollaborationTests(TestCase):
     def test_collaborator_alone_sees_shared_project_in_saved(self) -> None:
         """An invitation is durable and does not depend on owner's login session."""
         from contextlib import contextmanager
-        from uuid import uuid4
 
         from sigma import recents
 
@@ -423,28 +424,70 @@ class CollaborationTests(TestCase):
             self.assertEqual(authors["paper_draft"]["saved-project"], self.other.email)
 
     def test_run_reservations_allocate_unique_numbers_under_race(self) -> None:
-        """Two simultaneous admissions receive distinct, durable numbers."""
+        """Two different verified users can reserve without number collisions."""
         first, second = uuid4().hex, uuid4().hex
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        principal_context: ContextVar[Principal] = ContextVar(
+            "reservation_actor", default=self.owner
+        )
+        workspace_context: ContextVar[Workspace] = ContextVar(
+            "reservation_workspace", default=self.workspace
+        )
+        barrier = threading.Barrier(2)
 
-        def reserve(run_id: str) -> dict[str, Any]:
+        def reserve(item: tuple[str, Principal, Workspace]) -> dict[str, Any]:
+            run_id, principal, workspace = item
+            principal_context.set(principal)
+            workspace_context.set(workspace)
+            barrier.wait(timeout=5)
             result = shared.reserve_execution_run(
                 self.path, "paper", run_id, 2, model="paper-model", thinking="high"
             )
             assert result is not None
             return result
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            reservations = list(pool.map(reserve, [first, second]))
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                side_effect=workspace_context.get,
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                side_effect=principal_context.get,
+            ),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                reservations = list(
+                    pool.map(
+                        reserve,
+                        [
+                            (first, self.owner, self.workspace),
+                            (second, self.other, colleague),
+                        ],
+                    )
+                )
         self.assertEqual({record["number"] for record in reservations}, {3, 4})
-        self.assertEqual({record["creator_email"] for record in reservations}, {self.owner.email})
+        self.assertEqual(
+            {record["creator_email"] for record in reservations},
+            {self.owner.email, self.other.email},
+        )
 
-        # Replaying the same request does not consume a number or replace
-        # the actual model/thinking chosen at its original admission.
+        # Retrying the original owner's request must not consume a number or
+        # replace the originally chosen model/thinking.
         replay = shared.reserve_execution_run(
             self.path, "paper", first, 99, model="later-model", thinking="low"
         )
         self.assertEqual(replay, reservations[0])
-        third = reserve(uuid4().hex)
+        third = shared.reserve_execution_run(
+            self.path, "paper", uuid4().hex, 2, model="paper-model", thinking="high"
+        )
+        assert third is not None
         self.assertEqual(third["number"], 5)
 
     def test_run_reservations_keep_owner_before_and_after_sharing(self) -> None:
