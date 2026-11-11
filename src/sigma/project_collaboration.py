@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import sqlite3
 import time
@@ -22,7 +23,7 @@ from email.message import EmailMessage
 from functools import wraps
 from html import escape as html_escape
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from typing import Any, TypeVar
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -33,6 +34,8 @@ LEASE_SECONDS = 120
 MAX_NOTIFICATION_ATTEMPTS = 3
 EMAIL = re.compile(r"^[a-z0-9][a-z0-9._+%-]{0,63}@[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$")
 LOGGER = logging.getLogger("sigma.collaboration")
+_SCHEMA_LOCK = Lock()
+_SCHEMA_READY: set[tuple[str, int, int]] = set()
 _LEASE_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
     "sigma_project_execution_lease", default=None
 )
@@ -301,78 +304,92 @@ def _db() -> Iterator[sqlite3.Connection]:
     db = cloud_workspaces._connect(cloud_workspaces.storage_root())
     try:
         db.execute("PRAGMA foreign_keys=ON")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_projects (
-            path TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
-            owner_hash TEXT NOT NULL,
-            owner_email TEXT NOT NULL,
-            revision INTEGER NOT NULL DEFAULT 0,
-            project_sha256 TEXT,
-            model TEXT NOT NULL,
-            thinking TEXT NOT NULL,
-            last_writer TEXT NOT NULL,
-            updated_at REAL NOT NULL
-        )""")
-        project_columns = {
-            column["name"] for column in db.execute("PRAGMA table_info(shared_projects)")
-        }
-        if "project_sha256" not in project_columns:
-            db.execute("ALTER TABLE shared_projects ADD COLUMN project_sha256 TEXT")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_collaborators (
-            path TEXT NOT NULL,
-            email TEXT NOT NULL,
-            PRIMARY KEY(path, email),
-            FOREIGN KEY(path) REFERENCES shared_projects(path)
-        )""")
-        # Historical collaborators predate inviter tracking. Keep their author
-        # unknown rather than assigning a possibly incorrect collaborator.
-        # Such legacy entries remain removable by the owner.
-        member_columns = {
-            column["name"] for column in db.execute("PRAGMA table_info(shared_collaborators)")
-        }
-        if "added_by" not in member_columns:
-            db.execute("ALTER TABLE shared_collaborators ADD COLUMN added_by TEXT")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_leases (
-            path TEXT PRIMARY KEY,
-            token TEXT NOT NULL,
-            email TEXT NOT NULL,
-            activity TEXT NOT NULL,
-            started_at REAL NOT NULL,
-            expires_at REAL NOT NULL
-        )""")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_email_outbox (
-            id TEXT PRIMARY KEY,
-            recipient TEXT NOT NULL,
-            project_path TEXT NOT NULL,
-            project_title TEXT NOT NULL,
-            event TEXT NOT NULL,
-            created_at REAL NOT NULL,
-            sent_at REAL,
-            attempts INTEGER NOT NULL DEFAULT 0,
-            retry_after REAL NOT NULL DEFAULT 0,
-            failed_at REAL
-        )""")
-        db.execute("""CREATE TABLE IF NOT EXISTS shared_artifact_authors (
-            path TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            artifact_id TEXT NOT NULL,
-            email TEXT NOT NULL,
-            updated_at REAL NOT NULL,
-            PRIMARY KEY(path, kind, artifact_id),
-            FOREIGN KEY(path) REFERENCES shared_projects(path)
-        )""")
-        # Existing hosted databases have the earlier outbox schema.
-        fields = {row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")}
-        if "attempts" not in fields:
-            db.execute(
-                "ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
-            )
-        if "retry_after" not in fields:
-            db.execute(
-                "ALTER TABLE shared_email_outbox ADD COLUMN retry_after REAL NOT NULL DEFAULT 0"
-            )
-        if "failed_at" not in fields:
-            db.execute("ALTER TABLE shared_email_outbox ADD COLUMN failed_at REAL")
+        # Schema migration happens once per actual database inode, not on
+        # every read, activity poll, or unrelated account request.
+        db_file = next(
+            (row[2] for row in db.execute("PRAGMA database_list") if row[1] == "main"), ""
+        )
+        identity = None
+        if db_file:
+            info = os.stat(db_file)
+            identity = (db_file, info.st_dev, info.st_ino)
+        if identity is None or identity not in _SCHEMA_READY:
+            with _SCHEMA_LOCK:
+                if identity is None or identity not in _SCHEMA_READY:
+                db.execute("""CREATE TABLE IF NOT EXISTS shared_projects (
+                    path TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    owner_hash TEXT NOT NULL,
+                    owner_email TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 0,
+                    project_sha256 TEXT,
+                    model TEXT NOT NULL,
+                    thinking TEXT NOT NULL,
+                    last_writer TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )""")
+                project_columns = {
+                    column["name"] for column in db.execute("PRAGMA table_info(shared_projects)")
+                }
+                if "project_sha256" not in project_columns:
+                    db.execute("ALTER TABLE shared_projects ADD COLUMN project_sha256 TEXT")
+                db.execute("""CREATE TABLE IF NOT EXISTS shared_collaborators (
+                    path TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    PRIMARY KEY(path, email),
+                    FOREIGN KEY(path) REFERENCES shared_projects(path)
+                )""")
+                # Historical collaborators predate inviter tracking. Keep their author
+                # unknown rather than assigning a possibly incorrect collaborator.
+                # Such legacy entries remain removable by the owner.
+                member_columns = {
+                    column["name"] for column in db.execute("PRAGMA table_info(shared_collaborators)")
+                }
+                if "added_by" not in member_columns:
+                    db.execute("ALTER TABLE shared_collaborators ADD COLUMN added_by TEXT")
+                db.execute("""CREATE TABLE IF NOT EXISTS shared_leases (
+                    path TEXT PRIMARY KEY,
+                    token TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    activity TEXT NOT NULL,
+                    started_at REAL NOT NULL,
+                    expires_at REAL NOT NULL
+                )""")
+                db.execute("""CREATE TABLE IF NOT EXISTS shared_email_outbox (
+                    id TEXT PRIMARY KEY,
+                    recipient TEXT NOT NULL,
+                    project_path TEXT NOT NULL,
+                    project_title TEXT NOT NULL,
+                    event TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    sent_at REAL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    retry_after REAL NOT NULL DEFAULT 0,
+                    failed_at REAL
+                )""")
+                db.execute("""CREATE TABLE IF NOT EXISTS shared_artifact_authors (
+                    path TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    artifact_id TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    updated_at REAL NOT NULL,
+                    PRIMARY KEY(path, kind, artifact_id),
+                    FOREIGN KEY(path) REFERENCES shared_projects(path)
+                )""")
+                # Existing hosted databases have the earlier outbox schema.
+                fields = {row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")}
+                if "attempts" not in fields:
+                    db.execute(
+                        "ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
+                    )
+                if "retry_after" not in fields:
+                    db.execute(
+                        "ALTER TABLE shared_email_outbox ADD COLUMN retry_after REAL NOT NULL DEFAULT 0"
+                    )
+                if "failed_at" not in fields:
+                    db.execute("ALTER TABLE shared_email_outbox ADD COLUMN failed_at REAL")
+                    if identity is not None:
+                        _SCHEMA_READY.add(identity)
         yield db
     finally:
         db.close()
