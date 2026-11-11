@@ -7,6 +7,7 @@ import copy
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 from contextvars import ContextVar
@@ -16,6 +17,9 @@ from typing import Any
 from unittest.mock import patch
 
 from sigma import api, research_qa
+from sigma import project_collaboration as shared
+from sigma.cloud_auth import Principal
+from sigma.cloud_workspaces import Workspace
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
     ProjectError,
@@ -184,8 +188,31 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 },
             ],
         }
-        user: ContextVar[str] = ContextVar("qa-test-user", default="")
         identities = ("n@example.org", "z@example.org")
+        user: ContextVar[str] = ContextVar("qa-test-user", default=identities[0])
+        principals = {
+            identity: Principal(subject=f"verified-{identity}", email=identity, role="member")
+            for identity in identities
+        }
+        workspaces = {
+            identity: Workspace(
+                workspace_id=f"workspace-{identity}",
+                subject_hash=f"hash-{identity}",
+                path=Path(temporary) if identity == identities[0] else Path(temporary) / "z-private",
+                email=identity,
+                verified_subject=principals[identity].subject,
+            )
+            for identity in identities
+        }
+
+        def connect(_root: Path) -> sqlite3.Connection:
+            db = sqlite3.connect(
+                Path(temporary) / "collaboration.sqlite3", timeout=10, isolation_level=None
+            )
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA busy_timeout=10000")
+            return db
+
         provider_started: set[str] = set()
         provider_calls = 0
 
@@ -248,10 +275,6 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                     "sigma.research_state.current_understanding",
                     return_value={"summary": "Independent saved context"},
                 ),
-                patch(
-                    "sigma.project_collaboration.collaborator_identity",
-                    side_effect=lambda _path: user.get(),
-                ),
             ):
                 first_task = asyncio.create_task(submit(identities[0], "1" * 32))
                 second_task = asyncio.create_task(submit(identities[1], "2" * 32))
@@ -277,7 +300,10 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 assert len(research_qa.list_answers(str(path))) == 2
                 assert research_qa.list_pending_answers(str(path)) == []
                 assert len(inspect_project(path).project.strategies) == 1
-                assert inspect_project(path).project.strategies[0].title == "Edited while Q/A was running"
+                assert (
+                    inspect_project(path).project.strategies[0].title
+                    == "Edited while Q/A was running"
+                )
                 assert provider_calls == 2
 
                 # An authenticated Z cannot replay N's completed request ID,
@@ -291,7 +317,36 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 assert provider_calls == 2
                 assert len(research_qa.list_answers(str(path))) == 2
 
-        asyncio.run(exercise())
+        # Register independent authenticated N/Z identities against one
+        # genuinely shared project. Task context travels with each request.
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.storage_root",
+                return_value=Path(temporary),
+            ),
+            patch("sigma.project_collaboration.cloud_workspaces._connect", side_effect=connect),
+            patch(
+                "sigma.project_collaboration.cloud_workspaces.current",
+                side_effect=lambda: workspaces[user.get()],
+            ),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                side_effect=lambda: principals[user.get()],
+            ),
+        ):
+            shared.register_owner(view)
+            with shared._db() as db:
+                db.execute(
+                    "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
+                    (str(path), identities[1]),
+                )
+            assert shared.authorized_shared_path(path)
+            token = user.set(identities[1])
+            try:
+                assert shared.authorized_shared_path(path)
+            finally:
+                user.reset(token)
+            asyncio.run(exercise())
 
         # A backend restart must recover both independently attributed answers
         # from durable archive storage, not from an in-memory request registry.
