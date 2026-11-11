@@ -8057,11 +8057,10 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       // Authenticated guests cannot run paid work and do not need a handoff.
       if (!authenticatedGuest) {
         try {
-          const handoff = await fetch('/api/projects/research-presence/auth-handoff', {
+          await fetch('/api/projects/research-presence/auth-handoff', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'X-Sigma-Error-Handled': 'true' },
           });
-          void handoff.ok;
         } catch {
           // The auxiliary work-preservation request must not veto explicit sign-out.
         }
