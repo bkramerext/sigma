@@ -122,10 +122,14 @@ class MathTypesettingTests(unittest.TestCase):
             r"U=\operatorname{Sym}(\bigoplus_{m\geq1}H_{-m})\otimes\mathbb C[\Lambda]",
             r"\mathfrak n=\bigoplus_{m\geq1,n\in\mathbb Z}\mathfrak n_{m,n}",
             r"\mathbb C r\ltimes\operatorname{Lie}(U)",
-            r"\left(\begin{smallmatrix}a&b\\c&d\end{smallmatrix}\right)"
-            r"\in\operatorname{SL}_2(\mathbb Z)",
-            r"\sum_{\substack{a,d\geq1\\ad=N}}\sum_{b=0}^{d-1}"
-            r"f_{g^a}(\zeta_d^bq^{a/d})",
+            (
+                r"\left(\begin{smallmatrix}a&b\\c&d\end{smallmatrix}\right)"
+                r"\in\operatorname{SL}_2(\mathbb Z)"
+            ),
+            (
+                r"\sum_{\substack{a,d\geq1\\ad=N}}\sum_{b=0}^{d-1}"
+                r"f_{g^a}(\zeta_d^bq^{a/d})"
+            ),
         )
         for body in expressions:
             with self.subTest(math=body):
@@ -138,16 +142,20 @@ class MathTypesettingTests(unittest.TestCase):
     def test_moonshine_display_math_round_trip(self) -> None:
         """Recover the multiline displays printed literally in Moonshine v1."""
         displays = (
-            r"\begin{aligned}"
-            "\n"
-            r"P_{2,s}(X)&=X^2-2a_s(1),\\"
-            "\n"
-            r"P_{4,s}(X)&=X^4-4a_s(1)X^2-4a_s(2)X+2a_s(1)^2"
-            "\n"
-            r"\end{aligned}",
-            r"\Phi_{g,N}(f_g(q))="
-            r"\sum_{\substack{a,d\geq1\\ad=N}}"
-            r"\sum_{b=0}^{d-1}f_{g^a}(\zeta_d^bq^{a/d})",
+            (
+                r"\begin{aligned}"
+                "\n"
+                r"P_{2,s}(X)&=X^2-2a_s(1),\\"
+                "\n"
+                r"P_{4,s}(X)&=X^4-4a_s(1)X^2-4a_s(2)X+2a_s(1)^2"
+                "\n"
+                r"\end{aligned}"
+            ),
+            (
+                r"\Phi_{g,N}(f_g(q))="
+                r"\sum_{\substack{a,d\geq1\\ad=N}}"
+                r"\sum_{b=0}^{d-1}f_{g^a}(\zeta_d^bq^{a/d})"
+            ),
         )
         for body in displays:
             with self.subTest(math=body):
@@ -188,8 +196,10 @@ class MathTypesettingTests(unittest.TestCase):
         unsafe_bodies = (
             r"\begin{aligned}x&=1\\\input{private-file}\end{aligned}",
             r"\substack{a\\\write18{unsafe}}",
-            r"\left(\begin{smallmatrix}a&b\\c&\input{private-file}"
-            r"\end{smallmatrix}\right)",
+            (
+                r"\left(\begin{smallmatrix}a&b\\c&\input{private-file}"
+                r"\end{smallmatrix}\right)"
+            ),
             r"\begin{aligned}x&=1",  # Unclosed environment.
         )
         for body in unsafe_bodies:
