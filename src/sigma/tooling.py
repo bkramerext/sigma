@@ -154,6 +154,7 @@ def run_tooling(command: str) -> int:
             ],
             [*python, "python", "tests/papers_part1.py"],
             [*python, "python", "tests/papers_part2.py"],
+            [*python, "python", "tests/paper_run_isolation.py"],
             [*python, "python", "tests/test_paper_math_typesetting.py"],
             [*python, "python", "tests/publication_reference_compiler.py"],
             [*python, "python", "tests/paper_scores.py"],
