@@ -2890,10 +2890,13 @@ def next_paper_number_for_activity(path: str) -> int:
         directory = _paper_dir(path, create=False)
         if not directory.exists() or not any(directory.glob("*.json")):
             return 1
-    return max(
-        (paper.get("paper_version") or 0 for paper in list_papers(path)),
-        default=0,
-    ) + 1
+    return (
+        max(
+            (paper.get("paper_version") or 0 for paper in list_papers(path)),
+            default=0,
+        )
+        + 1
+    )
 
 
 def _write_version_sequence(path: str, version: int) -> None:
