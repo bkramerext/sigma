@@ -248,7 +248,11 @@ jobs:
           export SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/save_as_contract.py
+      # Upload failures must remain release-blocking. A single retry handles
+      # transient artifact-service failures without weakening browser tests.
       - name: Preserve browser screenshots and debug logs
+        id: browser_evidence_primary
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -273,6 +277,48 @@ jobs:
             /tmp/save-as-ui.log
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Retry browser evidence upload
+        id: browser_evidence_retry
+        continue-on-error: true
+        if: ${{ always() && steps.browser_evidence_primary.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-browser-evidence-${{ matrix.group }}-retry
+          path: |
+            /tmp/sigma-chromium-setup.log
+            /tmp/sigma-chromium-smoke.log
+            /tmp/sigma-outcome-acceptance/sigma-increment13-*.png
+            /tmp/sigma-t201-recovery.png
+            /tmp/t201-api.log
+            /tmp/t201-ui.log
+            /tmp/project-types-api.log
+            /tmp/project-types-ui.log
+            /tmp/research-qa-api.log
+            /tmp/research-qa-ui.log
+            docs/evaluations/research_qa/*.png
+            /tmp/t200-api.log
+            /tmp/t200-ui.log
+            /tmp/t92-api.log
+            /tmp/t92-ui.log
+            /tmp/save-as-api.log
+            /tmp/save-as-ui.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Require browser evidence upload
+        if: always()
+        env:
+          PRIMARY_OUTCOME: ${{ steps.browser_evidence_primary.outcome }}
+          RETRY_OUTCOME: ${{ steps.browser_evidence_retry.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$PRIMARY_OUTCOME" == "success" || "$RETRY_OUTCOME" == "success" ]]; then
+            exit 0
+          fi
+          echo "::error title=Browser evidence unavailable::Both artifact uploads failed; browser evidence must be retained."
+          exit 1
 
   # Preserve the existing required check name while the suites run in parallel.
   browser-gate:

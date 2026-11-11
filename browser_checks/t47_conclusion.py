@@ -498,16 +498,34 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 subheading = reasoning.locator(".outcome-markdown h2").first
                 expect(heading).to_have_text("Reasoning / proof")
                 expect(subheading).to_have_text("Investigated problem")
-                assert (
-                    heading.evaluate(
-                        "element => Number.parseFloat(getComputedStyle(element).fontSize)"
-                    )
-                    <= 20
-                )
-                subheading_size = subheading.evaluate(
-                    "element => Number.parseFloat(getComputedStyle(element).fontSize)"
-                )
-                assert subheading_size <= 17, f"Outcome H2 too large: {subheading_size}px"
+                # React may replace an already matched Markdown node during
+                # the advanced-view preference refresh. A detached element's
+                # computed fontSize is "" in Chromium, and parseFloat gives
+                # NaN. Sample both *connected and laid-out* headings from one
+                # current DOM snapshot, retaining the original strict limits.
+                font_sizes = page.wait_for_function(
+                    """sessionId => {
+                        const row = document.querySelector(
+                            'li[data-session-id="' + sessionId + '"]'
+                        );
+                        const section = row?.querySelector('.outcome-reasoning-subsection');
+                        const first = section?.querySelector('.outcome-markdown h1');
+                        const second = section?.querySelector('.outcome-markdown h2');
+                        if (!first?.isConnected || !second?.isConnected
+                                || !first.getClientRects().length
+                                || !second.getClientRects().length) {
+                            return false;
+                        }
+                        const h1 = Number.parseFloat(getComputedStyle(first).fontSize);
+                        const h2 = Number.parseFloat(getComputedStyle(second).fontSize);
+                        return Number.isFinite(h1) && Number.isFinite(h2)
+                            ? { h1, h2 } : false;
+                    }""",
+                    arg=session["id"],
+                    timeout=5000,
+                ).json_value()
+                assert font_sizes["h1"] <= 20, f"Outcome H1 too large: {font_sizes}"
+                assert font_sizes["h2"] <= 17, f"Outcome H2 too large: {font_sizes}"
                 outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
