@@ -461,6 +461,17 @@ def exercise(ui: str, workspaces: Path) -> None:
             "queued",
         }, statuses
 
+        # In a real run, an OS worker lock supplies liveness. This local mock
+        # has no worker, so freeze its explicit simulated running/queued state
+        # before other browsers begin polling, rather than racing the mock's
+        # automatic three-read completion sequence.
+        held = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-freeze-sessions",
+            headers={"Origin": ui},
+            data={"path": path},
+        )
+        assert held.status == 200, held.text()
+
         # The same authenticated N/Z project windows must display every live
         # Session on its own tooltip line, with creator and queued/running state.
         for page in (owner, member):
