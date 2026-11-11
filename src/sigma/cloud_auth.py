@@ -663,10 +663,17 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
                 (principal.subject,),
             )
         if not sponsored_access_enabled():
-            db.execute(
-                "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 WHERE subject=?",
+            outdated = db.execute(
+                "SELECT 1 FROM user_state WHERE subject=? "
+                "AND (model_access!='personal' OR sponsorship_eligible!=0)",
                 (principal.subject,),
-            )
+            ).fetchone()
+            if outdated:
+                db.execute(
+                    "UPDATE user_state SET model_access='personal',sponsorship_eligible=0 "
+                    "WHERE subject=?",
+                    (principal.subject,),
+                )
         row = db.execute(
             "SELECT email,role,access_active,workspace_id,sponsorship_eligible,model_access,model_access_selected,model_connection_status,invitation_welcome_pending FROM user_state WHERE subject=?",
             (principal.subject,),
@@ -702,6 +709,27 @@ def _upsert_user_state(
     sponsorship_eligible: int,
     model_access: str,
 ) -> None:
+    current = db.execute(
+        "SELECT email,role,access_active,workspace_id,sponsorship_eligible,"
+        "model_access,model_access_selected FROM user_state WHERE subject=?",
+        (subject,),
+    ).fetchone()
+    if current is not None:
+        selected = current["model_access_selected"] if sponsorship_eligible else 0
+        effective_mode = (
+            "personal" if not sponsorship_eligible
+            else model_access if not selected else current["model_access"]
+        )
+        if (
+            current["email"] == email
+            and current["role"] == role
+            and bool(current["access_active"])
+            and current["workspace_id"] == workspace_id
+            and current["sponsorship_eligible"] == sponsorship_eligible
+            and current["model_access"] == effective_mode
+            and current["model_access_selected"] == selected
+        ):
+            return  # Account-status reads must not acquire a SQLite writer lock.
     db.execute(
         """INSERT INTO user_state(subject,email,role,access_active,workspace_id,
                sponsorship_eligible,model_access,model_access_selected,model_connection_status,updated_at)
