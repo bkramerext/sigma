@@ -554,8 +554,7 @@ class CollaborationTests(TestCase):
                 b"\\\\documentclass{article}\\n\\\\begin{document}Old paper\\\\end{document}\\n"
             ),
             "artifacts/generated_papers/old-paper.json": (
-                b'{"paper_id":"old-paper","paper_version":3,'
-                b'"created_by":"owner@example.org"}'
+                b'{"paper_id":"old-paper","paper_version":3,"created_by":"owner@example.org"}'
             ),
             "research-qa/old-answer.json": (
                 b'{"qa_id":"old-answer","created_by":"owner@example.org"}'
@@ -572,9 +571,7 @@ class CollaborationTests(TestCase):
         decoded_members = {
             name: project_bundle.read_file(self.path, name) for name in legacy_members
         }
-        self.assertEqual(
-            json.loads(decoded_members["project.json"])["id"], "saved-project"
-        )
+        self.assertEqual(json.loads(decoded_members["project.json"])["id"], "saved-project")
 
         # A historical project gains collaboration metadata without migrating,
         # renaming, or touching any of its saved Session/Paper/Q/A/evidence.
@@ -583,7 +580,7 @@ class CollaborationTests(TestCase):
         receipt = shared.reserve_execution_run(
             self.path, "paper", run_id, 0, model="new-model", thinking="low"
         )
-        self.assertIsNotNone(receipt)
+        assert receipt is not None
         self.assertEqual(receipt["creator_email"], self.owner.email)
 
         colleague = Workspace(
@@ -615,7 +612,7 @@ class CollaborationTests(TestCase):
                 "sigma.project_collaboration.cloud_auth.current_principal",
                 return_value=self.other,
             ),
-            self.assertRaises(ProjectError),
+            self.assertRaisesRegex(ValueError, "Project not found or access denied"),
         ):
             shared.summary(self.path)
 
