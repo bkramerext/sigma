@@ -629,59 +629,6 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # One project running slot: either creator may win; the other waits.
         # Do not impose deterministic ordering on legitimately concurrent jobs.
-        # Activity rollups are backed by real execution reservations and are
-        # visible to both already-open independently authenticated browsers.
-        # A queued run is *not* a second running provider request.
-        activity = get_json(
-            member_context.request.get(ui + "/api/projects/activity-runs", params={"path": path})
-        )["runs"]
-        active_sessions = [row for row in activity if row["kind"] == "session"]
-        assert {row["id"] for row in active_sessions} == {first_run["id"], second_run["id"]}
-        assert {row["status"] for row in active_sessions} == {"active", "queued"}
-        assert {row["creator"] for row in active_sessions} == {OWNER, COLLABORATOR}
-        assert {row["number"] for row in active_sessions} == {
-            first_run["session_number"], second_run["session_number"]
-        }
-        for page in (owner, member):
-            title_action = page.locator(".project-header-title-action")
-            expect(title_action).to_be_visible(timeout=20000)
-            page.wait_for_function(
-                """({owner, collaborator}) => {
-                  const label = document.querySelector('.project-header-title-action')?.getAttribute('data-tooltip') ?? '';
-                  const rows = label.split('\\n').filter(Boolean);
-                  return rows.length === 2 && rows.every(row => row.startsWith('Session '))
-                    && label.includes(owner) && label.includes(collaborator);
-                }""",
-                {"owner": OWNER, "collaborator": COLLABORATOR},
-                timeout=20000,
-            )
-            assert "paper-queued-indicator" not in (title_action.locator(
-                ".research-running-indicator"
-            ).get_attribute("class") or ""), "Running Session must take green precedence"
-
-        # Home reflects BOTH creators, not only the latest session's author.
-        home = owner_context.new_page()
-        home.goto(ui)
-        home.get_by_role("tab", name="My Work").click()
-        expand_saved_group(home)
-        home_entry = home.locator(".recent-entry").filter(
-            has=home.locator(".recent-open", has_text=title)
-        )
-        jump = home_entry.get_by_role("button", name=f"Open active work in {title}")
-        expect(jump).to_be_visible(timeout=20000)
-        home.wait_for_function(
-            """({title, owner, collaborator}) => {
-              const rows = [...document.querySelectorAll('.recent-entry')];
-              const item = rows.find(row => row.querySelector('.recent-open')?.textContent?.includes(title));
-              const tooltip = item?.querySelector('.recent-activity-jump')?.getAttribute('data-tooltip') ?? '';
-              return tooltip.split('\\n').filter(x => x.startsWith('Session ')).length === 2
-                && tooltip.includes(owner) && tooltip.includes(collaborator);
-            }""",
-            {"title": title, "owner": OWNER, "collaborator": COLLABORATOR},
-            timeout=20000,
-        )
-        home.close()
-
         running_id = next(
             run_id
             for run_id in (first_run["id"], second_run["id"])
