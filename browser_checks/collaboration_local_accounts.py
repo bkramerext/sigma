@@ -466,6 +466,15 @@ def exercise(ui: str, workspaces: Path) -> None:
                 },
             )
 
+        # Install the fixture's running-stage hold *before* admission.
+        # Otherwise existing open browser windows can consume all three mock
+        # polling stages and finish the first Session before the second starts.
+        held = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-freeze-sessions",
+            headers={"Origin": ui},
+            data={"path": path, "before_admission": "true"},
+        )
+        assert held.status == 200, held.text()
         first_response = submit_mock(owner_context)
         second_response = submit_mock(member_context)
         assert first_response.status == 200, first_response.text()
@@ -487,16 +496,8 @@ def exercise(ui: str, workspaces: Path) -> None:
             "running",
             "queued",
         }, statuses
-        # In a real run, an OS worker lock supplies liveness. This local mock
-        # has no worker, so freeze its explicit simulated running/queued state
-        # before other browsers begin polling, rather than racing the mock's
-        # automatic three-read completion sequence.
-        held = owner_context.request.post(
-            ui + "/api/__fixture/collaboration-freeze-sessions",
-            headers={"Origin": ui},
-            data={"path": path},
-        )
-        assert held.status == 200, held.text()
+        # The fixture holds simulated progress at running/queued without
+        # affecting real Session worker ownership or provider dispatch.
 
         # The same authenticated N/Z project windows must display every live
         # Session on its own tooltip line, with creator and queued/running state.
@@ -805,10 +806,10 @@ def exercise(ui: str, workspaces: Path) -> None:
         for home in homes:
             home.close()
 
-        # Do not unfreeze synthetic per-read progression while both live
-        # browser tabs are polling: they can finish the queued simulation
-        # before the handoff assertion. Stop the current holder first, then
-        # allow exactly the normal queued-to-running transition.
+        # Keep synthetic sessions at their running stage while browser tabs
+        # are polling. Stopping the first owner frees capacity for the queued
+        # session to become running; unfreeze only after both owners stop so
+        # polling cannot race the final control/isolation assertions.
         running_id = next(
             run_id
             for run_id in (first_run["id"], second_run["id"])
@@ -833,11 +834,6 @@ def exercise(ui: str, workspaces: Path) -> None:
             data={"path": path, "action": "stop"},
         )
         assert stopped.status == 200, stopped.text()
-        unfrozen = owner_context.request.post(
-            ui + "/api/__fixture/collaboration-unfreeze-sessions",
-            headers={"Origin": ui},
-        )
-        assert unfrozen.status == 200, unfrozen.text()
         visible = get_json(
             member_context.request.get(
                 ui + "/api/projects/research-sessions", params={"path": path}
@@ -867,6 +863,13 @@ def exercise(ui: str, workspaces: Path) -> None:
             for row in check["sessions"]
             if row["id"] in {first_run["id"], second_run["id"]}
         )
+        # Restore the fixture's original mock progression only after both
+        # Session records are terminal, preserving all stop/queue assertions.
+        unfrozen = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-unfreeze-sessions",
+            headers={"Origin": ui},
+        )
+        assert unfrozen.status == 200, unfrozen.text()
         # Owner catalog standards are projected into the SAVED shared project.
         # A member's own custom types/preferences must not override them.
         standards_before = get_json(owner_context.request.get(ui + "/api/project-types"))
