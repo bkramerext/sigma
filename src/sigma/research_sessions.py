@@ -7043,6 +7043,8 @@ async def control_session(
                 )
                 timestamp = blocked.get("timestamp") if blocked else record.get("updated_at")
                 try:
+                    if not isinstance(timestamp, str):
+                        raise ValueError("Missing Source Material pause timestamp")
                     pause_start = datetime.fromisoformat(timestamp)
                     if pause_start.tzinfo is None or pause_start > datetime.now(UTC):
                         raise ValueError("Invalid Source Material pause timestamp")
