@@ -1262,8 +1262,35 @@ async def middleware(request: Request, call_next):
             request.method == "POST"
             and re.fullmatch(r"/api/projects/research-sessions/[^/]+/control", path) is not None
         )
+        # Source Material edits are deterministic project CRUD, not paid
+        # inference. Permit only the reviewed routes/methods in mock-auth
+        # browser acceptance; all provider and execution endpoints stay denied.
+        evidence_id_path = re.fullmatch(
+            r"/api/projects/evidence/[0-9a-f]{32}", path
+        ) is not None
+        evidence_link_path = re.fullmatch(
+            r"/api/projects/evidence/[0-9a-f]{32}/link", path
+        ) is not None
+        evidence_enabled_path = re.fullmatch(
+            r"/api/projects/evidence/[0-9a-f]{32}/enabled", path
+        ) is not None
+        safe_evidence_mutation = False
+        if request.method == "POST":
+            safe_evidence_mutation = path in {
+                "/api/projects/evidence",
+                "/api/projects/evidence/link",
+            }
+        elif request.method == "PUT":
+            safe_evidence_mutation = evidence_link_path
+        elif request.method == "PATCH":
+            safe_evidence_mutation = evidence_enabled_path
+        elif request.method == "DELETE":
+            safe_evidence_mutation = evidence_id_path
         if path.startswith(("/api/ai/", "/api/cloud-research/")) or (
-            project_write and path not in safe_project_writes and not mock_session_control
+            project_write
+            and path not in safe_project_writes
+            and not mock_session_control
+            and not safe_evidence_mutation
         ):
             scenario = _mock_allowance(cfg, principal.subject)
             mode = model_access_for_subject(principal.subject)

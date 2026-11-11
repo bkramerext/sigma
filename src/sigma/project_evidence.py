@@ -278,8 +278,7 @@ def edit_link(path: str, identifier: str, url: str, *, expected_url: str | None 
     # hand-written client must not bypass CAS by omitting the old URL.
     if expected_url is None and project_collaboration.summary(path)["shared"]:
         raise ProjectError(
-            "Shared Source Material edits require the original URL. "
-            "Reopen the link before saving."
+            "Shared Source Material edits require the original URL. Reopen the link before saving."
         )
     canonical = _validated_link_url(url)
     selected: dict = {}

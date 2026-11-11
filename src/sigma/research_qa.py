@@ -765,6 +765,7 @@ async def _answer_locked(
         raise ProjectError(config["message"])
     source_ids = {_source_id(source) for source in selected}
     started = datetime.now(UTC)
+
     # Persist an idempotency marker before dispatch. If the process exits after
     # provider bytes may have been sent, a retry cannot silently charge twice.
     def reserve(

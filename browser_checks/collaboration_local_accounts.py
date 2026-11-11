@@ -559,9 +559,10 @@ def exercise(ui: str, workspaces: Path) -> None:
             ("research_standards_references", "shared-research-743"),
             ("publication_standards_references", "shared-publication-743"),
         ):
-            assert any(
-                fragment in entry["url"] for entry in member_snapshot[field]
-            ), (field, member_snapshot[field])
+            assert any(fragment in entry["url"] for entry in member_snapshot[field]), (
+                field,
+                member_snapshot[field],
+            )
         member_types = get_json(member_context.request.get(ui + "/api/project-types"))
         assert not member_types["builtin_custom_references"].get("mathematical"), (
             "The owner's private type catalog leaked into a collaborator account"
@@ -602,9 +603,9 @@ def exercise(ui: str, workspaces: Path) -> None:
             expect(project_toggle).to_be_visible()
             if project_toggle.get_attribute("aria-expanded") == "false":
                 project_toggle.click()
-            expect(
-                page.locator(f'.sigma-supplied-evidence a[href="{remote_link}"]')
-            ).to_have_count(1, timeout=20000)
+            expect(page.locator(f'.sigma-supplied-evidence a[href="{remote_link}"]')).to_have_count(
+                1, timeout=20000
+            )
 
         duplicate = member_context.request.post(
             ui + "/api/projects/evidence/link",
@@ -662,8 +663,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         )["files"]
         assert any(entry.get("url") == revised_owner_link for entry in sources)
         assert not any(
-            entry.get("url") == "https://example.org/stale-source-743"
-            for entry in sources
+            entry.get("url") == "https://example.org/stale-source-743" for entry in sources
         )
 
         # Identical PDFs uploaded by separate collaborators are de-duplicated
@@ -683,9 +683,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         sources = get_json(
             owner_context.request.get(ui + "/api/projects/evidence", params={"path": path})
         )["files"]
-        assert sum(
-            entry.get("sha256") == uploaded[0]["sha256"] for entry in sources
-        ) == 1
+        assert sum(entry.get("sha256") == uploaded[0]["sha256"] for entry in sources) == 1
 
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")

@@ -70,9 +70,7 @@ class PaperRunIsolationTests(TestCase):
             hold_first = asyncio.Event()
             release_second = asyncio.Event()
 
-            async def generation(
-                entered: asyncio.Event, release: asyncio.Event
-            ) -> dict[str, Any]:
+            async def generation(entered: asyncio.Event, release: asyncio.Event) -> dict[str, Any]:
                 async with papers._paper_operation(self.path, generating=True):
                     entered.set()
                     await release.wait()

@@ -646,11 +646,7 @@ def _propagate_project_standards() -> None:
         raise ProjectError("Project standards could not be synchronized.") from exc
 
     for path in candidates:
-        if (
-            path.name.startswith(".")
-            or path.is_symlink()
-            or path.suffix not in {".sigma", ".json"}
-        ):
+        if path.name.startswith(".") or path.is_symlink() or path.suffix not in {".sigma", ".json"}:
             continue
         try:
             view = inspect_project(path)
@@ -667,7 +663,7 @@ def _propagate_project_standards() -> None:
         if view.project.project_type_snapshot == effective.record():
             continue
 
-        def publish(project):
+        def publish(project, identifier=identifier):
             if project.investigation_type != identifier:
                 return project  # Category changed while this catalog was saved.
             current = get_type(identifier)

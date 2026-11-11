@@ -804,15 +804,12 @@ def main() -> None:
                     item["url"] == f"https://example.org/{suffix}"
                     for item in after_standard_change.project_type_snapshot[field]
                 )
-            assert (
-                "https://example.org/research-v1"
-                not in {
-                    item["url"]
-                    for item in after_standard_change.project_type_snapshot[
-                        "research_standards_references"
-                    ]
-                }
-            )
+            assert "https://example.org/research-v1" not in {
+                item["url"]
+                for item in after_standard_change.project_type_snapshot[
+                    "research_standards_references"
+                ]
+            }
             # No-op catalog saves may be accepted but must not rewrite an
             # unchanged project snapshot or truncate existing project data.
             before_noop = (Path(shared_project.path) / "project.json").read_bytes()
