@@ -4714,6 +4714,13 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 "Review selected references and start a narrower session; switching models "
                 "does not change the manifest bound. Existing research is preserved."
             )
+        elif message.startswith("source material contains ") and "extracted characters" in message:
+            result["next_step_guidance"] = (
+                "The selected Source Material exceeded SIGMA's extracted-text limit before "
+                "an Investigator/Skeptic call. Shorten or split the source documents and "
+                "start a new research session. Saved sources and prior work remain intact; "
+                "switching models or Thinking levels will not increase this limit."
+            )
         elif "model" in message and ("available" in message or "selected" in message):
             result["next_step_guidance"] = (
                 "Check that the current connection supports the saved model. "
