@@ -2499,6 +2499,8 @@ def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
                 "total": 4,
                 "started_at": "2026-01-01T00:00:00+00:00",
                 "elapsed_seconds": 45,
+                "model": "gpt-fixture",
+                "reasoning_effort": "high",
             }
 
     asyncio.run(check())

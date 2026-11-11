@@ -423,6 +423,85 @@ class RecentProject:
     shared: bool = False
     collaborator: bool = False
     activity_author: str | None = None
+    activity_runs: list[dict] | None = None
+    answer_active: bool = False
+
+
+def project_activity_runs(
+    path: str,
+    *,
+    project: Any | None = None,
+    paper_status: str | None = None,
+    session_active: bool | None = None,
+    pending_answers: list[dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """One source for Home and project-title run attribution.
+
+    Consult full saved records only when an execution is actually active.
+    Creator provenance is available to an owner even before a collaborator
+    has been invited; unknown legacy authors remain unknown.
+    """
+    from sigma import papers, project_collaboration, research_qa, research_sessions
+    from sigma.research_sessions import has_active_session
+
+    if project is None:
+        project = inspect_project(path).project
+    if paper_status is None:
+        paper_status = papers.activity_status(path)
+    if session_active is None:
+        session_active = has_active_session(path, project_id=project.id)
+    if pending_answers is None:
+        pending_answers = research_qa.list_pending_answers(path)
+    if not session_active and paper_status not in {"active", "queued"} and not pending_answers:
+        return []
+
+    # Reading author rows is authorized by _membership even for projects that
+    # have an owner registration but no current collaborators.
+    try:
+        authors = project_collaboration.summary(path).get("artifact_authors", {})
+    except (ValueError, ProjectError):
+        authors = {}
+
+    runs: list[dict[str, Any]] = []
+    if paper_status in {"active", "queued"}:
+        progress = papers.progress_status(path) or {}
+        runs.append(
+            {
+                "kind": "paper",
+                "status": paper_status,
+                "number": papers.next_paper_number_for_activity(path),
+                "creator": (authors.get("paper_draft") or {}).get(project.id, ""),
+                "model": progress.get("model") or project.ai_model,
+                "thinking": progress.get("reasoning_effort") or project.reasoning_effort,
+            }
+        )
+    if session_active:
+        for session in research_sessions.list_sessions(path):
+            if session.get("status") not in {"running", "queued"}:
+                continue
+            runs.append(
+                {
+                    "kind": "session",
+                    "status": "queued" if session["status"] == "queued" else "active",
+                    "number": session.get("session_number"),
+                    "id": session.get("id"),
+                    "creator": (authors.get("session") or {}).get(session.get("id", ""), ""),
+                    "model": session.get("model", ""),
+                    "thinking": session.get("reasoning_effort", ""),
+                }
+            )
+    for answer in pending_answers:
+        runs.append(
+            {
+                "kind": "answer",
+                "status": "active",
+                "id": answer.get("request_id", ""),
+                "creator": answer.get("creator", ""),
+                "model": answer.get("model", ""),
+                "thinking": answer.get("thinking", ""),
+            }
+        )
+    return runs
 
 
 def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -> dict:
@@ -488,6 +567,31 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 except Exception:  # noqa: BLE001 - paper decoration must never block project access
                     # Broken paper decoration must never make the project unavailable.
                     paper_metadata = {"paper_count": 0, "best_paper_score": None}
+            paper_status = papers.activity_status(view.path) if not lightweight else None
+            session_active = (
+                has_active_session(view.path, project_id=view.project.id)
+                if not lightweight
+                else False
+            )
+            activity_runs: list[dict] = []
+            answer_active = False
+            if not lightweight:
+                from sigma import research_qa
+
+                try:
+                    pending_answers = research_qa.list_pending_answers(view.path)
+                    answer_active = bool(pending_answers)
+                    if not activity_only:
+                        activity_runs = project_activity_runs(
+                            view.path,
+                            project=view.project,
+                            paper_status=paper_status,
+                            session_active=session_active,
+                            pending_answers=pending_answers,
+                        )
+                except (ProjectError, OSError, ValueError):
+                    # Activity decoration must not prevent Saved Projects loading.
+                    pass
             recent.append(
                 asdict(
                     RecentProject(
@@ -498,27 +602,15 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         strategy_count=len(view.project.active_order),
                         paper_count=paper_metadata["paper_count"],
                         best_paper_score=paper_metadata["best_paper_score"],
-                        paper_activity=(
-                            papers.activity_status(view.path) if not lightweight else None
-                        ),
+                        paper_activity=paper_status,
                         difficulty=view.project.difficulty,
-                        research_running=(
-                            has_active_session(view.path, project_id=view.project.id)
-                            if not lightweight
-                            else False
-                        ),
+                        research_running=session_active,
                         available=True,
                         shared=view.path in shared_paths,
                         collaborator=view.path in shared_by_path,
-                        activity_author=(
-                            (project_collaboration.summary(view.path).get("lease") or {}).get(
-                                "email"
-                            )
-                            if view.path in shared_paths
-                            and not lightweight
-                            and (view.path in shared_by_path or workspace is not None)
-                            else None
-                        ),
+                        activity_runs=activity_runs,
+                        answer_active=answer_active,
+                        activity_author=None,
                         pinned=(view.project.id in pins.values()),
                         pin_state=(
                             "unpin"
@@ -568,6 +660,7 @@ def recent_activity() -> dict:
                 "research_running": item["research_running"],
                 "paper_activity": item["paper_activity"],
                 "activity_author": item["activity_author"],
+                "answer_active": item["answer_active"],
             }
             for item in recent_projects(activity_only=True)["projects"]
             if item["available"]

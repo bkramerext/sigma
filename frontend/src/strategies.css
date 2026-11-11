@@ -1311,6 +1311,13 @@
 /* Match compact spacing between session title and first control; avoid oversized icon gaps. */
 .workspace-page .session-summary .session-heading-actions { column-gap: 4px; row-gap: 6px; }
 
+/* Research errors keep the existing card appearance with the standard remove X. */
+.workspace-page .sigma-dismissible-error {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.workspace-page .sigma-dismissible-error > span { flex: 1; min-width: 0; }
+.workspace-page .sigma-dismissible-error > .session-notice-dismiss { margin: -6px -4px -6px 0; }
+
 /* Error-card dismiss control: reuse the session-remove X and 28px hit area. */
 .workspace-page .session-notice-header { align-items: flex-start; justify-content: space-between; flex-wrap: nowrap; }
 .workspace-page .session-notice-dismiss,

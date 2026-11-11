@@ -127,7 +127,62 @@ def check_bounded_shared_conversation() -> None:
     assert len(json.dumps(selected).encode()) <= research_qa.MAX_PRIOR_QA_CONTEXT_BYTES + 60
 
 
+def check_ask_activity_worker_liveness() -> None:
+    """Pending billing reservations do not constitute live Q/A execution."""
+    with TemporaryDirectory() as directory:
+        project = Path(directory) / "qa-project"
+        project.mkdir()
+        request_id = "c" * 32
+        with patch.object(research_qa, "project_path", return_value=project):
+            assert research_qa.list_pending_answers(str(project)) == []
+            with research_qa._ask_worker(str(project), request_id):
+                assert research_qa.list_pending_answers(str(project)) == []
+                research_qa._publish_ask_activity(
+                    str(project),
+                    request_id,
+                    creator="n@example.com",
+                    model="gpt-fixture",
+                    thinking="low",
+                )
+                expected = [
+                    {
+                        "request_id": request_id,
+                        "creator": "n@example.com",
+                        "model": "gpt-fixture",
+                        "thinking": "low",
+                    }
+                ]
+                with patch.object(
+                    research_qa,
+                    "_load_archive",
+                    side_effect=AssertionError("Activity must not load Q/A archive"),
+                ):
+                    assert research_qa.list_pending_answers(str(project)) == expected
+                try:
+                    with research_qa._ask_worker(str(project), request_id):
+                        raise AssertionError("Same request cannot acquire two worker locks")
+                except ProjectError as exc:
+                    assert "already answering" in str(exc)
+                # Failed contender must not remove the actual worker marker.
+                assert research_qa.list_pending_answers(str(project)) == expected
+            assert research_qa.list_pending_answers(str(project)) == []
+            try:
+                with research_qa._ask_worker(str(project), request_id):
+                    research_qa._publish_ask_activity(
+                        str(project),
+                        request_id,
+                        creator="n@example.com",
+                        model="gpt-fixture",
+                        thinking="high",
+                    )
+                    raise RuntimeError("Simulated provider failure")
+            except RuntimeError:
+                pass
+            assert research_qa.list_pending_answers(str(project)) == []
+
+
 def main() -> None:
+    check_ask_activity_worker_liveness()
     check_bounded_shared_conversation()
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "qa.sigma"

@@ -213,7 +213,82 @@ class CollaborationTests(TestCase):
         with shared._db() as db:
             db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
         self.assertFalse(shared.summary(self.path)["shared"])
-        self.assertEqual(shared.summary(self.path)["artifact_authors"], {})
+        self.assertEqual(
+            shared.summary(self.path)["artifact_authors"]["paper"]["paper-one"],
+            self.owner.email,
+        )
+        self.assertEqual(shared.collaborator_identity(self.path), self.owner.email)
+
+    def test_original_creator_and_owner_terminal_deletion_fence(self) -> None:
+        """Creator remains stable; owner may delete only completed other-user work."""
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            shared.note_artifact_author(self.path, "session", "other-session", created_only=True)
+            shared.note_artifact_author(self.path, "paper", "other-paper", created_only=True)
+            shared.reserve_paper_draft(self.path, "saved-project", resuming=False)
+            shared.require_execution_operator(
+                self.path, "session", "other-session", "Research session"
+            )
+            shared.require_artifact_manager(
+                self.path, "session", "other-session", owner_terminal=False
+            )
+        # An unrelated collaborator cannot control or delete the other run.
+        with (
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.owner,
+            ),
+        ):
+            self.assertRaisesRegex(
+                ProjectError,
+                "Only the original execution creator",
+                shared.require_execution_operator,
+                self.path,
+                "session",
+                "other-session",
+                "Research session",
+            )
+            self.assertRaisesRegex(
+                ProjectError,
+                "Only the creator",
+                shared.require_artifact_manager,
+                self.path,
+                "session",
+                "other-session",
+                owner_terminal=False,
+            )
+            # Completed or ended work may be removed by the project owner.
+            shared.require_artifact_manager(
+                self.path, "session", "other-session", owner_terminal=True
+            )
+            shared.require_artifact_manager(self.path, "paper", "other-paper")
+            self.assertRaisesRegex(
+                ProjectError,
+                "Only the original paper creator",
+                shared.reserve_paper_draft,
+                self.path,
+                "saved-project",
+                resuming=True,
+            )
+            # A score or post-processing action cannot replace the author.
+            shared.note_artifact_author(self.path, "session", "other-session")
+            shared.note_artifact_author(self.path, "paper", "other-paper")
+            authors = shared.summary(self.path)["artifact_authors"]
+            self.assertEqual(authors["session"]["other-session"], self.other.email)
+            self.assertEqual(authors["paper"]["other-paper"], self.other.email)
+            self.assertEqual(authors["paper_draft"]["saved-project"], self.other.email)
 
     def revision(self) -> int:
         with shared._db() as db:
@@ -1030,6 +1105,65 @@ class CollaborationTests(TestCase):
             "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.outsider
         ):
             self.assertFalse(shared.authorized_shared_path(Path(self.path)))
+
+    def test_collaborator_sees_owner_paper_activity_before_and_after_share(self) -> None:
+        """A creator stays visible to another account without lease attribution."""
+        from sigma import papers, recents
+
+        shared.reserve_paper_draft(self.path, "saved-project", resuming=False)
+        project = SimpleNamespace(
+            id="saved-project", ai_model="gpt-6.1-sol", reasoning_effort="high"
+        )
+        with (
+            patch.object(
+                papers,
+                "progress_status",
+                return_value={"model": "gpt-paper", "reasoning_effort": "low"},
+            ),
+            patch.object(papers, "next_paper_number_for_activity", return_value=2),
+        ):
+            # Zero collaborators must not erase the original owner's authorship.
+            with shared._db() as db:
+                db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
+            owner_runs = recents.project_activity_runs(
+                self.path,
+                project=project,
+                paper_status="active",
+                session_active=False,
+                pending_answers=[],
+            )
+            self.assertEqual(owner_runs[0]["creator"], self.owner.email)
+            with shared._db() as db:
+                db.execute(
+                    "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
+                    (self.path, self.other.email),
+                )
+            colleague = Workspace(
+                workspace_id="collaborator-workspace",
+                subject_hash="collaborator-hash",
+                path=self.root,
+                email=self.other.email,
+                verified_subject=self.other.subject,
+            )
+            with (
+                patch(
+                    "sigma.project_collaboration.cloud_workspaces.current",
+                    return_value=colleague,
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_auth.current_principal",
+                    return_value=self.other,
+                ),
+            ):
+                collaborator_runs = recents.project_activity_runs(
+                    self.path,
+                    project=project,
+                    paper_status="active",
+                    session_active=False,
+                    pending_answers=[],
+                )
+            self.assertEqual(collaborator_runs[0]["creator"], self.owner.email)
+            self.assertEqual(collaborator_runs[0]["model"], "gpt-paper")
 
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:

@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -905,6 +906,106 @@ def check(root: Path, base: Path) -> None:
     )
 
 
+def check_run_activity_aggregation_and_lightweight_poll() -> None:
+    """Mixed runs retain queued entries, immutable authors and low-cost reads."""
+    from sigma import papers, project_collaboration, recents, research_qa, research_sessions
+
+    project = SimpleNamespace(id="project-1", ai_model="fallback-model", reasoning_effort="medium")
+    with (
+        patch.object(
+            project_collaboration,
+            "summary",
+            return_value={
+                "shared": False,
+                "artifact_authors": {
+                    "session": {"session-n": "n@example.com"},
+                    "paper_draft": {"project-1": "z@example.com"},
+                },
+            },
+        ),
+        patch.object(
+            papers,
+            "progress_status",
+            return_value={"model": "paper-model", "reasoning_effort": "high"},
+        ),
+        patch.object(papers, "next_paper_number_for_activity", return_value=3),
+        patch.object(
+            research_sessions,
+            "list_sessions",
+            return_value=[
+                {
+                    "id": "session-n",
+                    "session_number": 2,
+                    "status": "queued",
+                    "model": "session-model",
+                    "reasoning_effort": "low",
+                }
+            ],
+        ),
+    ):
+        runs = recents.project_activity_runs(
+            "/fixture/project",
+            project=project,
+            paper_status="active",
+            session_active=True,
+            pending_answers=[
+                {
+                    "request_id": "d" * 32,
+                    "creator": "n@example.com",
+                    "model": "ask-model",
+                    "thinking": "medium",
+                }
+            ],
+        )
+    assert [(run["kind"], run["status"]) for run in runs] == [
+        ("paper", "active"),
+        ("session", "queued"),
+        ("answer", "active"),
+    ]
+    assert runs[0]["number"] == 3 and runs[0]["creator"] == "z@example.com"
+    assert runs[1]["number"] == 2 and runs[1]["creator"] == "n@example.com"
+    assert runs[2]["creator"] == "n@example.com"
+
+    # Normal modern Paper version lookup must not reread saved JSON records.
+    with (
+        patch.object(papers, "_read_version_sequence", return_value=5),
+        patch.object(
+            papers,
+            "list_papers",
+            side_effect=AssertionError("Paper activity read saved records"),
+        ),
+    ):
+        assert papers.next_paper_number_for_activity("/fixture/project") == 6
+
+    # The global favicon poll must not query saved Papers, full Session
+    # histories, or collaboration author maps to compute a boolean.
+    with (
+        patch.object(
+            recents,
+            "project_activity_runs",
+            side_effect=AssertionError("Global poll loaded full run details"),
+        ),
+        patch.object(
+            papers,
+            "list_papers",
+            side_effect=AssertionError("Global poll loaded Papers"),
+        ),
+        patch.object(
+            research_sessions,
+            "list_sessions",
+            side_effect=AssertionError("Global poll loaded Sessions"),
+        ),
+        patch.object(
+            project_collaboration,
+            "summary",
+            side_effect=AssertionError("Global poll loaded collaboration summary"),
+        ),
+        patch.object(research_qa, "list_pending_answers", return_value=[]),
+    ):
+        result = recents.recent_activity()
+    assert isinstance(result["projects"], list)
+
+
 def main() -> None:
     with TemporaryDirectory() as temporary:
         base = Path(temporary)
@@ -915,6 +1016,7 @@ def main() -> None:
             os.environ, {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(base / "state")}
         ):
             check(root, base)
+            check_run_activity_aggregation_and_lightweight_poll()
 
 
 if __name__ == "__main__":

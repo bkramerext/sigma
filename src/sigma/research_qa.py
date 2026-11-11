@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
 import re
 import stat
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -304,6 +306,107 @@ def _archive_bytes(
     if len(raw) > MAX_ARCHIVE_BYTES:
         raise ProjectError("Q/A archive exceeds its storage limit")
     return raw
+
+
+def _ask_worker_path(path: str, request_id: str) -> Path:
+    """Per-request execution fence, independent of durable idempotency markers."""
+    if not re.fullmatch(r"[0-9a-f]{32}", request_id):
+        raise ProjectError("Invalid Q/A request identifier")
+    project = project_path(path)
+    if project.suffix == ".json":
+        return project.with_name(f".{project.name}.qa-{request_id}.worker.lock")
+    return project / f".qa-{request_id}.worker.lock"
+
+
+@contextmanager
+def _ask_worker(path: str, request_id: str) -> Iterator[None]:
+    """An OS lock proves the answering worker is alive, including across processes.
+
+    Crashes release flock automatically. Pending billing/idempotency markers
+    deliberately survive separately and never imply active execution.
+    """
+    target = _ask_worker_path(path, request_id)
+    fd = os.open(target, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    acquired = False
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ProjectError("This Q/A request is already answering.") from exc
+        acquired = True
+        yield
+    finally:
+        try:
+            if acquired:
+                # Only the lock holder may clean up. Do not unlink if a
+                # competing request failed to acquire this same file.
+                target.unlink(missing_ok=True)
+        finally:
+            os.close(fd)
+
+
+def _publish_ask_activity(
+    path: str, request_id: str, *, creator: str, model: str, thinking: str
+) -> None:
+    """Write tiny provenance into the lock owned by this live request."""
+    payload = _json(
+        {"request_id": request_id, "creator": creator, "model": model, "thinking": thinking}
+    )
+    target = _ask_worker_path(path, request_id)
+    fd = os.open(target, os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ProjectError("Q/A worker marker is unsafe")
+        os.ftruncate(fd, 0)
+        os.write(fd, payload)
+    finally:
+        os.close(fd)
+
+
+def list_pending_answers(path: str) -> list[dict[str, str]]:
+    """Only report OS-verified live workers, never old billing markers.
+
+    This scan does not open the saved Q/A archive. A backend crash frees the
+    flock, so a stale reservation cannot produce a false green heartbeat.
+    """
+    project = project_path(path)
+    directory = project.parent if project.suffix == ".json" else project
+    prefix = f".{project.name}.qa-" if project.suffix == ".json" else ".qa-"
+    active: list[dict[str, str]] = []
+    for file in directory.glob(f"{prefix}*.worker.lock"):
+        request_id = file.name.removeprefix(prefix).removesuffix(".worker.lock")
+        if not re.fullmatch(r"[0-9a-f]{32}", request_id):
+            continue
+        try:
+            fd = os.open(file, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            continue
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > 1024:
+                continue
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                pass  # Another worker owns this active request.
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                continue
+            value = json.loads(os.read(fd, 1024))
+            if isinstance(value, dict) and value.get("request_id") == request_id:
+                active.append(
+                    {
+                        "request_id": request_id,
+                        "creator": str(value.get("creator") or ""),
+                        "model": str(value.get("model") or ""),
+                        "thinking": str(value.get("thinking") or ""),
+                    }
+                )
+        except (OSError, ValueError, TypeError):
+            continue
+        finally:
+            os.close(fd)
+    return active
 
 
 def list_answers(path: str) -> list[dict[str, Any]]:
@@ -609,7 +712,10 @@ def _prior_qa_context(question: str, records: list[dict[str, Any]]) -> list[dict
 async def answer(
     path: str, question: str, expected_project_id: str, expected_binding: str, request_id: str
 ) -> dict[str, Any]:
-    return await _answer_locked(path, question, expected_project_id, expected_binding, request_id)
+    with _ask_worker(path, request_id):
+        return await _answer_locked(
+            path, question, expected_project_id, expected_binding, request_id
+        )
 
 
 async def _answer_locked(
@@ -656,6 +762,9 @@ async def _answer_locked(
         raise ProjectError(config["message"])
     source_ids = {_source_id(source) for source in selected}
     started = datetime.now(UTC)
+    from sigma import project_collaboration
+
+    creator = project_collaboration.collaborator_identity(path) or ""
 
     # Persist an idempotency marker before dispatch. If the process exits after
     # provider bytes may have been sent, a retry cannot silently charge twice.
@@ -670,7 +779,17 @@ async def _answer_locked(
             raise ProjectError("This project has reached the 50 saved Q/A limit")
         return (
             records,
-            [*pending, {"request_id": request_id, "question_sha256": question_hash}],
+            [
+                *pending,
+                {
+                    "request_id": request_id,
+                    "question_sha256": question_hash,
+                    "started_at": started.isoformat(),
+                    "creator": creator,
+                    "model": str(config.get("model", "")),
+                    "thinking": str(config.get("reasoning_effort", "")),
+                },
+            ],
             None,
             True,
         )
@@ -678,6 +797,13 @@ async def _answer_locked(
     reserved = _archive_update(path, reserve)
     if reserved is not None:
         return reserved
+    _publish_ask_activity(
+        path,
+        request_id,
+        creator=creator,
+        model=str(config.get("model", "")),
+        thinking=str(config.get("reasoning_effort", "")),
+    )
     structured, _raw = await papers._provider_structured(
         {"question": question, "sources": selected, "prior_qa": prior_qa},
         binding,
