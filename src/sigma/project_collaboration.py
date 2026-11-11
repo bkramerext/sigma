@@ -521,15 +521,18 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             "shared": False,
             "failed_notifications": 0,
         }
+    # Comparing project bytes is read-only. In the common case, opening
+    # Project Settings must not reserve the global SQLite writer slot.
+    digest = _project_digest(view.path) if verify_revision else None
     with _db() as db:
-        if verify_revision:
-            # The workspace status polls every five seconds; only opening the
-            # editor requests the potentially expensive file/bundle check.
-            db.execute("BEGIN IMMEDIATE")
         row, email = _membership(db, view.path)
-        if verify_revision:
+        if verify_revision and digest is not None and digest != row["project_sha256"]:
+            # Reconciliation writes only when interrupted publication actually
+            # changed the project document; re-read under the transaction.
+            db.execute("BEGIN IMMEDIATE")
             _reconcile_project_digest(db, view.path)
             row = _row(db, view.path)
+            db.commit()
         membership = list(
             db.execute(
                 "SELECT email,added_by FROM shared_collaborators WHERE path=? ORDER BY email",
@@ -543,8 +546,6 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             for record in membership
             if is_owner or record["added_by"] == email or record["email"] == email
         ]
-        if verify_revision:
-            db.commit()
         return {
             "owner": row["owner_email"],
             "collaborators": members,
