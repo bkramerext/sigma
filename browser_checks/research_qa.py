@@ -154,9 +154,7 @@ with sync_playwright() as playwright:
     )
     question = "Can this saved research be used to explain the relationship between the investigators’ evidence, the skeptic’s objections, and the unresolved conclusions in this project?"
     dialog.get_by_label("Question").fill(question)
-    expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_enabled(
-        timeout=15000
-    )
+    expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_enabled(timeout=15000)
     assert fail_model_config[0] == 0, "Transient model configuration failure was not exercised"
     expect(dialog.get_by_text("Could not load model settings", exact=False)).to_have_count(0)
     dialog.get_by_role("button", name="Ask", exact=True).click()

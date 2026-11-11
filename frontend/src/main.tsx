@@ -4794,10 +4794,15 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     const loadConfiguration = async () => {
       if (controller.signal.aborted || requesting) return;
       requesting = true;
+      const attempt = new AbortController();
+      const abortAttempt = () => attempt.abort();
+      controller.signal.addEventListener('abort', abortAttempt, { once: true });
+      // A hung configuration read must also be retried, not just a failed one.
+      const timeout = window.setTimeout(abortAttempt, 8000);
       try {
         const response = await fetch(
           `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
-          { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } },
+          { cache: 'no-store', signal: attempt.signal, headers: { 'X-Sigma-Error-Handled': 'true' } },
         );
         const current = await response.json();
         if (!response.ok || !current.available || typeof current.binding !== 'string' || !current.binding) {
@@ -4811,9 +4816,14 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
         if (retryTimer !== undefined) window.clearInterval(retryTimer);
       } catch (cause) {
         if (!controller.signal.aborted) {
-          setConfigError(`Could not load model settings: ${errorMessage(cause)}. Retrying…`);
+          const detail = attempt.signal.aborted ? 'Request timed out' : errorMessage(cause);
+          setConfigError(`Could not load model settings: ${detail}. Retrying…`);
         }
-      } finally { requesting = false; }
+      } finally {
+        window.clearTimeout(timeout);
+        controller.signal.removeEventListener('abort', abortAttempt);
+        requesting = false;
+      }
     };
     // Never leave Ask permanently disabled after a transient configuration
     // failure. Retry only the read; never resubmit an answer/provider call.
