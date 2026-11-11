@@ -23,7 +23,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
-from sigma import cloud_research, cloud_workspaces, research_qa, research_sessions
+from sigma import cloud_research, cloud_workspaces, papers, research_qa, research_sessions
 from sigma.projects import ProjectError, initialize_project, inspect_project
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -154,12 +154,35 @@ def _execute(stage: str) -> None:
                 )
                 fd_b = _worker_lock(active_path, active["id"])
 
-                queued, queued_path = _admit(root, CREATOR, "queued", ids["queued"])
+                queued, queued_path = _admit(root, CREATOR, "active", ids["queued"])
                 research_sessions._save(queued_path, _record(queued, status="queued"))
                 fd_c = _worker_lock(queued_path, queued["id"])
 
-                qa_path = _project(root, CREATOR, "questions").path
+                qa_path = active_path
                 question_hash = hashlib.sha256(b"Persist this question").hexdigest()
+                # Keep both Paper checkpoints in the original shared project,
+                # together with active/queued Sessions and the pending Q/A.
+                for paper_id, model, partial in (
+                    (ids["paper_active"], "N", True),
+                    (ids["paper_queued"], "Z", False),
+                ):
+                    with papers.paper_run_scope(paper_id):
+                        work = papers._new_work(
+                            "a" * 64, "shared-crash-project", "b" * 64, model, "high"
+                        )
+                        if partial:
+                            work["section_drafts"]["1"] = {
+                                "tables": [],
+                                "examples": [],
+                                "paragraphs": ["Evidence saved before a mixed-workload crash."],
+                            }
+                            work["section_dispatches"]["1"] = [1]
+                            work["provider_calls"] = 1
+                            work["provider_calls_total"] = 1
+                        papers._save_work(active_path, work)
+                        if not partial:
+                            papers._write_queue_status(active_path, "queued", papers._now())
+
                 research_qa._save(
                     qa_path,
                     [],
@@ -205,9 +228,10 @@ def _execute(stage: str) -> None:
                     "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
                     (ids["active_call"],),
                 ).fetchone()
-            qa_path = str(root / CREATOR / "questions.sigma")
-            queued_path = str(root / CREATOR / "queued.sigma")
             active_path = str(root / CREATOR / "active.sigma")
+            # One original project: no separate per-artifact fixture copies.
+            qa_path = active_path
+            queued_path = active_path
             # An observer has no access to a foreign private project.
             try:
                 research_qa.list_pending_answers(qa_path)
@@ -299,6 +323,29 @@ def _execute(stage: str) -> None:
                     assert uncertain["status"] == "paused", uncertain
                     assert uncertain["steps"][0]["attempt_status"] == "unknown"
                     assert uncertain["steps"][0]["id"] == ids["ambiguous_call"]
+                    # The fresh backend must recover both Paper namespaces
+                    # without overwriting Session or Q/A checkpoints.
+                    for paper_id, model, partial in (
+                        (ids["paper_active"], "N", True),
+                        (ids["paper_queued"], "Z", False),
+                    ):
+                        with papers.paper_run_scope(paper_id):
+                            paper_work = papers._load_work(active_path)
+                            assert paper_work is not None
+                            assert paper_work["model"] == model
+                            if partial:
+                                assert paper_work["section_dispatches"] == {"1": [1]}
+                                assert paper_work["section_drafts"]["1"]["paragraphs"] == [
+                                    "Evidence saved before a mixed-workload crash."
+                                ]
+                                assert paper_work["provider_calls_total"] == 1
+                                assert papers._read_queue_status(active_path) is None
+                            else:
+                                paper_queue = papers._read_queue_status(active_path)
+                                assert paper_queue is not None
+                                assert paper_queue["status"] == "queued"
+                            assert papers.activity_status(active_path) != "active"
+
                     queued_saved = research_sessions._read(queued_path, ids["queued"])
                     assert queued_saved["status"] == "queued"
                     assert queued_saved["id"] == ids["queued"]
@@ -362,6 +409,8 @@ def test_real_process_recovery() -> None:
             "ambiguous_call": str(uuid4()),
             "waiting": str(uuid4()),
             "qa": uuid4().hex,
+            "paper_active": uuid4().hex,
+            "paper_queued": uuid4().hex,
         }
         environment = {
             **os.environ,
