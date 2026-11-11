@@ -387,6 +387,9 @@ def test_reviewed_models_have_bounded_dispatch_headroom_after_compaction() -> No
     }
     assert _size(original) > research_sessions.MAX_AGENT_CONTEXT_BYTES
     assert _size(original) < research_sessions.MAX_AGENT_DISPATCH_HEADROOM_BYTES
+    compacted = deepcopy(original)
+    assert not compact_dispatch_context(compacted, limit=LIMIT)
+    assert compacted["problem"] == required_text  # Never trim active mandatory evidence.
     for model in ("gpt-6-luna", "gpt-6-sol", "gpt-6.1-sol", "gpt-6-astra"):
         assert (
             research_sessions._agent_dispatch_guard_bytes({"model": model})
@@ -408,6 +411,20 @@ def test_reviewed_models_have_bounded_dispatch_headroom_after_compaction() -> No
         research_sessions._agent_dispatch_guard_bytes({"model": "unknown-old-model"})
         == research_sessions.MAX_AGENT_CONTEXT_BYTES
     )
+    try:
+        research_sessions._role_request_payload(
+            {
+                "model": "unknown-old-model",
+                "mode": "chatgpt",
+                "reasoning_effort": "medium",
+            },
+            "investigator",
+            deepcopy(original),
+        )
+    except research_sessions.ResearchContextLimitError:
+        pass
+    else:
+        raise AssertionError("An unreviewed model bypassed its old dispatch guard")
 
 
 def test_true_dispatch_overflow_still_fails_before_provider_call() -> None:
