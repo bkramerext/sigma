@@ -15,13 +15,13 @@ concurrency:
 
 jobs:
   browser:
-    name: Browser acceptance (${{ matrix.group }}/2)
+    name: Browser acceptance (${{ matrix.group }}/3)
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        group: ['1', '2']
+        group: ['1', '2', '3']
     env:
       CI: "true"
       SIGMA_CLOUD_AUTH_ENABLED: "false"
@@ -150,9 +150,21 @@ jobs:
           uv run --with playwright python browser_checks/project_types_436.py
           uv run --with playwright python browser_checks/project_email.py
           uv run --with playwright python browser_checks/collaboration_settings.py
-          # Two separate authenticated local browser profiles, real project ACL
-          # and revision endpoints (no mocked project or collaboration responses).
-          uv run --with playwright python browser_checks/collaboration_local_accounts.py
+      # The real two-profile collaboration suite starts its OWN authenticated
+      # API + Vite servers in a fresh temporary workspace and is independent
+      # of the Project Types fixture. Run it on a dedicated matrix worker to
+      # remove the original 162-second browser long pole without dropping checks.
+      - name: Real two-account collaboration browser acceptance
+        if: ${{ matrix.group == '3' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          started=$SECONDS
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          # Preserve the real API/browser assertion output as evidence even
+          # if the test fails; pipefail prevents tee from masking the failure.
+          uv run --with playwright python browser_checks/collaboration_local_accounts.py 2>&1 | tee /tmp/collaboration-local-accounts.log
+          echo "- Real two-account collaboration browser acceptance: $((SECONDS-started))s" >> "$GITHUB_STEP_SUMMARY"
       - name: Research Q/A browser acceptance
         # Validate the exact Q/A toolbar, scroll and source navigation in real Chrome.
         if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
@@ -266,6 +278,7 @@ jobs:
             /tmp/t201-ui.log
             /tmp/project-types-api.log
             /tmp/project-types-ui.log
+            /tmp/collaboration-local-accounts.log
             /tmp/research-qa-api.log
             /tmp/research-qa-ui.log
             docs/evaluations/research_qa/*.png
@@ -294,6 +307,7 @@ jobs:
             /tmp/t201-ui.log
             /tmp/project-types-api.log
             /tmp/project-types-ui.log
+            /tmp/collaboration-local-accounts.log
             /tmp/research-qa-api.log
             /tmp/research-qa-ui.log
             docs/evaluations/research_qa/*.png
@@ -327,7 +341,7 @@ jobs:
     needs: browser
     runs-on: ubuntu-24.04
     steps:
-      - name: Require both browser groups to pass
+      - name: Require all three browser groups to pass
         env:
           BROWSER_RESULT: ${{ needs.browser.result }}
         run: test "$BROWSER_RESULT" = "success"
