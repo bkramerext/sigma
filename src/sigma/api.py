@@ -930,6 +930,7 @@ def papers_view(path: str):
     available = [paper for paper in saved if paper.get("pdf_available")]
     return {
         "papers": saved,
+        "next_paper_number": papers.next_paper_number_for_activity(path),
         "paper_count": len(available),
         "best_paper_score": paper_scores.best_score(available),
     }
