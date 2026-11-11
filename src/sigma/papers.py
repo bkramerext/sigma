@@ -166,7 +166,6 @@ def _paper_state_key(path: str) -> str:
     return project_key if run_id is None else f"{project_key}#paper:{run_id}"
 
 
-
 @asynccontextmanager
 async def _paper_model_selection_scope():
     """Restore the task's previous selector even after failure or cancellation."""
@@ -3290,6 +3289,7 @@ def _work_file(path: str, *, create: bool) -> Path:
             raise ProjectError("Long-paper checkpoint directory is unsafe")
         os.chmod(directory, 0o700)
     return directories[-1] / "checkpoint.json"
+
 
 def needs_preflight_on_open(path: str) -> bool:
     """Only saved paper work requires the expensive evidence preflight on navigation.
