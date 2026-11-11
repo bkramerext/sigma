@@ -4789,9 +4789,17 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             queue_status = cloud_research.job_status(record["id"])
         except cloud_research.CloudResearchUnavailable as exc:
             raise ProjectError(str(exc)) from exc
-        if queue_status == "queued":
+        in_flight_step = any(
+            isinstance(step, dict) and step.get("status") == "running"
+            for step in record.get("steps", [])
+        )
+        if queue_status == "queued" and not in_flight_step:
             return record
-        if queue_status in {"running", "stopping"}:
+        if queue_status in {"running", "stopping"} or (
+            queue_status == "queued" and in_flight_step
+        ):
+            # A queued record with an unfinished provider step is not
+            # necessarily pre-dispatch; it must be fenced and interrupted.
             # A queued record whose ledger already owns a running slot is
             # inconsistent after an interrupted admission. Do not assume it
             # is live: the worker lock below distinguishes a running process
@@ -5386,8 +5394,9 @@ def has_active_session(path: str, *, project_id: str | None = None) -> bool:
         task = _tasks.get(session_id)
         if task is not None and not task.done():
             return True
-        if status == "queued" and cloud_research.billing_enabled():
-            return True
+        # A persisted queued receipt is not proof of an executing worker.
+        # After a crash the creator can still resume it, but Home must not
+        # advertise activity unless a task or OS-held worker lock is live.
         lock_path = _worker_lock_path(path, session_id)
         try:
             fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))

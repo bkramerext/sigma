@@ -1420,9 +1420,15 @@ def reserve_call(
     try:
         with _transaction() as db:
             job = db.execute(
-                "SELECT workspace_id,status FROM jobs WHERE session_id=?", (session_id,)
+                "SELECT workspace_id,status,process_epoch FROM jobs WHERE session_id=?",
+                (session_id,),
             ).fetchone()
-            if not job or job["workspace_id"] != owner or job["status"] != "running":
+            if (
+                not job
+                or job["workspace_id"] != owner
+                or job["status"] != "running"
+                or job["process_epoch"] != _PROCESS_EPOCH
+            ):
                 raise CloudResearchUnavailable(
                     "Research worker has no active execution reservation."
                 )
