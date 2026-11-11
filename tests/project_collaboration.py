@@ -145,6 +145,19 @@ class CollaborationTests(TestCase):
             holder.rollback()
             holder.close()
 
+    def test_nested_fenced_checkpoint_reuses_same_project_file_lock(self) -> None:
+        """Nested Paper checkpoints cannot deadlock on their own file lock."""
+        from sigma.projects import project_write_lock
+
+        @shared.fenced_checkpoint
+        def checkpoint(path: str) -> str:
+            return "persisted"
+
+        with patch("sigma.projects.project_path", return_value=Path(self.path)):
+            with project_write_lock(self.path):
+                with project_write_lock(self.path):
+                    self.assertEqual(checkpoint(self.path), "persisted")
+
     def test_waiting_project_lock_does_not_hold_global_writer(self) -> None:
         """The file-lock waiter must not block independent SQLite writes."""
         from sigma.projects import project_write_lock
