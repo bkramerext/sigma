@@ -95,12 +95,9 @@ async def create(
     async with papers._paper_operation(path, generating=False):
         source = source_checkpoint(path, paper_id, project_id)
         paper = source["paper"]
-        if (
-            paper["pdf_sha256"] != source_pdf_sha256
-            or (
-                expected_snapshot_sha256 is not None
-                and paper["snapshot_sha256"] != expected_snapshot_sha256
-            )
+        if paper["pdf_sha256"] != source_pdf_sha256 or (
+            expected_snapshot_sha256 is not None
+            and paper["snapshot_sha256"] != expected_snapshot_sha256
         ):
             raise ProjectError("Published Paper changed; reopen before restarting.")
         origin = {

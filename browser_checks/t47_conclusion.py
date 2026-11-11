@@ -504,12 +504,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     )
                     <= 20
                 )
-                assert (
-                    subheading.evaluate(
-                        "element => Number.parseFloat(getComputedStyle(element).fontSize)"
-                    )
-                    <= 17
+                subheading_size = subheading.evaluate(
+                    "element => Number.parseFloat(getComputedStyle(element).fontSize)"
                 )
+                assert subheading_size <= 17, f"Outcome H2 too large: {subheading_size}px"
                 outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
