@@ -1277,6 +1277,12 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     if shared:
         project_collaboration.register_owner(inspect_project(body.path))
         run_id = body.run_id or uuid4().hex
+        if body.run_id is not None:
+            existing = project_collaboration.execution_run(
+                body.path, "paper", run_id, operator=True, missing_ok=True
+            )
+            if existing is not None and existing.get("artifact_id"):
+                raise ProjectError("This Paper run is already published; open the saved PDF.")
         account = await auth_context()
         config = await papers.configuration(view=inspect_project(body.path), context=account)
         if not config["available"]:
