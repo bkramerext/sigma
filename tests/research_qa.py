@@ -276,6 +276,8 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 assert second["sources"][0]["source_id"] == source
                 assert len(research_qa.list_answers(str(path))) == 2
                 assert research_qa.list_pending_answers(str(path)) == []
+                assert len(inspect_project(path).project.strategies) == 1
+                assert inspect_project(path).project.strategies[0].title == "Edited while Q/A was running"
                 assert provider_calls == 2
 
                 # An authenticated Z cannot replay N's completed request ID,
@@ -302,7 +304,10 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                     "rows=list_answers(sys.argv[1]); "
                     "assert len(rows)==2; "
                     "assert {row['created_by'] for row in rows}"
-                    "=={'n@example.org','z@example.org'}"
+                    "=={'n@example.org','z@example.org'}; "
+                    "from sigma.projects import inspect_project; "
+                    "assert any(s.title == 'Edited while Q/A was running' "
+                    "for s in inspect_project(sys.argv[1]).project.strategies)"
                 ),
                 str(path),
             ],
