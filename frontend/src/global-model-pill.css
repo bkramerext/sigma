@@ -948,3 +948,38 @@
   width: auto;
   min-width: 53px;
 }
+
+/* Use one inter-pill gap in both directions without changing approved heights.
+   Keep the right-hand controls as far from the edge as their top inset. */
+:is(.home-page, .workspace-page) {
+  --sigma-header-horizontal-gap: var(--identity-pill-gap);
+}
+.home-page .home-account-grid,
+.workspace-page .project-art-header .header-controls {
+  column-gap: var(--identity-pill-gap);
+  row-gap: var(--identity-pill-gap);
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor {
+  gap: var(--identity-pill-gap);
+}
+:is(.home-page, .workspace-page) .sigma-header-about-model-anchor > .sigma-header-first-row {
+  gap: var(--identity-pill-gap);
+  width: 100%;
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  row-gap: var(--identity-pill-gap);
+}
+.home-page .home-topline {
+  padding-right: var(--home-corner-gap);
+}
+.workspace-page .project-art-header .header-controls {
+  top: 0;
+  transform: none;
+  padding-top: 0;
+  margin-right: -12px;
+}
+
+/* Project's earlier 10px override must not defeat the shared 13px rhythm. */
+.workspace-page .project-art-header .sigma-header-about-model-anchor {
+  gap: var(--identity-pill-gap);
+}

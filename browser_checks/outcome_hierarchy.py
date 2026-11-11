@@ -161,22 +161,12 @@ with sync_playwright() as playwright:
             expect(conclusion).to_contain_text("Historical session summary")
             expect(conclusion).to_contain_text(summary_text.splitlines()[1])
 
+            # Subsection Markdown controls are redundant: the Outcome heading
+            # is the single formatting action for the entire Outcome.
             reasoning = row.locator(".outcome-reasoning-subsection")
             reasoning.locator(":scope > summary").click()
-            reasoning_markdown = reasoning.get_by_role(
-                "button", name="Format Reasoning / proof as Markdown"
-            )
-            expect(reasoning_markdown).to_be_visible()
-            reasoning_markdown.click()
-            expect(
-                reasoning.locator(".outcome-markdown").get_by_role(
-                    "heading", name="Reasoning / proof", level=1
-                )
-            ).to_be_visible()
-            expect(
-                reasoning.get_by_role("button", name="Show saved Reasoning / proof text")
-            ).to_have_attribute("aria-pressed", "true")
-            reasoning.get_by_role("button", name="Show saved Reasoning / proof text").click()
+            expect(reasoning.locator(":scope > .sigma-render-toggle")).to_have_count(0)
+            expect(row.locator(".outcome-heading-title > .sigma-render-toggle")).to_be_visible()
 
             evidence = row.locator(".outcome-evidence-subsection")
             evidence.locator(":scope > summary").click()

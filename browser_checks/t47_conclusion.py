@@ -308,7 +308,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
             expect(papers_pane.get_by_role("button", name="Include in paper")).to_be_visible()
             papers_pane.get_by_role("button", name="New paper").click()
-            expect(papers_pane.get_by_role("button", name="Start Paper 1")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="Start Paper")).to_be_visible()
             settings = papers_pane.get_by_role("button", name="Include in paper")
             expect(settings).to_be_disabled()
             expect(settings).to_have_css("opacity", "0.38")
@@ -317,7 +317,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(settings).to_have_css("opacity", "1")
             expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
             papers_pane.get_by_role("button", name="New paper").click()
-            papers_pane.get_by_role("button", name="Start Paper 1").click()
+            papers_pane.get_by_role("button", name="Start Paper").click()
             expect(papers_pane.get_by_role("button", name="Stop Paper 1")).to_be_visible()
             # New paper remains visible in multi-run mode, but this tab cannot
             # start a second submission until its current request is handed off.
