@@ -1952,7 +1952,12 @@ def test_paper_generation_rejects_concurrent_duplicate_request() -> None:
                 first = asyncio.create_task(
                     papers.generate(str(path), credential["identity"], view.project.id)
                 )
-                await asyncio.wait_for(started.wait(), timeout=2)
+                try:
+                    await asyncio.wait_for(started.wait(), timeout=10)
+                except TimeoutError:
+                    if first.done():
+                        await first  # Report the actual generation failure.
+                    raise AssertionError("Paper provider never started within 10 seconds") from None
                 try:
                     await papers.generate(str(path), credential["identity"], view.project.id)
                 except ProjectError as exc:

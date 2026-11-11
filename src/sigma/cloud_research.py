@@ -1091,6 +1091,8 @@ def reconcile_orphaned_jobs() -> list[str]:
     uncertain path/state or any provider-call row is preserved; age is never
     evidence for releasing a job or spend reservation.
     """
+    from sigma import cloud_auth, project_collaboration
+
     workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
@@ -1129,8 +1131,6 @@ def reconcile_orphaned_jobs() -> list[str]:
             # Background cross-workspace recovery cannot impersonate a creator.
             # A verified, still-authorized collaborator may safely recover
             # their own durable Session on reconnect.
-            from sigma import cloud_auth, project_collaboration
-
             owner_name = relative_path.parts[0] if relative_path.parts else ""
             if (
                 cloud_auth.current_principal() is None

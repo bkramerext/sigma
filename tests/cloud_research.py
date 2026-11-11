@@ -2533,9 +2533,7 @@ def test_shared_collaborator_recovery_locator(root: Path, ledger_root: Path) -> 
                 )
             # Revocation must prevent even a creator from traversing the
             # owner's shared project during recovery.
-            with patch(
-                "sigma.project_collaboration.authorized_shared_path", return_value=False
-            ):
+            with patch("sigma.project_collaboration.authorized_shared_path", return_value=False):
                 assert cloud_research.reconcile_orphaned_jobs() == []
                 assert cloud_research.job_status(record["id"]) == "queued"
             # A verified creator who still has membership can reconcile a
@@ -3945,7 +3943,10 @@ def main() -> None:
         test_cross_user_crash_reclaims_only_dead_worker(root, foreign_ledger)
         auxiliary_ledger = root / "auxiliary-inference-ledger"
         auxiliary_ledger.mkdir(mode=0o700)
-        print("RUNNING test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost", flush=True)
+        print(
+            "RUNNING test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost",
+            flush=True,
+        )
         test_auxiliary_inference_ignores_full_research_slots_but_tracks_cost(root, auxiliary_ledger)
         pilot_ledger = root / "pilot-capacity-ledger"
         pilot_ledger.mkdir(mode=0o700)
@@ -3957,7 +3958,10 @@ def main() -> None:
         test_explicit_account_allowance_does_not_require_default(root, explicit_allowance_ledger)
         allowance_ledger = root / "allowance-ledger"
         allowance_ledger.mkdir(mode=0o700)
-        print("RUNNING test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold", flush=True)
+        print(
+            "RUNNING test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold",
+            flush=True,
+        )
         test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
             root, allowance_ledger
         )
@@ -3989,7 +3993,10 @@ def main() -> None:
         test_admin_unlimited_allowance_survives_monthly_global_renewal(root, admin_monthly_ledger)
         local_admin_ledger = root / "local-admin-global-exempt-ledger"
         local_admin_ledger.mkdir(mode=0o700)
-        print("RUNNING test_e006_local_admin_unlimited_does_not_consume_member_default_global_pool", flush=True)
+        print(
+            "RUNNING test_e006_local_admin_unlimited_does_not_consume_member_default_global_pool",
+            flush=True,
+        )
         test_e006_local_admin_unlimited_does_not_consume_member_default_global_pool(
             root, local_admin_ledger
         )
