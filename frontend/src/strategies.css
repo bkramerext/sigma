@@ -1419,6 +1419,8 @@
 
 /* Shared-project provenance stays on the existing metadata line. */
 .artifact-attribution { display: inline-block; white-space: nowrap; font-size: 0.85em; opacity: 0.82; }
+/* Q/A creator/model attribution belongs to the same metadata text run. */
+.research-qa-library .saved-paper-meta .artifact-attribution { font-size: inherit; }
 
 /* Strategy row: all six action hit areas use a single 28px box and gap.
    The Copy-to-Disable spacing is the reference for every neighboring pair. */
