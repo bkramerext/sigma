@@ -141,6 +141,11 @@ for run_id, expected in ((first, "N"), (second, "Z")):
         )
         self.assertEqual(child.returncode, 0, child.stderr)
 
+    def test_real_process_kill_preserves_scoped_paper_work(self) -> None:
+        from paper_process_restart import test_real_paper_process_crash
+
+        test_real_paper_process_crash()
+
     def test_invalid_or_symlinked_run_directory_is_rejected(self) -> None:
         for bad in ("../escape", "a" * 31, "A" * 32, "", None):
             with (

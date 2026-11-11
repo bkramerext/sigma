@@ -542,10 +542,9 @@ def test_orphaned_job_reconciliation(
                 ]
                 == 0.25
             )
-            # Legacy outer-running / ledger-queued records with no active
-            # step and an already-unknown charge remain queued until the
-            # creator inspects or resumes; nothing is silently dispatched.
-            assert cloud_research.job_status(ambiguous["id"]) == "queued"
+            # No published Session exists for this old, uncertain provider
+            # attempt. Retire only its execution slot and retain its charge.
+            assert cloud_research.job_status(ambiguous["id"]) == "interrupted"
             # Check the exact queues belonging to this project, rather than
             # conflating independent accepted work in the same account.
             queued_ids = {
@@ -556,7 +555,7 @@ def test_orphaned_job_reconciliation(
                     (workspace_a.workspace_id, project.project.id),
                 ).fetchall()
             }
-            assert queued_ids == {valid["id"], ambiguous["id"]}, queued_ids
+            assert queued_ids == {valid["id"]}, queued_ids
             db.close()
 
             # A real backend restart keeps an already-saved queued Session.

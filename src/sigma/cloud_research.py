@@ -1225,7 +1225,9 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
     try:
         with _connect() as db:
             candidates = db.execute(
-                "SELECT session_id,project_id,project_relpath,status FROM jobs WHERE workspace_id=? AND status IN ('queued','running','stopping') AND process_epoch<>?",
+                "SELECT session_id,project_id,project_relpath,status FROM jobs WHERE "
+                "workspace_id=? AND job_kind='research' "
+                "AND status IN ('queued','running','stopping') AND process_epoch<>?",
                 (owner, _PROCESS_EPOCH),
             ).fetchall()
     except sqlite3.Error as exc:

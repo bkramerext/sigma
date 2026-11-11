@@ -251,9 +251,57 @@ def test_queued_call_fence() -> None:
                 cloud_workspaces._CURRENT.reset(token)
 
 
+def test_live_auxiliary_is_not_a_research_orphan() -> None:
+    """Research worker maintenance cannot steal live standalone inference."""
+    with TemporaryDirectory(prefix="sigma-aux-recovery-", dir=ROOT.parent) as temp:
+        root = Path(temp)
+        creator = _workspace(root, BOB)
+        with (
+            patch.dict(os.environ, _settings(), clear=False),
+            patch.object(cloud_workspaces, "storage_root", return_value=root),
+            patch.object(
+                cloud_research,
+                "_effective_user_spend_ceiling_decimal",
+                return_value=Decimal("5.00"),
+            ),
+        ):
+            token = cloud_workspaces._CURRENT.set(creator)
+            try:
+                view = initialize_project(
+                    creator.path / "auxiliary.sigma",
+                    "Live auxiliary inference",
+                    "Research recovery must not touch this provider call",
+                    research_mode="mathematical",
+                )
+                (Path(view.path) / "research-sessions").mkdir(mode=0o700, exist_ok=True)
+                session_id, call_id = str(uuid4()), str(uuid4())
+                item = _job(session_id, view.project.id, view.path)
+                item["job_kind"] = "auxiliary"
+                cloud_research.prepare_job(item)
+                assert cloud_research.claim_job(session_id)
+                cloud_research.reserve_call(session_id, call_id, 0.04, 40)
+                with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
+                    cloud_research.reconcile_orphaned_jobs()
+                assert cloud_research.job_status(session_id) == "running"
+                with cloud_research._connect() as db:
+                    call = db.execute(
+                        "SELECT status,amount_usd,token_reservation "
+                        "FROM calls WHERE call_id=?",
+                        (call_id,),
+                    ).fetchone()
+                    assert (
+                        call["status"],
+                        call["amount_usd"],
+                        call["token_reservation"],
+                    ) == ("reserved", 0.04, 40)
+            finally:
+                cloud_workspaces._CURRENT.reset(token)
+
+
 def main() -> None:
     test_foreign_collaborator_crash()
     test_queued_call_fence()
+    test_live_auxiliary_is_not_a_research_orphan()
     print("PASS adversarial shared-creator recovery, queued dispatch fencing, retained liability")
 
 
