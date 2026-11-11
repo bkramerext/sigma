@@ -27,7 +27,8 @@ async def check_barrier() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation", new=reference_compiler
+                research_sessions,
+                "_ensure_reference_compilation", new=reference_compiler
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
@@ -67,7 +68,8 @@ async def check_partial_resume() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation", new=AsyncMock(return_value=True)
+                research_sessions,
+                "_ensure_reference_compilation", new=AsyncMock(return_value=True)
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(research_supplied_evidence, "_fetch_url", side_effect=fetch),
@@ -84,7 +86,8 @@ async def check_partial_resume() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation", new=AsyncMock(return_value=True)
+                research_sessions,
+                "_ensure_reference_compilation", new=AsyncMock(return_value=True)
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
@@ -117,7 +120,9 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
         attachment = project_evidence.add_evidence(
             str(path),
             "test-resume.pdf",
-            (Path(__file__).resolve().parent / "fixtures/sigma-valid-sample-paper.pdf").read_bytes(),
+            (
+                Path(__file__).resolve().parent / "fixtures/sigma-valid-sample-paper.pdf"
+            ).read_bytes(),
         )
         link = project_evidence.add_link(str(path), "https://example.org/oversize.txt")
         oversized_text = "A" * 80_000
@@ -145,12 +150,14 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation",
+                research_sessions,
+                "_ensure_reference_compilation",
                 new=AsyncMock(return_value=True),
             ) as compiler,
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
-                research_supplied_evidence, "compile_entry", side_effect=compile_frozen_source
+                research_supplied_evidence,
+                "compile_entry", side_effect=compile_frozen_source
             ) as compile_call,
         ):
             started = await research_sessions.start_session(
@@ -171,19 +178,24 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
             project_evidence.remove_evidence(str(path), link["id"])
         else:
             project_evidence.set_enabled(str(path), link["id"], False)
-        assert [row["id"] for row in project_evidence.list_evidence(str(path))
-                if row.get("enabled", True)] == [attachment["id"]]
+        assert [
+            row["id"]
+            for row in project_evidence.list_evidence(str(path))
+            if row.get("enabled", True)
+        ] == [attachment["id"]]
 
         with (
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation",
+                research_sessions,
+                "_ensure_reference_compilation",
                 new=AsyncMock(return_value=True),
             ) as compiler,
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
-                research_supplied_evidence, "compile_entry",
+                research_supplied_evidence,
+                "compile_entry",
                 side_effect=AssertionError("Unchanged PDF must not be extracted again"),
             ),
         ):
@@ -202,8 +214,9 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
         history = resumed["source_material_selection_history"]
         assert history[-1]["reason"] == "user_resume_before_research_dispatch"
         assert history[-1]["reused_verified_extracts"] == 1
-        assert any(event["kind"] == "source_material.selection_refreshed"
-                   for event in resumed["events"])
+        assert any(
+            event["kind"] == "source_material.selection_refreshed" for event in resumed["events"]
+        )
 
 
 async def check_remove_last_source_resume() -> None:
@@ -222,7 +235,8 @@ async def check_remove_last_source_resume() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation",
+                research_sessions,
+                "_ensure_reference_compilation",
                 new=AsyncMock(return_value=True),
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
@@ -250,12 +264,14 @@ async def check_remove_last_source_resume() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation",
+                research_sessions,
+                "_ensure_reference_compilation",
                 new=AsyncMock(return_value=True),
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
-                research_supplied_evidence, "compile_entry",
+                research_supplied_evidence,
+                "compile_entry",
                 side_effect=AssertionError("Deleted Source Material must not be fetched"),
             ),
         ):
@@ -272,7 +288,7 @@ async def check_role_dispatch_freezes_sources() -> None:
     """A session with role attempts must not silently rewrite past premises."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "past-research.sigma"
-        view, strategy, credential, config = await setup(path)
+        await setup(path)
         link = project_evidence.add_link(str(path), "https://example.org/old.txt")
         old = [{"id": f"uploaded-link:{link['id']}", "url": link["url"]}]
         record = {
@@ -295,4 +311,6 @@ if __name__ == "__main__":
     asyncio.run(check_edited_source_selection_resume(remove=True))
     asyncio.run(check_remove_last_source_resume())
     asyncio.run(check_role_dispatch_freezes_sources())
-    print("PASS Source Material barrier, corrected-selection Resume, and immutable dispatched premises")
+    print(
+        "PASS Source Material barrier, corrected-selection Resume, and immutable dispatched premises"
+    )
