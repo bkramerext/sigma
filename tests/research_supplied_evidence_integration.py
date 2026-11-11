@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -42,6 +43,7 @@ async def check_barrier() -> None:
             paused = await wait_for(path, started["id"])
         assert paused["status"] == "paused"
         assert paused["supplied_evidence_compilation"]["status"] == "blocked"
+        assert paused["stopped_at"] is not None
         assert "example.org/unavailable.txt" in paused["message"]
         portfolio.assert_not_called()
         reference_compiler.assert_not_awaited()  # Never spend on a blocked source
@@ -180,6 +182,21 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
             if row.get("enabled", True)
         ] == [attachment["id"]]
 
+        if remove:
+            # Simulate the real historical Session 5 record: blocked before any
+            # research call, with a missing pause checkpoint and expired clock.
+            # This state must be recoverable without giving away active time.
+            old = research_sessions._read(str(path), started["id"])
+            pause_at = datetime.now(UTC) - timedelta(minutes=85)
+            old["stopped_at"] = None
+            old["started_at"] = (pause_at - timedelta(seconds=8)).isoformat()
+            old["updated_at"] = pause_at.isoformat()
+            old["deadline_at"] = (pause_at + timedelta(minutes=60)).isoformat()
+            for event in old["events"]:
+                if event.get("kind") == "source_material.compilation.blocked":
+                    event["timestamp"] = pause_at.isoformat()
+            research_sessions._save(str(path), old)
+
         with (
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
@@ -206,6 +223,13 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
         assert resumed["uploaded_project_evidence"][0]["id"] == f"uploaded-pdf:{attachment['id']}"
         assert "80,000" not in resumed["uploaded_project_evidence"][0]["excerpt"]
         assert resumed["calls_used"] == 0
+        if remove:
+            assert float(resumed["stopped_duration_seconds"]) > 80 * 60
+            assert datetime.fromisoformat(resumed["deadline_at"]) > datetime.now(UTC)
+            assert any(
+                event["kind"] == "source_material.pause_clock_recovered"
+                for event in resumed["events"]
+            )
         assert len(compiled_ids) == 2
         history = resumed["source_material_selection_history"]
         assert history[-1]["reason"] == "user_resume_before_research_dispatch"
