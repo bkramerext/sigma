@@ -483,3 +483,28 @@
   box-shadow: none !important;
   cursor: not-allowed;
 }
+
+/* Project action boxes follow the visible Email→Settings reference gap.
+   LEAN's 42px wordmark must fit inside its hover/focus background (it used
+   to overflow a 34px box). Keep 34px height and center the existing artwork. */
+.workspace-page .project-pane-heading .project-primary-actions .project-pane-actions {
+  column-gap: 12px;
+  row-gap: 12px;
+}
+.workspace-page .project-pane-heading .project-pane-actions button.project-lean-button {
+  box-sizing: border-box;
+  flex: 0 0 52px;
+  width: 52px;
+  min-width: 52px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0 4px;
+  border-radius: 6px;
+}
+.workspace-page .project-pane-heading .project-pane-actions button.project-lean-button img {
+  width: 42px;
+  height: 21px;
+  max-width: 100%;
+  object-fit: contain;
+}

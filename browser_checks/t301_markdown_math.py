@@ -174,6 +174,26 @@ with sync_playwright() as playwright:
     assert r"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}" in malformed_tex
     assert r"1 + 2 + 3 + \cdots + 10 = \frac{10(11)}{2} = 55" in malformed_tex
     page.screenshot(path="docs/evaluations/t301/session4-repaired-math.png", full_page=True)
+    # Moonshine research often contains raw TeX macros in prose. They must not
+    # become partially normalized, red KaTeX parse errors.
+    page.evaluate(
+        """async body => {
+          const React = (await import('/node_modules/.vite/deps/react.js')).default;
+          const { createRoot } = (await import('/node_modules/.vite/deps/react-dom_client.js')).default;
+          const { default: RenderedMarkdown } = await import('/src/RenderedMarkdown.tsx');
+          const host = document.createElement('main');
+          host.id = 't750-moonshine-formulas';
+          document.body.append(host);
+          createRoot(host).render(React.createElement(RenderedMarkdown, { body }));
+        }""",
+        r"The coefficient identity is 1-pq^{-1}-\\Sigma_{j\\ge1}c_{g}(j)p^{j+1}. Also $\\Sigma_{j\\ge1}c_g(j)p^{j+1}$ is explicit mathematics.",
+    )
+    moonshine = page.locator("#t750-moonshine-formulas")
+    expect(moonshine.locator(".katex")).to_have_count(2)
+    expect(moonshine.locator(".katex-error")).to_have_count(0)
+    text = moonshine.locator(".katex annotation").all_text_contents()
+    assert any(r"\\Sigma_{j\\ge1}" in item for item in text), text
+
     browser.close()
 
 print(

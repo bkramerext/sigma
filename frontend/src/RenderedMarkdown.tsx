@@ -72,6 +72,18 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
     }
   };
 
+  // A raw TeX expression with well-balanced braces is one mathematical span.
+  // Extracting a smaller equation fragment can otherwise split a \Sigma term
+  // and leave half of a research identity unrendered.
+  add(/(?<![\p{L}\p{N}_])[\p{L}\p{N}{}^_+=*/().−-]*(?:\\(?:Sigma|sum|prod|frac|sqrt|mathbb|operatorname|geq|ge|leq|le|cdot|infty)(?![A-Za-z])[\p{L}\p{N}{}^_+=*/().\\−-]*)+/gu, 11, match => {
+    let depth = 0;
+    for (const symbol of match[0]) {
+      if (symbol === '{') depth++;
+      if (symbol === '}' && --depth < 0) return false;
+    }
+    return depth === 0;
+  });
+
   // Recognize the complete figurate-number formula rather than extracting
   // only (n+1)/2 and leaving the outside n as ordinary text.
   add(/(?<![\p{L}\p{N}_])(?:\d+\s*[+−-]\s*)?[A-Za-z]\s*\(\s*[A-Za-z]\s*[+−-]\s*\d+\s*\)\s*\/\s*\d+\b/gu, 9, () => true);
@@ -139,7 +151,9 @@ function candidates(text: string, structuralContext = ''): Candidate[] {
 }
 
 function inlineMath(value: string): MarkdownNode {
-  const source = mathSource(value);
+  // Existing TeX commands are already a representation, not a hint for the
+  // loose fraction/subscript normalizer. Leave their exact tokens alone.
+  const source = /\\[a-zA-Z]+/.test(value) ? value : mathSource(value);
   return {
     type: 'inlineMath',
     value: source,
