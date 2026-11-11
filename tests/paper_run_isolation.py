@@ -50,12 +50,8 @@ class PaperRunIsolationTests(TestCase):
                 papers._save_work(self.path, self.saved_work(model))
                 papers._write_queue_status(self.path, "queued", papers._now())
                 self.assertEqual(present(papers._load_work(self.path))["model"], model)
-                self.assertEqual(
-                    present(papers._read_queue_status(self.path))["status"], "queued"
-                )
-                self.assertEqual(
-                    papers._work_file(self.path, create=False).parent.name, run_id
-                )
+                self.assertEqual(present(papers._read_queue_status(self.path))["status"], "queued")
+                self.assertEqual(papers._work_file(self.path, create=False).parent.name, run_id)
 
         # Reopening a scope after all task state is gone recovers the same work.
         with papers.paper_run_scope(self.first):
@@ -64,9 +60,7 @@ class PaperRunIsolationTests(TestCase):
             papers._clear_queue_status(self.path)
         with papers.paper_run_scope(self.second):
             self.assertEqual(present(papers._load_work(self.path))["model"], "second")
-            self.assertEqual(
-                present(papers._read_queue_status(self.path))["status"], "queued"
-            )
+            self.assertEqual(present(papers._read_queue_status(self.path))["status"], "queued")
         self.assertEqual(present(papers._load_work(self.path))["model"], "legacy")
         self.assertEqual(papers._work_file(self.path, create=False), legacy_file)
         self.assertTrue(legacy_file.is_file())
@@ -110,9 +104,7 @@ class PaperRunIsolationTests(TestCase):
                         if release is not None:
                             await release.wait()
 
-            first_task = asyncio.create_task(
-                job(self.first, first_entered, release_first)
-            )
+            first_task = asyncio.create_task(job(self.first, first_entered, release_first))
             await asyncio.wait_for(first_entered.wait(), timeout=5)
             second_task = asyncio.create_task(job(self.second, second_entered, None))
             try:
