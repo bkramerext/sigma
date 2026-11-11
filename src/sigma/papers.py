@@ -2875,6 +2875,27 @@ def _read_version_sequence(path: str) -> int:
     return max(0, value)
 
 
+def next_paper_number_for_activity(path: str) -> int:
+    """Cheap read-only paper number for activity indicators.
+
+    Modern projects keep a small monotonic version sequence. Only legacy
+    projects lacking that sequence need to inspect older saved paper records.
+    This never allocates a number or mutates a paper.
+    """
+    current = _read_version_sequence(path)
+    if current:
+        return current + 1
+    target = project_path(path)
+    if target.suffix != ".json":
+        directory = _paper_dir(path, create=False)
+        if not directory.exists() or not any(directory.glob("*.json")):
+            return 1
+    return max(
+        (paper.get("paper_version") or 0 for paper in list_papers(path)),
+        default=0,
+    ) + 1
+
+
 def _write_version_sequence(path: str, version: int) -> None:
     target = project_path(path)
     member = _version_sequence_member(path)
