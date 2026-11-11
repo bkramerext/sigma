@@ -282,7 +282,6 @@ jobs:
         id: browser_evidence_retry
         continue-on-error: true
         if: ${{ always() && steps.browser_evidence_primary.outcome == 'failure' }}
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: consolidated-browser-evidence-${{ matrix.group }}-retry
