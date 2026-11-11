@@ -4795,9 +4795,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         )
         if queue_status == "queued" and not in_flight_step:
             return record
-        if queue_status in {"running", "stopping"} or (
-            queue_status == "queued" and in_flight_step
-        ):
+        if queue_status in {"running", "stopping"} or (queue_status == "queued" and in_flight_step):
             # A queued record with an unfinished provider step is not
             # necessarily pre-dispatch; it must be fenced and interrupted.
             # A queued record whose ledger already owns a running slot is
