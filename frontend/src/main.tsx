@@ -7831,6 +7831,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState('');
   const [invitationRecorded, setInvitationRecorded] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const signOutInFlight = useRef(false);
   const deniedIdentityAvailable = cloud?.deniedIdentityAvailable ?? false;
   // A local Google guest is authenticated but has no member permissions.
   const authenticatedGuest = cloud?.authenticated && cloud.user?.role === 'guest';
@@ -7908,7 +7910,17 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     void submitInvitationRequest();
     return () => { cancelled = true; };
   }, [deniedIdentityAvailable]);
+  useEffect(() => {
+    if (cloud?.authenticated) return;
+    const warningKey = 'sigma.signOutHandoffWarning';
+    if (window.sessionStorage.getItem(warningKey) !== 'true') return;
+    window.sessionStorage.removeItem(warningKey);
+    reportRequestFailure('You signed out of Google, but SIGMA could not preserve uninterrupted work for re-sign-in. You may need to Resume active work.');
+  }, [cloud?.authenticated]);
   async function signOut() {
+    if (signOutInFlight.current) return;
+    signOutInFlight.current = true;
+    setSigningOut(true);
     setError('');
     try {
       let currentProjectPath = window.location.pathname === '/project'
@@ -7939,12 +7951,25 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       }
       // Explicit reauthentication is distinct from the browser closing: keep
       // already admitted jobs alive during a bounded identity handoff.
-      const handoff = await fetch('/api/projects/research-presence/auth-handoff', {
-        method: 'POST', credentials: 'same-origin',
-      });
-      if (!handoff.ok) throw new Error('Could not preserve active work for re-sign-in.');
+      // Authenticated guests cannot run paid work and do not need a handoff.
+      let handoffReady = !!authenticatedGuest;
+      if (!authenticatedGuest) {
+        try {
+          const handoff = await fetch('/api/projects/research-presence/auth-handoff', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'X-Sigma-Error-Handled': 'true' },
+          });
+          handoffReady = handoff.ok;
+        } catch {
+          // The auxiliary work-preservation request must not veto explicit sign-out.
+        }
+      }
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
+      if (!handoffReady) {
+        // The user must be told if an interrupted job could require Resume.
+        try { window.sessionStorage.setItem('sigma.signOutHandoffWarning', 'true'); } catch { /* no-op */ }
+      }
       // Signing out is not a first visit. Keep the post-logout guest view
       // quiet for this tab instead of presenting its introductory welcome.
       window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true');
@@ -7954,6 +7979,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       if (signOutCopyUnavailable) window.sessionStorage.setItem('sigma.signOutCopyUnavailable', 'true');
       window.location.assign(destination);
     } catch (cause) {
+      signOutInFlight.current = false;
+      setSigningOut(false);
       const message = errorMessage(cause);
       setError(message);
       reportRequestFailure(message);
@@ -7961,7 +7988,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   }
   return <>
     {cloud?.enabled && cloud.authenticated
-      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} aria-label="Sign out of Google" data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>Sign out of Google</button>
+      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} disabled={signingOut} aria-busy={signingOut} aria-label={signingOut ? 'Signing out of Google' : 'Sign out of Google'} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>{signingOut ? 'Signing out of Google…' : 'Sign out of Google'}</button>
       : <>
         <a className="project-google-signin" href={projectReturn} onClick={() => window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed')}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}

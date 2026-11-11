@@ -837,6 +837,34 @@ def verify_new_windows_inherit_latest_google_account(browser, ui: str) -> None:
         assert account(popup) == COLLABORATOR
         assert account(first) == OWNER
 
+        # The first actual pill click in a newly opened window must log out,
+        # even when the auxiliary research-preservation request is unavailable.
+        # Previously that failure aborted the click before logout was attempted.
+        third.route(
+            "**/api/projects/research-presence/auth-handoff",
+            lambda route: route.fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"error":"Temporary handoff failure"}',
+            ),
+        )
+        logout_requests = []
+        third.on(
+            "request",
+            lambda request: (
+                logout_requests.append(request)
+                if request.url.endswith("/api/cloud-auth/logout")
+                else None
+            ),
+        )
+        third.get_by_role("button", name="Sign out of Google", exact=True).click()
+        expect(third.get_by_role("link", name="Sign in with Google")).to_be_visible()
+        assert len(logout_requests) == 1
+        assert account(third) is None
+        assert account(first) == OWNER
+        assert account(second) == COLLABORATOR
+        assert account(popup) == COLLABORATOR
+
         # Signing out the most recent login leaves existing pinned sessions
         # untouched but means a future new window starts signed out.
         code = second.evaluate(
@@ -846,7 +874,7 @@ def verify_new_windows_inherit_latest_google_account(browser, ui: str) -> None:
         second.reload()
         assert account(second) is None
         assert account(first) == OWNER
-        assert account(third) == COLLABORATOR
+        assert account(third) is None
         assert account(popup) == COLLABORATOR
         fourth = open_window()
         assert account(fourth) is None
