@@ -10,7 +10,8 @@ class CloudAuthTests(CloudAuthFixture):
         warm = self.client.get("/api/cloud-auth/status")
         self.assertEqual(warm.status_code, 200, warm.text)
         cfg = cloud_auth.config()
-        holder = sqlite3.connect(cfg.database, timeout=2, isolation_level=None)
+        self.assertIsNotNone(cfg.database)
+        holder = sqlite3.connect(cfg.database or "", timeout=2, isolation_level=None)
         try:
             holder.execute("BEGIN IMMEDIATE")
             started = time.monotonic()

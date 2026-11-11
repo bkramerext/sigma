@@ -49,7 +49,7 @@ _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", def
 _GUESTS: dict[str, tuple[Workspace, tempfile.TemporaryDirectory[str], float]] = {}
 _GUESTS_LOCK = threading.Lock()
 _WORKSPACE_SCHEMA_LOCK = threading.Lock()
-_WORKSPACE_SCHEMA_READY: set[tuple[str, int, int]] = set()
+_WORKSPACE_SCHEMA_READY: set[tuple[str, int, int, int]] = set()
 GUEST_TTL_SECONDS = 8 * 60 * 60
 
 
@@ -249,7 +249,8 @@ def _connect(root: Path) -> sqlite3.Connection:
         info = database.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
             raise WorkspaceUnavailable("Private workspace storage is unavailable.")
-        key = (str(database), info.st_dev, info.st_ino)
+        generation = connection.execute("PRAGMA schema_version").fetchone()[0]
+        key = (str(database), info.st_dev, info.st_ino, generation)
         if key not in _WORKSPACE_SCHEMA_READY:
             with _WORKSPACE_SCHEMA_LOCK:
                 if key not in _WORKSPACE_SCHEMA_READY:
@@ -260,7 +261,10 @@ def _connect(root: Path) -> sqlite3.Connection:
                             created_at TEXT NOT NULL
                         )"""
                     )
-                    _WORKSPACE_SCHEMA_READY.add(key)
+                    updated_generation = connection.execute("PRAGMA schema_version").fetchone()[0]
+                    _WORKSPACE_SCHEMA_READY.add(
+                        (key[0], key[1], key[2], updated_generation)
+                    )
         return connection
     except (OSError, sqlite3.Error) as exc:
         if connection is not None:

@@ -9,13 +9,13 @@ membership invitations, never authorization assertions.
 from __future__ import annotations
 
 import asyncio
-import threading
 import hashlib
 import json
 import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -36,13 +36,13 @@ MAX_NOTIFICATION_ATTEMPTS = 3
 EMAIL = re.compile(r"^[a-z0-9][a-z0-9._+%-]{0,63}@[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$")
 LOGGER = logging.getLogger("sigma.collaboration")
 _SCHEMA_LOCK = Lock()
-_SCHEMA_READY: set[tuple[str, int, int]] = set()
+_SCHEMA_READY: set[tuple[str, int, int, int]] = set()
 _LEASE_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
     "sigma_project_execution_lease", default=None
 )
-_WRITE_CONTEXT: ContextVar[
-    tuple[str, sqlite3.Connection, tuple[int, int | None]] | None
-] = ContextVar("sigma_project_write_transaction", default=None)
+_WRITE_CONTEXT: ContextVar[tuple[str, sqlite3.Connection, tuple[int, int | None]] | None] = (
+    ContextVar("sigma_project_write_transaction", default=None)
+)
 _T = TypeVar("_T")
 
 
@@ -338,7 +338,8 @@ def _db() -> Iterator[sqlite3.Connection]:
         identity = None
         if db_file:
             info = os.stat(db_file)
-            identity = (db_file, info.st_dev, info.st_ino)
+            schema_generation = db.execute("PRAGMA schema_version").fetchone()[0]
+            identity = (db_file, info.st_dev, info.st_ino, schema_generation)
         if identity is None or identity not in _SCHEMA_READY:
             with _SCHEMA_LOCK:
                 if identity is None or identity not in _SCHEMA_READY:
@@ -419,7 +420,13 @@ def _db() -> Iterator[sqlite3.Connection]:
                     if "failed_at" not in fields:
                         db.execute("ALTER TABLE shared_email_outbox ADD COLUMN failed_at REAL")
                     if identity is not None:
-                        _SCHEMA_READY.add(identity)
+                        # DDL increments schema_version. Cache the *post-migration*
+                        # generation; another process or a legacy restore changing
+                        # the schema will trigger validation again.
+                        latest_generation = db.execute("PRAGMA schema_version").fetchone()[0]
+                        _SCHEMA_READY.add(
+                            (identity[0], identity[1], identity[2], latest_generation)
+                        )
         yield db
     finally:
         db.close()
