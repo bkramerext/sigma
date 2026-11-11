@@ -156,7 +156,7 @@ async def stop_memory_protection() -> None:
 
 
 _research_qa_tasks: dict[
-    tuple[str, str], tuple[tuple[str, str, str], asyncio.Task[dict[str, Any]]]
+    tuple[str, str], tuple[tuple[str, str, str, str], asyncio.Task[dict[str, Any]]]
 ] = {}
 
 
@@ -869,7 +869,10 @@ async def research_qa_answer(body: ResearchQARequest):
         body.expected_binding, body.expected_project_id, body.path
     )
     key = (os.path.realpath(body.path), body.request_id)
-    fingerprint = (body.expected_project_id, body.expected_binding, body.question)
+    # A collaborator must never attach to another creator's paid task by
+    # replaying its request ID, even if both share the sponsored provider.
+    creator = project_collaboration.collaborator_identity(body.path) or ""
+    fingerprint = (body.expected_project_id, body.expected_binding, body.question, creator)
     entry = _research_qa_tasks.get(key)
     if entry is not None and entry[0] != fingerprint:
         raise ProjectError("Q/A request identifier is in use with different request parameters")

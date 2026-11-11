@@ -732,12 +732,15 @@ async def _answer_locked(
         raise ProjectError("AI connection changed before Q/A started")
     if not re.fullmatch(r"[0-9a-f]{32}", request_id):
         raise ProjectError("Invalid Q/A request identifier")
+    from sigma import project_collaboration
+
+    creator = project_collaboration.collaborator_identity(path) or ""
     question_hash = hashlib.sha256(question.encode()).hexdigest()
     records, pending = _load_archive(path)
-    previous = _request_record(records, request_id, question)
+    previous = _request_record(records, request_id, question, creator=creator)
     if previous:
         return previous
-    _check_pending_request(pending, request_id, question_hash)
+    _check_pending_request(pending, request_id, question_hash, creator=creator)
     if len(records) >= MAX_RECORDS:
         raise ProjectError("This project has reached the 50 saved Q/A limit")
     package, snapshot_hash = papers._snapshot(path)
@@ -762,19 +765,15 @@ async def _answer_locked(
         raise ProjectError(config["message"])
     source_ids = {_source_id(source) for source in selected}
     started = datetime.now(UTC)
-    from sigma import project_collaboration
-
-    creator = project_collaboration.collaborator_identity(path) or ""
-
     # Persist an idempotency marker before dispatch. If the process exits after
     # provider bytes may have been sent, a retry cannot silently charge twice.
     def reserve(
         records: list[dict[str, Any]], pending: list[dict[str, str]]
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]], Any, bool]:
-        previous = _request_record(records, request_id, question)
+        previous = _request_record(records, request_id, question, creator=creator)
         if previous:
             return records, pending, previous, False
-        _check_pending_request(pending, request_id, question_hash)
+        _check_pending_request(pending, request_id, question_hash, creator=creator)
         if len(records) >= MAX_RECORDS:
             raise ProjectError("This project has reached the 50 saved Q/A limit")
         return (
@@ -877,11 +876,15 @@ async def _answer_locked(
     def save_answer(
         records: list[dict[str, Any]], pending: list[dict[str, str]]
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]], Any, bool]:
-        previous = _request_record(records, request_id, question)
+        previous = _request_record(records, request_id, question, creator=creator)
         if previous:
             return records, pending, previous, False
         marker = next((item for item in pending if item.get("request_id") == request_id), None)
-        if marker is None or marker.get("question_sha256") != question_hash:
+        if (
+            marker is None
+            or marker.get("question_sha256") != question_hash
+            or marker.get("creator", "") != creator
+        ):
             raise ProjectError("Q/A request reservation changed before the answer was saved")
         if len(records) >= MAX_RECORDS:
             raise ProjectError("This project has reached the 50 saved Q/A limit")
@@ -901,20 +904,34 @@ async def _answer_locked(
 
 
 def _request_record(
-    records: list[dict[str, Any]], request_id: str, question: str
+    records: list[dict[str, Any]],
+    request_id: str,
+    question: str,
+    *,
+    creator: str = "",
 ) -> dict[str, Any] | None:
     previous = next((row for row in records if row.get("request_id") == request_id), None)
-    if previous and previous.get("question") != question:
+    if previous is None:
+        return None
+    if creator and (previous.get("author_email") or previous.get("created_by")) != creator:
+        raise ProjectError("Q/A request identifier belongs to another collaborator")
+    if previous.get("question") != question:
         raise ProjectError("Q/A request identifier was already used for a different question")
     return previous
 
 
 def _check_pending_request(
-    pending: list[dict[str, str]], request_id: str, question_hash: str
+    pending: list[dict[str, str]],
+    request_id: str,
+    question_hash: str,
+    *,
+    creator: str = "",
 ) -> None:
     marker = next((item for item in pending if item.get("request_id") == request_id), None)
     if marker is None:
         return
+    if creator and marker.get("creator", "") != creator:
+        raise ProjectError("Q/A request identifier belongs to another collaborator")
     if marker.get("question_sha256") != question_hash:
         raise ProjectError("Q/A request identifier was already used for a different question")
     raise ProjectError(

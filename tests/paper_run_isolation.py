@@ -1,8 +1,4 @@
-"""Provider-free tests of opt-in Paper run isolation and serial capacity queuing.
-
-API admission is still project-scoped. These tests protect the storage/task
-boundary before enabling independent collaborator starts.
-"""
+"""Provider-free tests of independent Paper run storage, admission and control."""
 
 from __future__ import annotations
 
@@ -64,6 +60,57 @@ class PaperRunIsolationTests(TestCase):
         self.assertEqual(present(papers._load_work(self.path))["model"], "legacy")
         self.assertEqual(papers._work_file(self.path, create=False), legacy_file)
         self.assertTrue(legacy_file.is_file())
+
+    def test_stopping_one_submitted_paper_does_not_cancel_the_other(self) -> None:
+        """Two admitted Papers retain distinct tasks across a creator Stop."""
+
+        async def exercise() -> None:
+            entered_first = asyncio.Event()
+            entered_second = asyncio.Event()
+            hold_first = asyncio.Event()
+            release_second = asyncio.Event()
+
+            async def generation(
+                entered: asyncio.Event, release: asyncio.Event
+            ) -> dict[str, Any]:
+                async with papers._paper_operation(self.path, generating=True):
+                    entered.set()
+                    await release.wait()
+                    return {"paper_id": uuid4().hex}
+
+            with papers.paper_run_scope(self.first):
+                first = asyncio.create_task(generation(entered_first, hold_first))
+                papers.register_submission(self.path, first)
+            await asyncio.wait_for(entered_first.wait(), timeout=5)
+            with papers.paper_run_scope(self.second):
+                second = asyncio.create_task(generation(entered_second, release_second))
+                papers.register_submission(self.path, second)
+            try:
+                with papers.paper_run_scope(self.second):
+                    for _ in range(100):
+                        queued = papers.progress_status(self.path)
+                        if queued is not None and queued.get("status") == "queued":
+                            break
+                        await asyncio.sleep(0)
+                    else:
+                        self.fail("Second Paper never received its own queue receipt")
+                self.assertFalse(entered_second.is_set())
+                with papers.paper_run_scope(self.first):
+                    self.assertTrue(await papers.cancel_generation(self.path))
+                await asyncio.wait_for(entered_second.wait(), timeout=5)
+                self.assertFalse(second.done(), "Stopping A incorrectly cancelled B")
+                with papers.paper_run_scope(self.first):
+                    self.assertFalse(await papers.cancel_generation(self.path))
+                release_second.set()
+                result = await asyncio.wait_for(second, timeout=5)
+                self.assertIn("paper_id", result)
+            finally:
+                hold_first.set()
+                release_second.set()
+                await asyncio.gather(first, second, return_exceptions=True)
+
+        with patch("sigma.memory_guard.require_capacity"):
+            asyncio.run(exercise())
 
     def test_invalid_or_symlinked_run_directory_is_rejected(self) -> None:
         for bad in ("../escape", "a" * 31, "A" * 32, "", None):

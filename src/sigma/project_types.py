@@ -622,6 +622,65 @@ def normalize_project_snapshot(value: Any, identifier: str) -> dict[str, Any] | 
         return None
 
 
+def _propagate_project_standards() -> None:
+    """Publish the owner's effective standards to existing projects by type ID.
+
+    A shared project retains its own snapshot: collaborators never resolve the
+    project's standards using *their* private project-type catalogs. Updating
+    the owner's catalog publishes the new effective snapshot to that owner's
+    projects. In-flight Sessions already carry a frozen snapshot; subsequent
+    Sessions and Papers see the committed revision.
+
+    Every project mutation uses the existing short per-project write lock and
+    collaboration revision, so overlapping member edits cannot be overwritten.
+    Missing/deleted custom types preserve the last valid project snapshot.
+    """
+    from sigma.projects import _update_project, inspect_project
+
+    root = projects_root()
+    try:
+        candidates = sorted(root.iterdir())
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise ProjectError("Project standards could not be synchronized.") from exc
+
+    for path in candidates:
+        if (
+            path.name.startswith(".")
+            or path.is_symlink()
+            or path.suffix not in {".sigma", ".json"}
+        ):
+            continue
+        try:
+            view = inspect_project(path)
+        except (ProjectError, OSError, ValueError):
+            # An unrelated invalid/import-in-progress project is not a
+            # reason to rewrite its files or withhold another project update.
+            continue
+        identifier = view.project.investigation_type
+        if identifier == "default":
+            continue
+        effective = get_type(identifier)
+        if effective is None:
+            continue
+        if view.project.project_type_snapshot == effective.record():
+            continue
+
+        def publish(project):
+            if project.investigation_type != identifier:
+                return project  # Category changed while this catalog was saved.
+            current = get_type(identifier)
+            if current is None:
+                return project  # A deleted type retains its valid snapshot.
+            snapshot = current.record()
+            if project.project_type_snapshot == snapshot:
+                return project
+            return replace(project, project_type_snapshot=snapshot)
+
+        _update_project(path, publish)
+
+
 def _write_custom(
     items: list[ProjectType],
     *,
@@ -702,6 +761,10 @@ def _write_custom(
             if os.path.exists(temporary):
                 os.unlink(temporary)
         fcntl.flock(lock, fcntl.LOCK_UN)
+
+    # The catalog is durable before publishing project snapshots. Publish
+    # outside its file lock to avoid blocking unrelated catalog readers.
+    _propagate_project_standards()
 
 
 def save_type(raw: dict[str, Any], *, identifier: str | None = None) -> ProjectType:
