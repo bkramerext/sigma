@@ -2518,6 +2518,107 @@ def test_cross_user_crash_reclaims_only_dead_worker(root: Path, ledger_root: Pat
             cloud_workspaces._CURRENT.reset(token)
 
 
+def test_orphan_recovery_epoch_compare_and_swap(root: Path, ledger_root: Path) -> None:
+    """A replacement claim between liveness check and DB update cannot be stolen."""
+    owner = workspace(root, "7" * 32)
+    settings = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "epoch-cas-provider-free-fixture",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    with (
+        patch.dict(os.environ, settings, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            project = initialize_project(
+                owner.path / "epoch-cas.sigma",
+                "Recovery fencing",
+                "Verify a newer worker survives stale recovery",
+                research_mode="mathematical",
+            )
+            record = job(owner.workspace_id)
+            record.update({"project_id": project.project.id, "project_path": project.path})
+            cloud_research.prepare_job(record)
+            assert cloud_research.claim_job(record["id"])
+            cloud_research.reserve_call(record["id"], "epoch-cas-unsettled", 0.04, 40)
+            saved = {
+                **record,
+                "session_number": 1,
+                "status": "running",
+                "steps": [],
+                "strategy_runs": [],
+                "events": [],
+                "created_by": "original-creator",
+                "artifacts": [{"id": "checkpoint-1"}],
+            }
+            research_sessions._save(project.path, saved)
+            old_epoch = "previous-worker-epoch"
+            replacement_epoch = "replacement-worker-epoch"
+            with cloud_research._connect() as db:
+                db.execute(
+                    "UPDATE jobs SET process_epoch=? WHERE session_id=?",
+                    (old_epoch, record["id"]),
+                )
+
+            def intervening_claim(session: dict) -> dict:
+                # Model a second process claiming during the recovery gap:
+                # the check established the old worker was dead, but the
+                # replacement now owns the running slot.
+                with cloud_research._connect() as db:
+                    db.execute(
+                        "UPDATE jobs SET status='running',process_epoch=? "
+                        "WHERE session_id=?",
+                        (replacement_epoch, record["id"]),
+                    )
+                session["status"] = "paused"
+                return session
+
+            with patch.object(research_sessions, "_recover", side_effect=intervening_claim):
+                cloud_research.reconcile_orphaned_jobs()
+            with cloud_research._connect() as db:
+                current = db.execute(
+                    "SELECT status,process_epoch FROM jobs WHERE session_id=?",
+                    (record["id"],),
+                ).fetchone()
+                assert current["status"] == "running"
+                assert current["process_epoch"] == replacement_epoch
+                liability = db.execute(
+                    "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
+                    ("epoch-cas-unsettled",),
+                ).fetchone()
+                assert (liability["status"], liability["amount_usd"], liability["token_reservation"]) == (
+                    "reserved",
+                    0.04,
+                    40,
+                )
+
+            # The unpublished-record branch has no session recovery callback;
+            # its direct reclaim must enforce the same epoch fence.
+            cloud_research.recover_job(record["id"], expected_epoch=old_epoch)
+            with cloud_research._connect() as db:
+                assert db.execute(
+                    "SELECT status FROM jobs WHERE session_id=?", (record["id"],)
+                ).fetchone()["status"] == "running"
+                assert db.execute(
+                    "SELECT status FROM calls WHERE call_id='epoch-cas-unsettled'"
+                ).fetchone()["status"] == "reserved"
+            cloud_research.recover_job(record["id"], expected_epoch=replacement_epoch)
+            with cloud_research._connect() as db:
+                assert db.execute(
+                    "SELECT status FROM jobs WHERE session_id=?", (record["id"],)
+                ).fetchone()["status"] == "interrupted"
+                assert db.execute(
+                    "SELECT status FROM calls WHERE call_id='epoch-cas-unsettled'"
+                ).fetchone()["status"] == "unknown"
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
 def test_shared_collaborator_recovery_locator(root: Path, ledger_root: Path) -> None:
     """An authenticated collaborator can recover a project in the owner's workspace.
 
@@ -3981,6 +4082,10 @@ def main() -> None:
         foreign_ledger.mkdir(mode=0o700)
         print("RUNNING test_cross_user_crash_reclaims_only_dead_worker", flush=True)
         test_cross_user_crash_reclaims_only_dead_worker(root, foreign_ledger)
+        epoch_ledger = root / "epoch-cas-ledger"
+        epoch_ledger.mkdir(mode=0o700)
+        print("RUNNING test_orphan_recovery_epoch_compare_and_swap", flush=True)
+        test_orphan_recovery_epoch_compare_and_swap(root, epoch_ledger)
         auxiliary_ledger = root / "auxiliary-inference-ledger"
         auxiliary_ledger.mkdir(mode=0o700)
         print(
