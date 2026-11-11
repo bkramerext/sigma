@@ -13,7 +13,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from sigma import papers, project_collaboration, research_qa, research_sessions
-from sigma.api import app
+from sigma.api import app, research_qa_answer, research_qa_delete
 from sigma.projects import inspect_project
 
 if os.environ.get("SIGMA_MOCK_AUTH") != "1":
@@ -129,6 +129,18 @@ def unfreeze_mock_sessions():
     research_sessions._advance_mock = _real_advance_mock
     research_sessions.has_active_session = _real_has_active_session
     return {"frozen": False}
+
+
+# Production mock auth deliberately denies inference endpoints. Test the real
+# Q/A handler, including task idempotency and creator-scoped authorization,
+# behind a fixture-only alias. This module cannot load outside mock auth, and
+# its provider is replaced with deterministic, no-network inference.
+app.add_api_route(
+    "/api/__fixture/collaboration-qa-ask", research_qa_answer, methods=["POST"]
+)
+app.add_api_route(
+    "/api/__fixture/collaboration-qa/{qa_id}", research_qa_delete, methods=["DELETE"]
+)
 
 
 @app.get("/api/__fixture/collaboration-qa-state")

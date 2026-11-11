@@ -537,7 +537,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         request_ids = (uuid4().hex, uuid4().hex)
         submit_qa = """({path, projectId, question, requestId}) => {
-            window.sigmaCollaborationQA = fetch('/api/projects/research-qa', {
+            window.sigmaCollaborationQA = fetch('/api/__fixture/collaboration-qa-ask', {
                 method: 'POST', headers: {'Content-Type':'application/json'},
                 body: JSON.stringify({
                     path, expected_project_id: projectId,
@@ -616,7 +616,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         # A collaborator cannot piggyback on another creator's in-flight paid
         # request by reusing its request ID. Neither fixture call is duplicated.
         stolen = member_context.request.post(
-            ui + "/api/projects/research-qa",
+            ui + "/api/__fixture/collaboration-qa-ask",
             headers={"Origin": ui},
             data={
                 "path": path,
@@ -752,7 +752,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             == 2
         ), "No implicit provider retry is permitted"
         foreign_delete = member_context.request.delete(
-            ui + f"/api/projects/research-qa/{answers[0]['qa_id']}",
+            ui + f"/api/__fixture/collaboration-qa/{answers[0]['qa_id']}",
             params={"path": path},
             headers={"Origin": ui},
         )
