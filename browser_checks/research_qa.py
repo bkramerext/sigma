@@ -201,13 +201,23 @@ with sync_playwright() as playwright:
     )
     dialog.get_by_role("textbox", name="Question", exact=True).fill(failed_question)
     dialog.get_by_role("button", name="Ask", exact=True).click()
-    expect(dialog.get_by_role("alert")).to_be_visible(timeout=30000)
+    # An unrelated archive/polling toast may be visible while the provider
+    # request is still in flight. Only the injected HTTP 500 proves that this
+    # failure/retry scenario reached the provider; a generic alert does not.
+    expect(dialog.get_by_role("alert")).to_contain_text(
+        "OpenAI API request failed (HTTP 500)", timeout=30000
+    )
     expect(dialog.get_by_role("group", name="Recover interrupted Q/A request")).to_have_count(0)
     expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
     ask_button = dialog.get_by_role("button", name="Ask", exact=True)
     expect(ask_button).to_be_enabled()
     failed_state_before_retry = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
+    )
+    assert failed_state_before_retry["started"] == state_after_cancel["started"] + 1, (
+        "Injected HTTP 500 must have dispatched exactly one provider request",
+        state_after_cancel,
+        failed_state_before_retry,
     )
     # Failure display is a single dismissible toast; dismissal is not a retry.
     dialog.get_by_role("button", name="Dismiss").click()
@@ -229,7 +239,11 @@ with sync_playwright() as playwright:
     state_after_retry = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
     )
-    assert state_after_retry["started"] == state_after_cancel["started"] + 2
+    assert state_after_retry["started"] == failed_state_before_retry["started"] + 1, (
+        "Explicit retry must dispatch exactly once, without automatic replay",
+        failed_state_before_retry,
+        state_after_retry,
+    )
 
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=30000)
