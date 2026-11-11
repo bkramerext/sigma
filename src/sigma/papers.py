@@ -13,8 +13,8 @@ import stat
 import unicodedata
 import zlib
 from collections import deque
-from collections.abc import Awaitable, Callable, Mapping
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -142,6 +142,30 @@ _paper_model_for_call: ContextVar[Callable[[dict[str, Any]], dict[str, Any]] | N
     "sigma_paper_model_for_call", default=None
 )
 
+# Task-local scope for durable per-Paper state. The existing API intentionally
+# remains legacy project-scoped until reservations, authorization and controls
+# have been migrated; this selector is not an authorization check.
+_paper_run_id: ContextVar[str | None] = ContextVar("sigma_paper_run_id", default=None)
+
+
+@contextmanager
+def paper_run_scope(run_id: str) -> Iterator[None]:
+    """Route one run's checkpoint, progress, queue receipt and task identity."""
+    if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{32}", run_id) is None:
+        raise ValueError("Paper run ID must be 32 lowercase hexadecimal characters")
+    token = _paper_run_id.set(run_id)
+    try:
+        yield
+    finally:
+        _paper_run_id.reset(token)
+
+
+def _paper_state_key(path: str) -> str:
+    project_key = str(project_path(path).resolve())
+    run_id = _paper_run_id.get()
+    return project_key if run_id is None else f"{project_key}#paper:{run_id}"
+
+
 
 @asynccontextmanager
 async def _paper_model_selection_scope():
@@ -230,7 +254,7 @@ def _paper_gate() -> asyncio.Condition:
 
 @asynccontextmanager
 async def _paper_operation(path: str, *, generating: bool):
-    key = str(project_path(path).resolve())
+    key = _paper_state_key(path)
     gate = _paper_gate()
     admitted = False
     now = _now()
@@ -328,7 +352,7 @@ _submission_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 
 def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
     """Reserve the job and fsync its receipt before the HTTP response begins."""
-    key = str(project_path(path).resolve())
+    key = _paper_state_key(path)
     existing = _submission_tasks.get(key)
     if existing is not None and not existing.done():
         raise ProjectError("A paper generation is already active or queued for this project")
@@ -3247,19 +3271,25 @@ def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
 
 def _work_file(path: str, *, create: bool) -> Path:
     root = _paper_dir(path, create=create)
-    directory = root / ".long-paper-work"
-    if directory.is_symlink():
-        raise ProjectError("Long-paper checkpoint directory must not be a symbolic link")
-    if not directory.exists():
-        if not create:
-            return directory / "checkpoint.json"
-        directory.mkdir(mode=0o700)
-    info = directory.lstat()
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
-        raise ProjectError("Long-paper checkpoint directory is unsafe")
-    os.chmod(directory, 0o700)
-    return directory / "checkpoint.json"
-
+    legacy = root / ".long-paper-work"
+    run_id = _paper_run_id.get()
+    # Legacy work stays where it was; explicitly identified runs use private
+    # subdirectories so checkpoint sidecars cannot overwrite another run.
+    directories = [legacy]
+    if run_id is not None:
+        directories.extend((legacy / "runs", legacy / "runs" / run_id))
+    for directory in directories:
+        if directory.is_symlink():
+            raise ProjectError("Long-paper checkpoint directory must not be a symbolic link")
+        if not directory.exists():
+            if not create:
+                return directories[-1] / "checkpoint.json"
+            directory.mkdir(mode=0o700, exist_ok=True)
+        info = directory.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise ProjectError("Long-paper checkpoint directory is unsafe")
+        os.chmod(directory, 0o700)
+    return directories[-1] / "checkpoint.json"
 
 def needs_preflight_on_open(path: str) -> bool:
     """Only saved paper work requires the expensive evidence preflight on navigation.
@@ -4385,7 +4415,7 @@ def _read_queue_status(path: str) -> dict[str, Any] | None:
 
 def activity_status(path: str) -> Literal["queued", "active", "interrupted", "failed"] | None:
     """Bounded status for project lists, including post-restart warnings."""
-    key = str(project_path(path).resolve())
+    key = _paper_state_key(path)
     if key in _queued_progress:
         return "queued"
     if key in _generating_paper_projects:
@@ -4417,7 +4447,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
     receipt = _read_reset_ledger(path)
     if receipt is not None and not receipt["attempt_started"]:
         return None
-    key = str(project_path(path).resolve())
+    key = _paper_state_key(path)
     queued = _queued_progress.get(key)
     waiters = tuple(_paper_waiters)
     if queued is not None and key in waiters:
@@ -4560,7 +4590,7 @@ def finish_progress(
     expected_run_id: str | None = None,
 ) -> None:
     """Freeze the latest checkpointed progress when generation exits abnormally."""
-    key = str(project_path(path).resolve())
+    key = _paper_state_key(path)
     active = _active_progress.get(key)
     if expected_run_id is not None and (active is None or active.get("run_id") != expected_run_id):
         return  # A stale task callback must never alter a newer attempt.
@@ -4837,7 +4867,7 @@ async def _restart_work_locked(
     )
     _clear_work(path)
     _clear_queue_status(path)
-    _active_progress.pop(str(project_path(path).resolve()), None)
+    _active_progress.pop(_paper_state_key(path), None)
     return {
         "provider_calls_attempted": 0,
         "provider_calls_previous_runs": sum(item["provider_calls_attempted"] for item in history),
@@ -4855,7 +4885,7 @@ async def _restart_work_locked(
 async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
     """Remove unpublished work without affecting saved paper versions."""
     async with _paper_operation(path, generating=False):
-        key = str(project_path(path).resolve())
+        key = _paper_state_key(path)
         submission = _submission_tasks.get(key)
         if submission is not None and not submission.done():
             raise ProjectError("A paper generation submission is still active")
@@ -9712,12 +9742,12 @@ async def _generate_impl(
     authorized_provider_change: bool = False,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True), _paper_model_selection_scope():
-        project_key = str(project_path(path).resolve())
+        project_key = _paper_state_key(path)
         _started_paper_attempts.add(project_key)
         logging.getLogger("sigma.lifecycle").info(
             "paper.start project_id=%s", expected_project_id or "unknown"
         )
-        run_id = uuid4().hex
+        run_id = _paper_run_id.get() or uuid4().hex
         from sigma import cloud_auth, progress_notifications
 
         progress_notifications.bind_job(cloud_auth.current_principal(), f"paper:{run_id}")
@@ -11457,7 +11487,7 @@ async def generate(
     from sigma.memory_guard import require_capacity
 
     require_capacity()
-    key = str(project_path(path).resolve())
+    key = _paper_state_key(path)
     current = _generation_tasks.get(key)
     if current is not None and not current.done():
         raise ProjectError("A paper generation is already active for this project")
@@ -11540,7 +11570,7 @@ async def generate(
 
 async def cancel_generation(path: str) -> bool:
     """Explicitly cancel this project's active generation, not a disconnected viewer."""
-    key = str(project_path(path).resolve())
+    key = _paper_state_key(path)
     # The API submission task is registered before any await, while the
     # inner generation task is registered only once that coroutine begins.
     # Cancel the outer owner: awaiting it forwards cancellation to the inner
