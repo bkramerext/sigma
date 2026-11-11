@@ -303,7 +303,12 @@ def project_write_lock(value: str | Path, *, advance_revision: bool = True):
     from sigma import project_collaboration
 
     held = _PROJECT_FILE_LOCK.get()
-    if held is not None and held.active and held.path == str(path) and held.owner == _file_lock_owner():
+    if (
+        held is not None
+        and held.active
+        and held.path == str(path)
+        and held.owner == _file_lock_owner()
+    ):
         with project_collaboration.write_guard(str(path), advance_revision=advance_revision):
             yield path
         return
