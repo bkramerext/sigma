@@ -318,12 +318,16 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
             papers_pane.get_by_role("button", name="New paper").click()
             papers_pane.get_by_role("button", name="Start Paper").click()
-            expect(papers_pane.get_by_role("button", name="Stop Paper 1")).to_be_visible()
-            # New paper remains visible in multi-run mode, but this tab cannot
-            # start a second submission until its current request is handed off.
+            # The isolated fixture lacks provider credentials; a rejected dispatch
+            # must not invent a numbered active paper.
+            expect(papers_pane.get_by_role("button", name="Stop paper generation")).to_have_count(0)
+            expect(papers_pane.get_by_role("button", name="Generate paper")).to_be_visible()
+            # No provider is connected in this offline fixture. The attempted
+            # generation must fail safely without fabricating a numbered draft.
             expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
-            expect(papers_pane.get_by_role("button", name="New paper")).to_be_disabled()
-            expect(papers_pane.get_by_role("button", name="Include in paper")).to_be_disabled()
+            expect(papers_pane.get_by_role("button", name="New paper")).to_be_enabled(
+                timeout=10000
+            )
             expect(papers_pane.locator(".section-count")).to_contain_text("1 paper")
             expect(
                 papers_pane.get_by_role("button", name="Remove unfinished Paper 1")

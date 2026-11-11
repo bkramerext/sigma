@@ -91,7 +91,16 @@ with sync_playwright() as playwright:
     expect(lean).to_be_visible()
     expect(lean).to_be_enabled()
     assert qa_button.bounding_box()["x"] < lean.bounding_box()["x"]
-    assert lean.bounding_box()["height"] == qa_button.bounding_box()["height"]
+    # LEAN's larger artwork requires a larger hover surface than the Q/A glyph.
+    lean_box = lean.bounding_box()
+    qa_box = qa_button.bounding_box()
+    assert lean_box is not None and qa_box is not None
+    assert lean_box["height"] >= qa_box["height"]
+    assert lean_box["width"] >= qa_box["width"]
+    icon_box = lean.locator("img").bounding_box()
+    assert icon_box is not None
+    assert icon_box["x"] >= lean_box["x"]
+    assert icon_box["x"] + icon_box["width"] <= lean_box["x"] + lean_box["width"]
     expect(lean.locator("img")).to_have_attribute("src", "/lean-logo.svg")
     lean.click()
     lean_dialog = page.get_by_role("dialog", name="Lean proof verification")

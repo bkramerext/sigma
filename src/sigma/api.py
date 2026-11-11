@@ -2454,9 +2454,7 @@ async def proposal_config(path: str | None = None, purpose: str | None = None):
     if purpose == "markdown":
         from sigma.text_conversion import FORMAT_EFFORT, FORMAT_MODEL
 
-        return await configuration(
-            path, frozen_model=FORMAT_MODEL, frozen_effort=FORMAT_EFFORT
-        )
+        return await configuration(path, frozen_model=FORMAT_MODEL, frozen_effort=FORMAT_EFFORT)
     return await configuration(path)
 
 

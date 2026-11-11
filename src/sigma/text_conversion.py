@@ -228,7 +228,9 @@ async def _convert_text(
                     or expected_digest is None
                     or expected_project_id is None
                 ):
-                    raise ProjectError("Current Understanding conversion requires a field and project binding")
+                    raise ProjectError(
+                        "Current Understanding conversion requires a field and project binding"
+                    )
                 raw_block = _understanding_block(path, field_path)
                 source = {
                     "source_format": "plain",
@@ -296,7 +298,14 @@ async def _convert_text(
             source_body: str = source[source_format]["body"]
             limit = (
                 20000
-                if scope in {"project", "research-conclusion", "research-block", "research-qa", "current-understanding"}
+                if scope
+                in {
+                    "project",
+                    "research-conclusion",
+                    "research-block",
+                    "research-qa",
+                    "current-understanding",
+                }
                 else MAX_STRATEGY_APPROACH
             )
             if len(source_body) > limit:
@@ -307,8 +316,10 @@ async def _convert_text(
                     "AI account/billing mode changed. Review the connection and retry"
                 )
             config = await configuration(
-                view=view, context=binding,
-                frozen_model=FORMAT_MODEL, frozen_effort=FORMAT_EFFORT,
+                view=view,
+                context=binding,
+                frozen_model=FORMAT_MODEL,
+                frozen_effort=FORMAT_EFFORT,
             )
             if not config["available"]:
                 raise ProjectError(config["message"])
@@ -518,8 +529,13 @@ async def _convert_text(
             # Formatting uses an explicit fixed model/effort; the selected research
             # model can change during this request without changing provenance.
             if scope == "current-understanding":
-                if field_path is None or digest(_understanding_block(path, field_path)) != source["source_digest"]:
-                    raise ProjectError("Current Understanding changed during conversion; reopen before retrying")
+                if (
+                    field_path is None
+                    or digest(_understanding_block(path, field_path)) != source["source_digest"]
+                ):
+                    raise ProjectError(
+                        "Current Understanding changed during conversion; reopen before retrying"
+                    )
                 return {
                     "body": body,
                     "warnings": result.warnings,

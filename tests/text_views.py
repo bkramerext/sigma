@@ -146,15 +146,23 @@ async def main_async(root: Path):
         return REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
 
     binding = {"identity": "fixture-account", "mode": "api_key", "token": "fixture-only"}
-    config = {"available": True, "model": MODEL, "reasoning_effort": FORMAT_EFFORT, "message": "ready"}
+    config = {
+        "available": True,
+        "model": MODEL,
+        "reasoning_effort": FORMAT_EFFORT,
+        "message": "ready",
+    }
 
     async def cheap_configuration(**kwargs):
         assert kwargs["frozen_model"] == FORMAT_MODEL
         assert kwargs["frozen_effort"] == FORMAT_EFFORT
         return config
+
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch("sigma.text_conversion.httpx.AsyncClient", side_effect=client),
     ):
         converted = await convert_text(
@@ -196,7 +204,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch("sigma.text_conversion.httpx.AsyncClient", side_effect=client),
     ):
         converted_conclusion = await convert_text(
@@ -288,7 +298,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -312,7 +324,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -360,7 +374,9 @@ async def main_async(root: Path):
         assert (legacy / "project.json").read_bytes() == before
         with (
             patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-            patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+            patch(
+                "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+            ),
             patch(
                 "sigma.text_conversion.httpx.AsyncClient",
                 side_effect=lambda **kwargs: REAL_CLIENT(
@@ -394,7 +410,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -490,7 +508,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -499,8 +519,11 @@ async def main_async(root: Path):
         ),
     ):
         formatted = await convert_text(
-            str(live_path), "current-understanding", "markdown",
-            expected_digest=digest(scope_text), expected_project_id=inspect_project(live_path).project.id,
+            str(live_path),
+            "current-understanding",
+            "markdown",
+            expected_digest=digest(scope_text),
+            expected_project_id=inspect_project(live_path).project.id,
             field_path="scope_note",
         )
         assert formatted["body"] == scope_text
@@ -508,8 +531,11 @@ async def main_async(root: Path):
         assert formatted["provenance"]["reasoning_effort"] == FORMAT_EFFORT
         try:
             await convert_text(
-                str(live_path), "current-understanding", "markdown",
-                expected_digest=digest("stale"), expected_project_id=inspect_project(live_path).project.id,
+                str(live_path),
+                "current-understanding",
+                "markdown",
+                expected_digest=digest("stale"),
+                expected_project_id=inspect_project(live_path).project.id,
                 field_path="scope_note",
             )
         except ProjectError as exc:
@@ -518,8 +544,11 @@ async def main_async(root: Path):
             raise AssertionError("Stale Current Understanding text was formatted")
         try:
             await convert_text(
-                str(live_path), "current-understanding", "markdown",
-                expected_digest=digest(scope_text), expected_project_id=inspect_project(live_path).project.id,
+                str(live_path),
+                "current-understanding",
+                "markdown",
+                expected_digest=digest(scope_text),
+                expected_project_id=inspect_project(live_path).project.id,
                 field_path="project_status",
             )
         except ProjectError as exc:
@@ -536,7 +565,9 @@ async def main_async(root: Path):
     release.clear()
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -576,7 +607,9 @@ async def main_async(root: Path):
             raise AssertionError("Unavailable model was used")
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -598,7 +631,9 @@ async def main_async(root: Path):
             "sigma.text_conversion.auth_context",
             new=AsyncMock(side_effect=[binding, {**binding, "identity": "other"}]),
         ),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -629,7 +664,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch("sigma.text_conversion.CALL_SECONDS", 0.01),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
@@ -662,7 +699,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch("sigma.text_conversion.CALL_SECONDS", 0.3),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
@@ -679,7 +718,9 @@ async def main_async(root: Path):
     malformed["output"][0]["content"][0]["text"] = "{"
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -707,7 +748,9 @@ async def main_async(root: Path):
     original_strategy = strategy.approach
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -794,7 +837,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -842,7 +887,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -888,7 +935,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -946,7 +995,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -981,7 +1032,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1026,7 +1079,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1057,7 +1112,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1082,7 +1139,9 @@ async def main_async(root: Path):
     api_source = (api_failure_path / "project.json").read_bytes()
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1117,7 +1176,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1145,7 +1206,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1207,7 +1270,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1263,7 +1328,9 @@ async def main_async(root: Path):
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -1329,7 +1396,9 @@ async def main_async(root: Path):
     }
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
-        patch("sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(

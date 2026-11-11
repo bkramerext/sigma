@@ -656,7 +656,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         if missing_type.is_visible():
             expect(missing_type).to_contain_text("complete saved settings")
             missing_type.get_by_role("button", name="Continue with saved settings").click()
-        expect(page.get_by_role("button", name="Start Session 1")).to_be_visible(timeout=15000)
+        expect(page.get_by_role("button", name="Start Session")).to_be_visible(timeout=15000)
         assert page.evaluate("sessionStorage.getItem('sigma.resumeGuestPlay')") is None
         resumed_mutations = len(mutation_requests)
         page.locator(".session-start-link").filter(has_text="Cancel").click()
