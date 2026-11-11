@@ -10,11 +10,41 @@ import asyncio
 
 from fastapi import HTTPException
 
-from sigma import papers, research_qa
+from sigma import papers, research_qa, research_sessions
 from sigma.api import app
 
 _started: list[str] = []
 _release = asyncio.Event()
+
+
+# In production, a real Session remains active while its process owns an OS
+# worker lock. Mock Sessions have no worker; the original single-browser tests
+# progress them on every read. Freeze only after admission so a two-browser
+# acceptance can observe the same overlapping running/queued state.
+_real_has_active_session = research_sessions.has_active_session
+
+
+@app.post("/api/__fixture/collaboration-freeze-sessions")
+def freeze_mock_sessions(body: dict[str, str]):
+    path = body.get("path", "")
+    if not isinstance(path, str) or not path:
+        raise HTTPException(400, "Missing project path")
+    records = research_sessions._all(path)
+    if not any(row.get("simulated") and row.get("status") == "running" for row in records):
+        raise HTTPException(409, "No simulated running Session to freeze")
+
+    research_sessions._advance_mock = lambda record: record
+
+    def simulated_liveness(candidate: str, *, project_id: str | None = None) -> bool:
+        if candidate == path:
+            return any(
+                row.get("simulated") and row.get("status") in {"queued", "running"}
+                for row in research_sessions._all(candidate)
+            )
+        return _real_has_active_session(candidate, project_id=project_id)
+
+    research_sessions.has_active_session = simulated_liveness
+    return {"frozen": True}
 
 
 @app.get("/api/__fixture/collaboration-qa-state")
