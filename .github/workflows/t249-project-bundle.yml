@@ -1,4 +1,4 @@
-name: T249 integrated project verification
+name: Project Storage & Migration
 on:
   pull_request:
     paths:
