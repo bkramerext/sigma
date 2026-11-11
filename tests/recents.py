@@ -910,12 +910,11 @@ def check_run_activity_aggregation_and_lightweight_poll() -> None:
     """Mixed runs retain queued entries, immutable authors and low-cost reads."""
     from sigma import papers, project_collaboration, recents, research_qa, research_sessions
 
-    project = SimpleNamespace(
-        id="project-1", ai_model="fallback-model", reasoning_effort="medium"
-    )
+    project = SimpleNamespace(id="project-1", ai_model="fallback-model", reasoning_effort="medium")
     with (
         patch.object(
-            project_collaboration, "summary",
+            project_collaboration,
+            "summary",
             return_value={
                 "shared": False,
                 "artifact_authors": {
@@ -925,28 +924,43 @@ def check_run_activity_aggregation_and_lightweight_poll() -> None:
             },
         ),
         patch.object(
-            papers, "progress_status",
+            papers,
+            "progress_status",
             return_value={"model": "paper-model", "reasoning_effort": "high"},
         ),
         patch.object(papers, "next_paper_number_for_activity", return_value=3),
         patch.object(
-            research_sessions, "list_sessions",
-            return_value=[{
-                "id": "session-n", "session_number": 2, "status": "queued",
-                "model": "session-model", "reasoning_effort": "low",
-            }],
+            research_sessions,
+            "list_sessions",
+            return_value=[
+                {
+                    "id": "session-n",
+                    "session_number": 2,
+                    "status": "queued",
+                    "model": "session-model",
+                    "reasoning_effort": "low",
+                }
+            ],
         ),
     ):
         runs = recents.project_activity_runs(
-            "/fixture/project", project=project, paper_status="active",
+            "/fixture/project",
+            project=project,
+            paper_status="active",
             session_active=True,
-            pending_answers=[{
-                "request_id": "d" * 32, "creator": "n@example.com",
-                "model": "ask-model", "thinking": "medium",
-            }],
+            pending_answers=[
+                {
+                    "request_id": "d" * 32,
+                    "creator": "n@example.com",
+                    "model": "ask-model",
+                    "thinking": "medium",
+                }
+            ],
         )
     assert [(run["kind"], run["status"]) for run in runs] == [
-        ("paper", "active"), ("session", "queued"), ("answer", "active"),
+        ("paper", "active"),
+        ("session", "queued"),
+        ("answer", "active"),
     ]
     assert runs[0]["number"] == 3 and runs[0]["creator"] == "z@example.com"
     assert runs[1]["number"] == 2 and runs[1]["creator"] == "n@example.com"
@@ -956,7 +970,8 @@ def check_run_activity_aggregation_and_lightweight_poll() -> None:
     with (
         patch.object(papers, "_read_version_sequence", return_value=5),
         patch.object(
-            papers, "list_papers",
+            papers,
+            "list_papers",
             side_effect=AssertionError("Paper activity read saved records"),
         ),
     ):
@@ -966,19 +981,23 @@ def check_run_activity_aggregation_and_lightweight_poll() -> None:
     # histories, or collaboration author maps to compute a boolean.
     with (
         patch.object(
-            recents, "project_activity_runs",
+            recents,
+            "project_activity_runs",
             side_effect=AssertionError("Global poll loaded full run details"),
         ),
         patch.object(
-            papers, "list_papers",
+            papers,
+            "list_papers",
             side_effect=AssertionError("Global poll loaded Papers"),
         ),
         patch.object(
-            research_sessions, "list_sessions",
+            research_sessions,
+            "list_sessions",
             side_effect=AssertionError("Global poll loaded Sessions"),
         ),
         patch.object(
-            project_collaboration, "summary",
+            project_collaboration,
+            "summary",
             side_effect=AssertionError("Global poll loaded collaboration summary"),
         ),
         patch.object(research_qa, "list_pending_answers", return_value=[]),
