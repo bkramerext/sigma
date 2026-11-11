@@ -547,6 +547,7 @@ def has_reserved_calls(session_id: str) -> bool:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
+
 def _legacy_session_status(project_path: str, project_id: str, session_id: str) -> str | None:
     """Distinguish pre-migration session jobs from standalone inference rows."""
     from sigma import research_sessions
@@ -1191,16 +1192,19 @@ def _reconcile_foreign_job(candidate: sqlite3.Row, project: Path, owner: str) ->
                 if row["status"] == "queued" and not has_session and not has_call:
                     db.execute(
                         "DELETE FROM jobs WHERE session_id=? AND workspace_id=? "
-                        "AND status='queued'",
-                        (candidate["session_id"], owner),
+                        "AND status='queued' AND process_epoch=?",
+                        (candidate["session_id"], owner, row["process_epoch"]),
                     )
                     return
                 stamp = _now()
-                db.execute(
+                changed = db.execute(
                     "UPDATE jobs SET status='interrupted',updated_at=? "
-                    "WHERE session_id=? AND workspace_id=?",
-                    (stamp, candidate["session_id"], owner),
+                    "WHERE session_id=? AND workspace_id=? AND process_epoch=? "
+                    "AND status IN ('queued','running','stopping')",
+                    (stamp, candidate["session_id"], owner, row["process_epoch"]),
                 )
+                if changed.rowcount != 1:
+                    return
                 db.execute(
                     "UPDATE calls SET status='unknown',updated_at=? "
                     "WHERE session_id=? AND workspace_id=? AND status='reserved'",
@@ -1225,7 +1229,7 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
     try:
         with _connect() as db:
             candidates = db.execute(
-                "SELECT session_id,project_id,project_relpath,status FROM jobs WHERE "
+                "SELECT session_id,project_id,project_relpath,status,process_epoch FROM jobs WHERE "
                 "workspace_id=? AND job_kind='research' "
                 "AND status IN ('queued','running','stopping') AND process_epoch<>?",
                 (owner, _PROCESS_EPOCH),
@@ -1296,7 +1300,7 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                     project_document.is_symlink()
                     or not project_document.is_file()
                     or session_directory.is_symlink()
-                    or not session_directory.is_dir()
+                    or (session_directory.exists() and not session_directory.is_dir())
                 ):
                     continue
             try:
@@ -1364,13 +1368,13 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                             recovered_state = "interrupted"
                         with _transaction() as db:
                             db.execute(
-                                "UPDATE jobs SET status=?,updated_at=? WHERE session_id=? AND workspace_id=? AND status IN ('queued','running','stopping')",
-                                (recovered_state, _now(), session_id, owner),
+                                "UPDATE jobs SET status=?,updated_at=? WHERE session_id=? AND workspace_id=? AND process_epoch=? AND status IN ('queued','running','stopping')",
+                                (recovered_state, _now(), session_id, owner, candidate["process_epoch"]),
                             )
                     else:
                         # Keep the job and call ledger as spending history;
                         # recover_job marks uncertain reservations unknown.
-                        recover_job(session_id)
+                        recover_job(session_id, expected_epoch=candidate["process_epoch"])
                     continue
                 if has_session:
                     # A saved queued Session may conceal a provider attempt.
@@ -1410,6 +1414,7 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                         or current["status"] != "queued"
                         or current["project_id"] != candidate["project_id"]
                         or current["project_relpath"] != relative
+                        or current["process_epoch"] != candidate["process_epoch"]
                         or current["process_epoch"] == _PROCESS_EPOCH
                     ):
                         continue
@@ -1422,9 +1427,12 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                         stamp = _now()
                         db.execute(
                             "UPDATE jobs SET status='interrupted',updated_at=? "
-                            "WHERE session_id=? AND workspace_id=? AND status='queued'",
-                            (stamp, session_id, owner),
+                            "WHERE session_id=? AND workspace_id=? AND status='queued' "
+                            "AND process_epoch=?",
+                            (stamp, session_id, owner, candidate["process_epoch"]),
                         )
+                        if db.execute("SELECT changes()").fetchone()[0] != 1:
+                            continue
                         db.execute(
                             "UPDATE calls SET status='unknown',updated_at=? "
                             "WHERE session_id=? AND workspace_id=? AND status='reserved'",
@@ -1432,10 +1440,12 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                         )
                         continue
                     db.execute(
-                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? AND status='queued'",
-                        (session_id, owner),
+                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? AND status='queued' "
+                        "AND process_epoch=?",
+                        (session_id, owner, candidate["process_epoch"]),
                     )
-                    removed.append(session_id)
+                    if db.execute("SELECT changes()").fetchone()[0] == 1:
+                        removed.append(session_id)
         except (OSError, RuntimeError, ValueError, sqlite3.Error, ProjectError):
             # Recovery is conservative: inability to prove absence keeps the row.
             continue
@@ -1530,23 +1540,36 @@ def release_job(session_id: str, *, paused: bool = False) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-def recover_job(session_id: str) -> None:
-    """Release a process-dead worker slot only after its project lock is free."""
+def recover_job(session_id: str, *, expected_epoch: str | None = None) -> None:
+    """Reclaim a dead slot without changing a newer worker's ownership.
+
+    Callers must first prove the OS worker lock is free. When reconciliation
+    began with a prior-epoch snapshot, an epoch mismatch leaves both the slot
+    and its in-flight billing reservations untouched.
+    """
     owner = _workspace_id()
     try:
         with _transaction() as db:
             row = db.execute(
-                "SELECT workspace_id FROM jobs WHERE session_id=?", (session_id,)
+                "SELECT workspace_id,process_epoch FROM jobs WHERE session_id=?",
+                (session_id,),
             ).fetchone()
-            if row and row["workspace_id"] == owner:
-                db.execute(
-                    "UPDATE jobs SET status='interrupted',updated_at=? WHERE session_id=? AND status IN ('running','stopping')",
-                    (_now(), session_id),
-                )
-                db.execute(
-                    "UPDATE calls SET status='unknown',updated_at=? WHERE session_id=? AND status='reserved'",
-                    (_now(), session_id),
-                )
+            if (
+                not row
+                or row["workspace_id"] != owner
+                or (expected_epoch is not None and row["process_epoch"] != expected_epoch)
+            ):
+                return
+            db.execute(
+                "UPDATE jobs SET status='interrupted',updated_at=? "
+                "WHERE session_id=? AND workspace_id=? AND status IN ('running','stopping')",
+                (_now(), session_id, owner),
+            )
+            db.execute(
+                "UPDATE calls SET status='unknown',updated_at=? "
+                "WHERE session_id=? AND workspace_id=? AND status='reserved'",
+                (_now(), session_id, owner),
+            )
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 

@@ -127,9 +127,13 @@ def _child(stage: str) -> None:
     assert not (root / "second-admitted").exists()
     assert (root / "provider-attempts").read_text().splitlines() == ["section-one"]
     with papers.paper_run_scope(ids["first"]):
-        assert papers._load_work(project)["section_drafts"]["1"]["paragraphs"]
+        first_reopened = papers._load_work(project)
+        assert first_reopened is not None
+        assert first_reopened["section_drafts"]["1"]["paragraphs"]
     with papers.paper_run_scope(ids["second"]):
-        assert papers._load_work(project)["model"] == "Z"
+        second_reopened = papers._load_work(project)
+        assert second_reopened is not None
+        assert second_reopened["model"] == "Z"
     print(json.dumps({"provider_attempts": 1, "replays": 0, "runs": 2}), flush=True)
 
 

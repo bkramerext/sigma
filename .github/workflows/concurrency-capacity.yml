@@ -5,6 +5,7 @@ on:
     paths:
       - "scripts/measure_dual_tectonic.py"
       - "papers/**"
+      - "tests/paper_collaboration_acceptance.py"
       - ".github/workflows/concurrency-capacity.yml"
   workflow_dispatch:
 
@@ -40,6 +41,24 @@ jobs:
             sigma-compile-capacity:ci \
             python /bench/scripts/measure_dual_tectonic.py --prewarm \
             | tee capacity-results/dual-tectonic.json
+      - name: Two independently authenticated Papers with real TeX and readable PDFs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reuse the already built backend and warmed TeX package cache;
+          # no second engine installation or remote inference is performed.
+          docker run --rm \
+            --cpus=2 --memory=5g --pids-limit=256 --read-only \
+            --cap-drop=ALL --security-opt=no-new-privileges \
+            --user=10001:10001 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001,mode=0700 \
+            -e SIGMA_REQUIRE_REAL_PAPER_PDF=1 \
+            -e SIGMA_TEST_SHARED_TECTONIC_STATE=/var/lib/sigma-auth \
+            -v "$PWD/capacity-cache:/var/lib/sigma-auth:rw" \
+            -v "$PWD/tests:/bench/tests:ro" \
+            -w /bench sigma-compile-capacity:ci \
+            python /bench/tests/paper_collaboration_acceptance.py \
+            | tee capacity-results/two-creator-paper-acceptance.log
       - name: Preserve compilation evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4

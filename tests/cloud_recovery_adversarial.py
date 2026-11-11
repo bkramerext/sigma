@@ -285,8 +285,7 @@ def test_live_auxiliary_is_not_a_research_orphan() -> None:
                 assert cloud_research.job_status(session_id) == "running"
                 with cloud_research._connect() as db:
                     call = db.execute(
-                        "SELECT status,amount_usd,token_reservation "
-                        "FROM calls WHERE call_id=?",
+                        "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
                         (call_id,),
                     ).fetchone()
                     assert (
