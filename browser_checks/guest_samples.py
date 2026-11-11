@@ -231,6 +231,15 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
 
         page.on("request", capture_request)
 
+        # Regression: after sign-out, My Work may be the first API read,
+        # before the Samples tab has ever established a guest workspace.
+        cold_context = browser.new_context(viewport={"width": 1280, "height": 850})
+        initial_my_work = cold_context.request.get(ui_url + "/api/projects/recent")
+        assert initial_my_work.status == 200, initial_my_work.text()
+        assert initial_my_work.json() == {"projects": []}
+        assert any("sigma_guest" in cookie["name"] for cookie in cold_context.cookies())
+        cold_context.close()
+
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
