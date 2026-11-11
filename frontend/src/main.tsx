@@ -6408,11 +6408,6 @@ function Home({ initialPath, onOpen }: {
   }, [sharedInvite, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.user?.email]);
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [entry, setEntry] = useState<'open' | 'new' | 'import' | null>(null);
-  const [signOutCopyUnavailable] = useState(() => {
-    const unavailable = window.sessionStorage.getItem('sigma.signOutCopyUnavailable') === 'true';
-    window.sessionStorage.removeItem('sigma.signOutCopyUnavailable');
-    return unavailable;
-  });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
   const [catalogTab, setCatalogTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
@@ -6530,7 +6525,6 @@ function Home({ initialPath, onOpen }: {
           <HomeInvitationAction/>
         </div></div>
       </div>
-      {signOutCopyUnavailable && <p className="home-signout-copy-notice" role="status">Signed out of Google. The original project remains saved in your Google account, but SIGMA could not make a guest copy. Sign back in to open that project.</p>}
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1} aria-label="Projects">{catalogTab === 'most-recent' ? 'Projects' : <button type="button" className="home-projects-title-toggle" aria-label="Collapse or expand project type groups" data-tooltip="Collapse or expand project type groups" onClick={() => window.dispatchEvent(new Event('sigma-home-projects-toggle-groups'))}>Projects</button>}</h1>
@@ -8028,13 +8022,6 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     void submitInvitationRequest();
     return () => { cancelled = true; };
   }, [deniedIdentityAvailable]);
-  useEffect(() => {
-    if (cloud?.authenticated) return;
-    const warningKey = 'sigma.signOutHandoffWarning';
-    if (window.sessionStorage.getItem(warningKey) !== 'true') return;
-    window.sessionStorage.removeItem(warningKey);
-    reportRequestFailure('You signed out of Google, but SIGMA could not preserve uninterrupted work for re-sign-in. You may need to Resume active work.');
-  }, [cloud?.authenticated]);
   async function signOut() {
     if (signOutInFlight.current) return;
     signOutInFlight.current = true;
@@ -8045,7 +8032,6 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         ? new URLSearchParams(window.location.search).get('path')
         : null;
       let destination = '/';
-      let signOutCopyUnavailable = false;
       if (currentProjectPath && !authenticatedGuest) {
         try {
           const copied = await fetch('/api/projects/guest-copy', {
@@ -8061,7 +8047,6 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
         } catch {
           // Export/import validation or an active session may prevent a guest copy.
           // Never make logout depend on the optional copy succeeding.
-          signOutCopyUnavailable = true;
           currentProjectPath = null;
         }
       } else if (currentProjectPath) {
@@ -8070,31 +8055,24 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       // Explicit reauthentication is distinct from the browser closing: keep
       // already admitted jobs alive during a bounded identity handoff.
       // Authenticated guests cannot run paid work and do not need a handoff.
-      let handoffReady = !!authenticatedGuest;
       if (!authenticatedGuest) {
         try {
-          const handoff = await fetch('/api/projects/research-presence/auth-handoff', {
+          await fetch('/api/projects/research-presence/auth-handoff', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'X-Sigma-Error-Handled': 'true' },
           });
-          handoffReady = handoff.ok;
         } catch {
           // The auxiliary work-preservation request must not veto explicit sign-out.
         }
       }
       const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
       if (!response.ok) throw new Error('Google sign-out could not be completed.');
-      if (!handoffReady) {
-        // The user must be told if an interrupted job could require Resume.
-        try { window.sessionStorage.setItem('sigma.signOutHandoffWarning', 'true'); } catch { /* no-op */ }
-      }
       // Signing out is not a first visit. Keep the post-logout guest view
       // quiet for this tab instead of presenting its introductory welcome.
       window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true');
       window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed');
       if (currentProjectPath) window.localStorage.setItem('sigma.currentProject', currentProjectPath);
       else window.localStorage.removeItem('sigma.currentProject');
-      if (signOutCopyUnavailable) window.sessionStorage.setItem('sigma.signOutCopyUnavailable', 'true');
       window.location.assign(destination);
     } catch (cause) {
       signOutInFlight.current = false;
