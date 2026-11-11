@@ -508,6 +508,7 @@ def exercise(ui: str, workspaces: Path) -> None:
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 2
+                        && lines.every(line => !line.includes('(running)'))
                         && lines.some(line => line.includes('Session ' + first)
                             && line.includes(owner) && line.includes(firstStatus))
                         && lines.some(line => line.includes('Session ' + second)
@@ -763,6 +764,29 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert {record["qa_id"] for record in all_answers} >= {
             answer["qa_id"] for answer in answers
         }
+        # Creator/model attribution is inline metadata, not a smaller caption.
+        # Exercise real Q/A cards under both independently authenticated users.
+        for page in (owner, member):
+            page.get_by_role("button", name="Research Q/A", exact=True).click()
+            qa_dialog = page.get_by_role("dialog", name="Research Q/A")
+            metadata = qa_dialog.locator(
+                ".research-qa-library .saved-paper-meta .artifact-attribution"
+            ).first
+            expect(metadata).to_be_visible(timeout=20000)
+            font_sizes = metadata.evaluate(
+                """element => {
+                    const current = Number.parseFloat(getComputedStyle(element).fontSize);
+                    const parent = Number.parseFloat(
+                        getComputedStyle(element.parentElement).fontSize
+                    );
+                    return [current, parent];
+                }"""
+            )
+            assert font_sizes[0] == font_sizes[1], (
+                "Q/A attribution must use the surrounding metadata font size",
+                font_sizes,
+            )
+            qa_dialog.get_by_role("button", name="Close research Q/A").click()
         assert (
             get_json(owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state"))[
                 "started"
