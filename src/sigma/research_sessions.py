@@ -15766,8 +15766,7 @@ def _refresh_supplied_evidence_on_resume(path: str, record: dict[str, Any]) -> b
     previous_stage = record.get("supplied_evidence_compilation")
     cached = (
         previous_stage.get("sources", [])
-        if isinstance(previous_stage, dict)
-        and isinstance(previous_stage.get("sources"), list)
+        if isinstance(previous_stage, dict) and isinstance(previous_stage.get("sources"), list)
         else []
     )
     reusable: dict[tuple[str, str], dict] = {}
@@ -15782,8 +15781,7 @@ def _refresh_supplied_evidence_on_resume(path: str, record: dict[str, Any]) -> b
         if (
             not isinstance(excerpt, str)
             or item.get("incomplete_extract")
-            or hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
-            != item.get("excerpt_sha256")
+            or hashlib.sha256(excerpt.encode("utf-8")).hexdigest() != item.get("excerpt_sha256")
         ):
             continue
         reusable[key] = item
