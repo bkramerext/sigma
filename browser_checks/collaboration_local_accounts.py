@@ -452,24 +452,35 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert first_run["created_by"] == OWNER
         assert second_run["created_by"] == COLLABORATOR
 
+        status = get_json(
+            owner_context.request.get(ui + "/api/projects/research-sessions", params={"path": path})
+        )
+        statuses = {item["id"]: item["status"] for item in status["sessions"]}
+        assert {statuses[first_run["id"]], statuses[second_run["id"]]} == {
+            "running",
+            "queued",
+        }, statuses
+
         # The same authenticated N/Z project windows must display every live
         # Session on its own tooltip line, with creator and queued/running state.
         for page in (owner, member):
             page.goto(url)
             page.wait_for_function(
-                """({first, second, owner, member}) => {
+                """({first, second, owner, member, firstStatus, secondStatus}) => {
                     const tip = document.querySelector('.project-header-title-action')
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 2
                         && lines.some(line => line.includes('Session ' + first)
-                            && line.includes(owner) && line.includes('(running)'))
+                            && line.includes(owner) && line.includes(firstStatus))
                         && lines.some(line => line.includes('Session ' + second)
-                            && line.includes(member) && line.includes('(queued)'));
+                            && line.includes(member) && line.includes(secondStatus));
                 }""",
                 arg={
-                    "first": first_run["session_number"] if first_run["id"] == first_run["id"] else 0,
+                    "first": first_run["session_number"],
                     "second": second_run["session_number"],
+                    "firstStatus": "(running)" if statuses[first_run["id"]] == "running" else "(queued)",
+                    "secondStatus": "(running)" if statuses[second_run["id"]] == "running" else "(queued)",
                     "owner": OWNER,
                     "member": COLLABORATOR,
                 },
@@ -618,14 +629,6 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # One project running slot: either creator may win; the other waits.
         # Do not impose deterministic ordering on legitimately concurrent jobs.
-        status = get_json(
-            owner_context.request.get(ui + "/api/projects/research-sessions", params={"path": path})
-        )
-        statuses = {item["id"]: item["status"] for item in status["sessions"]}
-        assert {statuses[first_run["id"]], statuses[second_run["id"]]} == {
-            "running",
-            "queued",
-        }, statuses
         running_id = next(
             run_id
             for run_id in (first_run["id"], second_run["id"])
