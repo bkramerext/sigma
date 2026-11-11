@@ -717,8 +717,11 @@ def _upsert_user_state(
     if current is not None:
         selected = current["model_access_selected"] if sponsorship_eligible else 0
         effective_mode = (
-            "personal" if not sponsorship_eligible
-            else model_access if not selected else current["model_access"]
+            "personal"
+            if not sponsorship_eligible
+            else model_access
+            if not selected
+            else current["model_access"]
         )
         if (
             current["email"] == email
