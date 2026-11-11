@@ -329,21 +329,19 @@ def _ask_worker(path: str, request_id: str) -> Iterator[None]:
     fd = os.open(
         target, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
     )
+    acquired = False
     try:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise ProjectError("This Q/A request is already answering.") from exc
+        acquired = True
         yield
     finally:
         try:
-            # Do not leave stale liveness sidecars after provider failures.
-            # Only the holder of this request-specific lock may unlink it.
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                pass
-            else:
+            if acquired:
+                # Only the lock holder may clean up. Do not unlink if a
+                # competing request failed to acquire this same file.
                 target.unlink(missing_ok=True)
         finally:
             os.close(fd)
