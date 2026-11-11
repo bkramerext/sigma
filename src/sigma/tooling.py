@@ -280,7 +280,11 @@ def run_tooling(command: str) -> int:
             elif "tests/papers_part2.py" in step:
                 owner = 5
             elif "tests/sage_execution.py" in step:
-                owner = 3
+                owner = 1
+            elif "tests/storage.py" in step:
+                owner = 2
+            elif "pyright" in step:
+                owner = 4
             elif extra_half:
                 owner = 8 if extra_half_b else 6
             else:
