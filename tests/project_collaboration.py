@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-import os
-import threading
 import hashlib
 import json
+import os
 import sqlite3
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -136,7 +136,7 @@ class CollaborationTests(TestCase):
                 requested.set()
                 with project_write_lock(self.path):
                     finished.set()
-            except BaseException as exc:
+            except Exception as exc:
                 errors.append(exc)
                 finished.set()
 
@@ -149,7 +149,7 @@ class CollaborationTests(TestCase):
                         (self.path,),
                     )
                     db.commit()
-            except BaseException as exc:
+            except Exception as exc:
                 errors.append(exc)
             finally:
                 writer_finished.set()
