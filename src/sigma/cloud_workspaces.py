@@ -262,9 +262,7 @@ def _connect(root: Path) -> sqlite3.Connection:
                         )"""
                     )
                     updated_generation = connection.execute("PRAGMA schema_version").fetchone()[0]
-                    _WORKSPACE_SCHEMA_READY.add(
-                        (key[0], key[1], key[2], updated_generation)
-                    )
+                    _WORKSPACE_SCHEMA_READY.add((key[0], key[1], key[2], updated_generation))
         return connection
     except (OSError, sqlite3.Error) as exc:
         if connection is not None:
