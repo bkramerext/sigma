@@ -1561,6 +1561,64 @@ class CollaborationTests(TestCase):
         assert queued is not None
         self.assertEqual(queued["status"], "queued")
 
+    def test_owner_can_revoke_during_active_research_session_lease(self) -> None:
+        """Revocation works during a Research lease, not just Paper execution."""
+        Path(self.path).write_text("{}", encoding="utf-8")
+        private = self.root / "research-collaborator-private"
+        private.mkdir()
+        member = Workspace(
+            workspace_id="research-collaborator",
+            subject_hash="research-collaborator-hash",
+            path=private,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=member),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            token = shared.acquire_lease(self.path, "Research session")
+            self.assertIsNotNone(token)
+
+        # Ordinary document writes still cannot override a running worker.
+        with self.assertRaises(ProjectError), shared.write_guard(self.path):
+            pass
+
+        # Synthetic .json fixture; skip document digest reconciliation just as
+        # the Paper lease revocation test does, without weakening ACL checks.
+        Path(self.path).unlink()
+        previous_revision = self.revision()
+        result = shared.save_settings(
+            self.path,
+            previous_revision,
+            [],
+            "gpt-6.1-sol",
+            "high",
+            "Research lease revocation",
+            allow_active_lease=True,
+        )
+        self.assertEqual(result["revision"], previous_revision + 1)
+        self.assertEqual(shared.summary(self.path)["collaborators"], [])
+
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=member),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            assert token is not None
+            self.assertFalse(shared.renew_lease(self.path, token))
+            with (
+                self.assertRaises(ValueError),
+                shared.bind_lease(self.path, token),
+                shared.write_guard(self.path),
+            ):
+                pass
+
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:
             try:
