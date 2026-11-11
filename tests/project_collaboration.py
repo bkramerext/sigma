@@ -1513,17 +1513,18 @@ class CollaborationTests(TestCase):
                 return_value=self.other,
             ),
         ):
-            with self.assertRaises(ProjectError):
+            # The hidden authorization check may reject with either the
+            # generic ValueError or its ProjectError subtype. Both deny access
+            # without disclosing the project's existence to the former member.
+            with self.assertRaisesRegex(ValueError, "access denied"):
                 shared.require_execution_operator(self.path, "session", session_run, "research")
-            with self.assertRaises(ProjectError):
+            with self.assertRaises(ValueError):
                 shared.execution_run(self.path, "paper", paper_run, operator=True)
-            with self.assertRaises(ProjectError):
-                with papers.paper_run_scope(paper_run):
-                    papers._write_queue_status(self.path, "running", papers._now())
-            with self.assertRaises(ProjectError):
-                with shared.write_guard(self.path):
-                    pass
-            with self.assertRaises(ProjectError):
+            with self.assertRaises(ValueError), papers.paper_run_scope(paper_run):
+                papers._write_queue_status(self.path, "running", papers._now())
+            with self.assertRaises(ValueError), shared.write_guard(self.path):
+                pass
+            with self.assertRaises(ValueError):
                 shared.reserve_execution_run(
                     self.path, "session", str(uuid4()), 1, model="stale", thinking="low"
                 )
