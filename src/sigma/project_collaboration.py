@@ -778,6 +778,81 @@ def reserve_execution_run(
         }
 
 
+def list_execution_runs(path: str, kind: str) -> list[dict[str, Any]]:
+    """Authorized, bounded Paper/Session reservations for activity and recovery.
+
+    This is a read, not an admission lock. Never poll the session/paper record
+    files while holding the collaboration database transaction.
+    """
+    if kind not in {"paper", "session"}:
+        raise ValueError("Unknown run kind")
+    workspace = cloud_workspaces.current()
+    if workspace is None or workspace.guest:
+        return []
+    with _db() as db:
+        _membership(db, path)
+        rows = db.execute(
+            """SELECT run_id, number, creator_email, model, thinking, created_at
+               FROM shared_run_reservations WHERE path=? AND kind=?
+               ORDER BY number""",
+            (path, kind),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def execution_run(
+    path: str, kind: str, run_id: str, *, operator: bool = False, missing_ok: bool = False
+) -> dict[str, Any] | None:
+    """A reserved run has one permanent owner, including before invitations."""
+    from sigma.projects import ProjectError
+
+    if kind not in {"paper", "session"}:
+        raise ValueError("Unknown run kind")
+    workspace = cloud_workspaces.current()
+    if workspace is None:
+        return None
+    if workspace.guest:
+        raise ProjectError("Execution not found or access denied.")
+    with _db() as db:
+        _membership(db, path)
+        row = db.execute(
+            """SELECT run_id, number, creator_hash, creator_email, model, thinking, created_at
+               FROM shared_run_reservations WHERE path=? AND kind=? AND run_id=?""",
+            (path, kind, run_id),
+        ).fetchone()
+        if row is None:
+            if missing_ok:
+                return None
+            raise ProjectError("Execution not found or access denied.")
+        if operator and row["creator_hash"] != _identity()[0].subject_hash:
+            raise ProjectError("Only the original execution creator may control this run.")
+        return dict(row)
+
+
+def note_execution_artifact_author(path: str, kind: str, run_id: str, artifact_id: str) -> None:
+    """Attribute publication to the *reserved creator*, not the current viewer."""
+    if not artifact_id or kind not in {"paper", "session"}:
+        raise ValueError("Invalid execution artifact attribution")
+    if cloud_workspaces.current() is None:
+        return
+    with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        _membership(db, path)
+        run = db.execute(
+            "SELECT creator_email FROM shared_run_reservations "
+            "WHERE path=? AND kind=? AND run_id=?",
+            (path, kind, run_id),
+        ).fetchone()
+        if run is None:
+            raise ValueError("Published run has no creator reservation")
+        db.execute(
+            "INSERT OR IGNORE INTO shared_artifact_authors "
+            "(path,kind,artifact_id,email,updated_at) VALUES (?,?,?,?,?)",
+            (path, kind, artifact_id, run["creator_email"], time.time()),
+        )
+        db.commit()
+
+
 def require_execution_operator(
     path: str,
     kind: str,
@@ -799,6 +874,19 @@ def require_execution_operator(
             "SELECT email FROM shared_artifact_authors WHERE path=? AND kind=? AND artifact_id=?",
             (path, kind, artifact_id),
         ).fetchone()
+        reserved = (
+            db.execute(
+                "SELECT creator_hash FROM shared_run_reservations "
+                "WHERE path=? AND kind=? AND run_id=?",
+                (path, kind, artifact_id),
+            ).fetchone()
+            if kind in {"paper", "session"}
+            else None
+        )
+        if reserved is not None:
+            if reserved["creator_hash"] != _identity()[0].subject_hash:
+                raise ProjectError("Only the original execution creator can control this run.")
+            return
         lease = db.execute(
             "SELECT email,activity,expires_at FROM shared_leases WHERE path=?", (path,)
         ).fetchone()
@@ -964,6 +1052,28 @@ def require_artifact_manager(
         if creator is not None and creator["email"] == actor:
             return
         if row["owner_hash"] == _identity()[0].subject_hash and owner_terminal:
+            # Ownership of the project is not ownership of a running or
+            # recoverable collaborator execution.
+            if kind == "session":
+                from sigma import research_sessions
+
+                record = research_sessions._read(path, artifact_id)
+                if record.get("status") not in {"ended", "completed"}:
+                    raise ProjectError(
+                        "The project owner may remove another creator's Session only after it ends."
+                    )
+            elif kind == "paper":
+                from sigma import papers
+
+                published = papers.get_paper(path, artifact_id, include_tex=False)
+                run_id = published.get("generation", {}).get("progress_run_id")
+                if isinstance(run_id, str) and len(run_id) == 32:
+                    with papers.paper_run_scope(run_id):
+                        progress = papers.progress_status(path)
+                    if progress is not None and progress.get("status") in {"active", "queued"}:
+                        raise ProjectError(
+                            "The project owner cannot remove another creator's active Paper."
+                        )
             return
         raise ProjectError(
             "Only the creator may remove unfinished work. "

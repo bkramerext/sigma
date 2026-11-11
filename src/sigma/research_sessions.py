@@ -127,7 +127,7 @@ MODEL_OUTPUT_LIMITS = {
 }
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
-    "max_concurrent_sessions": 1,
+    "max_concurrent_sessions": 2,
     "research_rounds": 2,
     "model_calls": 12,
     "session_duration_minutes": 60,
@@ -6300,6 +6300,7 @@ async def start_session(
     continue_using_saved_type_settings: bool = False,
     browser_presence_required: bool = False,
 ) -> dict[str, Any]:
+    from sigma import project_collaboration
     from sigma.memory_guard import require_capacity
 
     require_capacity()
@@ -6311,6 +6312,7 @@ async def start_session(
         raise ProjectError("A valid idempotency key is required") from exc
     _require_current_local_backend()
     view, guard = _snapshot(path)
+    project_collaboration.register_owner(view)
     if (
         browser_presence_required
         and not research_preferences.allow_unattended_background_execution()
@@ -6499,6 +6501,7 @@ async def start_session(
                 "backend_build_commit": build_commit(),
                 "obligation_id_format": "compact-v1",
                 "id": str(uuid4()),
+                "created_by": project_collaboration.collaborator_identity(view.path),
                 "session_number": 0,
                 "project_path": view.path,
                 **(
@@ -6663,6 +6666,16 @@ async def start_session(
             # research admission. Omitted IDs/counts remain frozen in the session
             # and are disclosed to every agent in its context manifest.
             record["session_number"] = _allocate_session_number(view.path, records)
+            reservation = project_collaboration.reserve_execution_run(
+                view.path,
+                "session",
+                record["id"],
+                record["session_number"] - 1,
+                model=config["model"],
+                thinking=config["reasoning_effort"],
+            )
+            if reservation is not None:
+                record["session_number"] = reservation["number"]
             # Freeze the instruction version once, before the first call.
             # Historical sessions without this field retain the v2 behavior.
             record["research_method_version"] = RESEARCH_METHOD_VERSION
@@ -6785,6 +6798,10 @@ async def start_session(
                 except cloud_research.CloudResearchUnavailable as exc:
                     raise ProjectError(str(exc)) from exc
             _save(view.path, record)
+            if reservation is not None:
+                project_collaboration.note_execution_artifact_author(
+                    view.path, "session", record["id"], record["id"]
+                )
             from sigma import cloud_auth, progress_notifications
 
             progress_notifications.bind_job(cloud_auth.current_principal(), record["id"])

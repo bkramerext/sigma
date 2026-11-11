@@ -146,17 +146,22 @@ _paper_model_for_call: ContextVar[Callable[[dict[str, Any]], dict[str, Any]] | N
 # remains legacy project-scoped until reservations, authorization and controls
 # have been migrated; this selector is not an authorization check.
 _paper_run_id: ContextVar[str | None] = ContextVar("sigma_paper_run_id", default=None)
+_paper_run_number: ContextVar[int | None] = ContextVar("sigma_paper_run_number", default=None)
 
 
 @contextmanager
-def paper_run_scope(run_id: str) -> Iterator[None]:
-    """Route one run's checkpoint, progress, queue receipt and task identity."""
+def paper_run_scope(run_id: str, *, number: int | None = None) -> Iterator[None]:
+    """Scope provider work and all sidecars to the authorized, reserved run."""
     if not isinstance(run_id, str) or re.fullmatch(r"[0-9a-f]{32}", run_id) is None:
         raise ValueError("Paper run ID must be 32 lowercase hexadecimal characters")
+    if number is not None and (type(number) is not int or number < 1):
+        raise ValueError("Paper number must be positive")
     token = _paper_run_id.set(run_id)
+    number_token = _paper_run_number.set(number)
     try:
         yield
     finally:
+        _paper_run_number.reset(number_token)
         _paper_run_id.reset(token)
 
 
@@ -2906,6 +2911,13 @@ def next_paper_number_for_activity(path: str) -> int:
     This never allocates a number or mutates a paper.
     """
     current = _read_version_sequence(path)
+    from sigma import project_collaboration
+
+    try:
+        reserved = project_collaboration.list_execution_runs(path, "paper")
+        current = max(current, *(item["number"] for item in reserved), 0)
+    except (OSError, ValueError):
+        pass  # Legacy/unregistered project may not have a reservation table.
     if current:
         return current + 1
     target = project_path(path)
@@ -3008,6 +3020,7 @@ def _allocate_paper_version(path: str) -> int:
         current = max(
             _read_version_sequence(path),
             *(item["paper_version"] for item in records if type(item.get("paper_version")) is int),
+            *(row["number"] for row in project_collaboration.list_execution_runs(path, "paper")),
             0,
         )
         version = current + 1
@@ -3187,7 +3200,12 @@ def _stored_paper_record_json(record: dict[str, Any]) -> bytes:
 def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
     target = project_path(path)
     identifier = _paper_id(record["paper_id"])
-    if type(record.get("paper_version")) is not int or record["paper_version"] < 1:
+    reserved_number = _paper_run_number.get()
+    if reserved_number is not None:
+        if record.get("paper_version") not in {None, reserved_number}:
+            raise ProjectError("Paper version does not match its reserved run number")
+        record["paper_version"] = reserved_number
+    elif type(record.get("paper_version")) is not int or record["paper_version"] < 1:
         record["paper_version"] = _allocate_paper_version(path)
     record["pdf_sha256"] = hashlib.sha256(pdf).hexdigest()
     record["pdf_size_bytes"] = len(pdf)
@@ -4413,8 +4431,63 @@ def _read_queue_status(path: str) -> dict[str, Any] | None:
     return value
 
 
+def run_progress_list(path: str) -> list[dict[str, Any]]:
+    """Every collaborator sees each Paper's independent activity and number.
+
+    Polling reads tiny per-run sidecars, never the large draft checkpoints.
+    A reservation with no receipt is an interrupted *unstarted* admission.
+    """
+    from sigma import project_collaboration
+
+    rows = project_collaboration.list_execution_runs(path, "paper")
+    published = {
+        item.get("generation", {}).get("progress_run_id"): item
+        for item in list_papers(path)
+        if isinstance(item.get("generation"), dict)
+    }
+    viewer = project_collaboration.collaborator_identity(path)
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        run_id = row["run_id"]
+        with paper_run_scope(run_id):
+            progress = progress_status(path)
+            preflight_needed = needs_preflight_on_open(path)
+            published_paper = published.get(run_id)
+            if published_paper and progress is None:
+                progress = {"status": "complete", "stage": "complete"}
+            elif progress is None:
+                progress = {
+                    "status": "interrupted",
+                    "stage": "queued",
+                    "detail": "The Paper was accepted before an interruption. Resume to continue.",
+                }
+        result.append(
+            {
+                **row,
+                "status": progress["status"],
+                "progress": progress,
+                "preflight_needed": preflight_needed,
+                "paper_id": published_paper.get("paper_id") if published_paper else None,
+                "can_control": viewer is None or viewer == row["creator_email"],
+            }
+        )
+    return result
+
+
 def activity_status(path: str) -> Literal["queued", "active", "interrupted", "failed"] | None:
-    """Bounded status for project lists, including post-restart warnings."""
+    """Aggregate run-specific activity without hiding legacy unfinished work."""
+    if _paper_run_id.get() is None:
+        from sigma import project_collaboration
+
+        states: list[str] = []
+        for row in project_collaboration.list_execution_runs(path, "paper"):
+            with paper_run_scope(row["run_id"]):
+                status = activity_status(path)
+            if status is not None:
+                states.append(status)
+        for status in ("active", "queued", "interrupted", "failed"):
+            if status in states:
+                return status
     key = _paper_state_key(path)
     if key in _queued_progress:
         return "queued"
@@ -10771,7 +10844,9 @@ async def _generate_impl(
         record = {
             "schema_version": 1,
             "paper_id": identifier,
+            "paper_version": _paper_run_number.get(),
             "project_id": view.project.id,
+            "created_by": project_collaboration.collaborator_identity(path),
             "created_at": timestamp,
             "snapshot_sha256": snapshot_hash,
             "snapshot": package,
@@ -11967,6 +12042,7 @@ def list_papers(path: str) -> list[dict[str, Any]]:
                     {
                         "paper_id": value["paper_id"],
                         "paper_version": value.get("paper_version"),
+                        "created_by": value.get("created_by"),
                         "title": value["draft"]["title"],
                         "created_at": value["created_at"],
                         "snapshot_sha256": value["snapshot_sha256"],
