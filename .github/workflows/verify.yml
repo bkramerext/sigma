@@ -135,14 +135,14 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+      # The CLI needs npm on PATH, but this backend-only PDF acceptance does
+      # not execute frontend commands or need to restore the npm tarball cache.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
       - name: Install locked dependencies
-        run: ./sigma setup
+        run: SIGMA_SETUP_SKIP_NPM=1 ./sigma setup
       # Do not depend on the runner having a TeX engine: the existing Paper
       # test explicitly skips without one, masking the real-PDF release gate.
       # Pinned upstream prebuilt artifact, checksum verified before execution.
@@ -164,5 +164,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          started=$SECONDS
           tectonic --version
           uv run --locked --no-sync python tests/paper_collaboration_acceptance.py
+          echo "- Two-creator real TeX-to-PDF acceptance: $((SECONDS-started))s" >> "$GITHUB_STEP_SUMMARY"
