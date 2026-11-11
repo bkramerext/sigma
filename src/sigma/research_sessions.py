@@ -5019,12 +5019,30 @@ def mock_session(
         previous = next(
             (item for item in records if item.get("idempotency_key") == idempotency_key), None
         )
+        from sigma import project_collaboration
+
         if previous:
             if previous.get("strategy_id") != strategy_id:
                 raise ProjectError("Idempotency key belongs to another strategy")
+            # Idempotent replay is available to the original creator only;
+            # a second verified account cannot claim the first user's mock run.
+            project_collaboration.execution_run(
+                view.path, "session", previous["id"], operator=True, missing_ok=True
+            )
             return _public(previous)
-        if any(item.get("status") in {"queued", "running"} for item in records):
-            raise ProjectError("A research session is already active")
+        if sum(item.get("status") in {"queued", "running"} for item in records) >= 32:
+            raise ProjectError("Research session queue is full; retry after work finishes.")
+        run_id = str(uuid4())
+        tentative_number = _allocate_session_number(view.path, records)
+        reserved = project_collaboration.reserve_execution_run(
+            view.path,
+            "session",
+            run_id,
+            tentative_number - 1,
+            model="mock-deterministic",
+            thinking="none",
+        )
+        number = reserved["number"] if reserved is not None else tentative_number
         now = _now()
         message = {
             "completed": "Simulated research completed. No provider was called.",
@@ -5034,8 +5052,9 @@ def mock_session(
         }[scenario]
         record = {
             "schema_version": 1,
-            "id": str(uuid4()),
-            "session_number": _allocate_session_number(view.path, records),
+            "id": run_id,
+            "created_by": project_collaboration.collaborator_identity(view.path),
+            "session_number": number,
             "project_path": view.path,
             **(
                 {
@@ -5118,6 +5137,10 @@ def mock_session(
         }
         record["outcome"] = _outcome(record)
         _save(view.path, record)
+        if reserved is not None:
+            project_collaboration.note_execution_artifact_author(
+                view.path, "session", run_id, run_id
+            )
         return _public(record)
 
 
@@ -5175,6 +5198,15 @@ def _advance_mock(record: dict[str, Any]) -> dict[str, Any]:
         return record
     stage = int(record.get("mock_stage", 0))
     if stage == 0:
+        # The deterministic fixture obeys the same per-project capacity as
+        # provider-backed research. Both creators can queue immediately, but
+        # a viewer's poll cannot force a second run through the occupied slot.
+        active = sum(
+            item.get("id") != record["id"] and item.get("status") == "running"
+            for item in _all(record["project_path"])
+        )
+        if active >= get_limits(record["project_path"])["max_concurrent_sessions"]:
+            return record
         record["status"] = "running"
         record["current_action"] = "Investigator: examining the strategy"
         record["message"] = "Simulated Investigator is examining the proposed approach."
@@ -5229,15 +5261,8 @@ def control_mock_session(path: str, session_id: str, action: str) -> dict[str, A
     if action == "resume":
         if record.get("status") not in {"paused", "stopped"}:
             return _public(record)
-        limits = get_limits(path)
-        active_count = sum(
-            item.get("id") != session_id and _recover(item).get("status") in {"queued", "running"}
-            for item in _all(path)
-        )
-        if active_count >= limits["max_concurrent_sessions"]:
-            raise ProjectError(
-                "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Home Settings → Limits."
-            )
+        # Admission and Resume are independent of running capacity. Polling
+        # promotes the queued mock only when a project slot becomes available.
         record["status"] = "queued"
         record["current_action"] = "Queued"
         record["message"] = "Simulated research resumed. No provider was called."
@@ -5396,6 +5421,8 @@ async def ensure_queued_workers(path: str) -> None:
         cloud_research.reconcile_orphaned_jobs()
     except cloud_research.CloudResearchUnavailable as exc:
         raise ProjectError(str(exc)) from exc
+    from sigma import project_collaboration
+
     async with _manager_lock:
         for record in _all(path):
             if (
@@ -5403,6 +5430,16 @@ async def ensure_queued_workers(path: str) -> None:
                 or record.get("status") != "queued"
                 or record["id"] in _tasks
             ):
+                continue
+            try:
+                # An observer may read any collaborator's queued Session but
+                # must never relaunch it under their own sponsored account.
+                # On reconnection, the real creator's verified context resumes
+                # the durable queue instead.
+                project_collaboration.require_execution_operator(
+                    path, "session", record["id"], "research"
+                )
+            except ProjectError:
                 continue
             event = asyncio.Event()
             _control[record["id"]] = event
@@ -6300,6 +6337,7 @@ async def start_session(
     continue_using_saved_type_settings: bool = False,
     browser_presence_required: bool = False,
 ) -> dict[str, Any]:
+    from sigma import project_collaboration
     from sigma.memory_guard import require_capacity
 
     require_capacity()
@@ -6311,6 +6349,7 @@ async def start_session(
         raise ProjectError("A valid idempotency key is required") from exc
     _require_current_local_backend()
     view, guard = _snapshot(path)
+    project_collaboration.register_owner(view)
     if (
         browser_presence_required
         and not research_preferences.allow_unattended_background_execution()
@@ -6432,14 +6471,11 @@ async def start_session(
                 return _public(_recover(existing))
             active = [_recover(r) for r in records]
             active = [r for r in active if r["status"] in {"queued", "running"}]
-            if len(active) >= limits["max_concurrent_sessions"]:
-                occupants = ", ".join(
-                    f"#{item.get('session_number')} ({item['id']})" for item in active
-                )
-                raise ProjectError(
-                    "This project is at its maximum concurrent sessions limit. "
-                    f"Sessions occupying slots: {occupants}. Open Research Sessions to inspect or stop them."
-                )
+            # Resource concurrency is enforced at worker dispatch, not at
+            # admission. Independent collaborators get durable queue records
+            # instead of a project-busy error.
+            if len(active) >= 32:
+                raise ProjectError("Research session queue is full; retry after work finishes.")
             if (
                 credential["mode"] == "api_key"
                 and limits["maximum_estimated_cost_usd"] is not None
@@ -6499,6 +6535,7 @@ async def start_session(
                 "backend_build_commit": build_commit(),
                 "obligation_id_format": "compact-v1",
                 "id": str(uuid4()),
+                "created_by": project_collaboration.collaborator_identity(view.path),
                 "session_number": 0,
                 "project_path": view.path,
                 **(
@@ -6663,6 +6700,16 @@ async def start_session(
             # research admission. Omitted IDs/counts remain frozen in the session
             # and are disclosed to every agent in its context manifest.
             record["session_number"] = _allocate_session_number(view.path, records)
+            reservation = project_collaboration.reserve_execution_run(
+                view.path,
+                "session",
+                record["id"],
+                record["session_number"] - 1,
+                model=config["model"],
+                thinking=config["reasoning_effort"],
+            )
+            if reservation is not None:
+                record["session_number"] = reservation["number"]
             # Freeze the instruction version once, before the first call.
             # Historical sessions without this field retain the v2 behavior.
             record["research_method_version"] = RESEARCH_METHOD_VERSION
@@ -6785,6 +6832,10 @@ async def start_session(
                 except cloud_research.CloudResearchUnavailable as exc:
                     raise ProjectError(str(exc)) from exc
             _save(view.path, record)
+            if reservation is not None:
+                project_collaboration.note_execution_artifact_author(
+                    view.path, "session", record["id"], record["id"]
+                )
             from sigma import cloud_auth, progress_notifications
 
             progress_notifications.bind_job(cloud_auth.current_principal(), record["id"])
@@ -7450,9 +7501,9 @@ async def control_session(
                 for recovered in [_recover(item)]
                 if recovered.get("status") in {"queued", "running"}
             ]
-            if len(others) >= current_limits["max_concurrent_sessions"]:
+            if len(others) >= 32:
                 raise ProjectError(
-                    "This project is at its maximum concurrent sessions limit. Stop or wait for an active session to finish, or increase the limit in Home Settings → Limits."
+                    "Research session queue is full; retry after existing work finishes."
                 )
             if record.get("cloud_sponsored") is True and record.get("cost_status") != "available":
                 # Older recovered sessions discarded their accumulated estimate
@@ -14411,44 +14462,6 @@ def _prior_session_failures_index(
     )
 
 
-async def _claim_cloud_job(session_id: str, path: str) -> bool:
-    if not cloud_research.billing_enabled():
-        return True
-    record = _read(path, session_id)
-    if record.get("status") != "queued":
-        return False
-    try:
-        # Admission has already reserved capacity in one SQLite transaction.
-        # Do not busy-poll and do not wait for other sessions to finish.
-        if cloud_research.claim_job(session_id):
-            return True
-        ledger_status = cloud_research.job_status(session_id)
-        async with _session_state_lock(session_id):
-            record = _read(path, session_id)
-            if record["status"] != "queued":
-                return False
-            record["status"] = "paused"
-            record["updated_at"] = _now()
-            record["stopped_at"] = _now()
-            record["current_action"] = "Paused after worker recovery"
-            record["message"] = (
-                "This execution reservation could not start. Saved research is intact; "
-                "resume to retry once capacity is available."
-            )
-            for branch in record.get("strategy_runs", []):
-                if branch.get("status") == "queued":
-                    branch["status"] = "paused"
-                    branch["current_action"] = record["current_action"]
-                    branch["reason"] = record["message"]
-            _event(record, "interrupted", record["message"])
-            _save(path, record)
-        if ledger_status in {"running", "stopping"}:
-            cloud_research.recover_job(session_id)
-        return False
-    except cloud_research.CloudResearchUnavailable as exc:
-        raise ProjectError(str(exc)) from exc
-
-
 def _record_worker_cancellation(record: dict[str, Any]) -> None:
     """Persist cancellation without claiming a provider request ran when none started."""
     running_steps = [step for step in record.get("steps", []) if step.get("status") == "running"]
@@ -15630,6 +15643,93 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                 return False
 
 
+async def _await_session_execution_slot(session_id: str, path: str) -> bool:
+    """Claim project AND hosted worker capacity only when dispatch can begin.
+
+    A queued Session owns no running slot. Claiming both resources under the
+    short project admission mutex prevents two collaborators from bypassing
+    per-project concurrency. Capacity shortages remain queued and recoverable;
+    no paid call or worker slot is reserved during the wait.
+    """
+    while True:
+        async with _manager_lock:
+            with _project_manager_lock(path):
+                latest = _read(path, session_id)
+                if latest.get("status") != "queued":
+                    return False
+                deadline = latest.get("deadline_at")
+                if isinstance(deadline, str):
+                    try:
+                        expired = datetime.fromisoformat(deadline) <= datetime.now(UTC)
+                    except ValueError as exc:
+                        raise ProjectError(
+                            "Queued research session has an invalid deadline."
+                        ) from exc
+                    if expired:
+                        # A queued Session has not dispatched provider work.
+                        # Never let a capacity-waiting worker start a call
+                        # after the saved session duration has elapsed.
+                        latest["status"] = "paused"
+                        latest["stopped_at"] = _now()
+                        latest["current_action"] = "Paused · waiting deadline"
+                        latest["message"] = (
+                            "Session duration expired while queued; no provider call was made. "
+                            "Resume to request a new execution window."
+                        )
+                        for branch in latest.get("strategy_runs", []):
+                            if branch.get("status") == "queued":
+                                branch["status"] = "paused"
+                                branch["current_action"] = latest["current_action"]
+                                branch["reason"] = latest["message"]
+                        _event(latest, "paused_before_dispatch", latest["message"])
+                        _save(path, latest)
+                        return False
+                if cloud_research.billing_enabled():
+                    # An interrupted or already-claimed ledger reservation
+                    # cannot be silently retried, even when project capacity
+                    # remains occupied by another collaborator.
+                    try:
+                        job_state = cloud_research.job_status(session_id)
+                    except cloud_research.CloudResearchUnavailable as exc:
+                        raise ProjectError(str(exc)) from exc
+                    if job_state != "queued":
+                        raise ProjectError(
+                            "Queued research reservation cannot be claimed; "
+                            "recover the saved session before resuming."
+                        )
+                limit = get_limits(path)["max_concurrent_sessions"]
+                occupied = sum(
+                    item.get("id") != session_id and item.get("status") == "running"
+                    for item in _all(path)
+                )
+                if occupied < limit:
+                    if cloud_research.billing_enabled():
+                        try:
+                            claimed = cloud_research.claim_job(session_id, project_limit=limit)
+                            if not claimed and cloud_research.job_status(session_id) != "queued":
+                                # Missing, revoked or already claimed ledger state
+                                # is not permission to dispatch or to reuse a billable
+                                # attempt. Leave the record intact for recovery.
+                                raise ProjectError(
+                                    "Queued research reservation cannot be claimed; "
+                                    "recover the saved session before resuming."
+                                )
+                        except cloud_research.CloudResearchUnavailable as exc:
+                            raise ProjectError(str(exc)) from exc
+                    else:
+                        claimed = True
+                    if claimed:
+                        latest["status"] = "running"
+                        latest["current_action"] = "Preparing research"
+                        latest["message"] = "Research is starting."
+                        latest["updated_at"] = _now()
+                        _save(path, latest)
+                        return True
+        # Recheck the saved status on every turn, so Stop/Pause or loss of
+        # permission prevents a queued job from ever reaching provider dispatch.
+        await asyncio.sleep(0.5)
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -15657,7 +15757,7 @@ async def _worker(session_id: str, path: str) -> None:
             if _pause_for_stop_advisory(initial, path):
                 _save(path, initial)
                 return
-        if not await _claim_cloud_job(session_id, path):
+        if not await _await_session_execution_slot(session_id, path):
             return
         # All newly started sessions use the branch-aware path, including a
         # one-strategy session. The legacy worker below remains only for

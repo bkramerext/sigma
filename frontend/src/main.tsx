@@ -2468,6 +2468,8 @@ function paperModelThinkingLabel(generation: PaperSummary['generation']): string
 }
 
 type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; substep_started_at?: string | null; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete'; model?: string; reasoning_effort?: string };
+type PaperRun = { run_id: string; number: number; creator_email: string; model: string; thinking: string; created_at: number; status: PaperProgress['status']; progress: Partial<PaperProgress> | null; paper_id?: string | null; can_control: boolean; preflight_needed?: boolean };
+
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; publication_requirement_reconciliation?: { text: string; status: 'missing' | 'needs_review'; note: string }[]; editorial_overlap_warnings?: string[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 const PAPER_STAGES = [
@@ -2701,6 +2703,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const request = useRef<AbortController | null>(null);
   const deliberatePaperStop = useRef(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
+  const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
+  const selectedRunIdRef = useRef<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  function selectPaperRun(runId: string | null) {
+    selectedRunIdRef.current = runId;
+    setSelectedRunId(runId);
+  }
   const [nextPaperNumber, setNextPaperNumber] = useState<number | null>(null);
   const [scoringId, setScoringId] = useState('');
   const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
@@ -2834,14 +2843,26 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
-      const generationRunning = ['active', 'queued'].includes(savedProgress?.progress?.status);
+      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
+      const runs = (Array.isArray(list.runs) ? list.runs : []) as PaperRun[];
+      setPaperRuns(runs);
+      let currentId = selectedRunIdRef.current;
+      const selectable = runs.filter(run => run.can_control && run.status !== 'complete' && !run.paper_id);
+      if (!currentId && !newPaperRequested && selectable.length > 0) {
+        currentId = selectable[selectable.length - 1].run_id;
+        selectPaperRun(currentId);
+      }
+      const own = runs.find(run => run.run_id === currentId);
+      const ownedProgress = own?.progress ?? (runs.length ? null : savedProgress?.progress);
+      const generationRunning = ['active', 'queued'].includes(ownedProgress?.status);
       if (!initialPaperActivityReported.current) {
         initialPaperActivityReported.current = true;
-        const status = savedProgress?.progress?.status;
+        const active = runs.some(run => run.status === 'active');
+        const queued = runs.some(run => run.status === 'queued');
+        const status = active ? 'active' : queued ? 'queued' : savedProgress?.progress?.status;
         onInitialActivity(status === 'active' || status === 'queued' ? status : null);
       }
-      setPaperProgress(savedProgress?.progress ?? null);
-      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
+      setPaperProgress(ownedProgress as PaperProgress | null);
       setPapers(list.papers as PaperSummary[]);
       setNextPaperNumber(typeof list.next_paper_number === 'number' ? list.next_paper_number : null);
       if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setRestartReady(false); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
@@ -2851,7 +2872,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         // hashing the complete research snapshot until the user presses Play.
         // Keep the existing preflight for checkpoints, reset receipts, and
         // servers that do not advertise this optimization.
-        if (progressResponse.ok && savedProgress?.preflight_needed === false) {
+        if (progressResponse.ok && (own?.preflight_needed ?? savedProgress?.preflight_needed) === false) {
           setCheckpointMismatch(null);
           setRestartableCheckpoint(null);
           setRestartReady(false);
@@ -2861,6 +2882,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         const params = new URLSearchParams({
           path, long_form: 'false', expected_project_id: projectId, expected_binding: config.binding,
           mode: config.mode, model: config.model, reasoning_effort: config.reasoning_effort,
+          ...(currentId ? { run_id: currentId } : {}),
         });
         const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const preflight = await preflightResponse.json();
@@ -2901,50 +2923,56 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     let stopped = false;
     const poll = async () => {
       try {
-        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+        const runId = selectedRunIdRef.current;
+        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path, ...(runId ? { run_id: runId } : {}) })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const body = await response.json();
         if (!stopped && response.ok) {
-          const next = (body.progress ?? null) as PaperProgress | null;
+          const runs = (body.runs ?? []) as PaperRun[];
+          setPaperRuns(runs);
+          const selected = runId ? runs.find(run => run.run_id === runId) : null;
+          const next = (selected?.progress ?? body.progress ?? null) as PaperProgress | null;
           setPaperProgress(next);
           if (next?.status !== 'active' && next?.status !== 'queued') {
-            // Completion clears the checkpoint. If the client lost its SSE
-            // stream, discard the now-stale draft row when the saved version
-            // takes its place; interrupted checkpoints remain expandable.
             if (next === null) setNewPaperRequested(false);
-            void refresh();
+            void refresh(undefined, true);
           }
         }
-      } catch { /* Keep the last saved operation visible until connectivity returns. */ }
+      } catch { /* Preserve persisted state until connectivity returns. */ }
     };
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [path, paperProgress?.status]);
-  // A collaborator can start Paper generation while this pane is idle.
-  // Poll that idle-to-active transition as well: collaboration revisions are
-  // not emitted for every progress update and cannot replace progress polling.
-  // Once active, the existing one-second progress poll takes over.
+  }, [path, paperProgress?.status, selectedRunId]);
+  // Poll even when this collaborator is idle; another creator's Paper may
+  // become active without changing the project's content revision.
   useEffect(() => {
     if (guest || collaborationRevision === undefined ||
         paperProgress?.status === 'active' || paperProgress?.status === 'queued') return;
     let stopped = false;
     const poll = async () => {
       try {
-        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path })}`,
+        const runId = selectedRunIdRef.current;
+        const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path, ...(runId ? { run_id: runId } : {}) })}`,
           { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok || stopped) return;
         const body = await response.json();
         if (stopped) return;
-        const next = (body.progress ?? null) as PaperProgress | null;
-        if (next?.status === 'active' || next?.status === 'queued') {
+        const runs = (body.runs ?? []) as PaperRun[];
+        setPaperRuns(runs);
+        const chosen = runId ? runs.find(run => run.run_id === runId) : null;
+        if (chosen) {
+          const next = chosen.progress as PaperProgress | null;
           setPaperProgress(next);
-          setDraftPaperExpanded(true);
+          if (next?.status === 'active' || next?.status === 'queued') setDraftPaperExpanded(true);
+        } else if (!runId && !newPaperRequested) {
+          const own = runs.filter(run => run.can_control && run.status !== 'complete' && !run.paper_id);
+          if (own.length) { selectPaperRun(own[own.length - 1].run_id); void refresh(undefined, true); }
         }
       } catch { /* Preserve the last known state during transient connectivity loss. */ }
     };
     void poll();
     const timer = window.setInterval(() => void poll(), 2000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [guest, collaborationRevision, path, paperProgress?.status]);
+  }, [guest, collaborationRevision, path, paperProgress?.status, selectedRunId, newPaperRequested]);
   // Notification deep links expand the exact saved paper (or the paused
   // draft) after initial hydration. Do not repeat this scroll on polling.
   const paperDeepLinkHandled = useRef(false);
@@ -3120,19 +3148,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setCopyError('Could not copy the explanation. Check browser clipboard permissions and try again.');
     }
   }
-  async function cancelGeneration() {
-    if (!busy && !['active', 'queued'].includes(paperProgress?.status ?? '')) return;
+  async function cancelGeneration(runId: string | null = selectedRunIdRef.current) {
+    const target = paperRuns.find(run => run.run_id === runId);
+    if (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? '')) return;
     try {
       const response = await fetch('/api/projects/papers/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding || 'stop-only' }),
+        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only' }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
       if (result.cancelled) {
-        deliberatePaperStop.current = true;
-        setPaperProgress(current => current ? { ...current, status: 'cancelled' } : current);
-        request.current?.abort();
+        if (runId === selectedRunIdRef.current) {
+          deliberatePaperStop.current = true;
+          setPaperProgress(current => current ? { ...current, status: 'cancelled' } : current);
+          request.current?.abort();
+        }
         setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
       } else {
         setSuccess('No active paper generation was found. Checking saved versions.');
@@ -3152,10 +3183,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     try {
       const response = await fetch('/api/projects/papers/discard', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, confirm_discard: true }),
+        body: JSON.stringify({ path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding, confirm_discard: true }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished paper work.');
+      selectPaperRun(null);
       setNewPaperRequested(false); setPaperProgress(null); setCheckpointMismatch(null);
       setRestartableCheckpoint(null); setContinuationAvailable(false); setResumeDetails(null);
       setResetConfirm(false); setConfirmDiscardDraft(false); setSuccess('');
@@ -3180,13 +3212,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
           body: JSON.stringify(restartingSavedWork ? {
-            path, expected_project_id: projectId, expected_binding: binding,
+            path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding,
             expected_snapshot_sha256: restartSource.snapshot_sha256,
             // Match Generate's automatic long-form choice rather than
             // unconditionally forcing long-form on a restarted one-shot paper.
             long_form: false, confirm_restart: true,
           } : {
-            path, expected_project_id: projectId, expected_binding: binding,
+            path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding,
             confirm_discard: true,
           }),
         },
@@ -3212,6 +3244,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
+    const runId = selectedRunIdRef.current ?? crypto.randomUUID().replaceAll('-', '');
+    selectPaperRun(runId);
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setPhase('Compiling publication standards…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
@@ -3230,7 +3264,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           signal: controller.signal,
           headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
           body: JSON.stringify({
-            path, expected_project_id: projectId, expected_binding: binding,
+            path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding,
             expected_snapshot_sha256: source.snapshot_sha256,
             long_form: false, confirm_restart: true,
           }),
@@ -3246,7 +3280,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       }
       const preflightParams = new URLSearchParams({
         path, long_form: 'false', expected_project_id: projectId, expected_binding: binding,
-        mode, model, reasoning_effort: effort,
+        mode, model, reasoning_effort: effort, run_id: runId,
       });
       const preflightResponse = await fetch(`/api/projects/papers/preflight?${preflightParams}`, { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
       const preflight = await preflightResponse.json();
@@ -3283,7 +3317,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         : 'Compiling publication standards…');
       requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
+        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
           ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}),
           authorized_provider_change: authorizedProviderChange }) });
       if (!response.ok) {
@@ -3368,7 +3402,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     ['active', 'queued'].includes(paperProgress?.status ?? '');
   const paperPlayDisabled = generating || loading || !binding || paperPlayBlocked;
   const paperPlayTooltip = paperPlayBlocked
-    ? 'Only one paper at a time can be generated'
+    ? 'This paper is already generating'
     : busy
       ? paperProgress?.status === 'cancelled' ? 'Finishing paper stop' :
         request.current ? 'Starting paper generation' : 'Paper action in progress'
@@ -3383,12 +3417,17 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // A completed paper does not reserve the next draft for its previous author.
   // Existing unfinished work remains creator-only; any collaborator may start
   // genuinely new work (the server reserves ownership before dispatch).
+  const selectedRun = paperRuns.find(run => run.run_id === selectedRunId);
+  const otherPaperRuns = paperRuns.filter(run =>
+    run.run_id !== selectedRunId && run.status !== 'complete' && !run.paper_id
+  );
   const unfinishedDraftPresent = continuationAvailable || Boolean(checkpointMismatch) ||
     Boolean(restartableCheckpoint) || (paperProgress != null && paperProgress.status !== 'complete');
-  const canControlDraft = !viewerEmail || !unfinishedDraftPresent || (draftCreatorEmail
-    ? viewerEmail === draftCreatorEmail
-    : viewerEmail === projectOwnerEmail);
-  const draftVersion = nextPaperNumber ?? (Math.max(0, ...papers.map(paper => paper.paper_version)) + 1);
+  const canControlDraft = selectedRun ? selectedRun.can_control
+    : !viewerEmail || !unfinishedDraftPresent || (draftCreatorEmail
+      ? viewerEmail === draftCreatorEmail : viewerEmail === projectOwnerEmail);
+  const activeDraftCreator = selectedRun?.creator_email || draftCreatorEmail;
+  const draftVersion = selectedRun?.number ?? nextPaperNumber ?? (Math.max(0, ...papers.map(paper => paper.paper_version)) + 1);
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
   const paperProgressFailure = paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
     : paperProgress?.status === 'interrupted' ? paperProgress.detail ?? '' : '';
@@ -3401,21 +3440,34 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   ].join('|');
   const paperNoticeCopy = providerInterruptionCopy(paperNoticeMessage);
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
-  const showDraftPaper = !guest && (newPaperRequested || generating || restartReady || continuationAvailable || (paperProgress != null && paperProgress.status !== 'complete'));
-  useEffect(() => { onRunningChange(generationRunning && paperProgress?.status !== 'queued'); return () => onRunningChange(false); }, [generationRunning, paperProgress?.status, onRunningChange]);
-  useEffect(() => { onQueuedChange(paperProgress?.status === 'queued'); return () => onQueuedChange(false); }, [paperProgress?.status, onQueuedChange]);
+  const showDraftPaper = !guest && (newPaperRequested || generating || restartReady || continuationAvailable ||
+    (paperProgress != null && paperProgress.status !== 'complete') ||
+    (selectedRun != null && selectedRun.status !== 'complete' && !selectedRun.paper_id));
+  const allPapersRunning = paperRuns.some(run => run.status === 'active') || generationRunning && paperProgress?.status !== 'queued';
+  const allPapersQueued = !allPapersRunning && paperRuns.some(run => run.status === 'queued');
+  useEffect(() => { onRunningChange(allPapersRunning); return () => onRunningChange(false); }, [allPapersRunning, onRunningChange]);
+  useEffect(() => { onQueuedChange(allPapersQueued); return () => onQueuedChange(false); }, [allPapersQueued, onQueuedChange]);
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
       {!guest && <div className="papers-heading-actions strategy-heading-actions">
-        {!showDraftPaper && (confirmNewPaper ? <>
-          <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => { setConfirmNewPaper(false); setNewPaperRequested(true); setDraftPaperExpanded(true); void generatePaper(); }}>Start Paper {draftVersion}</button>
+        {confirmNewPaper ? <>
+          <button type="button" className="text-view-link session-start-link" disabled={loading || busy} onClick={() => {
+            setConfirmNewPaper(false); selectPaperRun(crypto.randomUUID().replaceAll('-', ''));
+            setPaperProgress(null); setNewPaperRequested(true); setDraftPaperExpanded(true);
+            setCheckpointMismatch(null); setRestartableCheckpoint(null); setRestartReady(false);
+            setContinuationAvailable(false); setResumeDetails(null); void generatePaper();
+          }}>Start Paper {nextPaperNumber ?? draftVersion}</button>
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => setConfirmNewPaper(false)}>Cancel</button>
         </> : <>
-        <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading} onClick={() => { if (!expanded) onSectionOpened(); setExpanded(true); window.localStorage.setItem(`sigma.papersPane:${path}`, 'true'); setConfirmNewPaper(true); }}><CirclePlusIcon/></button>
-        </>)}
+          <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading || busy} onClick={() => {
+            if (!expanded) onSectionOpened(); setExpanded(true);
+            window.localStorage.setItem(`sigma.papersPane:${path}`, 'true');
+            setConfirmNewPaper(true);
+          }}><CirclePlusIcon/></button>
+        </>}
         <span className="paper-includes-anchor">
-          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" disabled={loading || confirmNewPaper || showDraftPaper} onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
+          <button ref={includeButtonRef} type="button" className="text-view-link papers-header-action papers-include-action sigma-heading-icon-action" aria-label="Include in paper" data-tooltip="Include in paper" aria-haspopup="dialog" aria-expanded={includeOptionsOpen} aria-controls="paper-include-options" disabled={loading || confirmNewPaper || busy} onClick={() => includeOptionsOpen ? setIncludeOptionsOpen(false) : openIncludeOptions()}><SlidersSettingsIcon/></button>
           {includeOptionsOpen && <div ref={includePopupRef} id="paper-include-options" className={`paper-includes-dialog${includePopupAbove ? ' paper-includes-dialog-above' : ''}`} role="dialog" aria-modal="false" aria-labelledby="paper-includes-title" style={{ left: includePopupOffset, maxHeight: includePopupMaxHeight }}>
       <div className="paper-includes-dialog-heading"><h3 id="paper-includes-title">Include in paper</h3><DialogDismissButton label="Close paper inclusion options" onClick={() => { setIncludeOptionsOpen(false); includeButtonRef.current?.focus(); }}/></div>
       <fieldset className="ai-paper-includes">
@@ -3432,7 +3484,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           </div>}
         </span>
       </div>}
-      <p className="section-count">{papers.length + (showDraftPaper ? 1 : 0)} {papers.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
+      <p className="section-count">{papers.length + otherPaperRuns.length + (showDraftPaper ? 1 : 0)} {papers.length + otherPaperRuns.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
 
     {showPaperNotice && <SessionNotice key={paperNoticeKey} number={draftVersion}
@@ -3451,11 +3503,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
       {loading && <p>Loading saved versions…</p>}
 
-      {(showDraftPaper || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
+      {(showDraftPaper || otherPaperRuns.length > 0 || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={`Paper ${draftVersion}`} data-paper-version={draftVersion}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${draftVersion}`} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={formatRunAttribution({ kind: 'paper', number: draftVersion, creator: draftCreatorEmail, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
+              badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={formatRunAttribution({ kind: 'paper', number: draftVersion, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
               beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && canControlDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? `Resume Paper ${draftVersion}` : `Generate Paper ${draftVersion}`} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
@@ -3519,6 +3571,29 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
 
           </div>
         </article>}
+        {otherPaperRuns.map(run => <article key={run.run_id} className="saved-paper-card paper-draft-card" data-paper-run={run.run_id} aria-label={`Paper ${run.number}`}>
+          <div className="saved-paper-row">
+            <div className="saved-paper-heading">
+              <strong className="paper-real-title">Paper {run.number}</strong>
+              {(run.status === 'active' || run.status === 'queued') && <span className={`research-running-indicator paper-title-activity${run.status === 'queued' ? ' paper-queued-indicator' : ''}`}
+                aria-label={run.status === 'queued' ? 'Paper queued' : 'Paper generating'}
+                data-tooltip={formatRunAttribution({ kind: 'paper', number: run.number, creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking, mode: 'hover' })}/>}
+              {run.can_control && <button type="button" className="text-view-link session-start-link" data-tooltip="Open your paper"
+                onClick={() => { selectPaperRun(run.run_id); setNewPaperRequested(false); setDraftPaperExpanded(true); void refresh(undefined, true); }}>Open</button>}
+              {run.can_control && (run.status === 'active' || run.status === 'queued') && <button type="button"
+                className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
+                aria-label={`Stop Paper ${run.number}`} data-tooltip="Stop paper generation" onClick={() => void cancelGeneration(run.run_id)}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
+              </button>}
+            </div>
+            <p className="saved-paper-meta">{formatRunAttribution({ kind: 'paper', creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking })}
+              {' · '}{run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued' : run.status === 'interrupted' ? 'Interrupted' : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
+            </p>
+            {run.progress?.stage && run.progress.started_at && typeof run.progress.current !== 'undefined' &&
+              <div className="ai-paper-status ai-paper-progress" role="status"><PaperStageSteps progress={run.progress as PaperProgress}/></div>}
+            {run.progress?.detail && <p className="settings-hint">{run.progress.detail}</p>}
+          </div>
+        </article>)}
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
@@ -4502,6 +4577,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   const request = useRef<AbortController | null>(null);
   const [question, setQuestion] = useState('');
   const [answers, setAnswers] = useState<ResearchQARecord[]>([]);
+  const [pendingAnswers, setPendingAnswers] = useState<{ request_id: string; creator: string; model: string; thinking: string }[]>([]);
   const [binding, setBinding] = useState('');
   const [model, setModel] = useState('');
   const [effort, setEffort] = useState('');
@@ -4527,24 +4603,43 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     else void refresh();
     return () => { request.current?.abort(); formattingRequest.current?.abort(); };
   }, [guest]);
-  async function refresh(): Promise<{ answers: ResearchQARecord[]; archiveAvailable: boolean } | null> {
-    setLoading(true);
+  async function refresh(silent = false): Promise<{ answers: ResearchQARecord[]; archiveAvailable: boolean } | null> {
+    if (!silent) setLoading(true);
     try {
       const q = new URLSearchParams({ path });
       const [listResponse, configResponse] = await Promise.all([
         fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' }),
-        fetch(`/api/projects/proposals/config?${q}`, { cache: 'no-store' }),
+        silent ? Promise.resolve(null) : fetch(`/api/projects/proposals/config?${q}`, { cache: 'no-store' }),
       ]);
-      const list = await listResponse.json(); const config = await configResponse.json();
+      const list = await listResponse.json();
+      const config = configResponse ? await configResponse.json() : null;
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
       const saved = (list.answers ?? []) as ResearchQARecord[];
       if (typeof list.archive_available !== 'boolean') throw new Error('Could not verify the saved Q/A archive.');
       setAnswers(saved);
-      if (configResponse.ok) { setBinding(config.binding); setModel(config.model); setEffort(config.reasoning_effort); }
+      if (configResponse?.ok && config) { setBinding(config.binding); setModel(config.model); setEffort(config.reasoning_effort); }
       return { answers: saved, archiveAvailable: list.archive_available };
     } catch (cause) { setError(errorMessage(cause)); return null; }
-    finally { setLoading(false); }
+    finally { if (!silent) setLoading(false); }
   }
+  useEffect(() => {
+    if (guest) return;
+    let closed = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/projects/research-qa/activity?${new URLSearchParams({ path })}`,
+          { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+        if (!closed && response.ok) {
+          const data = await response.json();
+          if (!closed) setPendingAnswers(Array.isArray(data.active) ? data.active : []);
+        }
+        if (!closed) await refresh(true);
+      } catch { /* Keep saved and pending answers visible through transient disconnects. */ }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2000);
+    return () => { closed = true; window.clearInterval(timer); };
+  }, [guest, path]);
   async function ask(event: React.FormEvent) {
     event.preventDefault(); if (!question.trim() || busy || !binding) return;
     if (recovery?.question === question) {
@@ -4644,6 +4739,13 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
         <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
+        {pendingAnswers.length > 0 && <section aria-label="Q/A in progress">
+          {pendingAnswers.map(pending => <p className="ai-paper-status" role="status" key={pending.request_id}>
+            <span className="research-running-indicator" aria-label="Answer in progress"
+              data-tooltip={formatRunAttribution({ kind: 'answer', creator: pending.creator, model: pending.model, thinking: pending.thinking, mode: 'hover' })}/>
+            {' Answering · '}{formatRunAttribution({ kind: 'answer', creator: pending.creator, model: pending.model, thinking: pending.thinking })}
+          </p>)}
+        </section>}
         {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
         {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
           <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>

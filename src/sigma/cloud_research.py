@@ -454,17 +454,37 @@ def _now() -> str:
 
 
 def _project_relpath(record: dict[str, Any], owner_path: Path) -> str:
+    """Persist a relocatable, authorized workspace-relative project locator.
+
+    A collaborator's Session is billed under their own workspace but the
+    shared project lives under the verified owner's *different* workspace.
+    Store that location with an explicit, safe prefix so restart recovery can
+    find the saved record without ever trusting a client absolute path.
+    """
     value = record.get("project_path")
     if not isinstance(value, str) or not value:
         return ""
     try:
         root = owner_path.resolve(strict=True)
         project = Path(value).resolve(strict=True)
-        if not project.is_relative_to(root) or not (
-            project.is_dir() or (project.suffix == ".json" and project.is_file())
+        if not (project.is_dir() or (project.suffix == ".json" and project.is_file())):
+            return ""
+        if project.is_relative_to(root):
+            return project.relative_to(root).as_posix()
+        # Shared-project paths may reference a sibling identity workspace, but
+        # never an arbitrary path outside the verified workspace collection.
+        relative = project.relative_to(root.parent)
+        if (
+            len(relative.parts) < 2
+            or len(relative.parts[0]) != 32
+            or any(char not in "0123456789abcdef" for char in relative.parts[0])
         ):
             return ""
-        return project.relative_to(root).as_posix()
+        from sigma import project_collaboration
+
+        if not project_collaboration.authorized_shared_path(project):
+            return ""
+        return "@shared/" + relative.as_posix()
     except (OSError, RuntimeError, ValueError):
         return ""
 
@@ -591,9 +611,14 @@ def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str
         raise CloudResearchUnavailable("Allowance could not be reloaded safely.") from exc
 
 
-def _require_research_capacity(db: sqlite3.Connection, owner: str, session_id: str) -> None:
-    """Reserve running capacity before publishing a session; no execution queue."""
-    user_limit, global_limit, _, _ = _evaluation_queue_limits()
+def _require_research_queue_capacity(db: sqlite3.Connection, owner: str, session_id: str) -> None:
+    """Bound durable admission separately from active worker capacity.
+
+    Waiting jobs have never dispatched a provider call and must not consume a
+    running slot. The configured queue allowances are *additional* to the
+    per-user and global running limits, including currently running jobs.
+    """
+    user_running, global_running, user_waiting, global_waiting = _evaluation_queue_limits()
     states = "('queued','running','stopping')"
     user = db.execute(
         "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND job_kind='research' "
@@ -605,14 +630,14 @@ def _require_research_capacity(db: sqlite3.Connection, owner: str, session_id: s
         f"AND status IN {states} AND session_id<>?",
         (session_id,),
     ).fetchone()[0]
-    if user >= user_limit or total >= global_limit:
+    if user >= user_running + user_waiting or total >= global_running + global_waiting:
         raise CloudResearchUnavailable(
-            "Research capacity is currently full. Please try again shortly."
+            "Research queue is full. Saved work is safe; retry when queued work completes."
         )
 
 
 def prepare_job(record: dict[str, Any]) -> None:
-    """Atomically reserve execution capacity without waiting or provider calls."""
+    """Durably admit a queued job without reserving running capacity or provider calls."""
     owner = _workspace_id()
     from sigma.cloud_sponsor import inference_provider
 
@@ -709,16 +734,8 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "UPDATE jobs SET session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
                             (project_relpath, now, legacy["session_id"], owner),
                         )
-                occupants = db.execute(
-                    "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? AND session_slot=1 AND status IN ('queued','running','stopping') AND session_id<>? ORDER BY created_at,session_id",
-                    (owner, record["project_id"], record["id"]),
-                ).fetchall()
-                if len(occupants) >= session_limit:
-                    occupant_ids = ", ".join(row["session_id"] for row in occupants)
-                    raise CloudResearchUnavailable(
-                        "This project is at its maximum concurrent sessions limit. "
-                        f"Sessions occupying slots: {occupant_ids}. Open Research Sessions to inspect or stop them."
-                    )
+                # Project-level running capacity is checked at worker claim, not
+                # at admission. Independent accepted sessions can wait here.
             existing = db.execute(
                 "SELECT * FROM jobs WHERE session_id=? OR (workspace_id=? AND idempotency_key=?)",
                 (record["id"], owner, record["idempotency_key"]),
@@ -750,7 +767,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "The per-user research token budget has been reached."
                         )
                     if not auxiliary:
-                        _require_research_capacity(db, owner, record["id"])
+                        _require_research_queue_capacity(db, owner, record["id"])
                     db.execute(
                         "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=?,session_slot=? WHERE session_id=?",
                         (now, project_relpath, _PROCESS_EPOCH, session_slot, record["id"]),
@@ -771,9 +788,9 @@ def prepare_job(record: dict[str, Any]) -> None:
                     "The per-user research token budget has been reached."
                 )
             if not auxiliary:
-                _require_research_capacity(db, owner, record["id"])
-            # "queued" is a transient persisted admission state, not a
-            # waiting queue: its execution slot is already reserved.
+                _require_research_queue_capacity(db, owner, record["id"])
+            # "queued" is a durable waiting state; worker slots are acquired
+            # separately in claim_job only immediately before execution.
             db.execute(
                 "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch,session_slot,job_kind) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
@@ -794,8 +811,10 @@ def prepare_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-def claim_job(session_id: str) -> bool:
-    """Acquire a per-user and global worker slot for one queued session."""
+def claim_job(session_id: str, *, project_limit: int | None = None) -> bool:
+    """Atomically claim user, global and shared-project running capacity."""
+    if project_limit is not None and (type(project_limit) is not int or project_limit < 1):
+        raise CloudResearchUnavailable("Project concurrency limit is invalid.")
     owner = _workspace_id()
     user_limit, global_limit, _user_queue, _global_queue = _evaluation_queue_limits()
     try:
@@ -811,6 +830,20 @@ def claim_job(session_id: str) -> bool:
             if job["status"] != "queued":
                 return False
             if job["job_kind"] != "auxiliary":
+                # The project limit applies to *running* work, not queued
+                # admissions. Match by immutable project ID across creator
+                # workspaces, so a collaborator cannot bypass its limit.
+                if job["session_slot"]:
+                    limit = project_limit or 1
+                    project_running = db.execute(
+                        """SELECT COUNT(*) FROM jobs
+                           WHERE project_id=? AND session_slot=1
+                           AND job_kind='research'
+                           AND status IN ('running','stopping') AND session_id<>?""",
+                        (job["project_id"], session_id),
+                    ).fetchone()[0]
+                    if project_running >= limit:
+                        return False
                 user_running = db.execute(
                     "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND job_kind='research' AND status IN ('running','stopping')",
                     (owner,),
@@ -1058,6 +1091,8 @@ def reconcile_orphaned_jobs() -> list[str]:
     uncertain path/state or any provider-call row is preserved; age is never
     evidence for releasing a job or spend reservation.
     """
+    from sigma import cloud_auth, project_collaboration
+
     workspace = _ledger_workspace()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
@@ -1081,15 +1116,30 @@ def reconcile_orphaned_jobs() -> list[str]:
         except (ValueError, TypeError, AttributeError):
             continue
         relative = candidate["project_relpath"]
-        relative_path = Path(relative) if isinstance(relative, str) else Path("/")
+        is_shared = isinstance(relative, str) and relative.startswith("@shared/")
+        raw_relative = relative[len("@shared/") :] if is_shared else relative
+        relative_path = Path(raw_relative) if isinstance(raw_relative, str) else Path("/")
         if (
-            not isinstance(relative, str)
-            or not relative
+            not isinstance(raw_relative, str)
+            or not raw_relative
             or relative_path.is_absolute()
             or ".." in relative_path.parts
         ):
             continue
-        lexical_project = root
+        base = root.parent if is_shared else root
+        if is_shared:
+            # Background cross-workspace recovery cannot impersonate a creator.
+            # A verified, still-authorized collaborator may safely recover
+            # their own durable Session on reconnect.
+            owner_name = relative_path.parts[0] if relative_path.parts else ""
+            if (
+                cloud_auth.current_principal() is None
+                or len(relative_path.parts) < 2
+                or len(owner_name) != 32
+                or any(char not in "0123456789abcdef" for char in owner_name)
+            ):
+                continue
+        lexical_project = base
         unsafe = False
         for part in relative_path.parts:
             lexical_project = lexical_project / part
@@ -1100,7 +1150,9 @@ def reconcile_orphaned_jobs() -> list[str]:
             continue
         try:
             project = lexical_project.resolve(strict=True)
-            if not project.is_relative_to(root):
+            if not project.is_relative_to(base):
+                continue
+            if is_shared and not project_collaboration.authorized_shared_path(project):
                 continue
             bundle_project = project.suffix == ".json" and project.is_file()
             if not bundle_project:

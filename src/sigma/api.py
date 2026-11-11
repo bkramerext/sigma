@@ -8,11 +8,12 @@ import re
 import secrets
 import sqlite3
 from collections.abc import AsyncIterator
+from contextlib import nullcontext
 from dataclasses import asdict, replace
 from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import quote, urlencode
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
@@ -691,6 +692,7 @@ class ResearchLimitsRequest(OpenRequest):
 
 
 class PaperGenerateRequest(OpenRequest):
+    run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     browser_presence_required: bool = False
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
@@ -712,6 +714,7 @@ class PaperGenerateRequest(OpenRequest):
 
 
 class PaperCancelRequest(OpenRequest):
+    run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
 
@@ -721,6 +724,7 @@ class PaperDiscardRequest(PaperCancelRequest):
 
 
 class PaperRestartRequest(OpenRequest):
+    run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -937,6 +941,7 @@ def papers_view(path: str):
         "next_paper_number": papers.next_paper_number_for_activity(path),
         "paper_count": len(available),
         "best_paper_score": paper_scores.best_score(available),
+        "runs": papers.run_progress_list(path),
     }
 
 
@@ -949,23 +954,33 @@ def papers_preflight_view(
     mode: str | None = None,
     model: str | None = None,
     reasoning_effort: str | None = None,
+    run_id: str | None = None,
 ):
-    return papers.preflight(
-        path,
-        force_long_form=long_form,
-        expected_project_id=expected_project_id,
-        expected_binding=expected_binding,
-        mode=mode,
-        model=model,
-        reasoning_effort=reasoning_effort,
-    )
+    if run_id is not None:
+        project_collaboration.execution_run(path, "paper", run_id, operator=True, missing_ok=True)
+    with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
+        return papers.preflight(
+            path,
+            force_long_form=long_form,
+            expected_project_id=expected_project_id,
+            expected_binding=expected_binding,
+            mode=mode,
+            model=model,
+            reasoning_effort=reasoning_effort,
+        )
 
 
 @app.get("/api/projects/papers/progress")
-def papers_progress_view(path: str):
+def papers_progress_view(path: str, run_id: str | None = None):
+    if run_id is not None:
+        project_collaboration.execution_run(path, "paper", run_id)
+    with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
+        progress = papers.progress_status(path)
+        preflight = papers.needs_preflight_on_open(path)
     return {
-        "progress": papers.progress_status(path),
-        "preflight_needed": papers.needs_preflight_on_open(path),
+        "progress": progress,
+        "preflight_needed": preflight,
+        "runs": papers.run_progress_list(path),
     }
 
 
@@ -974,10 +989,14 @@ async def paper_cancel_view(body: PaperCancelRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    project_collaboration.require_paper_draft_operator(
-        body.path, body.expected_project_id, controlling_active=True
-    )
-    return {"cancelled": await papers.cancel_generation(body.path)}
+    if body.run_id is None:
+        project_collaboration.require_paper_draft_operator(
+            body.path, body.expected_project_id, controlling_active=True
+        )
+    else:
+        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+    with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
+        return {"cancelled": await papers.cancel_generation(body.path)}
 
 
 @app.post("/api/projects/papers/discard")
@@ -985,21 +1004,32 @@ async def papers_discard_view(body: PaperDiscardRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
-    return await papers.discard_work(body.path, body.expected_project_id)
+    if body.run_id is None:
+        project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
+    else:
+        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+    with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
+        result = await papers.discard_work(body.path, body.expected_project_id)
+    if body.run_id is not None:
+        project_collaboration.discard_execution_run(body.path, "paper", body.run_id)
+    return result
 
 
 @app.post("/api/projects/papers/restart")
 async def papers_restart_view(body: PaperRestartRequest):
-    project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
-    return await papers.restart_work(
-        body.path,
-        body.expected_project_id,
-        body.expected_binding,
-        body.expected_snapshot_sha256,
-        body.confirm_restart,
-        body.long_form,
-    )
+    if body.run_id is None:
+        project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
+    else:
+        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+    with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
+        return await papers.restart_work(
+            body.path,
+            body.expected_project_id,
+            body.expected_binding,
+            body.expected_snapshot_sha256,
+            body.confirm_restart,
+            body.long_form,
+        )
 
 
 @app.get("/api/projects/papers/{paper_id}")
@@ -1145,17 +1175,40 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     )
     from sigma import project_collaboration
 
-    lease = project_collaboration.acquire_lease(body.path, "Paper generation")
-    try:
+    # Reserve a distinct Paper and number *before* scheduling provider work.
+    # Local single-user projects keep their existing checkpoint selection.
+    shared = cloud_workspaces.current() is not None
+    reservation: dict[str, Any] | None = None
+    run_id: str | None = None
+    if shared:
+        project_collaboration.register_owner(inspect_project(body.path))
+        run_id = body.run_id or uuid4().hex
+        account = await auth_context()
+        config = await papers.configuration(view=inspect_project(body.path), context=account)
+        if not config["available"]:
+            raise ProjectError(config["message"])
+        reservation = project_collaboration.reserve_execution_run(
+            body.path,
+            "paper",
+            run_id,
+            papers.next_paper_number_for_activity(body.path) - 1,
+            model=config["model"],
+            thinking=config["reasoning_effort"],
+        )
+        if reservation is None:
+            raise ProjectError("Paper reservation is unavailable.")
+    else:
         project_collaboration.reserve_paper_draft(
             body.path,
             body.expected_project_id,
             resuming=papers._load_work(body.path) is not None,
         )
-    except BaseException:
-        project_collaboration.release_lease(body.path, lease)
-        raise
-    with project_collaboration.bind_lease(body.path, lease):
+    scope = (
+        papers.paper_run_scope(run_id, number=reservation["number"])
+        if run_id is not None and reservation is not None
+        else nullcontext()
+    )
+    with scope:
         task = asyncio.create_task(
             papers.generate(
                 body.path,
@@ -1175,6 +1228,13 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 **presence_kwargs,
             )
         )
+        try:
+            # Synchronous, durable receipt: an immediate Stop sees the task.
+            papers.register_submission(body.path, task)
+        except BaseException:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
 
     def observe_detached_result(completed: asyncio.Task[dict[str, Any]]) -> None:
         if completed.cancelled():
@@ -1184,31 +1244,23 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             paper_id = completed.result().get("paper_id")
             if isinstance(paper_id, str):
                 try:
-                    project_collaboration.note_artifact_author(
-                        body.path, "paper", paper_id, created_only=True
-                    )
+                    if run_id is not None:
+                        project_collaboration.note_execution_artifact_author(
+                            body.path, "paper", run_id, paper_id
+                        )
+                    else:
+                        project_collaboration.note_artifact_author(
+                            body.path, "paper", paper_id, created_only=True
+                        )
                 except (OSError, sqlite3.Error, ValueError):
                     logging.getLogger(__name__).warning(
                         "Paper author attribution unavailable for %s", paper_id
                     )
-        if error is not None and not isinstance(error, ProjectError):
+        elif not isinstance(error, ProjectError):
             logging.getLogger(__name__).error(
                 "Detached paper generation failed: %s", type(error).__name__
             )
 
-    try:
-        # Reserve synchronously before yielding a StreamingResponse. This
-        # closes the window where an immediate Stop could miss the job.
-        with project_collaboration.bind_lease(body.path, lease):
-            papers.register_submission(body.path, task)
-    except BaseException:
-        # Disk failure, duplicate submission, or any other admission error
-        # must never leave an unregistered provider task running.
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
-        project_collaboration.release_lease(body.path, lease)
-        raise
-    project_collaboration.watch_lease(body.path, lease, task)
     task.add_done_callback(observe_detached_result)
 
     async def stream():
@@ -1218,7 +1270,8 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 try:
                     update = await asyncio.wait_for(updates.get(), timeout=1)
                 except TimeoutError:
-                    current = papers.progress_status(body.path)
+                    with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
+                        current = papers.progress_status(body.path)
                     if current is None:
                         yield ": paper generation is active\n\n"
                     else:
@@ -1283,7 +1336,11 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+            **({"X-Sigma-Paper-Run": run_id} if run_id is not None else {}),
+        },
     )
 
 
@@ -1698,60 +1755,48 @@ def mock_research_start_view(
 
 @app.post("/api/projects/research-sessions/start")
 async def research_start_view(body: ResearchStartRequest):
-    from sigma import project_collaboration
-
-    lease = project_collaboration.acquire_lease(body.path, "Research session")
-    transferred = False
+    """Independent Session admission; per-session state already has durable IDs."""
     try:
-        with project_collaboration.bind_lease(body.path, lease):
-            try:
-                result = await research_sessions.start_session(
-                    body.path,
-                    body.strategy_id,
-                    body.idempotency_key,
-                    body.expected_project_id,
-                    body.expected_binding,
-                    body.expected_limits,
-                    body.strategy_ids,
-                    body.continue_using_saved_type_settings,
-                    body.browser_presence_required,
-                )
-            except ProjectError as exc:
-                safe_message = project_diagnostics.sanitize(str(exc))
-                try:
-                    diagnostic = project_diagnostics.append(
-                        body.path,
-                        stage="admission",
-                        code="research_admission_failed",
-                        message=safe_message,
-                        correlation_id=str(body.idempotency_key),
-                        http_status=400,
-                    )
-                except (ProjectError, OSError, ValueError):
-                    return JSONResponse(
-                        {"error": safe_message, "diagnostic_recorded": False},
-                        status_code=400,
-                    )
-                return JSONResponse(
-                    {
-                        "error": diagnostic["message"],
-                        "diagnostic_recorded": True,
-                        "diagnostic": diagnostic,
-                    },
-                    status_code=400,
-                )
-        worker = research_sessions._tasks.get(result.get("id", ""))
-        if worker is not None and not worker.done():
-            project_collaboration.watch_lease(body.path, lease, worker)
-            transferred = True
-        if isinstance(result.get("id"), str):
-            project_collaboration.note_artifact_author(
-                body.path, "session", result["id"], created_only=True
+        result = await research_sessions.start_session(
+            body.path,
+            body.strategy_id,
+            body.idempotency_key,
+            body.expected_project_id,
+            body.expected_binding,
+            body.expected_limits,
+            body.strategy_ids,
+            body.continue_using_saved_type_settings,
+            body.browser_presence_required,
+        )
+    except ProjectError as exc:
+        safe_message = project_diagnostics.sanitize(str(exc))
+        try:
+            diagnostic = project_diagnostics.append(
+                body.path,
+                stage="admission",
+                code="research_admission_failed",
+                message=safe_message,
+                correlation_id=str(body.idempotency_key),
+                http_status=400,
             )
-        return result
-    finally:
-        if not transferred:
-            project_collaboration.release_lease(body.path, lease)
+        except (ProjectError, OSError, ValueError):
+            return JSONResponse(
+                {"error": safe_message, "diagnostic_recorded": False},
+                status_code=400,
+            )
+        return JSONResponse(
+            {
+                "error": diagnostic["message"],
+                "diagnostic_recorded": True,
+                "diagnostic": diagnostic,
+            },
+            status_code=400,
+        )
+    if isinstance(result.get("id"), str):
+        project_collaboration.note_artifact_author(
+            body.path, "session", result["id"], created_only=True
+        )
+    return result
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
@@ -1776,38 +1821,15 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         project_collaboration.note_artifact_author(body.path, "session", session_id)
         return simulated
 
-    if body.action not in {"resume", "repair"}:
-        # The original creator may borrow their own live worker's lease to
-        # persist Stop/Pause without taking ownership of somebody else's run.
-        with project_collaboration.bind_session_control_lease(body.path, "Research session"):
-            result = await research_sessions.control_session(
-                body.path,
-                session_id,
-                body.action,
-                additional_calls=body.additional_calls,
-                browser_presence_required=body.browser_presence_required,
-            )
-        return result
-    lease = project_collaboration.acquire_lease(body.path, "Research session")
-    transferred = False
-    try:
-        with project_collaboration.bind_lease(body.path, lease):
-            result = await research_sessions.control_session(
-                body.path,
-                session_id,
-                body.action,
-                additional_calls=body.additional_calls,
-                browser_presence_required=body.browser_presence_required,
-            )
-        worker = research_sessions._tasks.get(session_id)
-        if worker is not None and not worker.done():
-            project_collaboration.watch_lease(body.path, lease, worker)
-            transferred = True
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
-        return result
-    finally:
-        if not transferred:
-            project_collaboration.release_lease(body.path, lease)
+    result = await research_sessions.control_session(
+        body.path,
+        session_id,
+        body.action,
+        additional_calls=body.additional_calls,
+        browser_presence_required=body.browser_presence_required,
+    )
+    project_collaboration.note_artifact_author(body.path, "session", session_id, created_only=True)
+    return result
 
 
 @app.post("/api/projects/research-sessions/{session_id}/interventions")
@@ -1815,16 +1837,15 @@ async def research_intervention_view(session_id: str, body: ResearchIntervention
     project_collaboration.require_execution_operator(
         body.path, "session", session_id, "Research session"
     )
-    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
-        return await research_sessions.submit_intervention(
-            body.path,
-            session_id,
-            body.kind,
-            body.text,
-            body.strategy_ids,
-            body.agent_roles,
-            body.supersedes_intervention_id,
-        )
+    return await research_sessions.submit_intervention(
+        body.path,
+        session_id,
+        body.kind,
+        body.text,
+        body.strategy_ids,
+        body.agent_roles,
+        body.supersedes_intervention_id,
+    )
 
 
 @app.delete("/api/projects/research-sessions/{session_id}")
@@ -1836,10 +1857,7 @@ async def research_session_remove_view(session_id: str, body: ResearchSessionRem
         session_id,
         owner_terminal=session["status"] in {"completed", "ended"},
     )
-    with project_collaboration.bind_session_control_lease(body.path, "Research session"):
-        return await research_sessions.remove_session(
-            body.path, session_id, body.expected_updated_at
-        )
+    return await research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
 
 
 @app.get("/api/research-tools")

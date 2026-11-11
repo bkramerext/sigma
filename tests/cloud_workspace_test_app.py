@@ -31,11 +31,18 @@ async def deterministic_auth_middleware(request: Request, call_next):
     """Replace only OIDC session resolution in the isolated integration server."""
     if request.url.path == "/api/ui-instance" or request.url.path.startswith("/api/cloud-auth/"):
         return await call_next(request)
-    if not isinstance(getattr(request.state, "cloud_principal", None), cloud_auth.Principal):
+    principal = getattr(request.state, "cloud_principal", None)
+    if not isinstance(principal, cloud_auth.Principal):
         from fastapi.responses import JSONResponse
 
         return JSONResponse({"error": "Authentication required."}, status_code=401)
-    return await call_next(request)
+    # Match production middleware: state alone is insufficient for durable
+    # per-run creator authorization, which reads the task-local principal.
+    token = cloud_auth._CURRENT_PRINCIPAL.set(principal)
+    try:
+        return await call_next(request)
+    finally:
+        cloud_auth._CURRENT_PRINCIPAL.reset(token)
 
 
 api.cloud_auth.middleware = deterministic_auth_middleware

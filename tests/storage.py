@@ -412,16 +412,27 @@ def main() -> None:
             assert deep.returncode == 0, deep.stdout
             print(deep.stdout.strip())
             research_env = deep_env.copy()
-            research = subprocess.run(
-                [sys.executable, "tests/cloud_research.py"],
-                cwd=ROOT,
-                env=research_env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=120,
-                check=False,
-            )
+            research_env["PYTHONUNBUFFERED"] = "1"
+            try:
+                research = subprocess.run(
+                    [sys.executable, "tests/cloud_research.py"],
+                    cwd=ROOT,
+                    env=research_env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                # Capture the last completed fixture before the outer CI job
+                # fails, rather than discard child output and mask a deadlock.
+                output = exc.stdout or b""
+                if isinstance(output, bytes):
+                    output = output.decode("utf-8", errors="replace")
+                raise AssertionError(
+                    "Cloud research test timed out. Last recorded fixture:\n" + output[-9000:]
+                ) from exc
             assert research.returncode == 0, research.stdout
             print(research.stdout.strip())
         finally:

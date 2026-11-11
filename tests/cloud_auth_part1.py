@@ -336,6 +336,12 @@ class CloudAuthTests(CloudAuthFixture):
         }
         with (
             patch.object(research_sessions, "_save") as saved,
+            patch.object(research_sessions, "_all", return_value=[record]),
+            patch.object(
+                research_sessions,
+                "get_limits",
+                return_value=research_sessions.DEFAULT_LIMITS,
+            ),
             patch.object(research_sessions, "_outcome", return_value={"assessment": "mixed"}),
             patch.object(
                 research_sessions,

@@ -1637,14 +1637,17 @@ async def test_project_concurrent_session_limit_is_atomic(path: Path):
             return_exceptions=True,
         )
         started = [item for item in attempts if isinstance(item, dict)]
-        rejected = [item for item in attempts if isinstance(item, ProjectError)]
-        assert len(started) == 2 and len(rejected) == 1
-        assert "maximum concurrent sessions" in str(rejected[0]).lower()
+        assert len(started) == 3, attempts
+        assert sorted(item["session_number"] for item in started) == [1, 2, 3]
+        # Admission never discards another collaborator's independent Session
+        # just because the execution capacity is occupied. The worker gate,
+        # not admission, limits simultaneous provider dispatch.
         stopped = await research_sessions.control_session(str(path), started[0]["id"], "stop")
         assert stopped["status"] == "stopped"
         after_release = await research_sessions.start_session(
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"], limits
         )
+        assert after_release["session_number"] == 4
         workers = [research_sessions._tasks[item["id"]] for item in [*started, after_release]]
         release.set()
         await asyncio.gather(*workers, return_exceptions=True)

@@ -464,17 +464,35 @@ def project_activity_runs(
 
     runs: list[dict[str, Any]] = []
     if paper_status in {"active", "queued"}:
-        progress = papers.progress_status(path) or {}
-        runs.append(
-            {
-                "kind": "paper",
-                "status": paper_status,
-                "number": papers.next_paper_number_for_activity(path),
-                "creator": (authors.get("paper_draft") or {}).get(project.id, ""),
-                "model": progress.get("model") or project.ai_model,
-                "thinking": progress.get("reasoning_effort") or project.reasoning_effort,
-            }
-        )
+        paper_runs = papers.run_progress_list(path)
+        for paper in paper_runs:
+            if paper["status"] not in {"active", "queued"}:
+                continue
+            progress = paper.get("progress") or {}
+            runs.append(
+                {
+                    "kind": "paper",
+                    "status": paper["status"],
+                    "id": paper["run_id"],
+                    "number": paper["number"],
+                    "creator": paper["creator_email"],
+                    "model": progress.get("model") or paper["model"],
+                    "thinking": progress.get("reasoning_effort") or paper["thinking"],
+                }
+            )
+        if not paper_runs:
+            # Existing owner-only checkpoint preceding the run ledger.
+            progress = papers.progress_status(path) or {}
+            runs.append(
+                {
+                    "kind": "paper",
+                    "status": paper_status,
+                    "number": papers.next_paper_number_for_activity(path),
+                    "creator": (authors.get("paper_draft") or {}).get(project.id, ""),
+                    "model": progress.get("model") or project.ai_model,
+                    "thinking": progress.get("reasoning_effort") or project.reasoning_effort,
+                }
+            )
     if session_active:
         for session in research_sessions.list_sessions(path):
             if session.get("status") not in {"running", "queued"}:
@@ -485,7 +503,8 @@ def project_activity_runs(
                     "status": "queued" if session["status"] == "queued" else "active",
                     "number": session.get("session_number"),
                     "id": session.get("id"),
-                    "creator": (authors.get("session") or {}).get(session.get("id", ""), ""),
+                    "creator": (authors.get("session") or {}).get(session.get("id", ""), "")
+                    or session.get("created_by", ""),
                     "model": session.get("model", ""),
                     "thinking": session.get("reasoning_effort", ""),
                 }

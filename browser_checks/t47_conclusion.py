@@ -319,7 +319,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             papers_pane.get_by_role("button", name="New paper").click()
             papers_pane.get_by_role("button", name="Start Paper 1").click()
             expect(papers_pane.get_by_role("button", name="Stop Paper 1")).to_be_visible()
-            expect(papers_pane.get_by_role("button", name="New paper")).to_have_count(0)
+            # New paper remains visible in multi-run mode, but this tab cannot
+            # start a second submission until its current request is handed off.
+            expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="New paper")).to_be_disabled()
             expect(papers_pane.get_by_role("button", name="Include in paper")).to_be_disabled()
             expect(papers_pane.locator(".section-count")).to_contain_text("1 paper")
             expect(
