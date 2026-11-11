@@ -99,9 +99,7 @@ class CollaborationTests(TestCase):
     def test_collaboration_reads_do_not_wait_for_sqlite_writer(self) -> None:
         """Schema DDL cannot run during ordinary read/poll requests."""
         with shared._db() as db:
-            self.assertIsNotNone(
-                db.execute("SELECT 1 FROM shared_projects LIMIT 1").fetchone()
-            )
+            self.assertIsNotNone(db.execute("SELECT 1 FROM shared_projects LIMIT 1").fetchone())
         holder = sqlite3.connect(
             self.root / "collaboration.sqlite3", timeout=5, isolation_level=None
         )
@@ -113,7 +111,8 @@ class CollaborationTests(TestCase):
                     reader.execute("SELECT 1 FROM shared_projects LIMIT 1").fetchone()
                 )
             self.assertLess(
-                time.monotonic() - start, 1.0,
+                time.monotonic() - start,
+                1.0,
                 "An existing collaboration read waited for a SQLite writer",
             )
         finally:
