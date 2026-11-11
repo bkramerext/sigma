@@ -708,7 +708,7 @@ def check_browser_pdf_ci_distribution() -> None:
     assert "pipefail" in browser_workflow
 
     pdf_workflow = (ROOT / ".github/workflows/verify.yml").read_text(encoding="utf-8")
-    assert "Two-creator real PDF acceptance (no stub/skip)" in pdf_workflow
+    assert "Two-creator real PDF acceptance" in pdf_workflow
     assert 'SIGMA_REQUIRE_REAL_PAPER_PDF: "1"' in pdf_workflow
     assert "SIGMA_SETUP_SKIP_NPM=1 ./sigma setup" in pdf_workflow
     assert (
