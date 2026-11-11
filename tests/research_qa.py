@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import os
 import subprocess
 import sys
+from contextvars import ContextVar
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -17,6 +19,7 @@ from sigma import api, research_qa
 from sigma.project_bundle import import_bundle
 from sigma.projects import (
     ProjectError,
+    create_strategy,
     export_complete_project,
     initialize_project,
     inspect_project,
@@ -161,6 +164,157 @@ def check_creator_scoped_request_replay() -> None:
         raise AssertionError("A foreign pending Q/A reservation was reusable")
 
 
+def check_two_creators_answer_same_project_concurrently() -> None:
+    """N/Z provider calls overlap without crossing saved answers or attribution."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "shared-qa.sigma"
+        view = initialize_project(path, "Shared Q/A", "Test concurrent collaboration")
+        source = "session:11111111-1111-4111-8111-111111111111"
+        package = {
+            "project_id": view.project.id,
+            "sources": [
+                {
+                    "id": source,
+                    "kind": "session",
+                    "data": {
+                        "session_number": 1,
+                        "status": "completed",
+                        "outcome": {"label": "uncertain", "summary": "Two agents disagreed."},
+                    },
+                },
+            ],
+        }
+        user: ContextVar[str] = ContextVar("qa-test-user", default="")
+        identities = ("n@example.org", "z@example.org")
+        provider_started: set[str] = set()
+        provider_calls = 0
+
+        async def exercise() -> None:
+            nonlocal provider_calls
+            both_entered = asyncio.Event()
+            allow_completion = asyncio.Event()
+
+            async def provider(*_args, **_kwargs):
+                nonlocal provider_calls
+                identity = user.get()
+                assert identity in identities
+                provider_calls += 1
+                provider_started.add(identity)
+                if len(provider_started) == 2:
+                    both_entered.set()
+                await asyncio.wait_for(both_entered.wait(), timeout=5)
+                await asyncio.wait_for(allow_completion.wait(), timeout=5)
+                return (
+                    research_qa.AnswerDraft(
+                        answer=f"Saved research assessed by {identity}.",
+                        source_refs=[source],
+                    ),
+                    "{}",
+                )
+
+            async def binding():
+                return {"identity": "shared-sponsored-fixture", "mode": "chatgpt"}
+
+            async def config(**_kwargs):
+                return {
+                    "available": True,
+                    "model": "mock-no-provider-charges",
+                    "reasoning_effort": "medium",
+                }
+
+            async def submit(identity: str, request_id: str):
+                token = user.set(identity)
+                try:
+                    return await research_qa.answer(
+                        str(path),
+                        "What does the saved skeptic say?",
+                        view.project.id,
+                        "shared-sponsored-fixture",
+                        request_id,
+                    )
+                finally:
+                    user.reset(token)
+
+            with (
+                patch.object(research_qa, "auth_context", new=binding),
+                patch.object(research_qa, "configuration", new=config),
+                patch.object(
+                    research_qa.papers,
+                    "_snapshot",
+                    side_effect=lambda _path: (copy.deepcopy(package), "a" * 64),
+                ),
+                patch.object(research_qa.papers, "_provider_structured", new=provider),
+                patch(
+                    "sigma.research_state.current_understanding",
+                    return_value={"summary": "Independent saved context"},
+                ),
+                patch(
+                    "sigma.project_collaboration.collaborator_identity",
+                    side_effect=lambda _path: user.get(),
+                ),
+            ):
+                first_task = asyncio.create_task(submit(identities[0], "1" * 32))
+                second_task = asyncio.create_task(submit(identities[1], "2" * 32))
+                try:
+                    await asyncio.wait_for(both_entered.wait(), timeout=5)
+                    # Source work and shared project editing cannot wait for
+                    # either outstanding provider call to release its lock.
+                    modified = create_strategy(
+                        path, "Edited while Q/A was running", "Independent collaborator edit"
+                    )
+                    assert len(modified.project.strategies) == 1
+                finally:
+                    allow_completion.set()
+                first, second = await asyncio.wait_for(
+                    asyncio.gather(first_task, second_task), timeout=8
+                )
+                assert provider_started == set(identities)
+                assert first["qa_id"] != second["qa_id"]
+                assert first["created_by"] == identities[0]
+                assert second["created_by"] == identities[1]
+                assert first["sources"][0]["source_id"] == source
+                assert second["sources"][0]["source_id"] == source
+                assert len(research_qa.list_answers(str(path))) == 2
+                assert research_qa.list_pending_answers(str(path)) == []
+                assert provider_calls == 2
+
+                # An authenticated Z cannot replay N's completed request ID,
+                # even when sharing the same paid provider binding and question.
+                try:
+                    await submit(identities[1], "1" * 32)
+                except ProjectError as exc:
+                    assert "another collaborator" in str(exc)
+                else:
+                    raise AssertionError("Z replayed N's Q/A request identity")
+                assert provider_calls == 2
+                assert len(research_qa.list_answers(str(path))) == 2
+
+        asyncio.run(exercise())
+
+        # A backend restart must recover both independently attributed answers
+        # from durable archive storage, not from an in-memory request registry.
+        fresh_process = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys; from sigma.research_qa import list_answers; "
+                    "rows=list_answers(sys.argv[1]); "
+                    "assert len(rows)==2; "
+                    "assert {row['created_by'] for row in rows}"
+                    "=={'n@example.org','z@example.org'}"
+                ),
+                str(path),
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        assert fresh_process.returncode == 0, fresh_process.stderr
+
+
 def check_bounded_shared_conversation() -> None:
     history: list[dict[str, Any]] = [
         {"question": f"Other background {i}", "answer": "Unrelated " * 2000} for i in range(45)
@@ -236,6 +390,7 @@ def check_ask_activity_worker_liveness() -> None:
 def main() -> None:
     check_ask_activity_worker_liveness()
     check_creator_scoped_request_replay()
+    check_two_creators_answer_same_project_concurrently()
     check_bounded_shared_conversation()
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "qa.sigma"

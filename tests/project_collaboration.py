@@ -1468,6 +1468,82 @@ class CollaborationTests(TestCase):
         assert latest is not None
         self.assertEqual(latest["number"], other["number"] + 1)
 
+    def test_revocation_fences_live_paper_and_session_creators(self) -> None:
+        """N cannot resume or checkpoint after Z removes N from their project."""
+        from sigma import papers
+
+        Path(self.path).write_text("{}", encoding="utf-8")
+        member = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        paper_run = uuid4().hex
+        session_run = str(uuid4())
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=member),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            paper_receipt = shared.reserve_execution_run(
+                self.path, "paper", paper_run, 0, model="fixture-paper", thinking="low"
+            )
+            session_receipt = shared.reserve_execution_run(
+                self.path, "session", session_run, 0, model="fixture-session", thinking="low"
+            )
+            assert paper_receipt and session_receipt
+            with papers.paper_run_scope(paper_run):
+                papers._write_queue_status(self.path, "queued", papers._now())
+            shared.require_execution_operator(self.path, "session", session_run, "research")
+
+        with shared._db() as db:
+            db.execute(
+                "DELETE FROM shared_collaborators WHERE path=? AND email=?",
+                (self.path, self.other.email),
+            )
+
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=member),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            # The hidden authorization check may reject with either the
+            # generic ValueError or its ProjectError subtype. Both deny access
+            # without disclosing the project's existence to the former member.
+            with self.assertRaisesRegex(ValueError, "access denied"):
+                shared.require_execution_operator(self.path, "session", session_run, "research")
+            with self.assertRaises(ValueError):
+                shared.execution_run(self.path, "paper", paper_run, operator=True)
+            with self.assertRaises(ValueError), papers.paper_run_scope(paper_run):
+                papers._write_queue_status(self.path, "running", papers._now())
+            with self.assertRaises(ValueError), shared.write_guard(self.path):
+                pass
+            with self.assertRaises(ValueError):
+                shared.reserve_execution_run(
+                    self.path, "session", str(uuid4()), 1, model="stale", thinking="low"
+                )
+
+        # Revocation protects access without erasing the original attribution
+        # or the owner's visibility into retained, unfinished work.
+        runs = shared.list_execution_runs(self.path, "paper")
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["creator_email"], self.other.email)
+        self.assertEqual(runs[0]["run_id"], paper_run)
+        # The durable ledger records an accepted reservation; the separate
+        # crash-safe Paper sidecar records the queued execution phase.
+        self.assertEqual(runs[0]["status"], "reserved")
+        with papers.paper_run_scope(paper_run):
+            queued = papers._read_queue_status(self.path)
+        if queued is None:
+            raise AssertionError("Paper queue receipt vanished after revocation")
+        self.assertEqual(queued["status"], "queued")
+
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:
             try:
