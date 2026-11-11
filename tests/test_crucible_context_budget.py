@@ -367,7 +367,8 @@ def test_sigma_dispatch_byte_guard_reports_model_as_diagnostic_not_cause() -> No
     assert "not the provider model's token context window" in message
     assert "Context size:" in message
     assert "limit 256000B" in message
-    assert "selected_model=gpt-6-luna; thinking=low" in message
+    assert "selected_model=gpt-6-luna" in message
+    assert "thinking" not in message
     assert "phase=portfolio_dispatch" in message
     assert "sensitive-evidence" not in message
     assert "No provider call was made" in message
@@ -382,7 +383,8 @@ def test_sigma_context_guard_never_echoes_unknown_model_or_thinking() -> None:
             phase="agent_assembly",
         )
     )
-    assert "selected_model=unknown; thinking=unknown" in message
+    assert "selected_model=unknown" in message
+    assert "thinking" not in message
     assert "private-model-value" not in message
     assert "private-thinking" not in message
     assert "private" not in message
@@ -396,3 +398,10 @@ def test_sigma_manifest_storage_guard_is_not_confused_with_model_window() -> Non
     assert "No provider call was made" in message
     assert "x" * 100 not in message
 
+
+def test_context_manifest_errors_remain_recoverable_guards() -> None:
+    error = research_sessions._research_context_manifest_guard_error(
+        {"context_manifest": {"sources": ["z" * 12_001]}}
+    )
+    assert isinstance(error, research_sessions.ResearchContextLimitError)
+    assert research_sessions._is_guard_failure(str(error))

@@ -3885,7 +3885,10 @@ def _role_request_payload(
     input_text = json.dumps(context, ensure_ascii=False)
     if len(input_text.encode("utf-8")) > MAX_AGENT_CONTEXT_BYTES:
         raise _research_context_guard_error(
-            context, record=record, phase="final_payload", role=role,
+            context,
+            record=record,
+            phase="final_payload",
+            role=role,
             strategy_id=record.get("strategy_id"),
         )
     payload: dict[str, Any] = {
@@ -7669,6 +7672,8 @@ def _is_guard_failure(message: str) -> bool:
             "context limit",
             "mandatory research context",
             "mandatory peer and research context",
+            "sigma context manifest requires",
+            "research context manifest exceeds",
         )
     )
 
@@ -8769,8 +8774,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
         raise _research_context_guard_error(
-            context, record=record, phase="agent_assembly",
-            strategy_id=record.get("strategy_id"), role=role,
+            context,
+            record=record,
+            phase="agent_assembly",
+            strategy_id=record.get("strategy_id"),
+            role=role,
         )
     return context
 
@@ -8786,17 +8794,12 @@ def _research_context_guard_error(
     """Distinguish SIGMA's fixed byte guard from a provider's token window.
 
     This error is raised only after dispatch-only compaction. The selected
-    model/effort are audit context, not a claim that changing models fixes the
-    packet. No raw project prose or source content is included in diagnostics.
+    model is audit context, not a claim that changing models fixes the packet.
+    Thinking effort does not determine this guard's capacity. No raw project
+    prose or source content is included in diagnostics.
     """
     model = record.get("model")
-    effort = record.get("reasoning_effort")
     safe_model = model if isinstance(model, str) and model in MODEL_OUTPUT_LIMITS else "unknown"
-    safe_effort = (
-        effort
-        if isinstance(effort, str) and effort in {"low", "medium", "high", "xhigh"}
-        else "unknown"
-    )
     return ResearchContextLimitError(
         f"Mandatory research context exceeds SIGMA's {MAX_AGENT_CONTEXT_BYTES:,}-byte "
         "UTF-8 dispatch guard, not the provider model's token context window. "
@@ -8807,7 +8810,7 @@ def _research_context_guard_error(
             strategy_id=strategy_id,
             role=role,
         )
-        + f" selected_model={safe_model}; thinking={safe_effort}."
+        + f" selected_model={safe_model}."
     )
 
 
@@ -10203,8 +10206,11 @@ def _portfolio_context(
         raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
         raise _research_context_guard_error(
-            context, record=record, phase="peer_assembly",
-            strategy_id=strategy_id, role=role,
+            context,
+            record=record,
+            phase="peer_assembly",
+            strategy_id=strategy_id,
+            role=role,
         )
     return context
 
@@ -11313,8 +11319,11 @@ async def _portfolio_role_call(
                     raise _research_context_manifest_guard_error(context)
                 if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
                     raise _research_context_guard_error(
-                        context, record=record, phase="portfolio_dispatch",
-                        strategy_id=strategy_id, role=role,
+                        context,
+                        record=record,
+                        phase="portfolio_dispatch",
+                        strategy_id=strategy_id,
+                        role=role,
                     )
             except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
                 context_blocked = isinstance(exc, ResearchContextLimitError)
@@ -15891,8 +15900,11 @@ async def _worker(session_id: str, path: str) -> None:
                 raise _research_context_manifest_guard_error(context)
             if _json_bytes(context) > MAX_AGENT_CONTEXT_BYTES:
                 raise _research_context_guard_error(
-                    context, record=record, phase="legacy_dispatch",
-                    strategy_id=record.get("strategy_id"), role=role,
+                    context,
+                    record=record,
+                    phase="legacy_dispatch",
+                    strategy_id=record.get("strategy_id"),
+                    role=role,
                 )
             record["status"] = "queued"
             record["cycle"] = cycle_num
@@ -16363,7 +16375,9 @@ async def _worker(session_id: str, path: str) -> None:
                         if isinstance(exc, (TimeoutError, httpx.TimeoutException))
                         else "Research session failed unexpectedly; saved research artifacts were retained."
                     )
-                guard_failure = _is_guard_failure(str(exc))
+                guard_failure = isinstance(exc, ResearchContextLimitError) or _is_guard_failure(
+                    str(exc)
+                )
                 context_failure = isinstance(exc, ResearchContextLimitError) or (
                     guard_failure and "context" in str(exc).lower()
                 )

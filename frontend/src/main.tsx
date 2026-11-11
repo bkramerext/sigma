@@ -349,9 +349,9 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   const evidence = `${action} ${recordedReason}`;
   if (/clipped|output.token limit/.test(evidence))
     return { cause: 'The provider response was clipped before a complete research finding was saved.', next: 'Review provider allowance and session limits before resuming. Another provider call can consume allowance.' };
-  // SIGMA's fixed UTF-8 safety guard is different from the provider's token
-  // context window. In particular, Luna/Low is not a smaller-window setting.
-  const modelSelection = `${session.model || 'Unknown model'} (${session.reasoning_effort || 'unknown'} thinking)`;
+  // SIGMA's fixed UTF-8 safety guard is separate from a provider model's
+  // token context window. Thinking level does not change this byte guard.
+  const modelSelection = session.model || 'Unknown model';
   if (/SIGMA's [\d,]+-byte UTF-8 dispatch guard/i.test(message) ||
       (/256 KB UTF-8 byte limit/i.test(message) && /Context size:/i.test(message))) {
     const match = /Context size:\s*(\d+)B\s*\/\s*limit\s*(\d+)B/i.exec(message);
@@ -366,11 +366,11 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   if (/SIGMA context manifest requires|research context manifest exceeds its storage bound/i.test(message)) {
     return {
       cause: `SIGMA blocked the next research call because the source-evidence manifest exceeded its separate storage bound. Selected model: ${modelSelection}. Saved research is preserved.`,
-      next: 'Review the selected source material and start a narrower session. Changing models or Thinking level does not increase SIGMA’s manifest storage limit.',
+      next: 'Review the selected source material and start a narrower session. Changing models does not increase SIGMA’s manifest storage limit.',
     };
   }
   if (/context|token limit/.test(evidence))
-    return { cause: `Research stopped because a context limit was reached. Selected model: ${modelSelection}. Saved research is preserved; the exact limit source has not been established.`, next: 'Inspect session diagnostics to determine whether SIGMA or the provider enforced the limit. Do not assume changing Thinking levels will help.' };
+    return { cause: `Research stopped because a context limit was reached. Selected model: ${modelSelection}. Saved research is preserved; the exact limit source has not been established.`, next: 'Inspect session diagnostics to determine whether SIGMA or the provider enforced the limit before choosing a recovery action.' };
   if (/duration|wall.clock/.test(evidence))
     return { cause: 'This session stopped after reaching its configured elapsed-time limit. Saved research is preserved.', next: 'Adjust the project time limit if appropriate, then resume the session.' };
   if (/stopped by user|stopped by you/i.test(recordedReason))
