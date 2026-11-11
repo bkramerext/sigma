@@ -10354,6 +10354,24 @@ async def _generate_impl(
             always leaves the published paper identity available for Continue.
             """
             paper_id = saved_record["paper_id"]
+            # Publication is durable before scoring, which is optional and may
+            # fail or be cancelled. Attribute the saved PDF immediately to its
+            # immutable reservation instead of waiting for the detached SSE
+            # completion callback (which will not fire on scoring failure).
+            run_id_for_publication = _paper_run_id.get()
+            if run_id_for_publication is not None:
+                reservation = project_collaboration.execution_run(
+                    path, "paper", run_id_for_publication, operator=True
+                )
+                if reservation is not None:
+                    if (
+                        saved_record.get("paper_version") != reservation["number"]
+                        or saved_record.get("created_by") != reservation["creator_email"]
+                    ):
+                        raise ProjectError("Published Paper does not match its creator reservation")
+                    project_collaboration.note_execution_artifact_author(
+                        path, "paper", run_id_for_publication, paper_id
+                    )
             score_failure_detail: str | None = None
             from sigma import paper_scores
 
