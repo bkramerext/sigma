@@ -71,9 +71,7 @@ def _admit(root: Path, user: str, name: str, session_id: str) -> tuple[dict, str
     return job, view.path
 
 
-def _record(
-    job: dict, *, status: str, attempt: str = "", creator: str = CREATOR
-) -> dict:
+def _record(job: dict, *, status: str, attempt: str = "", creator: str = CREATOR) -> dict:
     stamp = datetime.now(UTC).isoformat()
     return {
         **job,
@@ -228,9 +226,7 @@ def _execute(stage: str) -> None:
                     # Even with a creator workspace binding, the observer's
                     # foreign process epoch must not reserve a paid attempt.
                     try:
-                        cloud_research.reserve_call(
-                            ids["active"], str(uuid4()), 0.01, 10
-                        )
+                        cloud_research.reserve_call(ids["active"], str(uuid4()), 0.01, 10)
                     except cloud_research.CloudResearchUnavailable:
                         pass
                     else:
@@ -245,9 +241,7 @@ def _execute(stage: str) -> None:
                 assert active_is_live
                 assert queued_is_live
                 assert [row["request_id"] for row in pending_activity] == [ids["qa"]]
-                waiting, waiting_path = _admit(
-                    root, OBSERVER, "waiting", ids["waiting"]
-                )
+                waiting, waiting_path = _admit(root, OBSERVER, "waiting", ids["waiting"])
                 research_sessions._save(
                     waiting_path,
                     _record(waiting, status="queued", creator=OBSERVER),
@@ -256,7 +250,9 @@ def _execute(stage: str) -> None:
                 assert cloud_research.job_status(ids["active"]) is None
 
             elif stage == "recover":
-                assert running == "paused", running
+                # The ledger records an interrupted owner, while the saved
+                # Session itself is safely paused for explicit recovery.
+                assert running == "interrupted", running
                 assert charge["status"] == "unknown", dict(charge)
                 assert charge["amount_usd"] == 0.04
                 assert charge["token_reservation"] == 40
@@ -387,7 +383,7 @@ def test_real_process_recovery() -> None:
                 assert result.returncode == 0, f"{stage}: {result.stdout}\n{result.stderr}"
                 report = json.loads(result.stdout.strip().splitlines()[-1])
                 assert report["attempts"] == 2
-                assert report["active"] == ("running" if stage == "observe" else "paused")
+                assert report["active"] == ("running" if stage == "observe" else "interrupted")
         finally:
             if worker.poll() is None:
                 worker.kill()
