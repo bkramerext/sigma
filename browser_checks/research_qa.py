@@ -114,6 +114,23 @@ with sync_playwright() as playwright:
     expect(lean).to_be_focused()
     expect(page.locator(".papers-pane").get_by_role("heading", name="Papers")).to_be_visible()
     page.screenshot(path=str(OUT / "research-qa-toolbar.png"), full_page=False)
+
+    # One transient model configuration failure must not permanently disable
+    # Ask. Archive reads remain independent; no provider call is retried.
+    fail_model_config = [1]
+
+    def fail_config_once(route):
+        if fail_model_config[0]:
+            fail_model_config[0] -= 1
+            route.fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"error":"fixture transient model configuration outage"}',
+            )
+            return
+        route.continue_()
+
+    context.route(re.compile(r"/api/projects/proposals/config\?"), fail_config_once)
     qa_button.click()
     dialog = page.get_by_role("dialog", name="Research Q/A")
     expect(dialog).to_contain_text("Ask a question about the research performed in this project")
@@ -137,6 +154,11 @@ with sync_playwright() as playwright:
     )
     question = "Can this saved research be used to explain the relationship between the investigators’ evidence, the skeptic’s objections, and the unresolved conclusions in this project?"
     dialog.get_by_label("Question").fill(question)
+    expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_enabled(
+        timeout=15000
+    )
+    assert fail_model_config[0] == 0, "Transient model configuration failure was not exercised"
+    expect(dialog.get_by_text("Could not load model settings", exact=False)).to_have_count(0)
     dialog.get_by_role("button", name="Ask", exact=True).click()
     expect(dialog.get_by_role("button", name="Answering")).to_be_disabled()
     expect(dialog.get_by_role("button", name="Answering")).to_contain_text("⌛ Answering…")
