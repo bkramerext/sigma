@@ -326,9 +326,7 @@ def _ask_worker(path: str, request_id: str) -> Iterator[None]:
     deliberately survive separately and never imply active execution.
     """
     target = _ask_worker_path(path, request_id)
-    fd = os.open(
-        target, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
-    )
+    fd = os.open(target, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     acquired = False
     try:
         try:
@@ -715,7 +713,9 @@ async def answer(
     path: str, question: str, expected_project_id: str, expected_binding: str, request_id: str
 ) -> dict[str, Any]:
     with _ask_worker(path, request_id):
-        return await _answer_locked(path, question, expected_project_id, expected_binding, request_id)
+        return await _answer_locked(
+            path, question, expected_project_id, expected_binding, request_id
+        )
 
 
 async def _answer_locked(
@@ -798,7 +798,9 @@ async def _answer_locked(
     if reserved is not None:
         return reserved
     _publish_ask_activity(
-        path, request_id, creator=creator,
+        path,
+        request_id,
+        creator=creator,
         model=str(config.get("model", "")),
         thinking=str(config.get("reasoning_effort", "")),
     )
