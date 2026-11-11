@@ -15664,8 +15664,18 @@ async def _ensure_mandatory_dispatch_preflight(session_id: str, path: str) -> bo
             if branch.get("status") in {"queued", "running"}
         ]
         if not active:
-            # A fully paused/completed portfolio cannot justify spending on
-            # optional reference compilation merely because Resume was clicked.
+            # Do not leave a workerless Session falsely running. A fully
+            # paused/completed portfolio also cannot justify a new compiler call.
+            record["status"] = "paused"
+            record["current_action"] = "Paused · no runnable strategies"
+            record["message"] = (
+                "No runnable research strategy remains. Review saved strategy "
+                "statuses before resuming. No provider request was dispatched."
+            )
+            record["stopped_at"] = record.get("stopped_at") or _now()
+            record["updated_at"] = _now()
+            _event(record, "research.no_runnable_strategies", record["message"])
+            _save(path, record)
             return False
         oversized: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for branch in active:
