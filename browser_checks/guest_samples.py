@@ -279,7 +279,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         ) as opened_response:
             sample_group.locator("button.sample-open").click()
         expect(
-            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\\? v[12]"))
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
         ).to_be_visible(timeout=15000)
         assert opened_response.value.ok, opened_response.value.status
         sandbox_path = opened_response.value.json()["path"]
