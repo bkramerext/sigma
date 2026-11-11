@@ -6795,6 +6795,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
   const [activeRuns, setActiveRuns] = useState<Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }>>([]);
+  const [activityLoaded, setActivityLoaded] = useState(false);
   useEffect(() => {
     if (guest || !view) return;
     const controller = new AbortController();
@@ -6810,7 +6811,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         });
         if (!response.ok) return;
         const body = await response.json() as { runs?: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> };
-        if (!controller.signal.aborted) setActiveRuns(body.runs ?? []);
+        if (!controller.signal.aborted) { setActiveRuns(body.runs ?? []); setActivityLoaded(true); }
       } catch { /* Preserve last known activity during transient failures. */ }
       finally { pending = false; }
     };
@@ -7137,9 +7138,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     paperQueued: paperQueued || activeRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
     askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'),
     activeRunLabels,
-    activityStatus: activeRuns.length
-      ? (activeRuns.some(run => run.status === 'active') ? 'active' as const : 'queued' as const)
-      : undefined,
+    activityStatus: !activityLoaded ? undefined
+      : activeRuns.some(run => run.status === 'active') ? 'active' as const
+      : activeRuns.length ? 'queued' as const : null,
   };
   function toggleStrategiesPane() {
     if (!strategiesExpanded) sectionOpen('strategies');
