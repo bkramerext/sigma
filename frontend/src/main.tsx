@@ -6310,9 +6310,15 @@ function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: Pr
     ? 'Your temporary private work in this browser (expires after inactivity or server restart).'
     : 'Show My Work. Click again to collapse or expand all.';
   const [tab, setTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
+    if (guest) return 'samples';
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
     return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
   });
+  // A signed-out visitor starts in Samples even if the previous member was
+  // browsing My Work. This only changes the initial selection, not guest tabs.
+  useEffect(() => {
+    if (guest) setTab('samples');
+  }, [guest]);
   // My Work and Most Recent are two views of one list, not two independent fetches.
   const [savedProjects, setSavedProjects] = useState<RecentProject[]>([]);
   const [savedLoading, setSavedLoading] = useState(true);
@@ -6411,6 +6417,7 @@ function Home({ initialPath, onOpen }: {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [projectTypesOpen, setProjectTypesOpen] = useState(false);
   const [catalogTab, setCatalogTab] = useState<'recent' | 'samples' | 'most-recent'>(() => {
+    if (cloud?.enabled && !cloud.authenticated) return 'samples';
     const saved = window.localStorage.getItem('sigma.homeCatalogTab');
     return saved === 'recent' || saved === 'most-recent' ? saved : 'samples';
   });
