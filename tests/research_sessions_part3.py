@@ -3365,4 +3365,4 @@ async def test_session_token_and_hard_ledger_stops_are_diagnostic(path: Path):
 if __name__ == "__main__":
     from research_sessions_split_runner import run
 
-    run(3)
+    run(3, half=1)
