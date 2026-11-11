@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from sigma import memory_guard, production_observability
+from sigma.projects import ProjectError
 
 
 def main() -> None:
@@ -51,10 +52,7 @@ def main() -> None:
             log.assert_called_once()
             try:
                 memory_guard.require_capacity()
-            except Exception as exc:
-                from sigma.projects import ProjectError
-
-                assert isinstance(exc, ProjectError)
+            except ProjectError as exc:
                 assert "cannot be verified" in str(exc)
             else:
                 raise AssertionError("Hosted admission must fail closed without cgroup metrics")
