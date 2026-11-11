@@ -2698,6 +2698,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const request = useRef<AbortController | null>(null);
   const deliberatePaperStop = useRef(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
+  const [nextPaperNumber, setNextPaperNumber] = useState<number | null>(null);
   const [scoringId, setScoringId] = useState('');
   const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
   const [scoreError, setScoreError] = useState('');
@@ -2839,6 +2840,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperProgress(savedProgress?.progress ?? null);
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
+      setNextPaperNumber(typeof list.next_paper_number === 'number' ? list.next_paper_number : null);
       if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); setRestartableCheckpoint(null); setRestartReady(false); setResetConfirm(false); setContinuationAvailable(false); setResumeDetails(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
@@ -3383,7 +3385,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const canControlDraft = !viewerEmail || !unfinishedDraftPresent || (draftCreatorEmail
     ? viewerEmail === draftCreatorEmail
     : viewerEmail === projectOwnerEmail);
-  const draftVersion = Math.max(0, ...papers.map(paper => paper.paper_version)) + 1;
+  const draftVersion = nextPaperNumber ?? (Math.max(0, ...papers.map(paper => paper.paper_version)) + 1);
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
   const paperProgressFailure = paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
     : paperProgress?.status === 'interrupted' ? paperProgress.detail ?? '' : '';
