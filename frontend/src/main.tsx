@@ -4833,7 +4833,7 @@ function GuestFeatureCard({ title, message, onClose }: { title: string; message:
   return <section className="research-pause-guidance guest-feature-card" role="status" aria-label={title}>
     <div className="guest-feature-card-header"><strong>{title}</strong><DialogDismissButton label="Dismiss preview" onClick={onClose}/></div>
     <p>{message}</p>
-    <p className="settings-hint">Member access and a connected ChatGPT account are required. No AI request was made.</p>
+    <p className="guest-feature-access-note">Member access and a connected ChatGPT account are required. No AI request was made.</p>
   </section>;
 }
 
