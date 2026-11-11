@@ -455,7 +455,7 @@ class CollaborationTests(TestCase):
         first = shared.reserve_execution_run(
             self.path, "session", original, 0, model="owner-model", thinking="high"
         )
-        self.assertIsNotNone(first)
+        assert first is not None
         with shared._db() as db:
             db.execute(
                 "INSERT INTO shared_collaborators(path, email) VALUES (?, ?)",
@@ -482,6 +482,7 @@ class CollaborationTests(TestCase):
             second = shared.reserve_execution_run(
                 self.path, "session", uuid4().hex, 0, model="other-model", thinking="low"
             )
+        assert second is not None
         self.assertEqual(first["number"], 1)
         self.assertEqual(first["creator_email"], self.owner.email)
         self.assertEqual(second["number"], 2)

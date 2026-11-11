@@ -742,7 +742,7 @@ def reserve_execution_run(
 
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        row, email = _membership(db, path)
+        _row_value, email = _membership(db, path)
         creator_hash = _identity()[0].subject_hash
         existing = db.execute(
             """SELECT run_id, number, creator_hash, creator_email, model, thinking
