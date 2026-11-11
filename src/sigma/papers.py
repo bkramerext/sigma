@@ -10354,6 +10354,14 @@ async def _generate_impl(
             always leaves the published paper identity available for Continue.
             """
             paper_id = saved_record["paper_id"]
+            # A completed Paper must be durably attributed before scoring or
+            # SSE completion. Browser disconnects and callback failures cannot
+            # leave a published PDF orphaned from its immutable creator run.
+            scoped_run_id = _paper_run_id.get()
+            if scoped_run_id is not None:
+                project_collaboration.note_execution_artifact_author(
+                    path, "paper", scoped_run_id, paper_id
+                )
             score_failure_detail: str | None = None
             from sigma import paper_scores
 
