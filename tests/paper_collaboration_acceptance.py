@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -89,6 +90,7 @@ async def exercise(app, api, papers, cloud_auth, cloud_workspaces, project_colla
         output = real_compile_pdf(tex, **kwargs)
         real_compilations += 1
         return output
+
     binding = "fixture:two-creator-pdf"
     config = {
         "available": True,
@@ -396,7 +398,15 @@ async def exercise(app, api, papers, cloud_auth, cloud_workspaces, project_colla
             else:
                 raise AssertionError("Resumed Z run never reentered FIFO queue")
             release_n.set()
-            first_resume_result = await asyncio.wait_for(resumed_z, timeout=180)
+            # Expected fault injection must not litter successful CI logs.
+            # Assert the exact failure was recorded; any unrelated errors
+            # remain test failures rather than being silently ignored.
+            with patch.object(logging.getLogger("sigma.lifecycle"), "error") as captured:
+                first_resume_result = await asyncio.wait_for(resumed_z, timeout=180)
+            assert len(captured.call_args_list) == 1, captured.call_args_list
+            expected_error = captured.call_args_list[0].args
+            assert expected_error[0].startswith("paper.exception "), expected_error
+            assert expected_error[3] == "ProjectError", expected_error
             assert first_resume_result.status_code == 200, first_resume_result.text
             assert (
                 '"type": "error"' in first_resume_result.text
