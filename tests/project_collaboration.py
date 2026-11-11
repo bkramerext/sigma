@@ -1476,7 +1476,7 @@ class CollaborationTests(TestCase):
         member = Workspace(
             workspace_id="collaborator-workspace",
             subject_hash="collaborator-hash",
-            path=self.root,
+            path=self.root / "collaborator-home",
             email=self.other.email,
             verified_subject=self.other.subject,
         )
@@ -1500,7 +1500,7 @@ class CollaborationTests(TestCase):
                 papers._write_queue_status(self.path, "queued", papers._now())
             shared.require_execution_operator(self.path, "session", session_run, "research")
             lease = shared.acquire_lease(self.path, "Research session")
-            self.assertIsNotNone(lease)
+            assert lease is not None
 
         # Exercise the actual owner settings path while the revoked creator
         # holds a live execution lease. Revocation must invalidate that lease.
