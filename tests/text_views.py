@@ -375,7 +375,8 @@ async def main_async(root: Path):
         with (
             patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
             patch(
-                "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+                "sigma.text_conversion.configuration",
+                new=AsyncMock(side_effect=cheap_configuration),
             ),
             patch(
                 "sigma.text_conversion.httpx.AsyncClient",

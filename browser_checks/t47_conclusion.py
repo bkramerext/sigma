@@ -305,9 +305,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             )
             papers_pane = page.locator(".papers-pane")
             expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
-            expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="New paper", exact=True)).to_be_visible()
             expect(papers_pane.get_by_role("button", name="Include in paper")).to_be_visible()
-            papers_pane.get_by_role("button", name="New paper").click()
+            papers_pane.get_by_role("button", name="New paper", exact=True).click()
             expect(papers_pane.get_by_role("button", name="Start Paper")).to_be_visible()
             settings = papers_pane.get_by_role("button", name="Include in paper")
             expect(settings).to_be_disabled()
@@ -315,8 +315,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             papers_pane.get_by_role("button", name="Cancel", exact=True).click()
             expect(settings).to_be_enabled()
             expect(settings).to_have_css("opacity", "1")
-            expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
-            papers_pane.get_by_role("button", name="New paper").click()
+            expect(papers_pane.get_by_role("button", name="New paper", exact=True)).to_be_visible()
+            papers_pane.get_by_role("button", name="New paper", exact=True).click()
             papers_pane.get_by_role("button", name="Start Paper").click()
             # The isolated fixture lacks provider credentials; a rejected dispatch
             # must not invent a numbered active paper.
@@ -324,10 +324,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(papers_pane.get_by_role("button", name="Generate paper")).to_be_visible()
             # No provider is connected in this offline fixture. The attempted
             # generation must fail safely without fabricating a numbered draft.
-            expect(papers_pane.get_by_role("button", name="New paper")).to_be_visible()
-            expect(papers_pane.get_by_role("button", name="New paper")).to_be_enabled(
-                timeout=10000
-            )
+            expect(papers_pane.get_by_role("button", name="New paper", exact=True)).to_be_visible()
+            expect(papers_pane.get_by_role("button", name="New paper", exact=True)).to_be_enabled(timeout=10000)
             expect(papers_pane.locator(".section-count")).to_contain_text("1 paper")
             expect(
                 papers_pane.get_by_role("button", name="Remove unfinished Paper 1")
