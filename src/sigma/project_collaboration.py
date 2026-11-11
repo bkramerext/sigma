@@ -329,7 +329,8 @@ def _db() -> Iterator[sqlite3.Connection]:
                         updated_at REAL NOT NULL
                     )""")
                     project_columns = {
-                        column["name"] for column in db.execute("PRAGMA table_info(shared_projects)")
+                        column["name"]
+                        for column in db.execute("PRAGMA table_info(shared_projects)")
                     }
                     if "project_sha256" not in project_columns:
                         db.execute("ALTER TABLE shared_projects ADD COLUMN project_sha256 TEXT")
@@ -343,7 +344,8 @@ def _db() -> Iterator[sqlite3.Connection]:
                     # unknown rather than assigning a possibly incorrect collaborator.
                     # Such legacy entries remain removable by the owner.
                     member_columns = {
-                        column["name"] for column in db.execute("PRAGMA table_info(shared_collaborators)")
+                        column["name"]
+                        for column in db.execute("PRAGMA table_info(shared_collaborators)")
                     }
                     if "added_by" not in member_columns:
                         db.execute("ALTER TABLE shared_collaborators ADD COLUMN added_by TEXT")
@@ -377,7 +379,9 @@ def _db() -> Iterator[sqlite3.Connection]:
                         FOREIGN KEY(path) REFERENCES shared_projects(path)
                     )""")
                     # Existing hosted databases have the earlier outbox schema.
-                    fields = {row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")}
+                    fields = {
+                        row["name"] for row in db.execute("PRAGMA table_info(shared_email_outbox)")
+                    }
                     if "attempts" not in fields:
                         db.execute(
                             "ALTER TABLE shared_email_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
