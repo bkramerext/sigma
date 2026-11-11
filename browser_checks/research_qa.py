@@ -205,7 +205,7 @@ with sync_playwright() as playwright:
     # request is still in flight. Only the injected HTTP 500 proves that this
     # failure/retry scenario reached the provider; a generic alert does not.
     expect(dialog.get_by_role("alert")).to_contain_text(
-        "OpenAI API request failed (HTTP 500)", timeout=30000
+        "Research Q/A provider request failed", timeout=30000
     )
     expect(dialog.get_by_role("group", name="Recover interrupted Q/A request")).to_have_count(0)
     expect(dialog.get_by_role("group", name="Confirm a fresh Q/A request")).to_have_count(0)
