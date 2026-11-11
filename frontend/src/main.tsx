@@ -2549,9 +2549,9 @@ type RunAttribution = { kind: AttributionKind; status?: 'active' | 'queued'; cre
 function formatRunAttribution({ kind, status, creator, model, thinking, number, mode = 'metadata' }: RunAttribution): string {
   const noun = kind === 'session' ? 'Session' : kind === 'paper' ? 'Paper' : 'Answer';
   const subject = mode === 'hover' ? `${noun}${number != null ? ` ${number}` : ''}` : '';
-  // Hover describes each actual run independently, not just the project's
-  // aggregate green/yellow indicator. Preserve compact saved-card metadata.
-  const state = mode === 'hover' && status ? (status === 'queued' ? '(queued)' : '(running)') : '';
+  // Green already indicates active work; retain "(queued)" because yellow
+  // distinguishes queued work, and keep the saved-card metadata compact.
+  const state = mode === 'hover' && status === 'queued' ? '(queued)' : '';
   const actor = creator ? `by ${creator}` : '';
   const modelInfo = model ? `using ${modelThinkingLabel(model, thinking ?? '')}` : '';
   return [subject, state, actor, modelInfo].filter(Boolean).join(' ');
