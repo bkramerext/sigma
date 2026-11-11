@@ -7660,6 +7660,11 @@ async def control_session(
                     "while its full budget reservation remains held."
                 )
                 _event(record, "references.compilation.recovered", compiler["reason"])
+            # The user may have disabled or deleted oversized Source Material
+            # after a pre-dispatch block. On explicit Resume, use the *current*
+            # enabled set without replaying reference-compiler or role attempts.
+            # Research-role attempts freeze their already delivered premises.
+            _refresh_supplied_evidence_on_resume(path, record)
             record["status"] = "queued"
             record.pop("stop_advisory", None)
             for branch in record.get("strategy_runs", []):
@@ -15712,6 +15717,106 @@ async def _ensure_mandatory_dispatch_preflight(session_id: str, path: str) -> bo
         _event(record, "research.context_blocked", record["message"])
         _save(path, record)
         return False
+
+
+def _source_selection_key(item: dict[str, Any]) -> tuple[str, str]:
+    """Identify a selected source by immutable PDF digest or edited link URL."""
+    identifier = str(item.get("id") or "")
+    value = item.get("sha256") if identifier.startswith("uploaded-pdf:") else item.get("url")
+    return identifier, str(value or "")
+
+
+def _refresh_supplied_evidence_on_resume(path: str, record: dict[str, Any]) -> bool:
+    """Rebind edited Source Material only before the first research-role attempt.
+
+    Source Material is initially frozen for provenance. An explicit Resume
+    after enabling/disabling/removing project sources may replace that
+    selection *only* if no Investigator/Skeptic call or finding exists.
+    Methodology compilation and its paid-call accounting are independent and
+    must never be reset. Preserved unchanged extracts are verified by digest.
+    """
+    previous = record.get("uploaded_project_evidence") or []
+    if not isinstance(previous, list):
+        raise ProjectError("Saved Source Material selection is invalid.")
+    current = project_evidence.evidence_context(path, limit=6000)
+    old_keys = [_source_selection_key(item) for item in previous]
+    new_keys = [_source_selection_key(item) for item in current]
+    if old_keys == new_keys:
+        return False
+
+    role_attempted = (
+        int(record.get("calls_used") or 0) > 0
+        or bool(record.get("artifacts"))
+        or any(
+            isinstance(step, dict) and step.get("role") in {"investigator", "skeptic"}
+            for step in record.get("steps", [])
+        )
+        or any(
+            branch.get("artifacts") or branch.get("pending_investigation")
+            for branch in record.get("strategy_runs", [])
+            if isinstance(branch, dict)
+        )
+    )
+    if role_attempted:
+        # A normal saved session must keep its original research premises.
+        # Editing project Source Material must not retroactively alter
+        # completed, failed or unknown paid Investigator/Skeptic attempts.
+        return False
+
+    previous_stage = record.get("supplied_evidence_compilation")
+    cached = (
+        previous_stage.get("sources", [])
+        if isinstance(previous_stage, dict)
+        and isinstance(previous_stage.get("sources"), list)
+        else []
+    )
+    reusable: dict[tuple[str, str], dict] = {}
+    old_key_set = set(old_keys)
+    for item in cached:
+        if not isinstance(item, dict):
+            continue
+        key = _source_selection_key(item)
+        if key not in old_key_set or item.get("status") != "retrieved":
+            continue
+        excerpt = item.get("excerpt")
+        if (
+            not isinstance(excerpt, str)
+            or item.get("incomplete_extract")
+            or hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+            != item.get("excerpt_sha256")
+        ):
+            continue
+        reusable[key] = item
+
+    # A removed or disabled source is no longer part of the session context.
+    # A changed PDF digest or link URL invalidates the prior extract. Nothing
+    # is deleted from historical logs or already-recorded provider usage.
+    retained = [reusable[key] for key in new_keys if key in reusable]
+    record["uploaded_project_evidence"] = current
+    record["supplied_evidence_compilation"] = {
+        "status": "pending" if current else "completed",
+        "sources": retained,
+        "total": len(current),
+        "completed_count": len(retained),
+        **({"finished_at": _now()} if not current else {}),
+    }
+    record.setdefault("source_material_selection_history", []).append(
+        {
+            "at": _now(),
+            "reason": "user_resume_before_research_dispatch",
+            "previous_source_ids": [key[0] for key in old_keys],
+            "selected_source_ids": [key[0] for key in new_keys],
+            "reused_verified_extracts": len(retained),
+        }
+    )
+    _event(
+        record,
+        "source_material.selection_refreshed",
+        f"Resume refreshed Source Material from {len(previous)} to {len(current)} "
+        f"enabled items before the first Investigator/Skeptic call; "
+        f"{len(retained)} verified extracts reused. Previous provider usage is preserved.",
+    )
+    return True
 
 
 async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> bool:
