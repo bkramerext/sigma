@@ -853,9 +853,15 @@ def claim_job(session_id: str, *, project_limit: int | None = None) -> bool:
                 ).fetchone()[0]
                 if user_running >= user_limit or global_running >= global_limit:
                     return False
+            # A queued job may have survived a previous backend process.
+            # Claiming it transfers execution ownership to this process in
+            # the same transaction as the running-slot reservation. Otherwise
+            # orphan reconciliation may classify a freshly claimed worker as
+            # belonging to the old process and interrupt its billing ledger.
             db.execute(
-                "UPDATE jobs SET status='running',updated_at=? WHERE session_id=?",
-                (_now(), session_id),
+                "UPDATE jobs SET status='running',process_epoch=?,updated_at=? "
+                "WHERE session_id=? AND workspace_id=? AND status='queued'",
+                (_PROCESS_EPOCH, _now(), session_id, owner),
             )
             return True
     except sqlite3.Error as exc:

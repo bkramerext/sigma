@@ -551,6 +551,35 @@ def test_orphaned_job_reconciliation(
             )
             db.close()
 
+            # A real backend restart keeps an already-saved queued Session.
+            # Its first new worker claim must atomically take this PROCESS
+            # epoch as well as the running slot. Otherwise a later orphan
+            # scanner may interrupt an active new-process worker and mark
+            # provider reservations unknown.
+            with patch.object(cloud_research, "_PROCESS_EPOCH", next_epoch):
+                assert cloud_research.job_status(valid["id"]) == "queued"
+                assert cloud_research.claim_job(valid["id"], project_limit=10)
+                assert not cloud_research.claim_job(valid["id"], project_limit=10)
+                with cloud_research._connect() as db:
+                    claimed = db.execute(
+                        "SELECT status,process_epoch FROM jobs WHERE session_id=?",
+                        (valid["id"],),
+                    ).fetchone()
+                    assert claimed["status"] == "running"
+                    assert claimed["process_epoch"] == next_epoch
+                    assert (
+                        db.execute(
+                            "SELECT COUNT(*) FROM calls WHERE session_id=?",
+                            (valid["id"],),
+                        ).fetchone()[0]
+                        == 0
+                    )
+                # Restart reconciliation must not reclaim a live job which
+                # was already claimed in this process.
+                assert valid["id"] not in cloud_research.reconcile_orphaned_jobs()
+                assert cloud_research.job_status(valid["id"]) == "running"
+                cloud_research.release_job(valid["id"], paused=True)
+
             # With the orphan gone, another job can consume the recovered queue
             # slot once one of the independently verified queued rows is removed.
             db = cloud_research._connect()
