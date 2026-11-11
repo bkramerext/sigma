@@ -307,37 +307,39 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(strategy_preview).to_contain_text("No ChatGPT request was made")
         strategy_preview.get_by_role("button", name="Close preview").click()
 
-        session_new = page.locator(".sessions-pane-heading").get_by_role(
+        # All three guest actions show small, dismissible cards without
+        # replacing the project UI, running research, or opening a modal.
+        page.locator(".sessions-pane-heading").get_by_role(
             "button", name="New session", exact=True
-        )
-        session_new.click()
-        expect(page.get_by_role("button", name="Start Session").first).to_be_visible()
-        expect(page.get_by_role("group", name="Example session configuration")).to_be_visible()
-        page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session").click()
-        research_preview = page.get_by_role("dialog", name="Research sessions")
-        expect(research_preview).to_contain_text("No ChatGPT request was made")
-        research_preview.get_by_role("button", name="Close preview").click()
+        ).click()
+        research_preview = page.get_by_role("status", name="Research sessions")
+        expect(research_preview).to_contain_text("connected ChatGPT account")
+        expect(page.get_by_role("group", name="Example session configuration")).to_have_count(0)
+        research_preview.get_by_role("button", name="Dismiss preview").click()
+        expect(research_preview).to_have_count(0)
 
         papers_pane = page.locator(".papers-pane")
         expect(papers_pane.get_by_role("heading", name="Papers")).to_be_visible()
         papers_pane.get_by_role("button", name="New paper").click()
-        expect(papers_pane.get_by_role("button", name="Start Paper")).to_be_visible()
-        papers_pane.get_by_role("button", name="Start Paper").click()
-        paper_preview = page.get_by_role("dialog", name="Generate a research paper")
-        expect(paper_preview).to_contain_text("No ChatGPT request was made")
-        paper_preview.get_by_role("button", name="Close preview").click()
+        paper_preview = papers_pane.get_by_role("status", name="Generate a research paper")
+        expect(paper_preview).to_contain_text("connected ChatGPT account")
+        expect(papers_pane.get_by_role("button", name="Start Paper")).to_have_count(0)
+        paper_preview.get_by_role("button", name="Dismiss preview").click()
+        expect(paper_preview).to_have_count(0)
 
-        # Q/A retains a guest's typed question and explains the model action.
         page.get_by_role("button", name="Research Q/A").click()
         qa_dialog = page.get_by_role("dialog", name="Research Q/A")
         qa_dialog.get_by_role("textbox", name="Question").fill(
             "What evidence supports the central research question?"
         )
         qa_dialog.get_by_role("button", name="Ask", exact=True).click()
-        expect(qa_dialog).to_contain_text("No request was sent")
+        qa_preview = qa_dialog.get_by_role("status", name="Ask about your research")
+        expect(qa_preview).to_contain_text("connected ChatGPT account")
         expect(qa_dialog.get_by_role("textbox", name="Question")).to_have_value(
             "What evidence supports the central research question?"
         )
+        qa_preview.get_by_role("button", name="Dismiss preview").click()
+        expect(qa_preview).to_have_count(0)
         qa_dialog.get_by_role("button", name="Close research Q/A").click()
 
         strategy_markdown = page.locator(
