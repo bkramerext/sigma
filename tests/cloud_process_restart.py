@@ -253,6 +253,10 @@ def _execute(stage: str) -> None:
                 # The ledger records an interrupted owner, while the saved
                 # Session itself is safely paused for explicit recovery.
                 assert running == "interrupted", running
+                # Reconciliation itself, without an explicit get/list or
+                # replayed worker, must already have retired this ambiguous
+                # queued-but-dispatched Session.
+                assert ambiguous_state == "paused", ambiguous_state
                 assert charge["status"] == "unknown", dict(charge)
                 assert charge["amount_usd"] == 0.04
                 assert charge["token_reservation"] == 40
