@@ -564,3 +564,20 @@ def test_mandatory_preflight_does_not_block_viable_portfolio_peers() -> None:
         )
     save.assert_not_called()
     assert record == original
+
+
+def test_no_runnable_strategy_cannot_start_optional_compilation() -> None:
+    record = _preflight_record("An already paused question")
+    record["strategy_runs"][0]["status"] = "paused"
+    original = deepcopy(record)
+    with (
+        patch.object(research_sessions, "_read", return_value=record),
+        patch.object(research_sessions, "_save") as save,
+    ):
+        assert not asyncio.run(
+            research_sessions._ensure_mandatory_dispatch_preflight(
+                "context-791-no-runnable", "test"
+            )
+        )
+    save.assert_not_called()
+    assert record == original
