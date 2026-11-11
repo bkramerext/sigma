@@ -48,8 +48,8 @@ def authored_draft(papers, source: str, creator: str):
                 {
                     "heading": "Independent preservation",
                     "paragraphs": [
-                        f"This fixture is independently authored for {creator}. "
-                        "It verifies the preserved snapshot rather than claiming a new theorem."
+                        (f"This fixture is independently authored for {creator}. "
+                        "It verifies the preserved snapshot rather than claiming a new theorem.")
                     ],
                     "claim_ids": ["C1"],
                 }
@@ -72,7 +72,7 @@ async def exercise(app, api, papers, cloud_auth) -> None:
     config = {
         "available": True,
         "binding": binding,
-        "model": "fixture-paper-model",
+        "model": "gpt-6.1-sol",
         "reasoning_effort": "medium",
     }
 
@@ -148,14 +148,21 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             assert original.status_code == 200, original.text
             project = original.json()["project"]
             keys = (
-                "title", "problem", "investigation_type", "ai_model",
-                "reasoning_effort", "difficulty", "show_advanced_outcome_details",
+                "title",
+                "problem",
+                "investigation_type",
+                "ai_model",
+                "reasoning_effort",
+                "difficulty",
+                "show_advanced_outcome_details",
             )
             settings = {key: project[key] for key in keys if key in project}
             shared = await n.post(
                 "/api/projects/update",
                 json={
-                    "path": path, **settings, "expected": settings,
+                    "path": path,
+                    **settings,
+                    "expected": settings,
                     "collaborators": ["z@example.test"],
                 },
             )
@@ -167,17 +174,22 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             preflight = await n.get(
                 "/api/projects/papers/preflight",
                 params={
-                    "path": path, "expected_project_id": project_id,
-                    "expected_binding": binding, "mode": "api_key",
-                    "model": config["model"], "reasoning_effort": "medium",
+                    "path": path,
+                    "expected_project_id": project_id,
+                    "expected_binding": binding,
+                    "mode": "api_key",
+                    "model": config["model"],
+                    "reasoning_effort": "medium",
                 },
             )
             assert preflight.status_code == 200, preflight.text
             digest = preflight.json()["snapshot_sha256"]
             runs = {"n@example.test": uuid4().hex, "z@example.test": uuid4().hex}
             request_data = {
-                "path": path, "expected_project_id": project_id,
-                "expected_binding": binding, "expected_snapshot_sha256": digest,
+                "path": path,
+                "expected_project_id": project_id,
+                "expected_binding": binding,
+                "expected_snapshot_sha256": digest,
                 "include_diagrams": False,
             }
 
@@ -198,10 +210,14 @@ async def exercise(app, api, papers, cloud_auth) -> None:
                 messages.append(message)
 
             scope = {
-                "type": "http", "asgi": {"version": "3.0"},
-                "http_version": "1.1", "method": "POST",
-                "scheme": "http", "path": "/api/projects/papers",
-                "raw_path": b"/api/projects/papers", "query_string": b"",
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": "/api/projects/papers",
+                "raw_path": b"/api/projects/papers",
+                "query_string": b"",
                 "root_path": "",
                 "headers": [
                     (b"host", b"testserver"),
@@ -209,7 +225,8 @@ async def exercise(app, api, papers, cloud_auth) -> None:
                     (b"x-test-subject", b"google-n"),
                     (b"x-test-email", b"n@example.test"),
                 ],
-                "server": ("testserver", 80), "client": ("127.0.0.1", 1234),
+                "server": ("testserver", 80),
+                "client": ("127.0.0.1", 1234),
             }
             serving = asyncio.create_task(app(scope, receive_queue.get, send))
             await asyncio.wait_for(entered_n.wait(), timeout=15)
@@ -224,8 +241,10 @@ async def exercise(app, api, papers, cloud_auth) -> None:
                     "/api/projects/papers/progress",
                     params={"path": path, "run_id": runs["z@example.test"]},
                 )
-                if status.status_code == 200 and status.json()["progress"] and (
-                    status.json()["progress"]["status"] == "queued"
+                if (
+                    status.status_code == 200
+                    and status.json()["progress"]
+                    and (status.json()["progress"]["status"] == "queued")
                 ):
                     break
                 await asyncio.sleep(0.01)
@@ -234,12 +253,11 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             assert provider_creators == ["n@example.test"]
             listing = await n.get("/api/projects/papers", params={"path": path})
             assert listing.status_code == 200, listing.text
-            reservations = {
-                entry["run_id"]: entry for entry in listing.json()["runs"]
-            }
+            reservations = {entry["run_id"]: entry for entry in listing.json()["runs"]}
             assert set(reservations) == set(runs.values())
-            assert reservations[runs["n@example.test"]]["number"] + 1 == (
-                reservations[runs["z@example.test"]]["number"]
+            assert (
+                reservations[runs["n@example.test"]]["number"] + 1
+                == (reservations[runs["z@example.test"]]["number"])
             )
             assert reservations[runs["n@example.test"]]["creator_email"] == "n@example.test"
             assert reservations[runs["z@example.test"]]["creator_email"] == "z@example.test"
@@ -247,8 +265,10 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             # Cross-creator Stop cannot affect either queued or active work.
             def cancel_body(run_id):
                 return {
-                    "path": path, "expected_project_id": project_id,
-                    "expected_binding": binding, "run_id": run_id,
+                    "path": path,
+                    "expected_project_id": project_id,
+                    "expected_binding": binding,
+                    "run_id": run_id,
                 }
 
             denied_z = await z.post(
@@ -259,6 +279,30 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             )
             assert denied_z.status_code in (400, 403, 404, 409), denied_z.text
             assert denied_n.status_code in (400, 403, 404, 409), denied_n.text
+            assert provider_creators == ["n@example.test"]
+
+            # These are authenticated, server-enforced creator controls.
+            foreign_discard = await z.post(
+                "/api/projects/papers/discard",
+                json={**cancel_body(runs["n@example.test"]), "confirm_discard": True},
+            )
+            foreign_restart = await n.post(
+                "/api/projects/papers/restart",
+                json={
+                    **cancel_body(runs["z@example.test"]),
+                    "expected_snapshot_sha256": digest,
+                    "confirm_restart": True,
+                },
+            )
+            foreign_preflight = await z.get(
+                "/api/projects/papers/preflight",
+                params={
+                    **cancel_body(runs["n@example.test"]),
+                    "run_id": runs["n@example.test"],
+                },
+            )
+            for denial in (foreign_discard, foreign_restart, foreign_preflight):
+                assert denial.status_code in (400, 403, 404, 409), denial.text
             assert provider_creators == ["n@example.test"]
 
             # Z stops only its own queued receipt, then independently resumes
@@ -279,8 +323,10 @@ async def exercise(app, api, papers, cloud_auth) -> None:
                     "/api/projects/papers/progress",
                     params={"path": path, "run_id": runs["z@example.test"]},
                 )
-                if state.status_code == 200 and state.json()["progress"] and (
-                    state.json()["progress"]["status"] == "queued"
+                if (
+                    state.status_code == 200
+                    and state.json()["progress"]
+                    and (state.json()["progress"]["status"] == "queued")
                 ):
                     break
                 await asyncio.sleep(0.01)
@@ -314,7 +360,8 @@ async def exercise(app, api, papers, cloud_auth) -> None:
                 assert row["status"] == "complete"
                 assert row["progress"]["stage"] == "complete"
                 assert row["number"] == next(
-                    item["paper_version"] for item in saved_papers
+                    item["paper_version"]
+                    for item in saved_papers
                     if item["paper_id"] == row["paper_id"]
                 )
                 record_response = await z.get(
@@ -341,15 +388,16 @@ async def exercise(app, api, papers, cloud_auth) -> None:
                 document = pypdfium2.PdfDocument(pdf_bytes)
                 assert len(document) > 0
                 text = " ".join(
-                    document[index].get_textpage().get_text_range() for index in range(len(document))
+                    document[index].get_textpage().get_text_range()
+                    for index in range(len(document))
                 )
                 assert "Independent Paper" in text
                 assert creator in text
                 with patch.object(papers, "_provider", side_effect=AssertionError("replayed")):
                     # A completed Paper cannot silently spend again on a reused run ID.
-                    duplicate = await (
-                        n if creator == "n@example.test" else z
-                    ).post("/api/projects/papers", json={**request_data, "run_id": run_id})
+                    duplicate = await (n if creator == "n@example.test" else z).post(
+                        "/api/projects/papers", json={**request_data, "run_id": run_id}
+                    )
                 assert duplicate.status_code in (400, 403, 409), duplicate.text
             assert len(pdf_hashes) == 2
             assert not papers._paper_waiters
@@ -377,7 +425,9 @@ def main() -> None:
             "SIGMA_CLOUD_AUTH_HOME": str(root / "auth"),
             "SIGMA_CLOUD_WORKSPACES_ROOT": str(root / "workspaces"),
             "SIGMA_PROJECTS_ROOT": str(root / "local-projects"),
-            "SIGMA_STATE_DIR": str(root / "local-state"),
+            "SIGMA_STATE_DIR": os.environ.get(
+                "SIGMA_TEST_SHARED_TECTONIC_STATE", str(root / "local-state")
+            ),
             "SIGMA_CLOUD_OPENAI_API_KEY": "fake-server-credential",
             "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
@@ -385,6 +435,7 @@ def main() -> None:
         }
         with patch.dict(os.environ, environment):
             from cloud_workspace_test_app import app
+
             from sigma import api, cloud_auth, papers
 
             asyncio.run(exercise(app, api, papers, cloud_auth))
