@@ -290,9 +290,9 @@ async def main_async(root: Path):
     )
     moonshine_path = root / "moonshine-markdown.sigma"
     initialize_project(moonshine_path, "Moonshine", moonshine_source)
-    generated = moonshine_source.replace(
-        "J(τ) = j(τ) − 744", r"$J(\tau) = j(\tau) - 744$"
-    ).replace("196884 = 196883 + 1", "$196884 = 196883 + 1$")
+    generated = moonshine_source.replace("J(τ) = j(τ) − 744", r"$J(\tau) = j(\tau) - 744$").replace(
+        "196884 = 196883 + 1", "$196884 = 196883 + 1$"
+    )
     expected = generated.replace("$196884 = 196883 + 1$", "196884 = 196883 + 1")
 
     def moonshine_handler(request):
@@ -319,20 +319,25 @@ async def main_async(root: Path):
     assert inspect_project(moonshine_path).project.problem == moonshine_source
 
     source_identity = "Keep 196884 = 196883 + 1 and 2 + 2 = 4."
-    assert _unwrap_redundant_numeric_math(
-        "Keep $196884 = 196883 + 1$ and $2 + 2 = 4$.", source_identity
-    ) == source_identity
-    assert _unwrap_redundant_numeric_math(
-        "$196884 = 196883 + 1$", "$196884 = 196883 + 1$"
-    ) == "$196884 = 196883 + 1$"
-    assert _unwrap_redundant_numeric_math(
-        "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$.",
-        source_identity,
-    ) == "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$."
+    assert (
+        _unwrap_redundant_numeric_math(
+            "Keep $196884 = 196883 + 1$ and $2 + 2 = 4$.", source_identity
+        )
+        == source_identity
+    )
+    assert (
+        _unwrap_redundant_numeric_math("$196884 = 196883 + 1$", "$196884 = 196883 + 1$")
+        == "$196884 = 196883 + 1$"
+    )
+    assert (
+        _unwrap_redundant_numeric_math(
+            "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$.",
+            source_identity,
+        )
+        == "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$."
+    )
     code_sample = (
-        "`$196884 = 196883 + 1$`\n"
-        "~~~text\n$196884 = 196883 + 1$\n~~~\n"
-        "$196884 = 196883 + 1$"
+        "`$196884 = 196883 + 1$`\n~~~text\n$196884 = 196883 + 1$\n~~~\n$196884 = 196883 + 1$"
     )
     assert _unwrap_redundant_numeric_math(code_sample, source_identity) == (
         code_sample.rsplit("$196884 = 196883 + 1$", 1)[0] + "196884 = 196883 + 1"

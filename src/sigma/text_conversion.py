@@ -74,12 +74,8 @@ INSTRUCTIONS = (
 # Plain integer arithmetic remains prose; preserve explicitly authored math
 # and avoid touching TeX expressions with variables or commands.
 _INTEGER_ARITHMETIC = r"\d+(?:\s*[+*/=-]\s*\d+)+"
-_SOURCE_INTEGER_EQUALITY = re.compile(
-    rf"(?<![\w$])({_INTEGER_ARITHMETIC})(?![\w$])"
-)
-_INLINE_INTEGER_EQUALITY = re.compile(
-    rf"(?<![\\$])\$({_INTEGER_ARITHMETIC})\$(?!\$)"
-)
+_SOURCE_INTEGER_EQUALITY = re.compile(rf"(?<![\w$])({_INTEGER_ARITHMETIC})(?![\w$])")
+_INLINE_INTEGER_EQUALITY = re.compile(rf"(?<![\\$])\$({_INTEGER_ARITHMETIC})\$(?!\$)")
 
 
 def _unwrap_redundant_numeric_math(markdown: str, source: str) -> str:
@@ -115,6 +111,7 @@ def _unwrap_redundant_numeric_math(markdown: str, source: str) -> str:
         else:
             lines.append(_INLINE_INTEGER_EQUALITY.sub(unwrap, line))
     return "".join(lines)
+
 
 # Only saved researcher-facing narrative fields are eligible for AI conversion.
 # Operational metadata, usage metrics and arbitrary client text are not eligible.
