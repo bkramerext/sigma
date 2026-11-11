@@ -405,3 +405,28 @@ def test_context_manifest_errors_remain_recoverable_guards() -> None:
     )
     assert isinstance(error, research_sessions.ResearchContextLimitError)
     assert research_sessions._is_guard_failure(str(error))
+
+
+def test_public_recovery_guidance_prioritizes_internal_context_guard_over_model() -> None:
+    message = str(
+        research_sessions._research_context_guard_error(
+            {"problem": "mandatory" * 40_000, "context_manifest": {"sources": []}},
+            record={"model": "gpt-6-luna", "reasoning_effort": "low"},
+            phase="portfolio_dispatch",
+        )
+    )
+    record = {
+        "status": "paused",
+        "message": message,
+        "mode": "chatgpt",
+        "steps": [],
+        "artifacts": [],
+        "strategy_runs": [],
+        "calls_used": 0,
+        "call_limit": 2,
+    }
+    guidance = research_sessions._public(record)["next_step_guidance"]
+    assert "256,000-byte UTF-8 dispatch guard" in guidance
+    assert "independent of the selected model" in guidance
+    assert "thinking" not in guidance.lower()
+    assert "Check that the current connection supports" not in guidance

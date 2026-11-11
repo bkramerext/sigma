@@ -4700,24 +4700,24 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 "Research is independent of the ChatGPT account. Connect an available "
                 "account and click Resume; saved findings remain intact."
             )
-        elif "model" in message and ("available" in message or "selected" in message):
-            result["next_step_guidance"] = (
-                "Check that the current connection supports the saved model. "
-                "Once available, click Resume to continue the original session."
-            )
         elif "sigma's" in message and "dispatch guard" in message:
             result["next_step_guidance"] = (
-                "SIGMA's 256,000-byte UTF-8 dispatch guard is shared across models and Thinking "
-                "levels. Review the context-size diagnostics. If mandatory source material or the "
-                "frozen question is too large, start a narrower session; the saved session and "
-                "research remain intact. Resume with the same mandatory context will hit the "
-                "same guard, even after switching models."
+                "SIGMA's 256,000-byte UTF-8 dispatch guard is independent of the selected model. "
+                "Review the context-size diagnostics. If mandatory source material or the frozen "
+                "question is too large, start a narrower session; the saved session and research "
+                "remain intact. Resume with the same mandatory context will hit the same guard, "
+                "even after switching models."
             )
         elif "sigma context manifest" in message:
             result["next_step_guidance"] = (
                 "The saved research context manifest exceeded SIGMA's separate storage bound. "
                 "Review selected references and start a narrower session; switching models "
                 "does not change the manifest bound. Existing research is preserved."
+            )
+        elif "model" in message and ("available" in message or "selected" in message):
+            result["next_step_guidance"] = (
+                "Check that the current connection supports the saved model. "
+                "Once available, click Resume to continue the original session."
             )
         elif "context" in message or "storage" in message:
             result["next_step_guidance"] = (
