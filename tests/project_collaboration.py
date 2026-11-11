@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
+import os
+import threading
 import hashlib
 import json
 import sqlite3
@@ -92,6 +95,85 @@ class CollaborationTests(TestCase):
                 "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
                 (self.path, self.other.email),
             )
+
+    def test_collaboration_reads_do_not_wait_for_sqlite_writer(self) -> None:
+        """Schema DDL cannot run during ordinary read/poll requests."""
+        with shared._db() as db:
+            self.assertIsNotNone(
+                db.execute("SELECT 1 FROM shared_projects LIMIT 1").fetchone()
+            )
+        holder = sqlite3.connect(
+            self.root / "collaboration.sqlite3", timeout=5, isolation_level=None
+        )
+        try:
+            holder.execute("BEGIN IMMEDIATE")
+            start = time.monotonic()
+            with shared._db() as reader:
+                self.assertIsNotNone(
+                    reader.execute("SELECT 1 FROM shared_projects LIMIT 1").fetchone()
+                )
+            self.assertLess(
+                time.monotonic() - start, 1.0,
+                "An existing collaboration read waited for a SQLite writer",
+            )
+        finally:
+            holder.rollback()
+            holder.close()
+
+    def test_waiting_project_lock_does_not_hold_global_writer(self) -> None:
+        """The file-lock waiter must not block independent SQLite writes."""
+        from sigma.projects import project_write_lock
+
+        lock_path = self.root / ".shared.json.sigma-write.lock"
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        requested = threading.Event()
+        finished = threading.Event()
+        writer_finished = threading.Event()
+        errors: list[BaseException] = []
+
+        def waiting_project_writer() -> None:
+            try:
+                requested.set()
+                with project_write_lock(self.path):
+                    finished.set()
+            except BaseException as exc:
+                errors.append(exc)
+                finished.set()
+
+        def unrelated_writer() -> None:
+            try:
+                with shared._db() as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    db.execute(
+                        "UPDATE shared_projects SET revision=revision+1 WHERE path=?",
+                        (self.path,),
+                    )
+                    db.commit()
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                writer_finished.set()
+
+        first = threading.Thread(target=waiting_project_writer, daemon=True)
+        second = threading.Thread(target=unrelated_writer, daemon=True)
+        try:
+            with patch("sigma.projects.project_path", return_value=Path(self.path)):
+                first.start()
+                self.assertTrue(requested.wait(1))
+                time.sleep(0.1)
+                second.start()
+                self.assertTrue(
+                    writer_finished.wait(1),
+                    "A blocked project file lock held the global SQLite writer",
+                )
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+            first.join(timeout=5)
+            second.join(timeout=5)
+        self.assertFalse(errors, str(errors))
+        self.assertTrue(finished.is_set())
 
     def test_collaborator_alone_sees_shared_project_in_saved(self) -> None:
         """An invitation is durable and does not depend on owner's login session."""
