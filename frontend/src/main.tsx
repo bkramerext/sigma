@@ -340,7 +340,15 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
     return { cause: 'Stopped by user. A dispatched provider request may still consume allowance.', next: 'Resume when you are ready.' };
   }
   const action = session.current_action.toLowerCase();
-  const message = session.message.trim();
+  // Aggregate session messages can be replaced by later branch activity. Keep
+  // the persisted typed guard diagnostic discoverable after a multi-strategy
+  // stop, without guessing that an unrelated provider error was a byte guard.
+  const rawMessage = session.message.trim();
+  const guardDetails = /SIGMA's [\\d,]+-byte UTF-8 dispatch guard|SIGMA context manifest requires|Source Material contains/i;
+  const branchGuard = session.strategy_runs
+    ?.map(branch => branch.reason || '')
+    .find(reason => guardDetails.test(reason));
+  const message = guardDetails.test(rawMessage) ? rawMessage : (branchGuard || rawMessage);
   const typedReason = [...session.steps].reverse().find(step => step.failure_kind || step.interruption_reason);
   const recordedReason = [message, typedReason?.failure_kind, typedReason?.interruption_reason].filter(Boolean).join(' · ')
     .replace(/\bpaused\b/gi, 'stopped').replace(/\bpausing\b/gi, 'stopping').replace(/\bpause\b/gi, 'stop');
@@ -374,7 +382,7 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   // message contains bounded counts, never the actual source document text.
   if (/source material contains|source material exceeds context limit/i.test(evidence) &&
       /extracted characters|source material exceeds context limit/i.test(evidence)) {
-    const match = /Source Material contains\\s*([\\d,]+)\\s*extracted characters;\\s*the session supports at most\\s*([\\d,]+)/i.exec(message);
+    const match = /Source Material contains\s*([\d,]+)\s*extracted characters;\s*the session supports at most\s*([\d,]+)/i.exec(message);
     const amounts = match
       ? `Extracted Source Material: ${Number(match[1].replaceAll(',', '')).toLocaleString('en-US')} characters; SIGMA limit: ${Number(match[2].replaceAll(',', '')).toLocaleString('en-US')}.`
       : 'The selected Source Material exceeded SIGMA’s extracted-text budget.';
