@@ -6735,7 +6735,11 @@ async def start_session(
                 "duration_limit_minutes": runtime_limits["session_duration_minutes"],
                 "output_token_limit": limits["output_tokens_per_call"],
                 "total_token_limit": call_ceiling
-                * (_agent_dispatch_guard_bytes({"model": config["model"]}) + 65_536 + limits["output_tokens_per_call"]),
+                * (
+                    _agent_dispatch_guard_bytes({"model": config["model"]})
+                    + 65_536
+                    + limits["output_tokens_per_call"]
+                ),
                 "maximum_input_tokens_per_session": limits.get("maximum_input_tokens_per_session"),
                 "hard_budget_ledger": hard_budget_ledger,
                 "tokens_used": None,
@@ -8867,7 +8871,13 @@ def _agent_dispatch_guard_bytes(record: Mapping[str, Any]) -> int:
     """
     if MAX_AGENT_CONTEXT_BYTES != 256_000:
         return MAX_AGENT_CONTEXT_BYTES
-    if record.get("model") in {"gpt-6-astra", "gpt-6-luna", "gpt-6-sol", "gpt-6.1-sol"}:
+    model = record.get("model")
+    if isinstance(model, str) and model in {
+        "gpt-6-astra",
+        "gpt-6-luna",
+        "gpt-6-sol",
+        "gpt-6.1-sol",
+    }:
         return MAX_AGENT_DISPATCH_HEADROOM_BYTES
     return MAX_AGENT_CONTEXT_BYTES
 
