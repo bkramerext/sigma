@@ -15614,6 +15614,106 @@ def _bounded_supplied_evidence(sources: list[dict], limit: int = 60000) -> list[
     return sources
 
 
+def _mandatory_dispatch_lower_bound(
+    record: dict[str, Any], branch: dict[str, Any]
+) -> dict[str, Any]:
+    """Exact mandatory fields that a first Investigator dispatch must contain.
+
+    This is a conservative *lower bound*, not a substitute for actual context
+    assembly. Optional methodology, history, runtime tools, and manifests are
+    absent, so exceeding the byte guard here cannot be repaired by dropping
+    optional context. Never mutate or shorten frozen scientific input.
+    """
+    context: dict[str, Any] = {
+        "problem": record["problem"],
+        "question": branch["current_question"],
+        "strategy": {
+            "id": branch["strategy_id"],
+            "title": branch["strategy_title"],
+            "approach": branch["strategy_text"],
+        },
+    }
+    for field in ("uploaded_project_evidence", "desired_outcomes"):
+        if record.get(field):
+            context[field] = record[field]
+    packets = record.get("approved_continuations")
+    if isinstance(packets, dict):
+        packet = packets.get(branch["strategy_id"])
+        # An experimental alias representation is not an exact lower bound for
+        # the frozen literal packet. The shipped representation remains literal.
+        if packet and not EXPERIMENTAL_EXACT_TEXT_POOL:
+            context["approved_continuation"] = packet
+    return context
+
+
+async def _ensure_mandatory_dispatch_preflight(session_id: str, path: str) -> bool:
+    """Avoid paid reference compilation when *every* branch is impossible.
+
+    The real post-assembly guard is still authoritative. Mixed portfolios
+    proceed: a single oversized branch must not strand independent strategies.
+    This reads only persisted, compiled Source Material and creates no provider
+    reservation or attempt.
+    """
+    async with _session_state_lock(session_id):
+        record = _read(path, session_id)
+        if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+            return False
+        active = [
+            branch
+            for branch in record.get("strategy_runs", [])
+            if branch.get("status") in {"queued", "running"}
+        ]
+        if not active:
+            # Do not leave a workerless Session falsely running. A fully
+            # paused/completed portfolio also cannot justify a new compiler call.
+            record["status"] = "paused"
+            record["current_action"] = "Paused · no runnable strategies"
+            record["message"] = (
+                "No runnable research strategy remains. Review saved strategy "
+                "statuses before resuming. No provider request was dispatched."
+            )
+            record["stopped_at"] = record.get("stopped_at") or _now()
+            record["updated_at"] = _now()
+            _event(record, "research.no_runnable_strategies", record["message"])
+            _save(path, record)
+            return False
+        oversized: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for branch in active:
+            mandatory = _mandatory_dispatch_lower_bound(record, branch)
+            if _json_bytes(mandatory) > MAX_AGENT_CONTEXT_BYTES:
+                oversized.append((branch, mandatory))
+        if len(oversized) != len(active):
+            return True
+        for branch, mandatory in oversized:
+            reason = (
+                f"Mandatory inputs alone exceed SIGMA's {MAX_AGENT_CONTEXT_BYTES:,}-byte "
+                "UTF-8 dispatch guard, independently of the provider model. "
+                "This is a conservative mandatory-only preflight: removing all "
+                "optional history and methods still cannot make the packet fit. "
+                "No Investigator/Skeptic request was dispatched by this check; "
+                "saved sources and prior compiler-attempt accounting are unchanged."
+                + _context_byte_breakdown(
+                    mandatory,
+                    phase="mandatory_preflight",
+                    strategy_id=branch.get("strategy_id"),
+                    role="investigator",
+                )
+            )
+            branch["status"] = "paused"
+            branch["current_action"] = "Paused · mandatory dispatch packet too large"
+            branch["termination_reason_code"] = "context_limit"
+            branch["reason"] = reason
+        record["status"] = "paused"
+        record["current_action"] = "Paused · mandatory dispatch packet too large"
+        record["termination_reason_code"] = "context_limit"
+        record["message"] = oversized[0][0]["reason"]
+        record["stopped_at"] = record.get("stopped_at") or _now()
+        record["updated_at"] = _now()
+        _event(record, "research.context_blocked", record["message"])
+        _save(path, record)
+        return False
+
+
 async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> bool:
     """Checkpoint all document reads and fail closed before role dispatch.
 
@@ -15882,6 +15982,8 @@ async def _worker(session_id: str, path: str) -> None:
             # research-reference compilation. An oversized/unavailable source
             # must not consume compiler allowance for an impossible session.
             if not await _ensure_supplied_evidence_compilation(session_id, path):
+                return
+            if not await _ensure_mandatory_dispatch_preflight(session_id, path):
                 return
             if not await _ensure_reference_compilation(session_id, path):
                 return
