@@ -52,6 +52,22 @@ jobs:
           test "$(id -u)" -ne 0
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/gce_host.py
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/tooling.py
+      # Only Part 6 runs the two-creator real-PDF acceptance. Keep TeX
+      # provisioning out of the other seven shards and pin the binary hash.
+      - name: Install pinned Tectonic for two-creator Paper PDF acceptance
+        if: matrix.shard == '6'
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-unknown-linux-gnu.tar.gz"
+          archive="$RUNNER_TEMP/tectonic-0.17.0.tar.gz"
+          curl --fail --location --retry 3 --output "$archive" "$url"
+          echo "1a715688baf591e650c8aeb160ae934e181685eecbb38b317de30b269ac5d606  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/tectonic-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/tectonic-bin" tectonic
+          chmod 755 "$RUNNER_TEMP/tectonic-bin/tectonic"
+          echo "$RUNNER_TEMP/tectonic-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/tectonic-bin/tectonic" --version
       - name: Run full repository verification
         env:
           SIGMA_CI_SEPARATE_RUFF: "1"
