@@ -2544,14 +2544,17 @@ function modelThinkingLabel(model: string, effort: string): string {
   return `${model} (${thinkingLabels[effort] ?? effort})`;
 }
 type AttributionKind = 'session' | 'paper' | 'answer';
-type RunAttribution = { kind: AttributionKind; creator?: string | null; model?: string | null; thinking?: string | null; number?: number | null; mode?: 'metadata' | 'hover' };
+type RunAttribution = { kind: AttributionKind; status?: 'active' | 'queued'; creator?: string | null; model?: string | null; thinking?: string | null; number?: number | null; mode?: 'metadata' | 'hover' };
 /** Single canonical renderer for all Session, Paper and Ask provenance. */
-function formatRunAttribution({ kind, creator, model, thinking, number, mode = 'metadata' }: RunAttribution): string {
+function formatRunAttribution({ kind, status, creator, model, thinking, number, mode = 'metadata' }: RunAttribution): string {
   const noun = kind === 'session' ? 'Session' : kind === 'paper' ? 'Paper' : 'Answer';
   const subject = mode === 'hover' ? `${noun}${number != null ? ` ${number}` : ''}` : '';
+  // Hover describes each actual run independently, not just the project's
+  // aggregate green/yellow indicator. Preserve compact saved-card metadata.
+  const state = mode === 'hover' && status ? (status === 'queued' ? '(queued)' : '(running)') : '';
   const actor = creator ? `by ${creator}` : '';
   const modelInfo = model ? `using ${modelThinkingLabel(model, thinking ?? '')}` : '';
-  return [subject, actor, modelInfo].filter(Boolean).join(' ');
+  return [subject, state, actor, modelInfo].filter(Boolean).join(' ');
 }
 function latestPaperModel(generation: PaperSummary['generation']): { model: string; thinking: string } {
   const history = generation.model_change_history ?? [];
@@ -4662,16 +4665,20 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   </dialog></div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], onIdleProjectTitleClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; onIdleProjectTitleClick?: () => void }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const hasActivity = activityStatus === undefined
+    ? researchRunning || paperRunning || paperQueued || askRunning : activityStatus !== null;
+  const queuedOnly = activityStatus === undefined
+    ? paperQueued && !researchRunning && !paperRunning && !askRunning : activityStatus === 'queued';
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{(researchRunning || paperRunning || paperQueued || askRunning)
-        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true" onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true"><span className={`research-running-indicator${paperQueued && !researchRunning && !paperRunning && !askRunning ? " paper-queued-indicator" : ""}`}/></span></span></button>
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
+        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true" onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
           ? <button type="button" className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" data-tooltip="Collapse all sections, or reopen Project when all are collapsed" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
@@ -4717,9 +4724,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], onIdleProjectTitleClick }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; onIdleProjectTitleClick?: () => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -4732,7 +4739,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} onIdleProjectTitleClick={onIdleProjectTitleClick}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -6059,10 +6066,26 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
   };
   // Running work takes precedence over a queued paper on the same project.
   // The queue API exposes paper_activity when the queued-generation feature lands.
-  const paperActivity = (entry: RecentProject): 'running' | 'queued' | null =>
-    entry.research_running || entry.answer_active || entry.paper_generating || entry.paper_activity === 'active'
-      ? 'running'
-      : entry.paper_activity === 'queued' ? 'queued' : null;
+  const paperActivity = (entry: RecentProject): 'running' | 'queued' | null => {
+    if (entry.activity_runs?.length) {
+      return entry.activity_runs.some(run => run.status === 'active') ? 'running' : 'queued';
+    }
+    return entry.research_running || entry.answer_active || entry.paper_generating || entry.paper_activity === 'active'
+      ? 'running' : entry.paper_activity === 'queued' ? 'queued' : null;
+  };
+  const activityDescription = (entry: RecentProject): string => {
+    const status = paperActivity(entry);
+    if (status === 'queued') {
+      return entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'paper'
+        ? 'Paper queued'
+        : entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'session'
+          ? 'Session queued' : 'Queued';
+    }
+    if (entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'paper') return 'Generating paper';
+    if (entry.activity_runs?.length === 1 && entry.activity_runs[0].kind === 'answer') return 'Answering';
+    if (!entry.activity_runs?.length && entry.answer_active) return 'Answering';
+    return 'Running';
+  };
   // Keep the ten newest projects plus every older running or queued project.
   // Filtering in source order avoids duplicating an active project in the top ten.
   const mostRecentProjects = flat
@@ -6113,7 +6136,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`} data-tooltip={`Open active work in ${entry.title}${recentRunLabels(entry).length ? `\n${recentRunLabels(entry).join('\n')}` : ''}`} data-tooltip-activity="true" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{paperActivity(entry) === 'queued' ? 'Paper queued' : entry.research_running ? 'Running' : 'Generating paper'}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`} data-tooltip={`Open active work in ${entry.title}${recentRunLabels(entry).length ? `\n${recentRunLabels(entry).join('\n')}` : ''}`} data-tooltip-activity="true" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{activityDescription(entry)}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
           <span data-tooltip={entry.path}>{entry.path}</span>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -6826,6 +6849,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
   const [activeRuns, setActiveRuns] = useState<Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }>>([]);
+  const [activityLoaded, setActivityLoaded] = useState(false);
   useEffect(() => {
     if (guest || !view) return;
     const controller = new AbortController();
@@ -6841,7 +6865,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         });
         if (!response.ok) return;
         const body = await response.json() as { runs?: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> };
-        if (!controller.signal.aborted) setActiveRuns(body.runs ?? []);
+        if (!controller.signal.aborted) { setActiveRuns(body.runs ?? []); setActivityLoaded(true); }
       } catch { /* Preserve last known activity during transient failures. */ }
       finally { pending = false; }
     };
@@ -7164,7 +7188,22 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const frame = { goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null, researchRunning, paperRunning, paperQueued, askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'), activeRunLabels, onIdleProjectTitleClick: toggleSectionsFromTitle };
+  const frame = {
+    goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null,
+    // A queued Session still belongs to Sessions when clicking the activity title.
+    // Color is decided separately from the authoritative active/queued run list.
+    researchRunning: researchRunning || activeRuns.some(run => run.kind === 'session'),
+    paperRunning: paperRunning || activeRuns.some(run => run.kind === 'paper' && run.status === 'active'),
+    paperQueued: paperQueued || activeRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
+    askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'),
+    activeRunLabels,
+    // Local-only Papers or mock runs can be active without a shared reservation.
+    // The ledger is authoritative when populated, but an empty ledger must
+    // not conceal activity the underlying panes still report.
+    activityStatus: !activityLoaded || !activeRuns.length ? undefined
+      : activeRuns.some(run => run.status === 'active') ? 'active' as const : 'queued' as const,
+    onIdleProjectTitleClick: toggleSectionsFromTitle,
+  };
   function toggleStrategiesPane() {
     if (!strategiesExpanded) sectionOpen('strategies');
     setStrategiesExpanded(open => { window.localStorage.setItem(`sigma.strategiesPane:${path}`, String(!open)); return !open; });
