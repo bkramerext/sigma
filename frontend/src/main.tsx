@@ -7178,7 +7178,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   const frame = {
     goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null,
-    researchRunning: researchRunning || activeRuns.some(run => run.kind === 'session' && run.status === 'active'),
+    // A queued Session still belongs to Sessions when clicking the activity title.
+    // Color is decided separately from the authoritative active/queued run list.
+    researchRunning: researchRunning || activeRuns.some(run => run.kind === 'session'),
     paperRunning: paperRunning || activeRuns.some(run => run.kind === 'paper' && run.status === 'active'),
     paperQueued: paperQueued || activeRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
     askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'),
