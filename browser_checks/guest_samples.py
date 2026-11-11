@@ -180,7 +180,6 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 850})
         failures: list[str] = []
-        opened_projects: list[dict] = []
         recent_responses: list[str] = []
         api_failures: list[str] = []
         protected_guest_requests: list[str] = []
@@ -232,11 +231,6 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
 
         page.on("request", capture_request)
 
-        def capture(response):
-            if response.url.endswith("/api/projects/samples/open"):
-                opened_projects.append(response.json())
-
-        page.on("response", capture)
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
