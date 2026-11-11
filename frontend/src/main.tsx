@@ -1,4 +1,4 @@
-import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent } from 'react';
+import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
@@ -2141,14 +2141,30 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
   return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
 }
-function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
+function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, onRewind, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; onRewind?: (element: HTMLElement) => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  if (inlineTitleActions) return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
+  const hint = onRewind ? `${expanded ? 'Collapse' : 'Expand'} · Shift-click to restart from checkpoint` : undefined;
+  const choose = (event: { shiftKey: boolean; preventDefault: () => void; stopPropagation: () => void; currentTarget: HTMLElement }) => {
+    if (event.shiftKey && onRewind) {
+      event.preventDefault();
+      event.stopPropagation();
+      onRewind(event.currentTarget);
+    } else onToggle();
+  };
+  const onKey = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      choose(event);
+    }
+  };
+  const disclosure = <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={hint} onClick={choose} onKeyDown={event => { if (event.shiftKey && event.key === 'Enter') { event.preventDefault(); choose(event); } }}><DisclosureChevron expanded={expanded}/></button>;
+  const titleButton = <span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={hint} onClick={choose} onKeyDown={onKey}>{title}</span>;
+  if (inlineTitleActions) return <div className="saved-paper-title-line">{disclosure}<h4 className="saved-paper-title">{badge}{titleButton}<span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
   return <div className="saved-paper-title-line">
-    <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button>
+    {disclosure}
     <div className="saved-paper-title-content">
       <div className="saved-paper-title-first-line">
-        <h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span></h4>
+        <h4 className="saved-paper-title">{badge}{titleButton}</h4>
         <span className="saved-paper-title-tools">{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span>
       </div>
       {beforeCopy && <div className="saved-paper-second-line">{beforeCopy}</div>}
@@ -2523,7 +2539,7 @@ function latestPaperModel(generation: PaperSummary['generation']): { model: stri
   return last ? { model: last.to_model, thinking: last.to_effort } : { model: generation.model, thinking: generation.reasoning_effort };
 }
 
-type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; created_by?: string; generation: { mode: string; model: string; reasoning_effort: string; model_change_history?: { from_model: string; to_model: string; from_effort: string; to_effort: string; call_index: number }[]; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
+type PaperSummary = { score?: PaperScore | null; paper_id: string; paper_version: number; download_basename: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; pdf_sha256?: string; created_by?: string; generation: { mode: string; model: string; reasoning_effort: string; model_change_history?: { from_model: string; to_model: string; from_effort: string; to_effort: string; call_index: number }[]; call_limit: number; publication_status?: 'needs_review' | 'proofreading_complete'; layout_status?: 'needs_review' | 'no_severe_box_warnings_reported'; proofreading?: { status?: string; verification_status?: string; review_reason?: string }; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; generation_elapsed_seconds?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[]; writing_source_selection?: string; writing_sources?: { title: string; url: string; tier: string; type: string; branch: string; sha256: string }[]; sigma_issues?: string[]; sigma_issues_included?: boolean } };
 function paperModelThinkingLabel(generation: PaperSummary['generation']): string {
   const latest = latestPaperModel(generation);
   return modelThinkingLabel(latest.model, latest.thinking);
@@ -2812,6 +2828,24 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [rewindDialog, setRewindDialog] = useState<{
+    paper: PaperSummary;
+    options: { source_pdf_sha256: string; snapshot_sha256: string; include_diagrams: boolean; stages: Array<{ id: 'writing' | 'typesetting'; label: string; description: string }> } | null;
+  } | null>(null);
+  const [rewindStage, setRewindStage] = useState<'typesetting' | 'writing'>('typesetting');
+  const [rewindBusy, setRewindBusy] = useState(false);
+  const [rewindError, setRewindError] = useState('');
+  const rewindReturnFocus = useRef<HTMLElement | null>(null);
+  const rewindCancelRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (rewindDialog) rewindCancelRef.current?.focus(); }, [rewindDialog?.paper.paper_id]);
+  useEffect(() => {
+    if (!rewindDialog) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !rewindBusy) { event.preventDefault(); setRewindDialog(null); rewindReturnFocus.current?.focus(); }
+    };
+    document.addEventListener('keydown', dismiss);
+    return () => document.removeEventListener('keydown', dismiss);
+  }, [rewindDialog, rewindBusy]);
   const [eli5Id, setEli5Id] = useState('');
   const [explainingId, setExplainingId] = useState('');
   const [eli5Error, setEli5Error] = useState('');
@@ -3059,6 +3093,57 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
     }));
   }, [loading, papers, path, onSectionOpened]);
+  async function openPaperRewind(paper: PaperSummary, element: HTMLElement) {
+    if (guest || rewindBusy) return;
+    rewindReturnFocus.current = element;
+    setRewindDialog({ paper, options: null });
+    setRewindStage('typesetting');
+    setRewindError('');
+    try {
+      const response = await fetch(
+        `/api/projects/papers/${encodeURIComponent(paper.paper_id)}/rewind?${new URLSearchParams({ path })}`,
+        { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } },
+      );
+      const info = await readPaperResponse(response, 'Checking Paper checkpoints');
+      if (info.source_pdf_sha256 !== paper.pdf_sha256) throw new Error('Paper changed; refresh before restarting.');
+      setRewindDialog(current => current?.paper.paper_id === paper.paper_id ? { paper, options: info } : current);
+    } catch (cause) { setRewindError(errorMessage(cause)); }
+  }
+  async function confirmPaperRewind() {
+    const dialog = rewindDialog;
+    if (!dialog?.options || rewindBusy) return;
+    if (!binding) { setRewindError('Connect an AI provider before restoring a Paper checkpoint.'); return; }
+    setRewindBusy(true);
+    setRewindError('');
+    try {
+      const runId = crypto.randomUUID().replaceAll('-', '');
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(dialog.paper.paper_id)}/rewind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({
+          path, expected_project_id: projectId, expected_binding: binding,
+          source_pdf_sha256: dialog.options.source_pdf_sha256,
+          expected_snapshot_sha256: dialog.options.snapshot_sha256,
+          stage: rewindStage, confirm_restart: true, run_id: runId,
+        }),
+      });
+      const restored = await readPaperResponse(response, 'Restoring Paper checkpoint');
+      if (restored.snapshot_sha256 !== dialog.options.snapshot_sha256) throw new Error('Paper restart evidence changed.');
+      selectPaperRun(restored.run_id ?? null);
+      setNewPaperRequested(true);
+      setDraftPaperExpanded(true);
+      setCheckpointMismatch(null);
+      setRestartableCheckpoint(null);
+      setContinuationAvailable(false);
+      setIncludeDiagramsAndTables(dialog.options.include_diagrams);
+      window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(dialog.options.include_diagrams));
+      setRewindDialog(null);
+      rewindReturnFocus.current?.focus();
+      await refresh(undefined, true);
+      setSuccess(`Restored Paper ${dialog.paper.paper_version} at ${rewindStage === 'typesetting' ? 'validated manuscript' : 'writing'}. Press Play to start a new Paper; the original is unchanged.`);
+    } catch (cause) { setRewindError(errorMessage(cause)); }
+    finally { setRewindBusy(false); }
+  }
   async function openPaper(id: string) {
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
@@ -3496,7 +3581,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const draftDisplayTitle = assignedPaperNumber !== null ? `Paper ${assignedPaperNumber}` : 'New paper';
   const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
   const paperProgressFailure = paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
-    : paperProgress?.status === 'interrupted' ? paperProgress.detail ?? '' : '';
+    : paperProgress?.status === 'interrupted' && !paperProgress.detail?.startsWith('Restored from Paper ') ? paperProgress.detail ?? '' : '';
   const paperNoticeMessage = error || paperProgressFailure;
   const paperNoticeKey = [
     paperProgress?.started_at ?? '',
@@ -3566,6 +3651,23 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <div className="ai-paper-body">
       {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
 
+      {rewindDialog && createPortal(<div className="paper-rewind-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !rewindBusy) { setRewindDialog(null); rewindReturnFocus.current?.focus(); } }}>
+        <div className="paper-rewind-dialog" role="dialog" aria-modal="true" aria-labelledby="paper-rewind-title" aria-describedby="paper-rewind-description">
+          <div className="paper-rewind-header"><h3 id="paper-rewind-title">Restart from checkpoint · Paper {rewindDialog.paper.paper_version}</h3><DialogDismissButton label="Close checkpoint restart" onClick={() => { if (!rewindBusy) { setRewindDialog(null); rewindReturnFocus.current?.focus(); } }}/></div>
+          <div className="paper-rewind-content">
+            <p id="paper-rewind-description">Start a new Paper using the saved version's verified evidence. The published Paper {rewindDialog.paper.paper_version} will remain unchanged.</p>
+            {rewindDialog.options ? <fieldset disabled={rewindBusy} className="paper-rewind-choices"><legend>Restart at</legend>
+              {rewindDialog.options.stages.map(stage => <label key={stage.id}><input type="radio" name="paper-rewind-stage" value={stage.id} checked={rewindStage === stage.id} onChange={() => setRewindStage(stage.id)}/><span><strong>{stage.label}</strong><span>{stage.description}</span></span></label>)}
+            </fieldset> : !rewindError && <p role="status">Checking saved checkpoints…</p>}
+            <p className="settings-hint">The next Play may consume AI allowance for writing, proofreading or scoring. No provider call is made when restoring the checkpoint.</p>
+            {rewindError && <p role="alert" className="error">{rewindError}</p>}
+          </div>
+          <div className="paper-rewind-footer">
+            <button ref={rewindCancelRef} type="button" className="text-view-link" disabled={rewindBusy} onClick={() => { setRewindDialog(null); rewindReturnFocus.current?.focus(); }}>Cancel</button>
+            <button type="button" className="text-view-link" disabled={!rewindDialog.options || rewindBusy || !binding} onClick={() => void confirmPaperRewind()}>{rewindBusy ? 'Restoring…' : 'Confirm restart'}</button>
+          </div>
+        </div>
+      </div>, document.body)}
       {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
       {loading && <p>Loading saved versions…</p>}
 
@@ -3574,7 +3676,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={draftDisplayTitle} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
               badge={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${paperProgress.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperProgress.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
-              beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
+              beforeCopy={paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && canControlDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? (assignedPaperNumber !== null ? `Resume Paper ${assignedPaperNumber}` : 'Resume paper') : 'Generate paper'} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
                   {confirmRecoverDraft && recoverySection !== null && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Authorize unfinished paper section recovery">
@@ -3663,7 +3765,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} onRewind={!guest ? element => void openPaperRewind(paper, element) : undefined} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
@@ -4645,6 +4747,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   const [answers, setAnswers] = useState<ResearchQARecord[]>([]);
   const [pendingAnswers, setPendingAnswers] = useState<{ request_id: string; creator: string; model: string; thinking: string }[]>([]);
   const [binding, setBinding] = useState('');
+  const [configError, setConfigError] = useState('');
   const [model, setModel] = useState('');
   const [effort, setEffort] = useState('');
   const [loading, setLoading] = useState(true);
@@ -4673,21 +4776,62 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     if (!silent) setLoading(true);
     try {
       const q = new URLSearchParams({ path });
-      const [listResponse, configResponse] = await Promise.all([
-        fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' }),
-        silent ? Promise.resolve(null) : fetch(`/api/projects/proposals/config?${q}`, { cache: 'no-store' }),
-      ]);
-      const list = await listResponse.json();
-      const config = configResponse ? await configResponse.json() : null;
-      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
+      const response = await fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' });
+      const list = await response.json();
+      if (!response.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
       const saved = (list.answers ?? []) as ResearchQARecord[];
       if (typeof list.archive_available !== 'boolean') throw new Error('Could not verify the saved Q/A archive.');
       setAnswers(saved);
-      if (configResponse?.ok && config) { setBinding(config.binding); setModel(config.model); setEffort(config.reasoning_effort); }
       return { answers: saved, archiveAvailable: list.archive_available };
     } catch (cause) { setError(errorMessage(cause)); return null; }
     finally { if (!silent) setLoading(false); }
   }
+  useEffect(() => {
+    if (guest) return;
+    const controller = new AbortController();
+    let requesting = false;
+    let retryTimer: number | undefined;
+    const loadConfiguration = async () => {
+      if (controller.signal.aborted || requesting) return;
+      requesting = true;
+      const attempt = new AbortController();
+      const abortAttempt = () => attempt.abort();
+      controller.signal.addEventListener('abort', abortAttempt, { once: true });
+      // A hung configuration read must also be retried, not just a failed one.
+      const timeout = window.setTimeout(abortAttempt, 8000);
+      try {
+        const response = await fetch(
+          `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
+          { cache: 'no-store', signal: attempt.signal, headers: { 'X-Sigma-Error-Handled': 'true' } },
+        );
+        const current = await response.json();
+        if (!response.ok || !current.available || typeof current.binding !== 'string' || !current.binding) {
+          throw new Error(current.error ?? current.message ?? 'Model configuration is unavailable.');
+        }
+        if (controller.signal.aborted) return;
+        setBinding(current.binding);
+        setModel(current.model ?? '');
+        setEffort(current.reasoning_effort ?? '');
+        setConfigError('');
+        if (retryTimer !== undefined) window.clearInterval(retryTimer);
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          const detail = attempt.signal.aborted ? 'Request timed out' : errorMessage(cause);
+          setConfigError(`Could not load model settings: ${detail}. Retrying…`);
+        }
+      } finally {
+        window.clearTimeout(timeout);
+        controller.signal.removeEventListener('abort', abortAttempt);
+        requesting = false;
+      }
+    };
+    // Never leave Ask permanently disabled after a transient configuration
+    // failure. Retry only the read; never resubmit an answer/provider call.
+    retryTimer = window.setInterval(() => void loadConfiguration(), 3500);
+    void loadConfiguration();
+    return () => { controller.abort(); if (retryTimer !== undefined) window.clearInterval(retryTimer); };
+  }, [guest, path]);
+
   useEffect(() => {
     if (guest) return;
     let closed = false;
@@ -4807,6 +4951,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       {guest ? <p className="settings-hint" role="status">Sign in to ask about saved project research.</p> : <>
         <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
         <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>
+        {configError && <p role="alert" className="error">{configError}</p>}
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={!binding || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
         {pendingAnswers.length > 0 && <section aria-label="Q/A in progress">
           {pendingAnswers.map(pending => <p className="ai-paper-status" role="status" key={pending.request_id}>

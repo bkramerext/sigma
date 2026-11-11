@@ -3488,7 +3488,21 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "generation_issues",
         "provider_change_history",
         "model_change_history",
+        "rewind_origin",
     }
+    rewind_origin = value.get("rewind_origin")
+    if rewind_origin is not None and (
+        not isinstance(rewind_origin, dict)
+        or set(rewind_origin) != {"paper_id", "paper_version", "stage", "pdf_sha256"}
+        or not isinstance(rewind_origin["paper_id"], str)
+        or re.fullmatch(r"[0-9a-f]{32}", rewind_origin["paper_id"]) is None
+        or type(rewind_origin["paper_version"]) is not int
+        or rewind_origin["paper_version"] < 1
+        or rewind_origin["stage"] not in {"writing", "typesetting"}
+        or not isinstance(rewind_origin["pdf_sha256"], str)
+        or re.fullmatch(r"[0-9a-f]{64}", rewind_origin["pdf_sha256"]) is None
+    ):
+        raise ProjectError("Paper restart provenance is invalid")
     model_history = value.get("model_change_history", [])
     if (
         not isinstance(model_history, list)
@@ -10906,6 +10920,7 @@ async def _generate_impl(
                     else provider_calls
                 ),
                 "progress_run_id": run_id,
+                "rewind_origin": work.get("rewind_origin"),
                 "generation_elapsed_seconds": int(
                     elapsed_before
                     + max(
