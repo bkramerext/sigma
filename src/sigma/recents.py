@@ -583,8 +583,10 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                     answer_active = bool(pending_answers)
                     if not activity_only:
                         activity_runs = project_activity_runs(
-                            view.path, project=view.project,
-                            paper_status=paper_status, session_active=session_active,
+                            view.path,
+                            project=view.project,
+                            paper_status=paper_status,
+                            session_active=session_active,
                             pending_answers=pending_answers,
                         )
                 except (ProjectError, OSError, ValueError):
