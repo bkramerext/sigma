@@ -15877,6 +15877,12 @@ async def _worker(session_id: str, path: str) -> None:
         # one-strategy session. The legacy worker below remains only for
         # persisted records created before per-strategy state existed.
         if initial.get("strategy_runs"):
+            # Source Material is a mandatory precondition. Verify every
+            # frozen source before optionally spending a provider call on
+            # research-reference compilation. An oversized/unavailable source
+            # must not consume compiler allowance for an impossible session.
+            if not await _ensure_supplied_evidence_compilation(session_id, path):
+                return
             if not await _ensure_reference_compilation(session_id, path):
                 return
             # Keep this gate after the final settled compilation attempt,
@@ -15906,8 +15912,6 @@ async def _worker(session_id: str, path: str) -> None:
                         _event(latest, "references.compilation.acceptance_blocked", blocked)
                         _save(path, latest)
                     return
-            if not await _ensure_supplied_evidence_compilation(session_id, path):
-                return
             await _portfolio_worker(session_id, path)
             return
         while True:
