@@ -48,6 +48,8 @@ class Workspace:
 _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", default=None)
 _GUESTS: dict[str, tuple[Workspace, tempfile.TemporaryDirectory[str], float]] = {}
 _GUESTS_LOCK = threading.Lock()
+_WORKSPACE_SCHEMA_LOCK = threading.Lock()
+_WORKSPACE_SCHEMA_READY: set[tuple[str, int, int]] = set()
 GUEST_TTL_SECONDS = 8 * 60 * 60
 
 
@@ -230,32 +232,44 @@ def storage_root() -> Path:
 
 
 def _connect(root: Path) -> sqlite3.Connection:
+    """Open workspace storage without schema writes on steady-state reads.
+
+    The inode key also supports root replacement and per-test databases.
+    Cross-process initial setup remains safely serialized by SQLite.
+    """
     database = root / "workspaces.sqlite3"
+    connection: sqlite3.Connection | None = None
     try:
         if database.is_symlink():
             raise WorkspaceUnavailable("Private workspace storage is unavailable.")
-        connection = sqlite3.connect(database, timeout=30, isolation_level=None)
+        connection = sqlite3.connect(database, timeout=5, isolation_level=None)
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout=30000")
-        # The default SQLite rollback journal is DELETE. Re-setting journal
-        # mode on every auth/read request needlessly requires database locks.
-        connection.execute(
-            """CREATE TABLE IF NOT EXISTS workspaces (
-                subject_hash TEXT PRIMARY KEY,
-                workspace_id TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL
-            )"""
-        )
+        connection.execute("PRAGMA busy_timeout=5000")
         os.chmod(database, 0o600)
         info = database.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
-            connection.close()
             raise WorkspaceUnavailable("Private workspace storage is unavailable.")
+        key = (str(database), info.st_dev, info.st_ino)
+        if key not in _WORKSPACE_SCHEMA_READY:
+            with _WORKSPACE_SCHEMA_LOCK:
+                if key not in _WORKSPACE_SCHEMA_READY:
+                    connection.execute(
+                        """CREATE TABLE IF NOT EXISTS workspaces (
+                            subject_hash TEXT PRIMARY KEY,
+                            workspace_id TEXT NOT NULL UNIQUE,
+                            created_at TEXT NOT NULL
+                        )"""
+                    )
+                    _WORKSPACE_SCHEMA_READY.add(key)
         return connection
-    except WorkspaceUnavailable:
-        raise
     except (OSError, sqlite3.Error) as exc:
+        if connection is not None:
+            connection.close()
         raise WorkspaceUnavailable("Private workspace storage is unavailable.") from exc
+    except BaseException:
+        if connection is not None:
+            connection.close()
+        raise
 
 
 def workspace_for_subject(subject: str) -> Workspace:
