@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import sqlite3
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -131,6 +132,7 @@ def test_foreign_collaborator_crash() -> None:
             lock = session_dir / f"{session_id}.worker.lock"
             fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            original_epoch = cloud_research._PROCESS_EPOCH
             observer_token = cloud_workspaces._CURRENT.set(alice)
             try:
                 with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
@@ -154,6 +156,51 @@ def test_foreign_collaborator_crash() -> None:
                     fcntl.flock(fd, fcntl.LOCK_UN)
                     os.close(fd)
                     fd = -1
+
+                    # Adversarial interleaving: a replacement claims B's job
+                    # after this observer selects an old candidate but before
+                    # its foreign-ledger reconciliation starts. A stale scan
+                    # must not overwrite the newly claimed worker or charge.
+                    replacement_epoch = uuid4().hex
+                    actual_reconciler = cloud_research._reconcile_foreign_job
+                    intercepted: list[str] = []
+
+                    def claim_between_scan_and_write(
+                        candidate: sqlite3.Row, project_path: Path, ledger_owner: str
+                    ) -> None:
+                        intercepted.append(candidate["session_id"])
+                        with cloud_research._transaction() as db:
+                            db.execute(
+                                "UPDATE jobs SET process_epoch=? WHERE session_id=?",
+                                (replacement_epoch, session_id),
+                            )
+                        actual_reconciler(candidate, project_path, ledger_owner)
+
+                    with patch.object(
+                        cloud_research,
+                        "_reconcile_foreign_job",
+                        claim_between_scan_and_write,
+                    ):
+                        cloud_research.reconcile_all_orphaned_jobs()
+                    assert intercepted == [session_id]
+                    with cloud_research._connect() as db:
+                        still_live = db.execute(
+                            "SELECT status,process_epoch FROM jobs WHERE session_id=?",
+                            (session_id,),
+                        ).fetchone()
+                        charge = db.execute(
+                            "SELECT status FROM calls WHERE call_id=?", (attempt_id,)
+                        ).fetchone()
+                        assert still_live["status"] == "running"
+                        assert still_live["process_epoch"] == replacement_epoch
+                        assert charge["status"] == "reserved"
+                    # Retire the injected new claim and exercise normal dead
+                    # worker recovery against the original epoch.
+                    with cloud_research._transaction() as db:
+                        db.execute(
+                            "UPDATE jobs SET process_epoch=? WHERE session_id=?",
+                            (original_epoch, session_id),
+                        )
 
                     # Same observer, new process epoch: no impersonation, but
                     # dead worker and unknown billing obligations are fenced.

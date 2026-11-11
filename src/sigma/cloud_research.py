@@ -547,7 +547,6 @@ def has_reserved_calls(session_id: str) -> bool:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-
 def _legacy_session_status(project_path: str, project_id: str, session_id: str) -> str | None:
     """Distinguish pre-migration session jobs from standalone inference rows."""
     from sigma import research_sessions
@@ -1175,6 +1174,9 @@ def _reconcile_foreign_job(candidate: sqlite3.Row, project: Path, owner: str) ->
                     or row["workspace_id"] != owner
                     or row["project_id"] != candidate["project_id"]
                     or row["project_relpath"] != candidate["project_relpath"]
+                    # A newer process may claim this slot after the stale
+                    # candidate snapshot but before the OS-lock/SQL fence.
+                    or row["process_epoch"] != candidate["process_epoch"]
                     or row["process_epoch"] == _PROCESS_EPOCH
                     or row["status"] not in {"queued", "running", "stopping"}
                 ):
@@ -1369,7 +1371,13 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                         with _transaction() as db:
                             db.execute(
                                 "UPDATE jobs SET status=?,updated_at=? WHERE session_id=? AND workspace_id=? AND process_epoch=? AND status IN ('queued','running','stopping')",
-                                (recovered_state, _now(), session_id, owner, candidate["process_epoch"]),
+                                (
+                                    recovered_state,
+                                    _now(),
+                                    session_id,
+                                    owner,
+                                    candidate["process_epoch"],
+                                ),
                             )
                     else:
                         # Keep the job and call ledger as spending history;
