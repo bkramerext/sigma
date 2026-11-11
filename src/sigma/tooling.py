@@ -1,5 +1,6 @@
 """Repository maintenance commands with streamed output and failure summaries."""
 
+import json
 import os
 import shlex
 import shutil
@@ -8,6 +9,7 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from time import perf_counter
 
 from sigma.projects import ROOT
 
@@ -88,11 +90,10 @@ def run_tooling(command: str) -> int:
         install_zstd = _zstd_setup_steps()
         if install_zstd is None:
             return 2
-        steps = [
-            *install_zstd,
-            ["uv", "sync", "--locked", "--group", "dev"],
-            ["npm", "--prefix", "frontend", "ci"],
-        ]
+        steps = [*install_zstd, ["uv", "sync", "--locked", "--group", "dev"]]
+        # Only CI shards running frontend typecheck/build need npm dependencies.
+        if os.environ.get("SIGMA_SETUP_SKIP_NPM") != "1":
+            steps.append(["npm", "--prefix", "frontend", "ci"])
     else:
         python = ["uv", "run", "--locked", "--no-sync"]
         steps = [
@@ -268,7 +269,16 @@ def run_tooling(command: str) -> int:
             extra_half_b = "tests/research_sessions_part3b.py" in step
             extra_half_c = "tests/research_sessions_part3c.py" in step
             extra_half = extra_half_b or extra_half_c
-            owner = (8 if extra_half_b else 6) if extra_half else regular_index % 8 + 1
+            # Move frontend compilation off the expensive research shard 4
+            # without changing the stable assignment of other checks.
+            if step == ["npm", "--prefix", "frontend", "run", "typecheck"]:
+                owner = 1
+            elif step == ["npm", "--prefix", "frontend", "run", "build"]:
+                owner = 7
+            elif extra_half:
+                owner = 8 if extra_half_b else 6
+            else:
+                owner = regular_index % 8 + 1
             if not extra_half:
                 regular_index += 1
             if owner == int(shard):
@@ -285,6 +295,9 @@ def run_tooling(command: str) -> int:
 
     failures: list[tuple[list[str], int]] = []
     skipped: list[list[str]] = []
+    timing_file = os.environ.get("SIGMA_CI_TIMINGS_FILE") if command == "test" else None
+    timing_started = perf_counter() if timing_file else 0.0
+    step_timings: list[dict[str, str | int | float]] = []
     with (
         TemporaryDirectory(prefix="sigma-test-state-")
         if command == "test"
@@ -306,6 +319,7 @@ def run_tooling(command: str) -> int:
             # Do not leak this CI-only option into local-tooling regression tests.
             environment.pop("SIGMA_CI_SEPARATE_RUFF", None)
             environment.pop("SIGMA_CI_TEST_SHARD", None)
+            environment.pop("SIGMA_CI_TIMINGS_FILE", None)
         else:
             environment = None
         for step_number, step in enumerate(steps):
@@ -317,6 +331,7 @@ def run_tooling(command: str) -> int:
                 )
                 continue
             print(f"\n> {shlex.join(step)}", flush=True)
+            step_started = perf_counter() if timing_file else 0.0
             try:
                 step_environment = environment
                 if temporary_state:
@@ -339,6 +354,12 @@ def run_tooling(command: str) -> int:
                 code = 2
             else:
                 code = result.returncode
+            if timing_file:
+                duration = round(perf_counter() - step_started, 3)
+                step_timings.append(
+                    {"command": shlex.join(step), "duration_seconds": duration, "exit_code": code}
+                )
+                print(f"SIGMA_CI_STEP_SECONDS {duration:.3f} {shlex.join(step)}", flush=True)
             if code:
                 normalized_code = code if code > 0 else 1
                 failures.append((step, normalized_code))
@@ -348,6 +369,23 @@ def run_tooling(command: str) -> int:
                 )
                 if command != "test":
                     return normalized_code
+    if timing_file:
+        duration = round(perf_counter() - timing_started, 3)
+        report = {
+            "schema_version": 1,
+            "shard": shard or "all",
+            "duration_seconds": duration,
+            "steps": step_timings,
+            "failures": len(failures),
+            "skipped": len(skipped),
+        }
+        try:
+            Path(timing_file).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"Cannot write CI timing report {timing_file}: {exc}", file=sys.stderr)
+            if not failures:
+                return 2
+        print(f"SIGMA_CI_SHARD_SECONDS shard={shard or 'all'} seconds={duration:.3f}", flush=True)
     if failures:
         print(f"\nsigma test: {len(failures)} step(s) failed:", file=sys.stderr)
         for step, code in failures:
