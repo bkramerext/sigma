@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import inspect
 import os
-from time import perf_counter
 from collections.abc import Callable
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 from unittest.mock import patch
 
@@ -40,6 +40,7 @@ def _skip_unselected(name: str, original: Callable[..., Any]) -> Callable[..., A
 def _time_selected(name: str, original: Callable[..., Any]) -> Callable[..., Any]:
     """Report truly slow scenarios, preserving async test execution and coverage."""
     if inspect.iscoroutinefunction(original):
+
         async def measured(*args: Any, **kwargs: Any) -> Any:
             start = perf_counter()
             try:
@@ -48,7 +49,9 @@ def _time_selected(name: str, original: Callable[..., Any]) -> Callable[..., Any
                 duration = perf_counter() - start
                 if duration >= 5:
                     print(f"TEST_DURATION {name} {duration:.1f}s", flush=True)
+
     else:
+
         def measured(*args: Any, **kwargs: Any) -> Any:
             start = perf_counter()
             try:
@@ -57,6 +60,7 @@ def _time_selected(name: str, original: Callable[..., Any]) -> Callable[..., Any
                 duration = perf_counter() - start
                 if duration >= 5:
                     print(f"TEST_DURATION {name} {duration:.1f}s", flush=True)
+
     measured.__name__ = name
     return measured
 
