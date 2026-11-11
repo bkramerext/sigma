@@ -1338,11 +1338,10 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             paper_id = completed.result().get("paper_id")
             if isinstance(paper_id, str):
                 try:
-                    if run_id is not None:
-                        project_collaboration.note_execution_artifact_author(
-                            body.path, "paper", run_id, paper_id
-                        )
-                    else:
+                    # Shared-run publication is now recorded in the durable
+                    # Paper finalizer before completion, not by this best-effort
+                    # SSE callback. Legacy local papers retain their fallback.
+                    if run_id is None:
                         project_collaboration.note_artifact_author(
                             body.path, "paper", paper_id, created_only=True
                         )
