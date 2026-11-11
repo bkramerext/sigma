@@ -1154,8 +1154,13 @@ def _reconcile_foreign_job(candidate: sqlite3.Row, project: Path, owner: str) ->
                         in read_bundle(str(project))["files"]
                     )
                 else:
-                    record_path = project / "research-sessions" / f"{candidate['session_id']}.json"
-                    has_session = record_path.is_file() and not record_path.is_symlink()
+                    session_dir = project / "research-sessions"
+                    if session_dir.is_symlink() or not session_dir.is_dir():
+                        return
+                    record_path = session_dir / f"{candidate['session_id']}.json"
+                    if record_path.is_symlink():
+                        return  # Unsafe state is never evidence of absence.
+                    has_session = record_path.is_file()
                 with _transaction() as db:
                     row = db.execute(
                         "SELECT workspace_id,project_id,project_relpath,process_epoch,status "
