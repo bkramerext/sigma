@@ -461,17 +461,17 @@ class CollaborationTests(TestCase):
                 "sigma.project_collaboration.cloud_auth.current_principal",
                 side_effect=principal_context.get,
             ),
+            ThreadPoolExecutor(max_workers=2) as pool,
         ):
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                reservations = list(
-                    pool.map(
-                        reserve,
-                        [
-                            (first, self.owner, self.workspace),
-                            (second, self.other, colleague),
-                        ],
-                    )
+            reservations = list(
+                pool.map(
+                    reserve,
+                    [
+                        (first, self.owner, self.workspace),
+                        (second, self.other, colleague),
+                    ],
                 )
+            )
         self.assertEqual({record["number"] for record in reservations}, {3, 4})
         self.assertEqual(
             {record["creator_email"] for record in reservations},
