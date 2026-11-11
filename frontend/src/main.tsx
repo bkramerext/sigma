@@ -357,7 +357,7 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
     const match = /Context size:\s*(\d+)B\s*\/\s*limit\s*(\d+)B/i.exec(message);
     const sizes = match
       ? `Required ${Number(match[1]).toLocaleString('en-US')} bytes; SIGMA limit ${Number(match[2]).toLocaleString('en-US')} bytes.`
-      : 'SIGMA limits each research dispatch to 256,000 UTF-8 bytes.';
+      : 'SIGMA enforces an internal UTF-8 dispatch limit after non-destructive compaction.';
     return {
       cause: `SIGMA blocked the next research call because mandatory context exceeds its internal byte limit. ${sizes} Selected model: ${modelSelection}. This is not a model-specific context-window limit. Saved research is preserved.`,
       next: 'Review the context-size diagnostics. Reduce the project question or mandatory source material and start a narrower session; this one remains saved. Switching models or retrying Resume with unchanged context cannot bypass SIGMA’s byte guard.',
