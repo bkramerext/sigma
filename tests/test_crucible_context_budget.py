@@ -479,6 +479,7 @@ def test_public_recovery_guidance_prioritizes_internal_context_guard_over_model(
     record = {
         "status": "paused",
         "message": message,
+        "model": "gpt-6-luna",
         "mode": "chatgpt",
         "steps": [],
         "artifacts": [],
@@ -491,3 +492,14 @@ def test_public_recovery_guidance_prioritizes_internal_context_guard_over_model(
     assert "independent of the selected model" in guidance
     assert "thinking" not in guidance.lower()
     assert "Check that the current connection supports" not in guidance
+
+    legacy_message = message.replace("512,000-byte", "256,000-byte").replace(
+        "limit 512000B", "limit 256000B"
+    )
+    legacy_record = {**record, "message": legacy_message}
+    resume_guidance = research_sessions._public(legacy_record)["next_step_guidance"]
+    assert "older 256,000-byte guard" in resume_guidance
+    assert "up to 512,000 bytes" in resume_guidance
+    assert "Click Resume" in resume_guidance
+    assert "made no provider call" in resume_guidance
+    assert "switching models" not in resume_guidance.lower()
