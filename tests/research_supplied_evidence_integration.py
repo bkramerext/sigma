@@ -165,7 +165,8 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
             assert paused["status"] == "paused"
             assert paused["supplied_evidence_compilation"]["status"] == "blocked"
             assert "Source Material contains" in paused["message"]
-            assert "80,000" in paused["message"]
+            assert "extracted characters" in paused["message"]
+            assert "at most 60,000" in paused["message"]
             assert paused["calls_used"] == 0
             compiler.assert_not_awaited()
             assert compile_call.call_count == 2
