@@ -351,7 +351,9 @@ def check_home_session_status_cache(root: Path) -> None:
         assert len(reads) == 2, "Foreign workspace identity must not share cached status"
         record["status"] = "queued"
         file.write_text(json.dumps(record), encoding="utf-8")
-        assert research_sessions.has_active_session(view.path, project_id=view.project.id)
+        # A durable queued receipt without a live task or worker lock is not
+        # active execution, even though its cached file status has changed.
+        assert not research_sessions.has_active_session(view.path, project_id=view.project.id)
         assert len(reads) == 3, "A changed session must invalidate cached status"
         file.unlink()
         assert not research_sessions.has_active_session(view.path, project_id=view.project.id)

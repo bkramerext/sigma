@@ -13,10 +13,21 @@ from uuid import uuid4
 
 
 def _insert_job(db, *, session_id: str, workspace_id: str, now: str) -> None:
+    from sigma import cloud_research
+
     db.execute(
-        "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at) "
-        "VALUES(?,?,?,?,'running',?,?)",
-        (session_id, workspace_id, str(uuid4()), str(uuid4()), now, now),
+        "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,"
+        "status,created_at,updated_at,process_epoch) "
+        "VALUES(?,?,?,?,'running',?,?,?)",
+        (
+            session_id,
+            workspace_id,
+            str(uuid4()),
+            str(uuid4()),
+            now,
+            now,
+            cloud_research._PROCESS_EPOCH,
+        ),
     )
 
 
