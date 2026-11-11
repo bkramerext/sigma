@@ -1134,6 +1134,9 @@ _SAFE_MATH_COMMANDS = {
     "dagger",
     "supseteq",
     "tfrac",
+    "natural",
+    "bigoplus",
+    "ltimes",
 }
 # Author math uses standard LaTeX/AMS math syntax across disciplines.
 # Keep these command families broad and semantic rather than adding symbols
@@ -1447,8 +1450,22 @@ def _safe_math(source: str) -> bool:
             invalid_environment = True
         return "M"
 
+    def validated_substack(match: re.Match[str]) -> str:
+        nonlocal invalid_environment
+        # Substack is a math-only multiline index. Validate each row; never
+        # admit arbitrary TeX merely because it sits inside a math delimiter.
+        body = match.group(1).replace(r"\\", " ")
+        if not _safe_math(body):
+            invalid_environment = True
+        return "M"
+
     source = re.sub(
-        r"\\begin\{(array|pmatrix|bmatrix|cases)\}"
+        r"\\substack\{((?:[^{}]|\{[^{}]*\})*)\}",
+        validated_substack,
+        source,
+    )
+    source = re.sub(
+        r"\\begin\{(array|pmatrix|bmatrix|cases|smallmatrix|aligned|gathered|split)\}"
         r"(?:\{([clr|]{1,24})\})?(.*?)\\end\{\1\}",
         validated_environment,
         source,
@@ -9027,6 +9044,10 @@ def _restore_escaped_math_in_tex(tex: str) -> tuple[str, int]:
     """
     restored = 0
 
+    def matches_renderer_escape(original: str, escaped: str) -> bool:
+        encoded = _latex(original)
+        return escaped in {encoded, encoded.replace(r"\_", r"\_\allowbreak{}")}
+
     def repair(match: re.Match[str]) -> str:
         nonlocal restored
         escaped = match.group(0)
@@ -9038,7 +9059,7 @@ def _restore_escaped_math_in_tex(tex: str) -> tuple[str, int]:
         if (
             not original.startswith("$")
             or not original.endswith("$")
-            or _latex(original) != escaped
+            or not matches_renderer_escape(original, escaped)
             or not _safe_math(original[1:-1])
         ):
             return escaped
@@ -9056,7 +9077,7 @@ def _restore_escaped_math_in_tex(tex: str) -> tuple[str, int]:
         if (
             not original.startswith(r"\[")
             or not original.endswith(r"\]")
-            or _latex(original).replace(r"\_", r"\_\allowbreak{}") != escaped
+            or not matches_renderer_escape(original, escaped)
             or not _safe_math(original[2:-2])
         ):
             return escaped

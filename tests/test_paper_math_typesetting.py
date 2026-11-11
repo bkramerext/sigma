@@ -114,6 +114,94 @@ class MathTypesettingTests(unittest.TestCase):
         self.assertNotIn(r"\textbackslash{}", rendered)
         self.assertNotIn(r"\$", rendered)
 
+    def test_moonshine_math_commands_and_environments(self) -> None:
+        """Moonshine paper: ordinary AMS math must not become printable TeX."""
+        expressions = (
+            r"V^{\natural}=\bigoplus_{n\geq0}V^{\natural}_n",
+            r"T_g(\tau)=\sum_{n\geq0}\operatorname{Tr}(g\mid V^{\natural}_n)q^{n-1}",
+            r"U=\operatorname{Sym}(\bigoplus_{m\geq1}H_{-m})\otimes\mathbb C[\Lambda]",
+            r"\mathfrak n=\bigoplus_{m\geq1,n\in\mathbb Z}\mathfrak n_{m,n}",
+            r"\mathbb C r\ltimes\operatorname{Lie}(U)",
+            r"\left(\begin{smallmatrix}a&b\\c&d\end{smallmatrix}\right)"
+            r"\in\operatorname{SL}_2(\mathbb Z)",
+            r"\sum_{\substack{a,d\geq1\\ad=N}}\sum_{b=0}^{d-1}"
+            r"f_{g^a}(\zeta_d^bq^{a/d})",
+        )
+        for body in expressions:
+            with self.subTest(math=body):
+                self.assertTrue(papers._safe_math(body))
+                rendered = papers._latex_prose("Given $" + body + "$.")
+                self.assertNotIn(r"\textbackslash{}", rendered)
+                self.assertNotIn(r"\$", rendered)
+                self.assertIn(body, rendered)
+
+    def test_moonshine_display_math_round_trip(self) -> None:
+        """Recover the multiline displays printed literally in Moonshine v1."""
+        displays = (
+            r"\begin{aligned}"
+            "\n"
+            r"P_{2,s}(X)&=X^2-2a_s(1),\\"
+            "\n"
+            r"P_{4,s}(X)&=X^4-4a_s(1)X^2-4a_s(2)X+2a_s(1)^2"
+            "\n"
+            r"\end{aligned}",
+            r"\Phi_{g,N}(f_g(q))="
+            r"\sum_{\substack{a,d\geq1\\ad=N}}"
+            r"\sum_{b=0}^{d-1}f_{g^a}(\zeta_d^bq^{a/d})",
+        )
+        for body in displays:
+            with self.subTest(math=body):
+                self.assertTrue(papers._safe_math(body))
+                original = "\\[\n" + body + "\n\\]"
+                self.assertEqual(papers._latex_prose(original), original)
+                for escaped in (
+                    project_reports._latex(original),
+                    project_reports._latex(original).replace(r"\_", r"\_\allowbreak{}"),
+                ):
+                    restored, count = papers._restore_escaped_math_in_tex(escaped)
+                    self.assertEqual(count, 1)
+                    self.assertNotIn(r"\textbackslash{}", restored)
+                    self.assertNotIn(r"\textasciicircum{}", restored)
+                    self.assertNotIn(r"\textbackslash{}[", restored)
+                    self.assertFalse(
+                        papers._tex_static_diagnostics(
+                            r"\begin{document}" + "\n" + restored + "\n" + r"\end{document}"
+                        )
+                    )
+
+    def test_moonshine_escaped_inline_with_breakable_underscores(self) -> None:
+        """Both escaped-source variants must recover without a paid proofreader."""
+        source = r"$V^{\natural}=\bigoplus_{n\geq0}V^{\natural}_n$"
+        for escaped in (
+            project_reports._latex(source),
+            project_reports._latex(source).replace(r"\_", r"\_\allowbreak{}"),
+        ):
+            with self.subTest(escaped=escaped):
+                repaired, count = papers._restore_escaped_math_in_tex(escaped)
+                self.assertEqual(count, 1)
+                self.assertIn(r"V^{\natural}", repaired)
+                self.assertNotIn(r"\$", repaired)
+                self.assertNotIn(r"\textbackslash{}", repaired)
+
+    def test_unsafe_commands_in_moonshine_math_structures_are_rejected(self) -> None:
+        """New math envelopes do not bypass the executable-TeX safety gate."""
+        unsafe_bodies = (
+            r"\begin{aligned}x&=1\\\input{private-file}\end{aligned}",
+            r"\substack{a\\\write18{unsafe}}",
+            r"\left(\begin{smallmatrix}a&b\\c&\input{private-file}"
+            r"\end{smallmatrix}\right)",
+            r"\begin{aligned}x&=1",  # Unclosed environment.
+        )
+        for body in unsafe_bodies:
+            with self.subTest(math=body):
+                self.assertFalse(papers._safe_math(body))
+                original = "$" + body + "$"
+                escaped = project_reports._latex(original)
+                self.assertEqual(papers._latex_prose(original), escaped)
+                restored, count = papers._restore_escaped_math_in_tex(escaped)
+                self.assertEqual(count, 0)
+                self.assertEqual(restored, escaped)
+
 
 if __name__ == "__main__":
     unittest.main()
