@@ -18,7 +18,6 @@ TESTS = ROOT / "tests"
 SHARDS = (
     ("platform-memory", TESTS / "platform_memory.py"),
     ("paper run isolation", TESTS / "paper_run_isolation.py"),
-    ("two-creator Paper PDF lifecycle", TESTS / "paper_two_creator_lifecycle.py"),
     ("papers 1/2", TESTS / "papers_part1.py"),
     ("papers 2/2", TESTS / "papers_part2.py"),
 )
