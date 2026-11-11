@@ -591,9 +591,16 @@ def admin_reload_workspace_allowance(workspace_id: str, actor_email: str) -> str
         raise CloudResearchUnavailable("Allowance could not be reloaded safely.") from exc
 
 
-def _require_research_capacity(db: sqlite3.Connection, owner: str, session_id: str) -> None:
-    """Reserve running capacity before publishing a session; no execution queue."""
-    user_limit, global_limit, _, _ = _evaluation_queue_limits()
+def _require_research_queue_capacity(
+    db: sqlite3.Connection, owner: str, session_id: str
+) -> None:
+    """Bound durable admission separately from active worker capacity.
+
+    Waiting jobs have never dispatched a provider call and must not consume a
+    running slot. The configured queue allowances are *additional* to the
+    per-user and global running limits, including currently running jobs.
+    """
+    user_running, global_running, user_waiting, global_waiting = _evaluation_queue_limits()
     states = "('queued','running','stopping')"
     user = db.execute(
         "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND job_kind='research' "
@@ -605,14 +612,14 @@ def _require_research_capacity(db: sqlite3.Connection, owner: str, session_id: s
         f"AND status IN {states} AND session_id<>?",
         (session_id,),
     ).fetchone()[0]
-    if user >= user_limit or total >= global_limit:
+    if user >= user_running + user_waiting or total >= global_running + global_waiting:
         raise CloudResearchUnavailable(
-            "Research capacity is currently full. Please try again shortly."
+            "Research queue is full. Saved work is safe; retry when queued work completes."
         )
 
 
 def prepare_job(record: dict[str, Any]) -> None:
-    """Atomically reserve execution capacity without waiting or provider calls."""
+    """Durably admit a queued job without reserving running capacity or provider calls."""
     owner = _workspace_id()
     from sigma.cloud_sponsor import inference_provider
 
@@ -709,16 +716,8 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "UPDATE jobs SET session_slot=1,project_relpath=?,updated_at=? WHERE session_id=? AND workspace_id=? AND session_slot=0",
                             (project_relpath, now, legacy["session_id"], owner),
                         )
-                occupants = db.execute(
-                    "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? AND session_slot=1 AND status IN ('queued','running','stopping') AND session_id<>? ORDER BY created_at,session_id",
-                    (owner, record["project_id"], record["id"]),
-                ).fetchall()
-                if len(occupants) >= session_limit:
-                    occupant_ids = ", ".join(row["session_id"] for row in occupants)
-                    raise CloudResearchUnavailable(
-                        "This project is at its maximum concurrent sessions limit. "
-                        f"Sessions occupying slots: {occupant_ids}. Open Research Sessions to inspect or stop them."
-                    )
+                # Project-level running capacity is checked at worker claim, not
+                # at admission. Independent accepted sessions can wait here.
             existing = db.execute(
                 "SELECT * FROM jobs WHERE session_id=? OR (workspace_id=? AND idempotency_key=?)",
                 (record["id"], owner, record["idempotency_key"]),
@@ -750,7 +749,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "The per-user research token budget has been reached."
                         )
                     if not auxiliary:
-                        _require_research_capacity(db, owner, record["id"])
+                        _require_research_queue_capacity(db, owner, record["id"])
                     db.execute(
                         "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=?,session_slot=? WHERE session_id=?",
                         (now, project_relpath, _PROCESS_EPOCH, session_slot, record["id"]),
@@ -771,9 +770,9 @@ def prepare_job(record: dict[str, Any]) -> None:
                     "The per-user research token budget has been reached."
                 )
             if not auxiliary:
-                _require_research_capacity(db, owner, record["id"])
-            # "queued" is a transient persisted admission state, not a
-            # waiting queue: its execution slot is already reserved.
+                _require_research_queue_capacity(db, owner, record["id"])
+            # "queued" is a durable waiting state; worker slots are acquired
+            # separately in claim_job only immediately before execution.
             db.execute(
                 "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch,session_slot,job_kind) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (
@@ -794,8 +793,12 @@ def prepare_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-def claim_job(session_id: str) -> bool:
-    """Acquire a per-user and global worker slot for one queued session."""
+def claim_job(session_id: str, *, project_limit: int | None = None) -> bool:
+    """Atomically claim user, global and shared-project running capacity."""
+    if project_limit is not None and (
+        type(project_limit) is not int or project_limit < 1
+    ):
+        raise CloudResearchUnavailable("Project concurrency limit is invalid.")
     owner = _workspace_id()
     user_limit, global_limit, _user_queue, _global_queue = _evaluation_queue_limits()
     try:
@@ -811,6 +814,20 @@ def claim_job(session_id: str) -> bool:
             if job["status"] != "queued":
                 return False
             if job["job_kind"] != "auxiliary":
+                # The project limit applies to *running* work, not queued
+                # admissions. Match by immutable project ID across creator
+                # workspaces, so a collaborator cannot bypass its limit.
+                if job["session_slot"]:
+                    limit = project_limit or 1
+                    project_running = db.execute(
+                        """SELECT COUNT(*) FROM jobs
+                           WHERE project_id=? AND session_slot=1
+                           AND job_kind='research'
+                           AND status IN ('running','stopping') AND session_id<>?""",
+                        (job["project_id"], session_id),
+                    ).fetchone()[0]
+                    if project_running >= limit:
+                        return False
                 user_running = db.execute(
                     "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND job_kind='research' AND status IN ('running','stopping')",
                     (owner,),

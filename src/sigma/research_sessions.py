@@ -5396,6 +5396,8 @@ async def ensure_queued_workers(path: str) -> None:
         cloud_research.reconcile_orphaned_jobs()
     except cloud_research.CloudResearchUnavailable as exc:
         raise ProjectError(str(exc)) from exc
+    from sigma import project_collaboration
+
     async with _manager_lock:
         for record in _all(path):
             if (
@@ -5403,6 +5405,16 @@ async def ensure_queued_workers(path: str) -> None:
                 or record.get("status") != "queued"
                 or record["id"] in _tasks
             ):
+                continue
+            try:
+                # An observer may read any collaborator's queued Session but
+                # must never relaunch it under their own sponsored account.
+                # On reconnection, the real creator's verified context resumes
+                # the durable queue instead.
+                project_collaboration.require_execution_operator(
+                    path, "session", record["id"], "research"
+                )
+            except ProjectError:
                 continue
             event = asyncio.Event()
             _control[record["id"]] = event
@@ -14425,44 +14437,6 @@ def _prior_session_failures_index(
     )
 
 
-async def _claim_cloud_job(session_id: str, path: str) -> bool:
-    if not cloud_research.billing_enabled():
-        return True
-    record = _read(path, session_id)
-    if record.get("status") != "queued":
-        return False
-    try:
-        # Admission has already reserved capacity in one SQLite transaction.
-        # Do not busy-poll and do not wait for other sessions to finish.
-        if cloud_research.claim_job(session_id):
-            return True
-        ledger_status = cloud_research.job_status(session_id)
-        async with _session_state_lock(session_id):
-            record = _read(path, session_id)
-            if record["status"] != "queued":
-                return False
-            record["status"] = "paused"
-            record["updated_at"] = _now()
-            record["stopped_at"] = _now()
-            record["current_action"] = "Paused after worker recovery"
-            record["message"] = (
-                "This execution reservation could not start. Saved research is intact; "
-                "resume to retry once capacity is available."
-            )
-            for branch in record.get("strategy_runs", []):
-                if branch.get("status") == "queued":
-                    branch["status"] = "paused"
-                    branch["current_action"] = record["current_action"]
-                    branch["reason"] = record["message"]
-            _event(record, "interrupted", record["message"])
-            _save(path, record)
-        if ledger_status in {"running", "stopping"}:
-            cloud_research.recover_job(session_id)
-        return False
-    except cloud_research.CloudResearchUnavailable as exc:
-        raise ProjectError(str(exc)) from exc
-
-
 def _record_worker_cancellation(record: dict[str, Any]) -> None:
     """Persist cancellation without claiming a provider request ran when none started."""
     running_steps = [step for step in record.get("steps", []) if step.get("status") == "running"]
@@ -15645,11 +15619,12 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
 
 
 async def _await_session_execution_slot(session_id: str, path: str) -> bool:
-    """Queue independently admitted Sessions behind the configured run capacity.
+    """Claim project AND hosted worker capacity only when dispatch can begin.
 
-    An OS manager lock protects the short claim across worker processes. Never
-    hold any project lock while awaiting a slot or running provider work.
-    A stopped or paused queued record exits without dispatch.
+    A queued Session owns no running slot. Claiming both resources under the
+    short project admission mutex prevents two collaborators from bypassing
+    per-project concurrency. Capacity shortages remain queued and recoverable;
+    no paid call or worker slot is reserved during the wait.
     """
     while True:
         async with _manager_lock:
@@ -15657,17 +15632,38 @@ async def _await_session_execution_slot(session_id: str, path: str) -> bool:
                 latest = _read(path, session_id)
                 if latest.get("status") != "queued":
                     return False
+                limit = get_limits(path)["max_concurrent_sessions"]
                 occupied = sum(
                     item.get("id") != session_id and item.get("status") == "running"
                     for item in _all(path)
                 )
-                if occupied < get_limits(path)["max_concurrent_sessions"]:
-                    latest["status"] = "running"
-                    latest["current_action"] = "Preparing research"
-                    latest["message"] = "Research is starting."
-                    latest["updated_at"] = _now()
-                    _save(path, latest)
-                    return True
+                if occupied < limit:
+                    if cloud_research.billing_enabled():
+                        try:
+                            claimed = cloud_research.claim_job(
+                                session_id, project_limit=limit
+                            )
+                            if not claimed and cloud_research.job_status(session_id) != "queued":
+                                # Missing, revoked or already claimed ledger state
+                                # is not permission to dispatch or to reuse a billable
+                                # attempt. Leave the record intact for recovery.
+                                raise ProjectError(
+                                    "Queued research reservation cannot be claimed; "
+                                    "recover the saved session before resuming."
+                                )
+                        except cloud_research.CloudResearchUnavailable as exc:
+                            raise ProjectError(str(exc)) from exc
+                    else:
+                        claimed = True
+                    if claimed:
+                        latest["status"] = "running"
+                        latest["current_action"] = "Preparing research"
+                        latest["message"] = "Research is starting."
+                        latest["updated_at"] = _now()
+                        _save(path, latest)
+                        return True
+        # Recheck the saved status on every turn, so Stop/Pause or loss of
+        # permission prevents a queued job from ever reaching provider dispatch.
         await asyncio.sleep(0.5)
 
 
@@ -15698,8 +15694,6 @@ async def _worker(session_id: str, path: str) -> None:
             if _pause_for_stop_advisory(initial, path):
                 _save(path, initial)
                 return
-        if not await _claim_cloud_job(session_id, path):
-            return
         if not await _await_session_execution_slot(session_id, path):
             return
         # All newly started sessions use the branch-aware path, including a

@@ -1222,7 +1222,7 @@ def test_model_max_output_reserves_member_and_global_allowance(
 def test_eight_research_users_fill_exactly_thirty_two_admissions(
     root: Path, ledger_root: Path
 ) -> None:
-    """Exercise the real SQLite admission limits, not just arithmetic defaults."""
+    """Eight users get 32 running slots plus 8 durable waiting reservations."""
     owners = [workspace(root / "eight-users", f"{index:032x}") for index in range(1, 10)]
     settings = {
         "SIGMA_CLOUD_AUTH_ENABLED": "true",
@@ -1232,6 +1232,8 @@ def test_eight_research_users_fill_exactly_thirty_two_admissions(
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
         "SIGMA_CLOUD_USER_MAX_CONCURRENT": "4",
         "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "32",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
         "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
     }
     with (
@@ -1242,7 +1244,7 @@ def test_eight_research_users_fill_exactly_thirty_two_admissions(
         for owner in owners[:8]:
             binding = cloud_workspaces._CURRENT.set(owner)
             try:
-                for index in range(4):
+                for index in range(5):
                     record = job(owner.workspace_id)
                     record["project_id"] = f"{owner.workspace_id}-project-{index}"
                     cloud_research.prepare_job(record)
@@ -1252,33 +1254,33 @@ def test_eight_research_users_fill_exactly_thirty_two_admissions(
                 try:
                     cloud_research.prepare_job(rejected)
                 except cloud_research.CloudResearchUnavailable as exc:
-                    assert "capacity is currently full" in str(exc)
+                    assert "queue is full" in str(exc)
                 else:
-                    raise AssertionError("A fifth session bypassed the four-per-user cap")
+                    raise AssertionError("Sixth admission bypassed user's bounded queue")
                 assert cloud_research.job_status(rejected["id"]) is None
             finally:
                 cloud_workspaces._CURRENT.reset(binding)
 
-        # Nine independent workspaces exist; only eight have research slots.
+        # The 41st durable reservation cannot exceed 32 running + 8 queued.
         ninth = job(owners[8].workspace_id)
         binding = cloud_workspaces._CURRENT.set(owners[8])
         try:
             try:
                 cloud_research.prepare_job(ninth)
             except cloud_research.CloudResearchUnavailable as exc:
-                assert "capacity is currently full" in str(exc)
+                assert "queue is full" in str(exc)
             else:
-                raise AssertionError("The global 32-slot cap was bypassed")
+                raise AssertionError("Global 40-job execution/queue cap was bypassed")
             assert cloud_research.job_status(ninth["id"]) is None
         finally:
             cloud_workspaces._CURRENT.reset(binding)
         with cloud_research._connect() as db:
-            assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 32
+            assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 40
             assert db.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
             counts = db.execute(
                 "SELECT workspace_id, COUNT(*) AS n FROM jobs GROUP BY workspace_id"
             ).fetchall()
-            assert len(counts) == 8 and all(row["n"] == 4 for row in counts)
+            assert len(counts) == 8 and all(row["n"] == 5 for row in counts)
 
         binding = cloud_workspaces._CURRENT.set(owners[0])
         try:
@@ -2483,7 +2485,7 @@ def test_cross_user_crash_reclaims_only_dead_worker(root: Path, ledger_root: Pat
 
 
 def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path) -> None:
-    """Reject excess before persisting; admit after another owner exits."""
+    """Full worker capacity queues additional distinct users without dispatch."""
     left = workspace(root, "e" * 32)
     right = workspace(root, "f" * 32)
     settings = {
@@ -2494,6 +2496,8 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
         "SIGMA_CLOUD_USER_MAX_CONCURRENT": "2",
         "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "3",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "2",
         "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
     }
     entries = [
@@ -2506,27 +2510,17 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
         patch.dict(os.environ, settings, clear=False),
         patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
     ):
-        for owner, record in entries[:3]:
+        for owner, record in entries:
             token = cloud_workspaces._CURRENT.set(owner)
             try:
                 cloud_research.prepare_job(record)
+                assert cloud_research.job_status(record["id"]) == "queued"
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
-        # Pending execution claims already occupy a slot: no queue.
-        token = cloud_workspaces._CURRENT.set(right)
-        try:
-            try:
-                cloud_research.prepare_job(entries[3][1])
-            except cloud_research.CloudResearchUnavailable as exc:
-                assert "capacity is currently full" in str(exc)
-            else:
-                raise AssertionError("Fourth research job must be refused immediately")
-            with cloud_research._connect() as db:
-                assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 3
-                assert db.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
-        finally:
-            cloud_workspaces._CURRENT.reset(token)
+        with cloud_research._connect() as db:
+            assert db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 4
+            assert db.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
 
         for owner, record in entries[:3]:
             token = cloud_workspaces._CURRENT.set(owner)
@@ -2534,6 +2528,13 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
                 assert cloud_research.claim_job(record["id"])
             finally:
                 cloud_workspaces._CURRENT.reset(token)
+        token = cloud_workspaces._CURRENT.set(right)
+        try:
+            assert not cloud_research.claim_job(entries[3][1]["id"])
+            assert cloud_research.job_status(entries[3][1]["id"]) == "queued"
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+
         token = cloud_workspaces._CURRENT.set(left)
         try:
             cloud_research.release_job(entries[0][1]["id"], paused=True)
@@ -2542,7 +2543,6 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
 
         token = cloud_workspaces._CURRENT.set(right)
         try:
-            cloud_research.prepare_job(entries[3][1])
             assert cloud_research.claim_job(entries[3][1]["id"])
         finally:
             cloud_workspaces._CURRENT.reset(token)
@@ -2556,6 +2556,62 @@ def test_multiuser_parallel_cloud_worker_admission(root: Path, ledger_root: Path
                 left.workspace_id: 1,
                 right.workspace_id: 2,
             }
+
+
+def test_shared_project_claim_only_one_creator(root: Path, ledger_root: Path) -> None:
+    """N/Z share a project but only one Session holds its provider slot."""
+    left = workspace(root, "c" * 32)
+    right = workspace(root, "d" * 32)
+    settings = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+        "SIGMA_CLOUD_OPENAI_API_KEY": "shared-project-queue-fixture",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "5.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "3",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
+    }
+    one, two = job(left.workspace_id), job(right.workspace_id)
+    one["project_id"] = two["project_id"] = "same-project-across-workspaces"
+    one["max_concurrent_sessions"] = two["max_concurrent_sessions"] = 1
+    with (
+        patch.dict(os.environ, settings, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        for owner, record in ((left, one), (right, two)):
+            token = cloud_workspaces._CURRENT.set(owner)
+            try:
+                cloud_research.prepare_job(record)
+                assert cloud_research.job_status(record["id"]) == "queued"
+            finally:
+                cloud_workspaces._CURRENT.reset(token)
+        token = cloud_workspaces._CURRENT.set(left)
+        try:
+            assert cloud_research.claim_job(one["id"], project_limit=1)
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+        token = cloud_workspaces._CURRENT.set(right)
+        try:
+            assert not cloud_research.claim_job(two["id"], project_limit=1)
+            assert cloud_research.job_status(two["id"]) == "queued"
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+        with cloud_research._connect() as db:
+            assert db.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 0
+        token = cloud_workspaces._CURRENT.set(left)
+        try:
+            cloud_research.release_job(one["id"], paused=True)
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
+        token = cloud_workspaces._CURRENT.set(right)
+        try:
+            assert cloud_research.claim_job(two["id"], project_limit=1)
+            assert not cloud_research.claim_job(two["id"], project_limit=1)
+        finally:
+            cloud_workspaces._CURRENT.reset(token)
 
 
 def test_hosted_deployment_forwards_global_spend_window() -> None:
@@ -2819,13 +2875,9 @@ def main() -> None:
                 assert summary["user_reserved_or_observed_tokens"] == 120
 
                 second = job(a.workspace_id)
-                try:
-                    cloud_research.prepare_job(second)
-                except cloud_research.CloudResearchUnavailable as exc:
-                    assert "capacity is currently full" in str(exc)
-                else:
-                    raise AssertionError("Second research job must fail fast at capacity")
-                assert cloud_research.job_status(second["id"]) is None
+                cloud_research.prepare_job(second)
+                assert cloud_research.job_status(second["id"]) == "queued"
+                assert not cloud_research.claim_job(second["id"])
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
@@ -2841,13 +2893,9 @@ def main() -> None:
                     pass
                 assert cloud_research.snapshot()["jobs"].get("queued", 0) == 0
                 third = job(b.workspace_id)
-                try:
-                    cloud_research.prepare_job(third)
-                except cloud_research.CloudResearchUnavailable as exc:
-                    assert "capacity is currently full" in str(exc)
-                else:
-                    raise AssertionError("Third research job must fail fast at global capacity")
-                assert cloud_research.job_status(third["id"]) is None
+                cloud_research.prepare_job(third)
+                assert cloud_research.job_status(third["id"]) == "queued"
+                assert not cloud_research.claim_job(third["id"])
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
@@ -3688,9 +3736,8 @@ def main() -> None:
             finally:
                 cloud_workspaces._CURRENT.reset(token)
 
-        # Concurrent owners race for one global execution slot. SQLite's
-        # BEGIN IMMEDIATE admission must persist exactly one job; excess
-        # work is rejected before any worker or call can start.
+        # Concurrent owners both get durable queue entries, but the SQLite
+        # running-slot claim admits exactly one provider worker.
         with (
             patch.dict(
                 os.environ,
@@ -3709,26 +3756,42 @@ def main() -> None:
                 context = cloud_workspaces._CURRENT.set(owner)
                 try:
                     barrier.wait(timeout=5)
-                    try:
-                        cloud_research.prepare_job(record)
-                    except cloud_research.CloudResearchUnavailable as exc:
-                        assert "capacity is currently full" in str(exc)
-                        return False
-                    return True
+                    cloud_research.prepare_job(record)
+                    return cloud_research.job_status(record["id"]) == "queued"
                 finally:
                     cloud_workspaces._CURRENT.reset(context)
 
             with ThreadPoolExecutor(max_workers=2) as pool:
-                results = [pool.submit(admit, record, owner) for record, owner in zip(jobs, (a, b))]
+                results = [
+                    pool.submit(admit, record, owner)
+                    for record, owner in zip(jobs, (a, b), strict=True)
+                ]
                 admitted = [future.result(timeout=10) for future in results]
-            assert sorted(admitted) == [False, True], admitted
-            for record, owner, accepted in zip(jobs, (a, b), admitted):
+            assert admitted == [True, True], admitted
+
+            claim_barrier = threading.Barrier(2)
+
+            def claim(record: dict, owner: cloud_workspaces.Workspace) -> bool:
+                context = cloud_workspaces._CURRENT.set(owner)
+                try:
+                    claim_barrier.wait(timeout=5)
+                    return cloud_research.claim_job(record["id"])
+                finally:
+                    cloud_workspaces._CURRENT.reset(context)
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = [
+                    pool.submit(claim, record, owner)
+                    for record, owner in zip(jobs, (a, b), strict=True)
+                ]
+                claimed = [future.result(timeout=10) for future in results]
+            assert sorted(claimed) == [False, True], claimed
+            for record, owner, won in zip(jobs, (a, b), claimed, strict=True):
                 token = cloud_workspaces._CURRENT.set(owner)
                 try:
-                    if accepted:
-                        assert cloud_research.claim_job(record["id"])
-                    else:
-                        assert cloud_research.job_status(record["id"]) is None
+                    assert cloud_research.job_status(record["id"]) == (
+                        "running" if won else "queued"
+                    )
                 finally:
                     cloud_workspaces._CURRENT.reset(token)
 
@@ -3804,6 +3867,9 @@ def main() -> None:
         parallel_ledger = root / "parallel-worker-ledger"
         parallel_ledger.mkdir(mode=0o700)
         test_multiuser_parallel_cloud_worker_admission(root, parallel_ledger)
+        shared_project_ledger = root / "shared-project-ledger"
+        shared_project_ledger.mkdir(mode=0o700)
+        test_shared_project_claim_only_one_creator(root, shared_project_ledger)
         foreign_ledger = root / "cross-owner-recovery-ledger"
         foreign_ledger.mkdir(mode=0o700)
         test_cross_user_crash_reclaims_only_dead_worker(root, foreign_ledger)

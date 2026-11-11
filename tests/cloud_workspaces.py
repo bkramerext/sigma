@@ -111,7 +111,9 @@ class Server:
 def identity(subject: str, *, email: str | None = None, role: str = "member") -> dict[str, str]:
     return {
         "X-Test-Subject": subject,
-        "X-Test-Email": email or f"{subject}@example.test",
+        # The OIDC subject is opaque and intentionally not the user email.
+        # Attribution may persist a verified email; the subject must stay hashed.
+        "X-Test-Email": email or f"account-{subject.rsplit('-', 1)[-1]}@example.test",
         "X-Test-Role": role,
     }
 
