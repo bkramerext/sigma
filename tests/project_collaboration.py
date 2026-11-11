@@ -1540,7 +1540,8 @@ class CollaborationTests(TestCase):
         self.assertEqual(runs[0]["status"], "reserved")
         with papers.paper_run_scope(paper_run):
             queued = papers._read_queue_status(self.path)
-        self.assertIsNotNone(queued)
+        if queued is None:
+            raise AssertionError("Paper queue receipt vanished after revocation")
         self.assertEqual(queued["status"], "queued")
 
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
