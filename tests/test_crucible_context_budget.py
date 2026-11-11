@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from copy import deepcopy
+from unittest.mock import patch
 from typing import Any
 
 from sigma import research_sessions
@@ -461,3 +463,104 @@ def test_source_material_overflow_reports_exact_pre_dispatch_limit() -> None:
     assert "before an Investigator/Skeptic call" in guidance
     assert "switching models or Thinking levels" in guidance
     assert not record["steps"] and record["calls_used"] == 0
+
+
+def _preflight_record(question: str, *, source: str = "premise") -> dict[str, Any]:
+    return {
+        "id": "context-791",
+        "status": "running",
+        "model": "gpt-6.1-sol",
+        "problem": "Research the frozen project evidence.",
+        "uploaded_project_evidence": [{"id": "source-a", "excerpt": source}],
+        "strategy_runs": [
+            {
+                "strategy_id": "strategy-a",
+                "strategy_title": "Evidence",
+                "strategy_text": "Test the supplied premises.",
+                "current_question": question,
+                "status": "queued",
+            }
+        ],
+        "reference_compilation": {"status": "pending", "attempts": []},
+        "calls_used": 0,
+        "steps": [],
+        "artifacts": [],
+        "events": [],
+    }
+
+
+def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() -> None:
+    """59k extracted Unicode chars fit source policy but may exceed byte policy."""
+    record = _preflight_record("q" * 30_000, source="🧪" * 59_000)
+    original = deepcopy(record)
+    packet = research_sessions._mandatory_dispatch_lower_bound(
+        record, record["strategy_runs"][0]
+    )
+    assert len(record["uploaded_project_evidence"][0]["excerpt"]) < 60_000
+    assert _size(packet) > LIMIT
+    assert packet["uploaded_project_evidence"] == original["uploaded_project_evidence"]
+    assert record == original
+
+    stored = deepcopy(record)
+    writes: list[dict[str, Any]] = []
+
+    def read(_path: str, _id: str) -> dict[str, Any]:
+        return deepcopy(stored)
+
+    def save(_path: str, updated: dict[str, Any]) -> None:
+        nonlocal stored
+        stored = deepcopy(updated)
+        writes.append(deepcopy(updated))
+
+    with (
+        patch.object(research_sessions, "_read", side_effect=read),
+        patch.object(research_sessions, "_save", side_effect=save),
+    ):
+        assert not asyncio.run(
+            research_sessions._ensure_mandatory_dispatch_preflight("context-791", "test")
+        )
+    assert len(writes) == 1
+    assert stored["status"] == "paused"
+    assert stored["strategy_runs"][0]["status"] == "paused"
+    assert stored["termination_reason_code"] == "context_limit"
+    assert "mandatory_preflight" in stored["message"]
+    assert "SIGMA's 256,000-byte UTF-8 dispatch guard" in stored["message"]
+    assert "59,000" not in stored["message"]  # No raw source content or characters disclosed
+    assert "🧪" not in stored["message"]
+    assert stored["calls_used"] == 0
+    assert stored["steps"] == []
+    assert stored["reference_compilation"] == original["reference_compilation"]
+    assert stored["uploaded_project_evidence"] == original["uploaded_project_evidence"]
+    assert stored["events"][-1]["kind"] == "research.context_blocked"
+    # Re-evaluation of the original frozen inputs cannot trigger provider work.
+    assert _size(research_sessions._mandatory_dispatch_lower_bound(
+        original, original["strategy_runs"][0]
+    )) > LIMIT
+
+
+def test_mandatory_preflight_does_not_block_viable_portfolio_peers() -> None:
+    record = _preflight_record("q" * (LIMIT + 1000))
+    record["strategy_runs"].append({
+        "strategy_id": "strategy-b",
+        "strategy_title": "Independent approach",
+        "strategy_text": "Proceed with the bounded inputs.",
+        "current_question": "Check a short counterexample.",
+        "status": "queued",
+    })
+    original = deepcopy(record)
+    assert _size(research_sessions._mandatory_dispatch_lower_bound(
+        record, record["strategy_runs"][0]
+    )) > LIMIT
+    assert _size(research_sessions._mandatory_dispatch_lower_bound(
+        record, record["strategy_runs"][1]
+    )) < LIMIT
+
+    with (
+        patch.object(research_sessions, "_read", return_value=record),
+        patch.object(research_sessions, "_save") as save,
+    ):
+        assert asyncio.run(
+            research_sessions._ensure_mandatory_dispatch_preflight("context-791", "test")
+        )
+    save.assert_not_called()
+    assert record == original
