@@ -7041,9 +7041,7 @@ async def control_session(
                     ),
                     None,
                 )
-                timestamp = (
-                    blocked.get("timestamp") if blocked else record.get("updated_at")
-                )
+                timestamp = blocked.get("timestamp") if blocked else record.get("updated_at")
                 try:
                     pause_start = datetime.fromisoformat(timestamp)
                     if pause_start.tzinfo is None or pause_start > datetime.now(UTC):
