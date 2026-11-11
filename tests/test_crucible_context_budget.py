@@ -613,6 +613,7 @@ def test_mandatory_packet_lower_bound_prevents_spending_on_impossible_sources() 
     assert stored["termination_reason_code"] == "context_limit"
     assert "mandatory_preflight" in stored["message"]
     assert "SIGMA's 512,000-byte UTF-8 dispatch guard" in stored["message"]
+    assert "limit 512000B" in stored["message"]
     assert "59,000" not in stored["message"]  # No raw source content or characters disclosed
     assert "🧪" not in stored["message"]
     assert stored["calls_used"] == 0
