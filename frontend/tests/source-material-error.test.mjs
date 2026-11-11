@@ -13,8 +13,8 @@ test('excess Source Material is named with exact persisted counts and a concrete
   assert.match(copy.cause, /not the selected model’s context window/);
   assert.match(copy.next, /Source Material list/);
   assert.match(copy.next, /disable or remove/);
-  assert.match(copy.next, /start a new session/);
-  assert.match(copy.next, /frozen sources/);
+  assert.match(copy.next, /click Resume/);
+  assert.match(copy.next, /reload the current enabled sources/);
 });
 
 test('historical blocked event preserves sizes even after top-level message changes', () => {
