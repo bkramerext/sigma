@@ -1371,13 +1371,23 @@ def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
                         recover_job(session_id)
                     continue
                 if has_session:
-                    # A queued snapshot can conceal a dispatched provider
-                    # attempt. Reconcile before ensure_queued_workers launches
-                    # a new worker; the OS lock protects a live predecessor.
+                    # A saved queued Session may conceal a provider attempt.
+                    # Do not reclassify legacy "running" snapshots with no
+                    # in-flight step or reserved call during unrelated scans.
+                    # They cannot be auto-dispatched and remain recoverable
+                    # on their creator's next explicit read.
                     try:
-                        research_sessions._recover(
-                            research_sessions._read(str(project), session_id)
+                        saved = research_sessions._read(str(project), session_id)
+                        in_flight = any(
+                            isinstance(step, dict) and step.get("status") == "running"
+                            for step in saved.get("steps", [])
                         )
+                        if (
+                            saved.get("status") == "queued"
+                            or in_flight
+                            or has_reserved_calls(session_id)
+                        ):
+                            research_sessions._recover(saved)
                     except (OSError, ValueError, ProjectError):
                         pass  # Keep uncertain accepted work fail-closed.
                     continue

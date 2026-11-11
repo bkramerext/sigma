@@ -542,13 +542,16 @@ def test_orphaned_job_reconciliation(
                 ]
                 == 0.25
             )
-            assert cloud_research.job_status(ambiguous["id"]) == "paused"
+            # Legacy outer-running / ledger-queued records with no active
+            # step and an already-unknown charge remain queued until the
+            # creator inspects or resumes; nothing is silently dispatched.
+            assert cloud_research.job_status(ambiguous["id"]) == "queued"
             assert (
                 db.execute(
                     "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'",
                     (workspace_a.workspace_id,),
                 ).fetchone()[0]
-                == 1
+                == 2
             )
             db.close()
 
