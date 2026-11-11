@@ -1265,15 +1265,13 @@ async def middleware(request: Request, call_next):
         # Source Material edits are deterministic project CRUD, not paid
         # inference. Permit only the reviewed routes/methods in mock-auth
         # browser acceptance; all provider and execution endpoints stay denied.
-        evidence_id_path = re.fullmatch(
-            r"/api/projects/evidence/[0-9a-f]{32}", path
-        ) is not None
-        evidence_link_path = re.fullmatch(
-            r"/api/projects/evidence/[0-9a-f]{32}/link", path
-        ) is not None
-        evidence_enabled_path = re.fullmatch(
-            r"/api/projects/evidence/[0-9a-f]{32}/enabled", path
-        ) is not None
+        evidence_id_path = re.fullmatch(r"/api/projects/evidence/[0-9a-f]{32}", path) is not None
+        evidence_link_path = (
+            re.fullmatch(r"/api/projects/evidence/[0-9a-f]{32}/link", path) is not None
+        )
+        evidence_enabled_path = (
+            re.fullmatch(r"/api/projects/evidence/[0-9a-f]{32}/enabled", path) is not None
+        )
         safe_evidence_mutation = False
         if request.method == "POST":
             safe_evidence_mutation = path in {
