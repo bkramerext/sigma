@@ -539,6 +539,95 @@ class CollaborationTests(TestCase):
                 ).fetchone()["revision"]
             )
 
+    def test_pre_collaboration_saved_bundle_survives_sharing_and_revocation(self) -> None:
+        """Existing work must never be repacked or rewritten by the ACL ledger."""
+        legacy_members = {
+            "project.json": (
+                b'{"schema_version":8,"id":"saved-project",'
+                b'"title":"Older saved research","ai_model":"legacy-model"}'
+            ),
+            "research-sessions/old-session.json": (
+                b'{"id":"old-session","status":"paused",'
+                b'"created_by":"owner@example.org","calls_used":3}'
+            ),
+            "artifacts/generated_papers/old-paper.tex": (
+                b"\\\\documentclass{article}\\n\\\\begin{document}Old paper\\\\end{document}\\n"
+            ),
+            "artifacts/generated_papers/old-paper.json": (
+                b'{"paper_id":"old-paper","paper_version":3,'
+                b'"created_by":"owner@example.org"}'
+            ),
+            "research-qa/old-answer.json": (
+                b'{"qa_id":"old-answer","created_by":"owner@example.org"}'
+            ),
+            "source-materials/old-notes.md": b"# Research source retained unchanged\\n",
+            "artifacts/original-evidence.bin": bytes(range(256)),
+        }
+        saved = Path(self.path)
+        saved.write_text(
+            json.dumps(project_bundle.portable_bundle(legacy_members), sort_keys=True),
+            encoding="utf-8",
+        )
+        original_bytes = saved.read_bytes()
+        decoded_members = {
+            name: project_bundle.read_file(self.path, name) for name in legacy_members
+        }
+        self.assertEqual(
+            json.loads(decoded_members["project.json"])["id"], "saved-project"
+        )
+
+        # A historical project gains collaboration metadata without migrating,
+        # renaming, or touching any of its saved Session/Paper/Q/A/evidence.
+        shared.summary(self.path, verify_revision=True)
+        run_id = uuid4().hex
+        receipt = shared.reserve_execution_run(
+            self.path, "paper", run_id, 0, model="new-model", thinking="low"
+        )
+        self.assertIsNotNone(receipt)
+        self.assertEqual(receipt["creator_email"], self.owner.email)
+
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+        ):
+            shared.summary(self.path, verify_revision=True)
+            with self.assertRaises(ProjectError):
+                shared.discard_execution_run(self.path, "paper", run_id)
+
+        with shared._db() as db:
+            db.execute(
+                "DELETE FROM shared_collaborators WHERE path=? AND email=?",
+                (self.path, self.other.email),
+            )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal",
+                return_value=self.other,
+            ),
+            self.assertRaises(ProjectError),
+        ):
+            shared.summary(self.path)
+
+        shared.summary(self.path, verify_revision=True)
+        self.assertEqual(saved.read_bytes(), original_bytes)
+        for name, data in decoded_members.items():
+            self.assertEqual(
+                project_bundle.read_file(self.path, name),
+                data,
+                f"Pre-collaboration saved member changed: {name}",
+            )
+
     def test_owner_reopen_is_read_only_and_rejects_identity_drift(self) -> None:
         view = SimpleNamespace(
             path=self.path,
