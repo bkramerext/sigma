@@ -966,7 +966,9 @@ class CloudAuthTests(CloudAuthFixture):
             TestClient(app, base_url="https://testserver") as guest_b,
         ):
             self.assertFalse(guest_a.get("/api/cloud-auth/status").json()["authenticated"])
-            self.assertEqual(guest_a.get("/api/projects/recent").status_code, 401)
+            self.assertEqual(guest_a.get("/api/projects/recent").json(), {"projects": []})
+            # A direct My Work visit must provision the private guest cookie.
+            self.assertTrue(any("sigma_guest" in key for key in guest_a.cookies))
             self.assertEqual(guest_a.get("/api/projects/samples").status_code, 200)
             self.assertEqual(guest_a.get("/api/projects/recent").json(), {"projects": []})
             created = guest_a.post(
@@ -1051,7 +1053,7 @@ class CloudAuthTests(CloudAuthFixture):
             )
 
             # A fresh browser receives a distinct opaque cookie and private root.
-            self.assertEqual(guest_b.get("/api/projects/recent").status_code, 401)
+            self.assertEqual(guest_b.get("/api/projects/recent").json(), {"projects": []})
             self.assertEqual(guest_b.get("/api/projects/samples").status_code, 200)
             self.assertEqual(guest_b.get("/api/projects/recent").json(), {"projects": []})
             leaked = guest_b.get("/api/projects/inspect", params={"path": path})
@@ -1142,7 +1144,7 @@ class CloudAuthTests(CloudAuthFixture):
             )
         self.assertTrue(project_path.exists(), "Guest files remain until expiry, not as projects")
         with TestClient(app, base_url="https://testserver") as another_guest:
-            self.assertEqual(another_guest.get("/api/projects/recent").status_code, 401)
+            self.assertEqual(another_guest.get("/api/projects/recent").json(), {"projects": []})
             self.assertEqual(another_guest.get("/api/projects/samples").status_code, 200)
             self.assertEqual(another_guest.get("/api/projects/recent").json(), {"projects": []})
 
@@ -1369,7 +1371,7 @@ class CloudAuthTests(CloudAuthFixture):
                 ("google-sub-member",),
             ).fetchone()
         self.assertEqual(member_state, (0, 0))
-        self.assertEqual(member.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(member.get("/api/projects/recent").json(), {"projects": []})
         self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").json()["grants"], [])
         self.assertEqual(
             self.client.post("/api/ai/disconnect", headers={"Origin": ORIGIN}).status_code, 403
@@ -1422,14 +1424,14 @@ class CloudAuthTests(CloudAuthFixture):
         self.assertIn('__Host-sigma_session="";', signed_out.headers["set-cookie"])
         self.assertIn("Max-Age=0", signed_out.headers["set-cookie"])
         self.assertIsNone(cloud_auth.resolve_session(raw))
-        self.assertEqual(restarted.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(restarted.get("/api/projects/recent").json(), {"projects": []})
 
         # A copied/stale cookie cannot restore access from another client.
         stale_context = TestClient(app)
         stale = stale_context.__enter__()
         self.addCleanup(stale_context.__exit__, None, None, None)
         stale.cookies.set(cloud_auth.SESSION_COOKIE, raw)
-        self.assertEqual(stale.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(stale.get("/api/projects/recent").json(), {"projects": []})
 
     def test_admin_contact_is_designated_admin_and_subject_binding_is_enforced(self):
         response = self.finish(email="admin@example.org", subject="first-admin-subject")

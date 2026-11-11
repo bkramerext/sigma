@@ -1558,6 +1558,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
+  const [guestSessionCard, setGuestSessionCard] = useState(false);
   const [confirmMissingType, setConfirmMissingType] = useState(false);
   const continueWithSavedType = useRef(false);
   const missingTypeDialog = useRef<HTMLDialogElement>(null);
@@ -1785,16 +1786,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
     try {
-      if (guest) {
-        if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
-        const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
-        if (!limitResponse.ok) throw new Error('Could not load example research limits.');
-        setLimits(await limitResponse.json() as ResearchLimits);
-        setPendingStrategyIds(chosenIds);
-        setConfig({ available: false, model: '', reasoning_effort: '', mode: '', binding: '', message: 'Preview only' });
-        setConfirmStart(true);
-        return;
-      }
+      if (guest) { setGuestSessionCard(true); return; }
       if (mockResearch) {
         if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
         setPendingStrategyIds(chosenIds);
@@ -1829,7 +1821,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }
 
   async function start() {
-    if (guest) { setConfirmStart(false); onGuestPlay(); return; }
+    if (guest) { setConfirmStart(false); setGuestSessionCard(true); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
     setBusy(true); setError('');
@@ -2055,16 +2047,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const requiresSponsoredCost = cloud?.target === 'hosted'
     || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
   const play = useCallback(() => {
+    if (guest) { setGuestSessionCard(true); return; }
     if (busy || readError || projectAtCapacity) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
-    if (!eligible.length) {
-      if (guest) onGuestPlay();
-      return;
-    }
+    if (!eligible.length) return;
     if (missingType) { setConfirmMissingType(true); return; }
     setConfirmStart(false);
     void begin();
-  }, [busy, eligible, readError, path, projectAtCapacity, missingType, guest, onGuestPlay]);
+  }, [busy, eligible, readError, path, projectAtCapacity, missingType, guest]);
   const stop = useCallback(() => {
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
@@ -2115,16 +2105,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
 
+    {guest && guestSessionCard && <GuestFeatureCard title="Research sessions"
+      message="SIGMA coordinates Investigator and Skeptic agents to investigate strategies, challenge findings, and record evidence."
+      onClose={() => setGuestSessionCard(false)}/>}
     <div id="sessions-pane-content" hidden={!expanded}>
-    {guest && confirmStart && limits && <fieldset className="research-pause-guidance" aria-label="Example session configuration">
-      <legend>Example session configuration</legend>
-      <p>Explore the settings for a research session. These choices are a preview and won't run or save research.</p>
-      <label>Rounds <input type="number" min={1} max={60} value={limits.research_rounds} onChange={event => setLimits(previous => previous && ({ ...previous, research_rounds: Math.min(60, Math.max(1, Number(event.target.value) || 1)) }))}/></label>
-      <label>Turns per round <input type="number" min={1} max={20} value={limits.turns_per_round} onChange={event => setLimits(previous => previous && ({ ...previous, turns_per_round: Math.min(20, Math.max(1, Number(event.target.value) || 1)) }))}/></label>
-      <p>Strategies in this session:</p>
-      {eligible.map(strategy => <label key={strategy.id}><input type="checkbox" checked={pendingStrategyIds.includes(strategy.id)} onChange={event => setPendingStrategyIds(current => event.target.checked ? [...current, strategy.id] : current.filter(id => id !== strategy.id))}/>{strategy.title}</label>)}
-      <p>{limits.research_rounds * limits.turns_per_round * 2 * pendingStrategyIds.length} maximum Investigator/Skeptic calls; none will be dispatched in this demo.</p>
-    </fieldset>}
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
@@ -3703,6 +3687,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           <button type="button" className="text-view-link session-start-link" disabled={loading} onClick={() => setConfirmNewPaper(false)}>Cancel</button>
         </> : <>
           <button type="button" className="text-view-link papers-header-action papers-new-action sigma-heading-icon-action" aria-label="New paper" data-tooltip="New paper" disabled={loading || busy} onClick={() => {
+            if (guest) { setGuestPaperPreview(true); return; }
             if (!expanded) onSectionOpened(); setExpanded(true);
             window.localStorage.setItem(`sigma.papersPane:${path}`, 'true');
             setConfirmNewPaper(true);
@@ -3729,8 +3714,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <p className="section-count">{papers.length + otherPaperRuns.length + (showDraftPaper ? 1 : 0)} {papers.length + otherPaperRuns.length + (showDraftPaper ? 1 : 0) === 1 ? "paper" : "papers"}</p>
     </header>
 
-    {guestPaperPreview && <GuestFeatureDialog title="Generate a research paper"
-      message="With authorized SIGMA access and ChatGPT, SIGMA can extract evidence from completed research, plan and write sections, validate claims, proofread LaTeX, generate a PDF and score the result. Research findings and AI-written papers still need human verification."
+    {guestPaperPreview && <GuestFeatureCard title="Generate a research paper"
+      message="SIGMA uses saved research to gather evidence, draft and validate sections, proofread, produce a PDF, and score the result. Research findings still need human verification."
       onClose={() => setGuestPaperPreview(false)}/>}
     {guestExplainPreview && <GuestFeatureDialog title="Explain this paper"
       message="With member access and ChatGPT, SIGMA can summarize a saved paper in simpler language, explain its claims and limitations, and keep that explanation alongside the paper. An AI explanation is not an independent validation."
@@ -4844,6 +4829,14 @@ type Destination = { root: string; path: string | null; exists: boolean };
 type ResearchQASource = { source_id: string; session_number: number | null; kind: string; label?: string; navigation_available?: boolean; navigation_url?: string; navigation_unavailable_reason?: string };
 type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; author_email?: string; created_by?: string; markdown_answer?: string | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
 
+function GuestFeatureCard({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
+  return <section className="research-pause-guidance guest-feature-card" role="status" aria-label={title}>
+    <div className="guest-feature-card-header"><strong>{title}</strong><DialogDismissButton label="Dismiss preview" onClick={onClose}/></div>
+    <p>{message}</p>
+    <p className="settings-hint">Member access and a connected ChatGPT account are required. No AI request was made.</p>
+  </section>;
+}
+
 function GuestFeatureDialog({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -5096,7 +5089,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
           : <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>}
         {configError && <p role="alert" className="error">{configError}</p>}
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={(!guest && !binding) || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
-        {guestAskPreview && <div className="research-pause-guidance" role="status"><strong>Ask about your research</strong><p>With authorized SIGMA access and ChatGPT, SIGMA would answer this question using saved research and cite supporting evidence. Answers require verification. No request was sent.</p><button type="button" className="text-view-link" onClick={() => setGuestAskPreview(false)}>Close</button></div>}
+        {guestAskPreview && <GuestFeatureCard title="Ask about your research" message="SIGMA answers questions using saved project research and cites supporting evidence. Answers require verification." onClose={() => setGuestAskPreview(false)}/>}
         {pendingAnswers.length > 0 && <section aria-label="Q/A in progress">
           {pendingAnswers.map(pending => <p className="ai-paper-status" role="status" key={pending.request_id}>
             <span className="research-running-indicator" aria-label="Answer in progress"

@@ -1199,6 +1199,10 @@ async def middleware(request: Request, call_next):
             (path == "/api/projects/samples" and request.method == "GET")
             or (path == "/api/projects/samples/open" and request.method == "POST")
             or (path == "/api/projects/create" and request.method == "POST")
+            # My Work may be the first request after a member signs out or a
+            # visitor restores that tab. Establish a private empty workspace
+            # rather than returning a member-only 401.
+            or (path == "/api/projects/recent" and request.method == "GET")
         )
         if (path == "/api/projects" or path.startswith("/api/projects/")) and (
             guest_workspace is not None or create_guest
