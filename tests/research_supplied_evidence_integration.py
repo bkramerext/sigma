@@ -27,8 +27,7 @@ async def check_barrier() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions,
-                "_ensure_reference_compilation", new=reference_compiler
+                research_sessions, "_ensure_reference_compilation", new=reference_compiler
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
@@ -68,8 +67,7 @@ async def check_partial_resume() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions,
-                "_ensure_reference_compilation", new=AsyncMock(return_value=True)
+                research_sessions, "_ensure_reference_compilation", new=AsyncMock(return_value=True)
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(research_supplied_evidence, "_fetch_url", side_effect=fetch),
@@ -86,8 +84,7 @@ async def check_partial_resume() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions,
-                "_ensure_reference_compilation", new=AsyncMock(return_value=True)
+                research_sessions, "_ensure_reference_compilation", new=AsyncMock(return_value=True)
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
@@ -156,8 +153,7 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
             ) as compiler,
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
-                research_supplied_evidence,
-                "compile_entry", side_effect=compile_frozen_source
+                research_supplied_evidence, "compile_entry", side_effect=compile_frozen_source
             ) as compile_call,
         ):
             started = await research_sessions.start_session(
