@@ -241,14 +241,10 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         cold_context.close()
 
         # A remembered member My Work tab must not hide Samples on guest entry.
-        page.add_init_script(
-            "window.localStorage.setItem('sigma.homeCatalogTab', 'recent')"
-        )
+        page.add_init_script("window.localStorage.setItem('sigma.homeCatalogTab', 'recent')")
         page.goto(ui_url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-        expect(page.get_by_role("tab", name="Samples")).to_have_attribute(
-            "aria-selected", "true"
-        )
+        expect(page.get_by_role("tab", name="Samples")).to_have_attribute("aria-selected", "true")
         welcome = page.get_by_role("dialog", name="Welcome to SIGMA!")
         expect(welcome).to_contain_text("without signing in")
         welcome.get_by_role("button", name="Let's get started").click()
