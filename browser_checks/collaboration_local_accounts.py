@@ -517,12 +517,8 @@ def exercise(ui: str, workspaces: Path) -> None:
                 arg={
                     "first": first_run["session_number"],
                     "second": second_run["session_number"],
-                    "firstStatus": ""
-                    if statuses[first_run["id"]] == "running"
-                    else "(queued)",
-                    "secondStatus": ""
-                    if statuses[second_run["id"]] == "running"
-                    else "(queued)",
+                    "firstStatus": "" if statuses[first_run["id"]] == "running" else "(queued)",
+                    "secondStatus": "" if statuses[second_run["id"]] == "running" else "(queued)",
                     "owner": OWNER,
                     "member": COLLABORATOR,
                 },
