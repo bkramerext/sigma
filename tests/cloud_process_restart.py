@@ -253,10 +253,9 @@ def _execute(stage: str) -> None:
                 # The ledger records an interrupted owner, while the saved
                 # Session itself is safely paused for explicit recovery.
                 assert running == "interrupted", running
-                # Reconciliation itself, without an explicit get/list or
-                # replayed worker, must already have retired this ambiguous
-                # queued-but-dispatched Session.
-                assert ambiguous_state == "paused", ambiguous_state
+                # Cross-account maintenance is ledger-only: it retires the
+                # uncertain slot without rewriting creator B's project file.
+                assert ambiguous_state == "interrupted", ambiguous_state
                 assert charge["status"] == "unknown", dict(charge)
                 assert charge["amount_usd"] == 0.04
                 assert charge["token_reservation"] == 40
@@ -272,7 +271,9 @@ def _execute(stage: str) -> None:
                     cloud_workspaces.Workspace(CREATOR, CREATOR, root / CREATOR)
                 )
                 try:
-                    active_saved = research_sessions._read(active_path, ids["active"])
+                    active_raw = research_sessions._read(active_path, ids["active"])
+                    assert active_raw["status"] == "running"
+                    active_saved = research_sessions._recover(active_raw)
                     assert active_saved["status"] == "paused"
                     assert active_saved["created_by"] == CREATOR
                     assert active_saved["artifacts"][0]["id"] == "saved-checkpoint"
