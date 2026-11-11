@@ -128,8 +128,13 @@ def check_failures() -> None:
     assert sum(len(plans[shard]) for shard in shard_names) == len(whole)
     assert len({tuple(step) for step in combined}) == len(whole)
     assert {tuple(step) for step in combined} == {tuple(step) for step in whole}
-    for index, step in enumerate(whole):
-        assert step == plans[shard_names[index % 8]][index // 8]
+    regular_index = 0
+    for step in whole:
+        extra_half = "tests/research_sessions_part3b.py" in step
+        owner = "8" if extra_half else shard_names[regular_index % 8]
+        assert step in plans[owner]
+        if not extra_half:
+            regular_index += 1
     assert not any("ruff" in step for step in combined)
     # Split suites must each appear once; legacy aggregate drivers are not
     # scheduled in addition to their independently runnable pieces.
@@ -139,6 +144,7 @@ def check_failures() -> None:
             assert sum(name in step for step in combined) == 1, name
         assert not any(f"tests/{suite}.py" in step for step in combined)
 
+    assert sum("tests/research_sessions_part3b.py" in step for step in combined) == 1
     assert any("scripts/increment15_offline_pairs.py" in step for step in combined)
     assert any(step[-2:] == ["run", "build"] for step in combined)
     with (
