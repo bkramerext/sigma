@@ -452,6 +452,170 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert first_run["created_by"] == OWNER
         assert second_run["created_by"] == COLLABORATOR
 
+        # The same authenticated N/Z project windows must display every live
+        # Session on its own tooltip line, with creator and queued/running state.
+        for page in (owner, member):
+            page.goto(url)
+            page.wait_for_function(
+                """({first, second, owner, member}) => {
+                    const tip = document.querySelector('.project-header-title-action')
+                        ?.getAttribute('data-tooltip') || '';
+                    const lines = tip.split('\\n').filter(Boolean);
+                    return lines.length === 2
+                        && lines.some(line => line.includes('Session ' + first)
+                            && line.includes(owner) && line.includes('(running)'))
+                        && lines.some(line => line.includes('Session ' + second)
+                            && line.includes(member) && line.includes('(queued)'));
+                }""",
+                arg={
+                    "first": first_run["session_number"] if first_run["id"] == first_run["id"] else 0,
+                    "second": second_run["session_number"],
+                    "owner": OWNER,
+                    "member": COLLABORATOR,
+                },
+                timeout=20000,
+            )
+
+        # Ask twice from different authenticated accounts while the two Session
+        # runs remain active/queued. Hold fake provider calls (not the API or
+        # storage) so both browser contexts must see four distinct activities.
+        qa_questions = (
+            "What research evidence can the owner corroborate?",
+            "Which skeptic objections can the collaborator assess?",
+        )
+        request_ids = (uuid4().hex, uuid4().hex)
+        submit_qa = """({path, projectId, question, requestId}) => {
+            window.sigmaCollaborationQA = fetch('/api/projects/research-qa', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    path, expected_project_id: projectId,
+                    expected_binding: 'fixture:collaboration-qa',
+                    question, request_id: requestId
+                })
+            }).then(async response => ({status: response.status, data: await response.json()}))
+              .catch(error => ({status: 0, error: String(error)}));
+        }"""
+        for page, question, request_id in zip(
+            (owner, member), qa_questions, request_ids, strict=True
+        ):
+            page.evaluate(
+                submit_qa,
+                {"path": path, "projectId": project_id, "question": question, "requestId": request_id},
+            )
+        for _ in range(100):
+            state = get_json(
+                owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state")
+            )
+            if state["started"] == 2:
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError(f"Both provider-free Q/A calls did not start: {state}")
+        assert set(state["questions"]) == set(qa_questions), state
+
+        # Same live activity endpoint under each identity, no faked UI response.
+        for account, page in ((owner_context, owner), (member_context, member)):
+            activity = account.request.get(
+                ui + "/api/projects/activity-runs", params={"path": path}
+            )
+            assert activity.status == 200, activity.text()
+            runs = get_json(activity)["runs"]
+            assert len(runs) == 4, runs
+            sessions = [run for run in runs if run["kind"] == "session"]
+            answers = [run for run in runs if run["kind"] == "answer"]
+            assert len(sessions) == len(answers) == 2, runs
+            assert {run["creator"] for run in answers} == {OWNER, COLLABORATOR}, runs
+            assert {run["status"] for run in sessions} == {"active", "queued"}, runs
+            page.wait_for_function(
+                """({owner, member}) => {
+                    const tip = document.querySelector('.project-header-title-action')
+                        ?.getAttribute('data-tooltip') || '';
+                    const lines = tip.split('\\n').filter(Boolean);
+                    return lines.length === 4
+                        && lines.filter(line => line.startsWith('Session ')).length === 2
+                        && lines.filter(line => line.startsWith('Answer ')).length === 2
+                        && lines.every(line => line.includes('(running)')
+                            || line.includes('(queued)'))
+                        && lines.filter(line => line.includes(owner)).length === 2
+                        && lines.filter(line => line.includes(member)).length === 2;
+                }""",
+                arg={"owner": OWNER, "member": COLLABORATOR},
+                timeout=20000,
+            )
+
+        # A collaborator cannot piggyback on another creator's in-flight paid
+        # request by reusing its request ID. Neither fixture call is duplicated.
+        stolen = member_context.request.post(
+            ui + "/api/projects/research-qa",
+            headers={"Origin": ui},
+            data={
+                "path": path,
+                "expected_project_id": project_id,
+                "expected_binding": "fixture:collaboration-qa",
+                "question": qa_questions[0],
+                "request_id": request_ids[0],
+            },
+        )
+        assert stolen.status >= 400, (stolen.status, stolen.text())
+        assert get_json(
+            owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state")
+        )["started"] == 2
+
+        # Home's own green indicator also lists all four lines. A second tab
+        # keeps both in-flight Q/A fetches attached to their original pages.
+        homes = []
+        for account in (owner_context, member_context):
+            home = account.new_page()
+            home.goto(ui)
+            home.get_by_role("tab", name="My Work").click()
+            expand_saved_group(home)
+            indicator = home.get_by_role("button", name=f"Open active work in {title}")
+            expect(indicator).to_be_visible(timeout=20000)
+            home.wait_for_function(
+                """project => {
+                    const indicator = [...document.querySelectorAll(
+                        'button.recent-activity-jump'
+                    )].find(button => button.getAttribute('aria-label')
+                        === 'Open active work in ' + project);
+                    const lines = (indicator?.getAttribute('data-tooltip') || '').split('\\n')
+                        .slice(1).filter(Boolean);
+                    return lines.length === 4
+                        && lines.some(line => line.startsWith('Session '))
+                        && lines.some(line => line.startsWith('Answer '));
+                }""",
+                arg=title,
+                timeout=20000,
+            )
+            homes.append(home)
+
+        released = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-qa-release", headers={"Origin": ui}
+        )
+        assert released.status == 200, released.text()
+        answers = []
+        for page in (owner, member):
+            outcome = page.evaluate("() => window.sigmaCollaborationQA")
+            assert outcome["status"] == 200, outcome
+            answers.append(outcome["data"])
+        assert answers[0]["qa_id"] != answers[1]["qa_id"], answers
+        all_answers = get_json(
+            member_context.request.get(ui + "/api/projects/research-qa", params={"path": path})
+        )["answers"]
+        assert {record["created_by"] for record in all_answers} >= {OWNER, COLLABORATOR}
+        assert {record["qa_id"] for record in all_answers} >= {
+            answer["qa_id"] for answer in answers
+        }
+        assert get_json(
+            owner_context.request.get(ui + "/api/__fixture/collaboration-qa-state")
+        )["started"] == 2, "No implicit provider retry is permitted"
+        foreign_delete = member_context.request.delete(
+            ui + f"/api/projects/research-qa/{answers[0]['qa_id']}",
+            params={"path": path}, headers={"Origin": ui}
+        )
+        assert foreign_delete.status >= 400, foreign_delete.text()
+        for home in homes:
+            home.close()
+
         # One project running slot: either creator may win; the other waits.
         # Do not impose deterministic ordering on legitimately concurrent jobs.
         status = get_json(
@@ -871,7 +1035,9 @@ def main() -> None:
                         str(ROOT / ".venv/bin/python"),
                         "-m",
                         "uvicorn",
-                        "sigma.api:app",
+                        "collaboration_provider_fixture:app",
+                        "--app-dir",
+                        str(ROOT / "browser_checks"),
                         "--host",
                         "127.0.0.1",
                         "--port",

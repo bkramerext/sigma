@@ -2524,14 +2524,17 @@ function modelThinkingLabel(model: string, effort: string): string {
   return `${model} (${thinkingLabels[effort] ?? effort})`;
 }
 type AttributionKind = 'session' | 'paper' | 'answer';
-type RunAttribution = { kind: AttributionKind; creator?: string | null; model?: string | null; thinking?: string | null; number?: number | null; mode?: 'metadata' | 'hover' };
+type RunAttribution = { kind: AttributionKind; status?: 'active' | 'queued'; creator?: string | null; model?: string | null; thinking?: string | null; number?: number | null; mode?: 'metadata' | 'hover' };
 /** Single canonical renderer for all Session, Paper and Ask provenance. */
-function formatRunAttribution({ kind, creator, model, thinking, number, mode = 'metadata' }: RunAttribution): string {
+function formatRunAttribution({ kind, status, creator, model, thinking, number, mode = 'metadata' }: RunAttribution): string {
   const noun = kind === 'session' ? 'Session' : kind === 'paper' ? 'Paper' : 'Answer';
   const subject = mode === 'hover' ? `${noun}${number != null ? ` ${number}` : ''}` : '';
+  // Hover describes each actual run independently, not just the project's
+  // aggregate green/yellow indicator. Preserve compact saved-card metadata.
+  const state = mode === 'hover' && status ? (status === 'queued' ? '(queued)' : '(running)') : '';
   const actor = creator ? `by ${creator}` : '';
   const modelInfo = model ? `using ${modelThinkingLabel(model, thinking ?? '')}` : '';
-  return [subject, actor, modelInfo].filter(Boolean).join(' ');
+  return [subject, state, actor, modelInfo].filter(Boolean).join(' ');
 }
 function latestPaperModel(generation: PaperSummary['generation']): { model: string; thinking: string } {
   const history = generation.model_change_history ?? [];
@@ -7116,7 +7119,16 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const frame = { goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null, researchRunning, paperRunning, paperQueued, askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'), activeRunLabels };
+  const frame = {
+    goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null,
+    // The live server run ledger is authoritative even if this browser has not
+    // opened Sessions or Papers. Both creators see the same mixed activity.
+    researchRunning: researchRunning || activeRuns.some(run => run.kind === 'session' && run.status === 'active'),
+    paperRunning: paperRunning || activeRuns.some(run => run.kind === 'paper' && run.status === 'active'),
+    paperQueued: paperQueued || activeRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
+    askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'),
+    activeRunLabels,
+  };
   function toggleStrategiesPane() {
     if (!strategiesExpanded) sectionOpen('strategies');
     setStrategiesExpanded(open => { window.localStorage.setItem(`sigma.strategiesPane:${path}`, String(!open)); return !open; });
