@@ -968,7 +968,7 @@ class CloudAuthTests(CloudAuthFixture):
             self.assertFalse(guest_a.get("/api/cloud-auth/status").json()["authenticated"])
             self.assertEqual(guest_a.get("/api/projects/recent").json(), {"projects": []})
             # A direct My Work visit must provision the private guest cookie.
-            self.assertTrue(any("sigma_guest" in key for key in guest_a.cookies.keys()))
+            self.assertTrue(any("sigma_guest" in key for key in guest_a.cookies))
             self.assertEqual(guest_a.get("/api/projects/samples").status_code, 200)
             self.assertEqual(guest_a.get("/api/projects/recent").json(), {"projects": []})
             created = guest_a.post(
