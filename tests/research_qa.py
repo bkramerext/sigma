@@ -17,7 +17,7 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
 
-from sigma import api, research_qa
+from sigma import api, papers, research_qa
 from sigma import project_collaboration as shared
 from sigma.cloud_auth import Principal
 from sigma.cloud_workspaces import Workspace
@@ -303,8 +303,22 @@ def check_two_creators_answer_same_project_concurrently() -> None:
                 second_task = asyncio.create_task(submit(identities[1], "2" * 32))
                 try:
                     await asyncio.wait_for(both_entered.wait(), timeout=5)
-                    # Source work and shared project editing cannot wait for
-                    # either outstanding provider call to release its lock.
+                    # A separate Paper operation can also make progress while
+                    # both Q/A provider requests are suspended. Keep the actual
+                    # project edit outside the Paper lease: document mutations
+                    # must remain fenced by active Paper execution (#761).
+                    paper_run_id = "3" * 32
+                    assert shared.reserve_execution_run(
+                        str(path), "paper", paper_run_id, 0, model="mock", thinking="low"
+                    )
+                    with (
+                        papers.paper_run_scope(paper_run_id),
+                        patch("sigma.memory_guard.require_capacity"),
+                    ):
+                        async with papers._paper_operation(str(path), generating=True):
+                            assert provider_started == set(identities)
+                            assert not first_task.done() and not second_task.done()
+                    # Shared project edits remain available during Q/A alone.
                     token = user.set(identities[1])
                     try:
                         modified = api.create_strategy_view(
