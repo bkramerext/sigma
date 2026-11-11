@@ -138,15 +138,23 @@ def check_ask_activity_worker_liveness() -> None:
             with research_qa._ask_worker(str(project), request_id):
                 assert research_qa.list_pending_answers(str(project)) == []
                 research_qa._publish_ask_activity(
-                    str(project), request_id, creator="n@example.com",
-                    model="gpt-fixture", thinking="low",
+                    str(project),
+                    request_id,
+                    creator="n@example.com",
+                    model="gpt-fixture",
+                    thinking="low",
                 )
-                expected = [{
-                    "request_id": request_id, "creator": "n@example.com",
-                    "model": "gpt-fixture", "thinking": "low",
-                }]
+                expected = [
+                    {
+                        "request_id": request_id,
+                        "creator": "n@example.com",
+                        "model": "gpt-fixture",
+                        "thinking": "low",
+                    }
+                ]
                 with patch.object(
-                    research_qa, "_load_archive",
+                    research_qa,
+                    "_load_archive",
                     side_effect=AssertionError("Activity must not load Q/A archive"),
                 ):
                     assert research_qa.list_pending_answers(str(project)) == expected
@@ -161,8 +169,11 @@ def check_ask_activity_worker_liveness() -> None:
             try:
                 with research_qa._ask_worker(str(project), request_id):
                     research_qa._publish_ask_activity(
-                        str(project), request_id, creator="n@example.com",
-                        model="gpt-fixture", thinking="high",
+                        str(project),
+                        request_id,
+                        creator="n@example.com",
+                        model="gpt-fixture",
+                        thinking="high",
                     )
                     raise RuntimeError("Simulated provider failure")
             except RuntimeError:
