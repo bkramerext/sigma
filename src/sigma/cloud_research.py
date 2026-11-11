@@ -517,6 +517,36 @@ def job_status(session_id: str) -> str | None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
+def job_is_foreign(session_id: str) -> bool:
+    """Check ownership without returning another workspace's identity."""
+    owner = _workspace_id()
+    try:
+        with _connect() as db:
+            row = db.execute(
+                "SELECT workspace_id FROM jobs WHERE session_id=?", (session_id,)
+            ).fetchone()
+            return row is not None and row["workspace_id"] != owner
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
+def has_reserved_calls(session_id: str) -> bool:
+    """Unresolved write-ahead reservations must not become new dispatches."""
+    owner = _workspace_id()
+    try:
+        with _connect() as db:
+            return (
+                db.execute(
+                    "SELECT 1 FROM calls WHERE session_id=? AND workspace_id=? "
+                    "AND status='reserved' LIMIT 1",
+                    (session_id, owner),
+                ).fetchone()
+                is not None
+            )
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
 def _legacy_session_status(project_path: str, project_id: str, session_id: str) -> str | None:
     """Distinguish pre-migration session jobs from standalone inference rows."""
     from sigma import research_sessions
@@ -829,6 +859,17 @@ def claim_job(session_id: str, *, project_limit: int | None = None) -> bool:
             # running slots under the exclusive per-session worker lock.
             if job["status"] != "queued":
                 return False
+            # Fencing in the worker is not sufficient: a crashed backend
+            # may have left an unsettled call under an outer queued status.
+            if db.execute(
+                "SELECT 1 FROM calls WHERE session_id=? AND workspace_id=? "
+                "AND status='reserved' LIMIT 1",
+                (session_id, owner),
+            ).fetchone():
+                raise CloudResearchUnavailable(
+                    "Queued research has an unsettled provider reservation. "
+                    "Recover the interrupted Session before another dispatch."
+                )
             if job["job_kind"] != "auxiliary":
                 # The project limit applies to *running* work, not queued
                 # admissions. Match by immutable project ID across creator
@@ -1089,7 +1130,91 @@ def sync_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
-def reconcile_orphaned_jobs() -> list[str]:
+def _reconcile_foreign_job(candidate: sqlite3.Row, project: Path, owner: str) -> None:
+    """Fence a dead foreign worker in the ledger, never in project data.
+
+    Only server-owned, path-validated ledger records enter this maintenance
+    path. The triggering browser identity never becomes the run creator.
+    """
+    from sigma import research_sessions
+
+    with cloud_workspaces.without_workspace():
+        view = inspect_project(str(project))
+        if view.project.id != candidate["project_id"]:
+            return
+        with (
+            research_sessions._project_manager_lock(str(project)),
+            research_sessions._idle_worker_lock(str(project), candidate["session_id"]),
+        ):
+            # The admission lock rules out a concurrent unpublished
+            # Session receipt. Retire it only if no provider call exists.
+            if project.suffix == ".json":
+                from sigma.project_bundle import read_bundle
+
+                has_session = (
+                    f"research-sessions/{candidate['session_id']}.json"
+                    in read_bundle(str(project))["files"]
+                )
+            else:
+                session_dir = project / "research-sessions"
+                if session_dir.is_symlink() or not session_dir.is_dir():
+                    return
+                record_path = session_dir / f"{candidate['session_id']}.json"
+                if record_path.is_symlink():
+                    return  # Unsafe state is never evidence of absence.
+                has_session = record_path.is_file()
+            with _transaction() as db:
+                row = db.execute(
+                    "SELECT workspace_id,project_id,project_relpath,process_epoch,status "
+                    "FROM jobs WHERE session_id=?",
+                    (candidate["session_id"],),
+                ).fetchone()
+                if (
+                    row is None
+                    or row["workspace_id"] != owner
+                    or row["project_id"] != candidate["project_id"]
+                    or row["project_relpath"] != candidate["project_relpath"]
+                    # A newer process may claim this slot after the stale
+                    # candidate snapshot but before the OS-lock/SQL fence.
+                    or row["process_epoch"] != candidate["process_epoch"]
+                    or row["process_epoch"] == _PROCESS_EPOCH
+                    or row["status"] not in {"queued", "running", "stopping"}
+                ):
+                    return
+                unsettled = db.execute(
+                    "SELECT 1 FROM calls WHERE session_id=? AND status='reserved' LIMIT 1",
+                    (candidate["session_id"],),
+                ).fetchone()
+                if row["status"] == "queued" and not unsettled and has_session:
+                    return
+                has_call = db.execute(
+                    "SELECT 1 FROM calls WHERE session_id=? LIMIT 1",
+                    (candidate["session_id"],),
+                ).fetchone()
+                if row["status"] == "queued" and not has_session and not has_call:
+                    db.execute(
+                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? "
+                        "AND status='queued' AND process_epoch=?",
+                        (candidate["session_id"], owner, row["process_epoch"]),
+                    )
+                    return
+                stamp = _now()
+                changed = db.execute(
+                    "UPDATE jobs SET status='interrupted',updated_at=? "
+                    "WHERE session_id=? AND workspace_id=? AND process_epoch=? "
+                    "AND status IN ('queued','running','stopping')",
+                    (stamp, candidate["session_id"], owner, row["process_epoch"]),
+                )
+                if changed.rowcount != 1:
+                    return
+                db.execute(
+                    "UPDATE calls SET status='unknown',updated_at=? "
+                    "WHERE session_id=? AND workspace_id=? AND status='reserved'",
+                    (stamp, candidate["session_id"], owner),
+                )
+
+
+def reconcile_orphaned_jobs(*, ledger_only_foreign: bool = False) -> list[str]:
     """Reconcile prior-process queued and running session reservations.
 
     The project admission lock closes the prepare_job/_save crash window. If a
@@ -1106,7 +1231,9 @@ def reconcile_orphaned_jobs() -> list[str]:
     try:
         with _connect() as db:
             candidates = db.execute(
-                "SELECT session_id,project_id,project_relpath,status,process_epoch FROM jobs WHERE workspace_id=? AND status IN ('queued','running','stopping') AND process_epoch<>?",
+                "SELECT session_id,project_id,project_relpath,status,process_epoch FROM jobs WHERE "
+                "workspace_id=? AND job_kind='research' "
+                "AND status IN ('queued','running','stopping') AND process_epoch<>?",
                 (owner, _PROCESS_EPOCH),
             ).fetchall()
     except sqlite3.Error as exc:
@@ -1139,7 +1266,7 @@ def reconcile_orphaned_jobs() -> list[str]:
             # their own durable Session on reconnect.
             owner_name = relative_path.parts[0] if relative_path.parts else ""
             if (
-                cloud_auth.current_principal() is None
+                (not ledger_only_foreign and cloud_auth.current_principal() is None)
                 or len(relative_path.parts) < 2
                 or len(owner_name) != 32
                 or any(char not in "0123456789abcdef" for char in owner_name)
@@ -1158,6 +1285,11 @@ def reconcile_orphaned_jobs() -> list[str]:
             project = lexical_project.resolve(strict=True)
             if not project.is_relative_to(base):
                 continue
+            if ledger_only_foreign:
+                # Cross-account maintenance is ledger-only even for a private
+                # project owned by another workspace.
+                _reconcile_foreign_job(candidate, project, owner)
+                continue
             if is_shared and not project_collaboration.authorized_shared_path(project):
                 continue
             bundle_project = project.suffix == ".json" and project.is_file()
@@ -1170,7 +1302,7 @@ def reconcile_orphaned_jobs() -> list[str]:
                     project_document.is_symlink()
                     or not project_document.is_file()
                     or session_directory.is_symlink()
-                    or not session_directory.is_dir()
+                    or (session_directory.exists() and not session_directory.is_dir())
                 ):
                     continue
             try:
@@ -1253,10 +1385,35 @@ def reconcile_orphaned_jobs() -> list[str]:
                         recover_job(session_id, expected_epoch=candidate["process_epoch"])
                     continue
                 if has_session:
+                    # A saved queued Session may conceal a provider attempt.
+                    # Do not reclassify legacy "running" snapshots with no
+                    # in-flight step or reserved call during unrelated scans.
+                    # They cannot be auto-dispatched and remain recoverable
+                    # on their creator's next explicit read.
+                    try:
+                        saved = research_sessions._read(str(project), session_id)
+                        in_flight = any(
+                            isinstance(step, dict) and step.get("status") == "running"
+                            for step in saved.get("steps", [])
+                        )
+                        if (
+                            saved.get("status") == "queued"
+                            or in_flight
+                            or has_reserved_calls(session_id)
+                        ):
+                            research_sessions._recover(saved)
+                    except (OSError, ValueError, ProjectError):
+                        pass  # Keep uncertain accepted work fail-closed.
                     continue
-                with _transaction() as db:
+                # The admission lock proves no publisher is concurrently
+                # writing this record; also require the worker OS fence.
+                with (
+                    research_sessions._idle_worker_lock(str(project), session_id),
+                    _transaction() as db,
+                ):
                     current = db.execute(
-                        "SELECT workspace_id,status,project_id,project_relpath,process_epoch FROM jobs WHERE session_id=?",
+                        "SELECT workspace_id,status,project_id,project_relpath,process_epoch "
+                        "FROM jobs WHERE session_id=?",
                         (session_id,),
                     ).fetchone()
                     if (
@@ -1265,6 +1422,7 @@ def reconcile_orphaned_jobs() -> list[str]:
                         or current["status"] != "queued"
                         or current["project_id"] != candidate["project_id"]
                         or current["project_relpath"] != relative
+                        or current["process_epoch"] != candidate["process_epoch"]
                         or current["process_epoch"] == _PROCESS_EPOCH
                     ):
                         continue
@@ -1272,12 +1430,30 @@ def reconcile_orphaned_jobs() -> list[str]:
                         "SELECT 1 FROM calls WHERE session_id=? LIMIT 1", (session_id,)
                     ).fetchone()
                     if has_call:
+                        # No published Session exists, but billing history
+                        # remains held. Retire the orphaned queue slot.
+                        stamp = _now()
+                        db.execute(
+                            "UPDATE jobs SET status='interrupted',updated_at=? "
+                            "WHERE session_id=? AND workspace_id=? AND status='queued' "
+                            "AND process_epoch=?",
+                            (stamp, session_id, owner, candidate["process_epoch"]),
+                        )
+                        if db.execute("SELECT changes()").fetchone()[0] != 1:
+                            continue
+                        db.execute(
+                            "UPDATE calls SET status='unknown',updated_at=? "
+                            "WHERE session_id=? AND workspace_id=? AND status='reserved'",
+                            (stamp, session_id, owner),
+                        )
                         continue
                     db.execute(
-                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? AND status='queued'",
-                        (session_id, owner),
+                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? AND status='queued' "
+                        "AND process_epoch=?",
+                        (session_id, owner, candidate["process_epoch"]),
                     )
-                    removed.append(session_id)
+                    if db.execute("SELECT changes()").fetchone()[0] == 1:
+                        removed.append(session_id)
         except (OSError, RuntimeError, ValueError, sqlite3.Error, ProjectError):
             # Recovery is conservative: inability to prove absence keeps the row.
             continue
@@ -1344,7 +1520,9 @@ def reconcile_all_orphaned_jobs() -> None:
         recovery = cloud_workspaces.Workspace(owner, "", resolved)
         token = cloud_workspaces.bind_workspace(recovery)
         try:
-            reconcile_orphaned_jobs()
+            # The triggering user is not this creator. Only worker/ledger
+            # maintenance is allowed for a foreign shared project.
+            reconcile_orphaned_jobs(ledger_only_foreign=True)
         finally:
             cloud_workspaces.reset(token)
 

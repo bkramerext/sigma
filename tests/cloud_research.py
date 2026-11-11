@@ -542,13 +542,20 @@ def test_orphaned_job_reconciliation(
                 ]
                 == 0.25
             )
-            assert (
-                db.execute(
-                    "SELECT COUNT(*) FROM jobs WHERE workspace_id=? AND status='queued'",
-                    (workspace_a.workspace_id,),
-                ).fetchone()[0]
-                == 2
-            )
+            # No published Session exists for this old, uncertain provider
+            # attempt. Retire only its execution slot and retain its charge.
+            assert cloud_research.job_status(ambiguous["id"]) == "interrupted"
+            # Check the exact queues belonging to this project, rather than
+            # conflating independent accepted work in the same account.
+            queued_ids = {
+                row["session_id"]
+                for row in db.execute(
+                    "SELECT session_id FROM jobs WHERE workspace_id=? AND project_id=? "
+                    "AND status='queued'",
+                    (workspace_a.workspace_id, project.project.id),
+                ).fetchall()
+            }
+            assert queued_ids == {valid["id"]}, queued_ids
             db.close()
 
             # A real backend restart keeps an already-saved queued Session.
@@ -1797,7 +1804,9 @@ def test_json_project_orphan_recovery(
                 )
             with patch.object(cloud_research, "_PROCESS_EPOCH", uuid4().hex):
                 assert uncertain["id"] not in cloud_research.reconcile_orphaned_jobs()
-            assert cloud_research.job_status(uncertain["id"]) == "queued"
+            # Unpublished queued work with prior provider liability cannot run
+            # and must not occupy the durable queue indefinitely.
+            assert cloud_research.job_status(uncertain["id"]) == "interrupted"
             with cloud_research._connect() as db:
                 row = db.execute(
                     "SELECT status,amount_usd FROM calls WHERE call_id=?", (call_id,)
@@ -4163,8 +4172,10 @@ def main() -> None:
 
     # Exercise actual SIGKILL of a live backend and new interpreter recovery.
     from cloud_process_restart import test_real_process_recovery
+    from cloud_recovery_adversarial import main as test_recovery_adversarial
 
     test_real_process_recovery()
+    test_recovery_adversarial()
 
     print(
         "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"

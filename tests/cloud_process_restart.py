@@ -7,6 +7,7 @@ reconciles the same ledger and session artifacts, asserting exact zero replay.
 
 from __future__ import annotations
 
+import asyncio
 import fcntl
 import hashlib
 import json
@@ -19,7 +20,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from sigma import cloud_research, cloud_workspaces, research_qa, research_sessions
@@ -253,6 +254,9 @@ def _execute(stage: str) -> None:
                 # The ledger records an interrupted owner, while the saved
                 # Session itself is safely paused for explicit recovery.
                 assert running == "interrupted", running
+                # Cross-account maintenance is ledger-only: it retires the
+                # uncertain slot without rewriting creator B's project file.
+                assert ambiguous_state == "interrupted", ambiguous_state
                 assert charge["status"] == "unknown", dict(charge)
                 assert charge["amount_usd"] == 0.04
                 assert charge["token_reservation"] == 40
@@ -268,16 +272,30 @@ def _execute(stage: str) -> None:
                     cloud_workspaces.Workspace(CREATOR, CREATOR, root / CREATOR)
                 )
                 try:
-                    active_saved = research_sessions._read(active_path, ids["active"])
+                    active_raw = research_sessions._read(active_path, ids["active"])
+                    assert active_raw["status"] == "running"
+                    active_saved = research_sessions._recover(active_raw)
                     assert active_saved["status"] == "paused"
                     assert active_saved["created_by"] == CREATOR
                     assert active_saved["artifacts"][0]["id"] == "saved-checkpoint"
-                    uncertain = research_sessions._recover(
-                        research_sessions._read(
-                            str(root / CREATOR / "ambiguous.sigma"),
-                            ids["ambiguous"],
-                        )
-                    )
+                    ambiguous_path = str(root / CREATOR / "ambiguous.sigma")
+
+                    # Exercise the actual queued-worker restoration entrypoint.
+                    # Its creator admission is supplied by this synthetic
+                    # owner fixture rather than an HTTP auth middleware.
+                    async def reconnect() -> None:
+                        with (
+                            patch("sigma.project_collaboration.require_execution_operator"),
+                            patch.object(
+                                research_sessions, "_worker", new_callable=AsyncMock
+                            ) as scheduled,
+                        ):
+                            await research_sessions.ensure_queued_workers(ambiguous_path)
+                            await asyncio.sleep(0)
+                            assert scheduled.await_count == 0
+
+                    asyncio.run(reconnect())
+                    uncertain = research_sessions._read(ambiguous_path, ids["ambiguous"])
                     assert uncertain["status"] == "paused", uncertain
                     assert uncertain["steps"][0]["attempt_status"] == "unknown"
                     assert uncertain["steps"][0]["id"] == ids["ambiguous_call"]
