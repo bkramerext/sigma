@@ -48,8 +48,10 @@ def authored_draft(papers, source: str, creator: str):
                 {
                     "heading": "Independent preservation",
                     "paragraphs": [
-                        (f"This fixture is independently authored for {creator}. "
-                        "It verifies the preserved snapshot rather than claiming a new theorem.")
+                        (
+                            f"This fixture is independently authored for {creator}. "
+                            "It verifies the preserved snapshot rather than claiming a new theorem."
+                        )
                     ],
                     "claim_ids": ["C1"],
                 }
@@ -63,11 +65,30 @@ def authored_draft(papers, source: str, creator: str):
     )
 
 
-async def exercise(app, api, papers, cloud_auth) -> None:
+async def exercise(app, api, papers, cloud_auth, cloud_workspaces, project_collaboration) -> None:
     entered_n = asyncio.Event()
     release_n = asyncio.Event()
     provider_creators: list[str] = []
     scoring_ids: list[str] = []
+    # The first Z publication compile fails after a durable author draft.
+    # A subsequent explicit Resume must not dispatch a second authoring call.
+    real_compile_pdf = papers._compile_pdf
+    injected_compile_failure = False
+    real_compilations = 0
+
+    def compile_fixture(tex, **kwargs):
+        nonlocal injected_compile_failure, real_compilations
+        principal = cloud_auth.current_principal()
+        if (
+            principal is not None
+            and principal.email == "z@example.test"
+            and not injected_compile_failure
+        ):
+            injected_compile_failure = True
+            raise RuntimeError("Deterministic final TeX compilation outage")
+        output = real_compile_pdf(tex, **kwargs)
+        real_compilations += 1
+        return output
     binding = "fixture:two-creator-pdf"
     config = {
         "available": True,
@@ -93,6 +114,12 @@ async def exercise(app, api, papers, cloud_auth) -> None:
         if creator == "n@example.test":
             entered_n.set()
             await release_n.wait()
+        else:
+            # FIFO must serialize the *whole* previous Paper, including
+            # TeX/PDF persistence, not merely the provider phase.
+            published = papers.list_papers(path)
+            assert len(published) == 1, published
+            assert published[0]["created_by"] == "n@example.test"
         source = next(item["id"] for item in package["sources"] if item["kind"] == "project")
         return authored_draft(papers, source, creator), config["model"]
 
@@ -108,6 +135,19 @@ async def exercise(app, api, papers, cloud_auth) -> None:
 
     async def scoring(path, paper_id, *_args):
         assert papers.get_pdf(path, paper_id).startswith(b"%PDF-")
+        # The artifact belongs to its immutable reserved creator BEFORE
+        # optional scoring or a detached SSE callback can run.
+        run_id = papers._paper_run_id.get()
+        principal = cloud_auth.current_principal()
+        assert run_id and principal
+        reservation = project_collaboration.execution_run(path, "paper", run_id, operator=True)
+        assert reservation is not None
+        assert reservation["artifact_id"] == paper_id
+        assert reservation["creator_email"] == principal.email
+        assert reservation["status"] == "complete"
+        record = papers.get_paper(path, paper_id, include_tex=False)
+        assert record["paper_version"] == reservation["number"]
+        assert record["created_by"] == principal.email
         scoring_ids.append(paper_id)
         return {"paper_id": paper_id}
 
@@ -119,6 +159,7 @@ async def exercise(app, api, papers, cloud_auth) -> None:
         patch.object(papers, "configuration", new=configuration),
         patch.object(papers, "_provider", new=provider),
         patch.object(papers, "_proofread_tex", new=proofread),
+        patch.object(papers, "_compile_pdf", new=compile_fixture),
         patch("sigma.paper_scores.score_paper", new=scoring),
     ):
         async with (
@@ -157,12 +198,17 @@ async def exercise(app, api, papers, cloud_auth) -> None:
                 "show_advanced_outcome_details",
             )
             settings = {key: project[key] for key in keys if key in project}
+            revision = await n.get("/api/projects/collaboration", params={"path": path})
+            assert revision.status_code == 200, revision.text
+            expected_revision = revision.json()["revision"]
+            assert type(expected_revision) is int
             shared = await n.post(
                 "/api/projects/update",
                 json={
                     "path": path,
                     **settings,
                     "expected": settings,
+                    "expected_revision": expected_revision,
                     "collaborators": ["z@example.test"],
                 },
             )
@@ -251,6 +297,12 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             else:
                 raise AssertionError("Z never received a separate FIFO queue receipt")
             assert provider_creators == ["n@example.test"]
+            n_status = await n.get(
+                "/api/projects/papers/progress",
+                params={"path": path, "run_id": runs["n@example.test"]},
+            )
+            assert n_status.status_code == 200
+            assert n_status.json()["progress"]["status"] == "active"
             listing = await n.get("/api/projects/papers", params={"path": path})
             assert listing.status_code == 200, listing.text
             reservations = {entry["run_id"]: entry for entry in listing.json()["runs"]}
@@ -279,6 +331,17 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             )
             assert denied_z.status_code in (400, 403, 404, 409), denied_z.text
             assert denied_n.status_code in (400, 403, 404, 409), denied_n.text
+            assert provider_creators == ["n@example.test"]
+            # Replaying another creator's run ID cannot hijack admission.
+            for requester, foreign in (
+                (n, runs["z@example.test"]),
+                (z, runs["n@example.test"]),
+            ):
+                denied = await requester.post(
+                    "/api/projects/papers",
+                    json={**request_data, "run_id": foreign},
+                )
+                assert denied.status_code in (400, 403, 404, 409), denied.text
             assert provider_creators == ["n@example.test"]
 
             # These are authenticated, server-enforced creator controls.
@@ -333,9 +396,32 @@ async def exercise(app, api, papers, cloud_auth) -> None:
             else:
                 raise AssertionError("Resumed Z run never reentered FIFO queue")
             release_n.set()
-            z_result = await asyncio.wait_for(resumed_z, timeout=180)
+            first_resume_result = await asyncio.wait_for(resumed_z, timeout=180)
+            assert first_resume_result.status_code == 200, first_resume_result.text
+            assert (
+                '"type": "error"' in first_resume_result.text
+                or '"type":"error"' in first_resume_result.text
+            ), first_resume_result.text[-1000:]
+            assert injected_compile_failure
+            assert provider_creators == ["n@example.test", "z@example.test"]
+            # Recover the accepted Z author draft, rather than repeating an
+            # uncertain paid request after a compiler-only failure.
+            z_principal = cloud_auth.Principal("google-z", "z@example.test", "member")
+            workspace_token = cloud_workspaces.bind(z_principal)
+            principal_token = cloud_auth._CURRENT_PRINCIPAL.set(z_principal)
+            try:
+                with papers.paper_run_scope(runs["z@example.test"]):
+                    checkpoint = papers._load_work(path)
+                assert checkpoint is not None
+                assert checkpoint.get("one_shot_draft")
+                assert checkpoint["provider_calls"] == 1
+            finally:
+                cloud_auth._CURRENT_PRINCIPAL.reset(principal_token)
+                cloud_workspaces.reset(workspace_token)
+            z_result = await z.post("/api/projects/papers", json=z_body)
             assert z_result.status_code == 200, z_result.text
             assert '"type": "complete"' in z_result.text or '"type":"complete"' in z_result.text
+            assert provider_creators == ["n@example.test", "z@example.test"]
 
             for _ in range(300):
                 listed = await n.get("/api/projects/papers", params={"path": path})
@@ -348,6 +434,7 @@ async def exercise(app, api, papers, cloud_auth) -> None:
 
             assert provider_creators == ["n@example.test", "z@example.test"]
             assert len(scoring_ids) == 2 and len(set(scoring_ids)) == 2
+            assert real_compilations >= 2, real_compilations
             paper_ids = [rows[run]["paper_id"] for run in runs.values()]
             assert len(set(paper_ids)) == 2 and all(paper_ids)
             saved_papers = listed.json()["papers"]
@@ -436,9 +523,11 @@ def main() -> None:
         with patch.dict(os.environ, environment):
             from cloud_workspace_test_app import app
 
-            from sigma import api, cloud_auth, papers
+            from sigma import api, cloud_auth, cloud_workspaces, papers, project_collaboration
 
-            asyncio.run(exercise(app, api, papers, cloud_auth))
+            asyncio.run(
+                exercise(app, api, papers, cloud_auth, cloud_workspaces, project_collaboration)
+            )
     print("PASS: two authenticated creators, queue/Stop/Resume/disconnect, two real PDFs")
 
 
