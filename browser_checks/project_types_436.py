@@ -1003,6 +1003,56 @@ with sync_playwright() as playwright:
         ),
     )
     page.reload()
+    # A normal click on a saved title must retain disclosure behavior.
+    saved_heading = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-title-toggle')
+    expect(saved_heading).to_be_visible()
+    expect(saved_heading).to_have_attribute("aria-expanded", "false")
+    saved_heading.click()
+    expect(saved_heading).to_have_attribute("aria-expanded", "true")
+    saved_heading.click()
+    expect(saved_heading).to_have_attribute("aria-expanded", "false")
+
+    # Shift-click and focused Shift+Enter open rollback inspection without
+    # expanding; only confirmed provider-free staging can change saved work.
+    preview_calls: list[str] = []
+    stage_calls: list[dict] = []
+
+    def preview_rollback(route):
+        preview_calls.append(route.request.method)
+        route.fulfill(json={
+            "paper_id": "fixture-paper-1",
+            "paper_version": 1,
+            "pdf_sha256": "c" * 64,
+            "stages": ["proofreading"],
+            "message": "A validated draft and frozen source can be restored.",
+        })
+
+    def stage_rollback(route):
+        stage_calls.append(route.request.post_data_json)
+        route.fulfill(status=409, json={"error": "Fixture rejects staging safely"})
+
+    page.route("**/api/projects/papers/fixture-paper-1/rollback?*", preview_rollback)
+    page.route("**/api/projects/papers/rollback", stage_rollback)
+    saved_heading.click(modifiers=["Shift"])
+    rollback = page.get_by_role("dialog", name="Restart Paper 1 from checkpoint")
+    expect(rollback).to_be_visible()
+    expect(saved_heading).to_have_attribute("aria-expanded", "false")
+    rollback.get_by_role("button", name="Cancel").click()
+    expect(rollback).to_have_count(0)
+    assert not stage_calls
+    saved_heading.focus()
+    saved_heading.press("Shift+Enter")
+    expect(rollback).to_be_visible()
+    expect(saved_heading).to_have_attribute("aria-expanded", "false")
+    rollback.get_by_role("button", name="Restart from Proofread").click()
+    expect(rollback.get_by_role("alert")).to_contain_text("Fixture rejects staging safely")
+    assert len(stage_calls) == 1 and stage_calls[0]["stage"] == "proofreading"
+    assert stage_calls[0]["confirm_rollback"] is True
+    rollback.get_by_role("button", name="Cancel").click()
+    expect(rollback).to_have_count(0)
+    assert preview_calls == ["GET", "GET"]
+    page.unroute("**/api/projects/papers/fixture-paper-1/rollback?*")
+    page.unroute("**/api/projects/papers/rollback")
     play = page.get_by_role("button", name="Resume paper")
     expect(play).to_be_enabled(timeout=10000)
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"

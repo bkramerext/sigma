@@ -2141,14 +2141,26 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
   return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
 }
-function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
+function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, onRollback, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; onRollback?: () => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  if (inlineTitleActions) return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span><span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
+  const titleHint = onRollback ? `${expanded ? 'Click to collapse' : 'Click to expand'} · Shift-click to restart from checkpoint` : undefined;
+  const paperClick = (event: React.MouseEvent) => {
+    if (event.shiftKey && onRollback) { event.preventDefault(); event.stopPropagation(); onRollback(); }
+    else onToggle();
+  };
+  const paperKey = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (event.shiftKey && onRollback) { event.stopPropagation(); onRollback(); }
+      else onToggle();
+    }
+  };
+  if (inlineTitleActions) return <div className="saved-paper-title-line"><button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={titleHint} onClick={paperClick}><DisclosureChevron expanded={expanded}/></button><h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={titleHint} onClick={paperClick} onKeyDown={paperKey}>{title}</span><span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
   return <div className="saved-paper-title-line">
-    <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle}><DisclosureChevron expanded={expanded}/></button>
+    <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={titleHint} onClick={paperClick}><DisclosureChevron expanded={expanded}/></button>
     <div className="saved-paper-title-content">
       <div className="saved-paper-title-first-line">
-        <h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={onToggle} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }}>{title}</span></h4>
+        <h4 className="saved-paper-title">{badge}<span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={titleHint} onClick={paperClick} onKeyDown={paperKey}>{title}</span></h4>
         <span className="saved-paper-title-tools">{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span>
       </div>
       {beforeCopy && <div className="saved-paper-second-line">{beforeCopy}</div>}
@@ -2472,6 +2484,37 @@ const paperScoreCategories: { key: keyof PaperScore['categories']; title: string
   { key: 'visuals', title: 'Useful visuals', standard: 'Accurate figures or tables clarify difficult relationships, with clear captions and provenance.' },
 ];
 
+function PaperRollbackDialog({ paper, preview, loading, error, canConfirm, onConfirm, onClose }: {
+  paper: PaperSummary;
+  preview: { stages: string[]; pdf_sha256: string; message: string } | null;
+  loading: boolean; error: string; canConfirm: boolean;
+  onConfirm: () => void; onClose: () => void;
+}) {
+  const element = useRef<HTMLDialogElement>(null);
+  useEffect(() => { element.current?.showModal(); }, []);
+  return <dialog ref={element} className="project-settings-dialog paper-rollback-dialog"
+    aria-labelledby="paper-rollback-title" onCancel={event => { event.preventDefault(); if (!loading) onClose(); }}>
+    <header className="settings-header">
+      <h2 id="paper-rollback-title">Restart Paper {paper.paper_version} from checkpoint</h2>
+      <div className="settings-actions"><DialogDismissButton label="Close paper rollback" onClick={onClose}/></div>
+    </header>
+    <div className="settings-body">
+      {loading && !preview && <p role="status">Checking preserved checkpoints…</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {preview && <><p>{preview.message}</p>
+        {preview.stages.includes('proofreading') && <>
+          <p><strong>Proofread</strong> is the earliest safely recoverable stage for this published paper. The accepted manuscript and frozen research evidence will be reused. Earlier writing checkpoints were not retained.</p>
+          <p className="settings-hint">A new version may incur provider costs when you press Play. Staging is provider-free; the original paper, PDF and score remain unchanged.</p>
+        </>}
+      </>}
+      <div className="session-remove-confirm-actions">
+        {preview?.stages.includes('proofreading') && <button type="button" className="text-view-link" disabled={loading || !canConfirm} onClick={onConfirm}>Restart from Proofread</button>}
+        <button type="button" className="text-view-link" disabled={loading} onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  </dialog>;
+}
+
 function PaperScoreDialog({ score, onRescore, canRescore, rescoreUnavailableReason, rescoring, error, onClose }: { score: PaperScore; onRescore: () => void; canRescore: boolean; rescoreUnavailableReason: string; rescoring: boolean; error: string; onClose: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
   useEffect(() => { element.current?.showModal(); }, []);
@@ -2775,6 +2818,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [nextPaperNumber, setNextPaperNumber] = useState<number | null>(null);
   const [scoringId, setScoringId] = useState('');
   const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
+  const [rollbackTarget, setRollbackTarget] = useState<PaperSummary | null>(null);
+  const [rollbackPreview, setRollbackPreview] = useState<{ stages: string[]; pdf_sha256: string; message: string } | null>(null);
+  const [rollbackLoading, setRollbackLoading] = useState(false);
+  const [rollbackError, setRollbackError] = useState('');
+  const rollbackRequestId = useRef<string | null>(null);
   const [scoreError, setScoreError] = useState('');
   const [scoreConfig, setScoreConfig] = useState<{ available: boolean; binding: string; message: string } | null>(null);
   const scoringRef = useRef(false);
@@ -3059,6 +3107,38 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
     }));
   }, [loading, papers, path, onSectionOpened]);
+  async function openRollbackDialog(paper: PaperSummary) {
+    rollbackRequestId.current = crypto.randomUUID().replaceAll('-', '');
+    setRollbackTarget(paper); setRollbackPreview(null); setRollbackError(''); setRollbackLoading(true);
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/rollback?${new URLSearchParams({ path })}`,
+        { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not inspect the rollback checkpoint.');
+      setRollbackPreview(result);
+    } catch (cause) { setRollbackError(errorMessage(cause)); }
+    finally { setRollbackLoading(false); }
+  }
+  async function confirmPaperRollback() {
+    const paper = rollbackTarget;
+    if (!paper || !rollbackPreview || !rollbackPreview.stages.includes('proofreading') || !binding || rollbackLoading) return;
+    setRollbackLoading(true); setRollbackError('');
+    try {
+      const runId = rollbackRequestId.current ?? crypto.randomUUID().replaceAll('-', '');
+      const result = await post<{ staged: boolean; run_id: string | null }>('papers/rollback', {
+        path, source_paper_id: paper.paper_id, expected_project_id: projectId,
+        expected_binding: binding, expected_pdf_sha256: rollbackPreview.pdf_sha256,
+        stage: 'proofreading', confirm_rollback: true, run_id: runId,
+      }, undefined, true);
+      if (!result.staged) throw new Error('Rollback was not staged.');
+      selectPaperRun(result.run_id);
+      setNewPaperRequested(true); setDraftPaperExpanded(true); setExpanded(true);
+      setRollbackTarget(null); setRollbackPreview(null);
+      setSuccess(`Reopened Paper ${paper.paper_version} at Proofread. Press Play to create a new paper version; the saved original remains unchanged.`);
+      await refresh(undefined, true);
+    } catch (cause) { setRollbackError(errorMessage(cause)); }
+    finally { setRollbackLoading(false); }
+  }
   async function openPaper(id: string) {
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
@@ -3663,7 +3743,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} onRollback={guest ? undefined : () => { void openRollbackDialog(paper); }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total > HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
@@ -3752,6 +3832,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       {success && <p className="ai-paper-status" role="status">{success}</p>}
 
       </>}
+      {rollbackTarget && <PaperRollbackDialog paper={rollbackTarget} preview={rollbackPreview}
+        loading={rollbackLoading} error={rollbackError} canConfirm={!!binding && !generating && !loading}
+        onConfirm={() => void confirmPaperRollback()}
+        onClose={() => { if (!rollbackLoading) { setRollbackTarget(null); setRollbackPreview(null); setRollbackError(''); } }}/>}
       {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={!!scoreConfig?.available && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoreUnavailableReason={!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available ? 'A compiled PDF is required to rescore this paper.' : !scoreConfig ? 'Checking current AI model and connection…' : scoreConfig.available ? '' : scoreConfig.message} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
       </div>
     </div>

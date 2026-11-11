@@ -732,6 +732,17 @@ class PaperRestartRequest(OpenRequest):
     long_form: bool = False
 
 
+class PaperRollbackRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+    expected_pdf_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_paper_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+    stage: Literal["proofreading"]
+    confirm_rollback: Literal[True]
+    # Idempotency key for a collaborator's new (unpublished) paper run.
+    run_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+
+
 class ResearchQARequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
@@ -1033,6 +1044,61 @@ async def papers_restart_view(body: PaperRestartRequest):
             body.confirm_restart,
             body.long_form,
         )
+
+
+@app.get("/api/projects/papers/{paper_id}/rollback")
+def papers_rollback_preview(paper_id: str, path: str):
+    # A read-only capability probe. The write endpoint repeats every check.
+    return papers.rollback_available(path, paper_id)
+
+
+@app.post("/api/projects/papers/rollback")
+async def papers_rollback_view(body: PaperRollbackRequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    project_collaboration.require_artifact_manager(
+        body.path, "paper", body.source_paper_id
+    )
+    # Verify immutable source provenance before allocating a shared run number.
+    available = papers.rollback_available(body.path, body.source_paper_id)
+    if body.stage not in available["stages"] or available["pdf_sha256"] != body.expected_pdf_sha256:
+        raise ProjectError("This saved paper cannot be rolled back; reload it before trying again")
+    shared = cloud_workspaces.current() is not None
+    reservation = None
+    if shared:
+        project_collaboration.register_owner(inspect_project(body.path))
+        account = await auth_context()
+        model_config = await papers.configuration(
+            view=inspect_project(body.path), context=account
+        )
+        if not model_config["available"]:
+            raise ProjectError(model_config["message"])
+        reservation = project_collaboration.reserve_execution_run(
+            body.path, "paper", body.run_id,
+            papers.next_paper_number_for_activity(body.path) - 1,
+            model=model_config["model"],
+            thinking=model_config["reasoning_effort"],
+        )
+        if reservation is None:
+            raise ProjectError("Could not reserve a new paper version")
+    else:
+        project_collaboration.reserve_paper_draft(
+            body.path, body.expected_project_id, resuming=False
+        )
+    scope = (
+        papers.paper_run_scope(body.run_id, number=reservation["number"])
+        if reservation is not None
+        else nullcontext()
+    )
+    with scope:
+        result = await papers.stage_saved_paper_rollback(
+            body.path, body.source_paper_id,
+            body.expected_project_id, body.expected_binding,
+            body.expected_pdf_sha256, stage=body.stage,
+        )
+    # The stage is safe and provider-free. Only a later explicit Play dispatches.
+    return {**result, "run_id": body.run_id if shared else None}
 
 
 @app.get("/api/projects/papers/{paper_id}")

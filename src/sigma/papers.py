@@ -3485,6 +3485,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "writing_source_selection",
         "publication_compilation",
         "publication_compiler_calls",
+        "rollback_origin",
         "generation_issues",
         "provider_change_history",
         "model_change_history",
@@ -3630,6 +3631,18 @@ def _load_work(path: str) -> dict[str, Any] | None:
         )
     ):
         raise ProjectError("Paper checkpoint provider-change history is invalid")
+    if "rollback_origin" in value:
+        origin = value["rollback_origin"]
+        if (
+            not isinstance(origin, dict)
+            or set(origin) != {"paper_id", "pdf_sha256", "stage"}
+            or not isinstance(origin["paper_id"], str)
+            or not re.fullmatch(r"[0-9a-f]{32}", origin["paper_id"])
+            or not isinstance(origin["pdf_sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", origin["pdf_sha256"])
+            or origin["stage"] != "proofreading"
+        ):
+            raise ProjectError("Paper rollback origin is invalid")
     if "frozen_package_ref" in value:
         digest = value["frozen_package_ref"]
         if not isinstance(digest, str) or "frozen_package" in value:
@@ -4989,6 +5002,125 @@ async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
         _clear_queue_status(path)
         _clear_reset_ledger(path)
         return {"discarded": True}
+
+
+def rollback_available(path: str, paper_id: str) -> dict[str, Any]:
+    """Report only durable rollback boundaries, without creating an attempt."""
+    record = get_paper(path, paper_id, include_tex=False)
+    available = (
+        bool(record.get("pdf_available"))
+        and isinstance(record.get("snapshot"), dict)
+        and isinstance(record.get("draft"), dict)
+        and isinstance(record.get("validation_warnings"), list)
+        and isinstance(record.get("snapshot_sha256"), str)
+        and bool(record.get("pdf_sha256"))
+    )
+    if available:
+        try:
+            _, digest = _validate_frozen_snapshot(record["snapshot"], record["project_id"])
+            if digest != record["snapshot_sha256"]:
+                available = False
+            PaperDraft.model_validate(record["draft"])
+            get_pdf(path, paper_id)
+        except (ProjectError, ValueError, OSError):
+            available = False
+    return {
+        "paper_id": record["paper_id"],
+        "paper_version": record.get("paper_version"),
+        "pdf_sha256": record.get("pdf_sha256"),
+        "stages": ["proofreading"] if available else [],
+        "message": (
+            "Re-use the accepted draft and frozen evidence. Proofreading, PDF creation "
+            "and scoring will run again in a new paper version; the original stays unchanged."
+            if available
+            else "This paper does not have a verifiable frozen draft and evidence snapshot."
+        ),
+    }
+
+
+async def stage_saved_paper_rollback(
+    path: str,
+    paper_id: str,
+    expected_project_id: str,
+    expected_binding: str,
+    expected_pdf_sha256: str,
+    *,
+    stage: str,
+) -> dict[str, Any]:
+    """Create a recoverable *new* paper attempt at the oldest durable boundary.
+
+    Published versions are immutable. Do not invent earlier writing-section
+    checkpoints that were deliberately deleted after publication.
+    """
+    if stage != "proofreading":
+        raise ProjectError("That rollback checkpoint was not preserved")
+    async with _paper_operation(path, generating=False):
+        existing = _load_work(path)
+        if existing is not None:
+            if existing.get("rollback_origin") == {
+                "paper_id": paper_id,
+                "pdf_sha256": expected_pdf_sha256,
+                "stage": stage,
+            } and existing.get("validated_draft") is not None:
+                return {
+                    "staged": True,
+                    "stage": stage,
+                    "source_paper_id": paper_id,
+                    "snapshot_sha256": existing["snapshot_sha256"],
+                    "run_id": _paper_run_id.get(),
+                    "paper_version": _paper_run_number.get(),
+                }
+            raise ProjectError("An unfinished paper exists. Resume or discard it before rollback.")
+        if _read_reset_ledger(path) is not None:
+            raise ProjectError("An unfinished paper reset exists. Resume or discard it before rollback.")
+        record = get_paper(path, paper_id, include_tex=False)
+        if record["project_id"] != expected_project_id:
+            raise ProjectError("Project identity changed; reopen the saved paper")
+        available = rollback_available(path, paper_id)
+        if "proofreading" not in available["stages"]:
+            raise ProjectError(available["message"])
+        if record["pdf_sha256"] != expected_pdf_sha256:
+            raise ProjectError("Saved paper changed; reopen before restarting")
+        # Verify the publication bytes as well as metadata before seeding paid work.
+        get_pdf(path, paper_id)
+        frozen, digest = _validate_frozen_snapshot(record["snapshot"], expected_project_id)
+        if digest != record["snapshot_sha256"]:
+            raise ProjectError("Saved paper frozen evidence checksum mismatch")
+        auth = await auth_context()
+        if auth["identity"] != expected_binding:
+            raise ProjectError("AI account/billing mode changed; review it and retry")
+        view = inspect_project(path)
+        config = await configuration(view=view, context=auth)
+        if not config["available"]:
+            raise ProjectError(config["message"])
+        generation = record["generation"]
+        work = _new_work(
+            digest,
+            expected_project_id,
+            hashlib.sha256((auth["mode"] + "\0" + auth["identity"]).encode()).hexdigest(),
+            config["model"],
+            config["reasoning_effort"],
+            kind="long_form" if generation.get("long_form") else "one_shot",
+        )
+        work["frozen_package"] = frozen
+        work["include_diagrams"] = bool(generation.get("include_diagrams", True))
+        work["validated_draft"] = PaperDraft.model_validate(record["draft"]).model_dump()
+        work["validated_warnings"] = list(record["validation_warnings"])
+        work["rollback_origin"] = {
+            "paper_id": paper_id,
+            "pdf_sha256": expected_pdf_sha256,
+            "stage": stage,
+        }
+        # This is not a provider dispatch; Play is a separate deliberate action.
+        _save_work(path, work)
+        return {
+            "staged": True,
+            "stage": stage,
+            "source_paper_id": paper_id,
+            "snapshot_sha256": digest,
+            "run_id": _paper_run_id.get(),
+            "paper_version": _paper_run_number.get(),
+        }
 
 
 async def restart_work(
@@ -10882,6 +11014,7 @@ async def _generate_impl(
             "author_review_warnings": draft.validation_warnings,
             "generation": {
                 "provider": "openai",
+                "rollback_origin": work.get("rollback_origin"),
                 "mode": initial_auth["mode"],
                 "model": model,
                 "reasoning_effort": config["reasoning_effort"],
