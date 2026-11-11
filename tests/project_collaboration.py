@@ -1592,8 +1592,13 @@ class CollaborationTests(TestCase):
         Path(self.path).unlink()
         previous_revision = self.revision()
         result = shared.save_settings(
-            self.path, previous_revision, [], "gpt-6.1-sol", "high",
-            "Research lease revocation", allow_active_lease=True,
+            self.path,
+            previous_revision,
+            [],
+            "gpt-6.1-sol",
+            "high",
+            "Research lease revocation",
+            allow_active_lease=True,
         )
         self.assertEqual(result["revision"], previous_revision + 1)
         self.assertEqual(shared.summary(self.path)["collaborators"], [])
@@ -1607,9 +1612,12 @@ class CollaborationTests(TestCase):
         ):
             assert token is not None
             self.assertFalse(shared.renew_lease(self.path, token))
-            with self.assertRaises(ValueError), shared.bind_lease(self.path, token):
-                with shared.write_guard(self.path):
-                    pass
+            with (
+                self.assertRaises(ValueError),
+                shared.bind_lease(self.path, token),
+                shared.write_guard(self.path),
+            ):
+                pass
 
     def test_concurrent_expected_revision_has_one_winner(self) -> None:
         def save() -> bool:
