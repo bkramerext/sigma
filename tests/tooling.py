@@ -1,5 +1,6 @@
 """Check maintenance failure handling without installing or changing dependencies."""
 
+import json
 import os
 import signal
 import subprocess
@@ -102,6 +103,47 @@ def check_failures() -> None:
         assert any("pyright" in command for command in commands)
         assert any("tests/lifecycle.py" in command for command in commands)
 
+    # CI may skip npm installation on shards that run no frontend build/typecheck.
+    with (
+        patch.dict(os.environ, {"SIGMA_SETUP_SKIP_NPM": "1"}),
+        patch("sigma.tooling.shutil.which", return_value="tool"),
+        patch(
+            "sigma.tooling.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0),
+        ) as run,
+    ):
+        assert run_tooling("setup") == 0
+        setup_commands = [item.args[0] for item in run.call_args_list]
+        assert ["uv", "sync", "--locked", "--group", "dev"] in setup_commands
+        assert not any(command[0] == "npm" for command in setup_commands)
+
+    # A successful shard emits actual per-check and shard timings as machine-readable JSON.
+    with (
+        TemporaryDirectory() as directory,
+        patch.dict(
+            os.environ,
+            {
+                "SIGMA_CI_TEST_SHARD": "1",
+                "SIGMA_CI_SEPARATE_RUFF": "1",
+                "SIGMA_CI_TIMINGS_FILE": str(Path(directory) / "timing.json"),
+            },
+        ),
+        patch("sigma.tooling.shutil.which", return_value="tool"),
+        patch(
+            "sigma.tooling.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0),
+        ) as run,
+    ):
+        assert run_tooling("test") == 0
+        report = json.loads((Path(directory) / "timing.json").read_text(encoding="utf-8"))
+        assert report["shard"] == "1"
+        assert report["schema_version"] == 1
+        assert report["failures"] == 0
+        assert len(report["steps"]) == run.call_count
+        assert report["duration_seconds"] >= 0
+        assert all(step["duration_seconds"] >= 0 for step in report["steps"])
+        assert all("SIGMA_CI_TIMINGS_FILE" not in c.kwargs["env"] for c in run.call_args_list)
+
     # All eight CI shards must be exhaustive together, disjoint, and independent.
     plans: dict[str, list[list[str]]] = {}
     shard_names = tuple(str(index) for index in range(1, 9))
@@ -133,7 +175,14 @@ def check_failures() -> None:
         extra_half_b = "tests/research_sessions_part3b.py" in step
         extra_half_c = "tests/research_sessions_part3c.py" in step
         extra_half = extra_half_b or extra_half_c
-        owner = ("8" if extra_half_b else "6") if extra_half else shard_names[regular_index % 8]
+        if step == ["npm", "--prefix", "frontend", "run", "typecheck"]:
+            owner = "1"
+        elif step == ["npm", "--prefix", "frontend", "run", "build"]:
+            owner = "7"
+        elif extra_half:
+            owner = "8" if extra_half_b else "6"
+        else:
+            owner = shard_names[regular_index % 8]
         assert step in plans[owner]
         if not extra_half:
             regular_index += 1
@@ -150,6 +199,13 @@ def check_failures() -> None:
     assert sum("tests/research_sessions_part3c.py" in step for step in combined) == 1
     assert any("scripts/increment15_offline_pairs.py" in step for step in combined)
     assert any(step[-2:] == ["run", "build"] for step in combined)
+    # If frontend commands move shards, the workflow's npm-skip configuration
+    # must be updated rather than silently running without dependencies.
+    assert all(
+        not any(command[:4] == ["npm", "--prefix", "frontend", "run"] for command in plans[shard])
+        for shard in shard_names
+        if shard not in {"1", "7"}
+    )
     with (
         patch.dict(os.environ, {"SIGMA_CI_TEST_SHARD": "invalid"}),
         patch("sigma.tooling.shutil.which", return_value="tool"),
