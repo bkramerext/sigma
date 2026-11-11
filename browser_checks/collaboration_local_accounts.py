@@ -720,6 +720,15 @@ def exercise(ui: str, workspaces: Path) -> None:
 
         # One project running slot: either creator may win; the other waits.
         # Do not impose deterministic ordering on legitimately concurrent jobs.
+        # Resume the preexisting mock progression semantics before testing
+        # Stop → queued-to-running handoff; only the mixed-activity window
+        # intentionally froze simulated Session read advancement.
+        unfrozen = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-unfreeze-sessions",
+            headers={"Origin": ui},
+        )
+        assert unfrozen.status == 200, unfrozen.text()
+
         running_id = next(
             run_id
             for run_id in (first_run["id"], second_run["id"])
