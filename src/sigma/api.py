@@ -736,6 +736,7 @@ class PaperRewindRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     source_pdf_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     stage: Literal["writing", "typesetting"]
     confirm_restart: Literal[True]
     run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
@@ -1062,7 +1063,10 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
     project_collaboration.require_artifact_manager(body.path, "paper", paper_id)
     # Validate the immutable source before allocating a new collaborator run.
     source = paper_rewind.describe(body.path, paper_id, body.expected_project_id)
-    if source["source_pdf_sha256"] != body.source_pdf_sha256:
+    if (
+        source["source_pdf_sha256"] != body.source_pdf_sha256
+        or source["snapshot_sha256"] != body.expected_snapshot_sha256
+    ):
         raise ProjectError("Published Paper changed; reopen before restarting.")
     account = await auth_context()
     config = await papers.configuration(view=inspect_project(body.path), context=account)
@@ -1090,7 +1094,7 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
         )
     scope = (
         papers.paper_run_scope(run_id, number=reservation["number"])
-        if reservation is not None
+        if reservation is not None and run_id is not None
         else nullcontext()
     )
     with scope:
@@ -1101,13 +1105,18 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
                 body.expected_project_id,
                 body.source_pdf_sha256,
                 body.stage,
+                expected_snapshot_sha256=body.expected_snapshot_sha256,
                 auth=account,
                 config=config,
             )
         except Exception:
             # Failed rewind admissions must not leave a phantom interrupted
             # collaborator run. Never tombstone a successfully saved checkpoint.
-            if reservation is not None and run_id is not None and papers._load_work(body.path) is None:
+            if (
+                reservation is not None
+                and run_id is not None
+                and papers._load_work(body.path) is None
+            ):
                 project_collaboration.discard_execution_run(body.path, "paper", run_id)
             raise
     return {

@@ -3123,6 +3123,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         body: JSON.stringify({
           path, expected_project_id: projectId, expected_binding: binding,
           source_pdf_sha256: dialog.options.source_pdf_sha256,
+          expected_snapshot_sha256: dialog.options.snapshot_sha256,
           stage: rewindStage, confirm_restart: true, run_id: runId,
         }),
       });

@@ -48,9 +48,13 @@ jobs:
       - name: Install locked dependencies once
         id: dependencies
         run: ./sigma setup
+      # ubuntu-24.04 runners already include the required Chromium libraries.
+      # Avoid apt mirror DNS outages in --with-deps (which previously blocked
+      # every browser suite before it could execute). Download the same pinned
+      # Playwright browser binary used by Project Types acceptance.
       - name: Install Chromium once
         id: chromium
-        run: uv run --with playwright python -m playwright install --with-deps chromium
+        run: uv run --with playwright python -m playwright install chromium
       - name: Project diagnostics copy/download browser acceptance (#525)
         if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash

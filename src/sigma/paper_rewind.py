@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
-
-from sigma.openai_connection import AuthContext
 
 from sigma import papers
 from sigma.projects import ProjectError, inspect_project
@@ -84,8 +83,9 @@ async def create(
     source_pdf_sha256: str,
     stage: str,
     *,
-    auth: AuthContext,
+    auth: Mapping[str, Any],
     config: dict[str, Any],
+    expected_snapshot_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Seed the current (newly reserved) run; source publication stays immutable."""
     if stage not in {"typesetting", "writing"}:
@@ -95,7 +95,13 @@ async def create(
     async with papers._paper_operation(path, generating=False):
         source = source_checkpoint(path, paper_id, project_id)
         paper = source["paper"]
-        if paper["pdf_sha256"] != source_pdf_sha256:
+        if (
+            paper["pdf_sha256"] != source_pdf_sha256
+            or (
+                expected_snapshot_sha256 is not None
+                and paper["snapshot_sha256"] != expected_snapshot_sha256
+            )
+        ):
             raise ProjectError("Published Paper changed; reopen before restarting.")
         origin = {
             "paper_id": paper_id,

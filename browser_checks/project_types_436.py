@@ -1273,6 +1273,7 @@ with sync_playwright() as playwright:
     assert len(rewind_calls) == 1, rewind_calls
     assert rewind_calls[0]["stage"] == "writing"
     assert rewind_calls[0]["source_pdf_sha256"] == "c" * 64
+    assert rewind_calls[0]["expected_snapshot_sha256"] == "a" * 64
     assert rewind_calls[0]["confirm_restart"] is True
     expect(paper_row).to_be_visible()
     page.unroute("**/api/projects/papers/fixture-paper-1/rewind**")

@@ -67,7 +67,7 @@ class SavedPaperRewindTests(TestCase):
         papers._save(self.path, original, pdf)
         self.pdf = pdf
         self.record_bytes = (
-            Path(self.path) / "artifacts/papers" / f"{self.paper_id}.json"
+            papers._paper_dir(self.path, create=False) / f"{self.paper_id}.json"
         ).read_bytes()
         self.binding = {"identity": "fixture-account", "mode": "api_key"}
         self.config = {
@@ -105,7 +105,10 @@ class SavedPaperRewindTests(TestCase):
             self.assertFalse(saved["include_diagrams"])
             self.assertEqual(saved["progress"]["status"], "paused")
             self.assertIn("ready to resume", saved["progress"]["detail"])
-            self.assertEqual(papers.progress_status(self.path)["status"], "interrupted")
+            progress = papers.progress_status(self.path)
+            self.assertIsNotNone(progress)
+            assert progress is not None
+            self.assertEqual(progress["status"], "interrupted")
             second = self._new("typesetting")
             self.assertFalse(second["created"])
             next_work = papers._load_work(self.path)
@@ -113,7 +116,7 @@ class SavedPaperRewindTests(TestCase):
             assert next_work is not None
             self.assertEqual(next_work["validated_draft"], saved["validated_draft"])
         self.assertEqual(
-            (Path(self.path) / "artifacts/papers" / f"{self.paper_id}.json").read_bytes(),
+            (papers._paper_dir(self.path, create=False) / f"{self.paper_id}.json").read_bytes(),
             self.record_bytes,
         )
         self.assertEqual(papers.get_pdf(self.path, self.paper_id), self.pdf)
@@ -129,7 +132,7 @@ class SavedPaperRewindTests(TestCase):
             with self.assertRaisesRegex(ProjectError, "already has unfinished"):
                 self._new("typesetting")
         self.assertEqual(
-            (Path(self.path) / "artifacts/papers" / f"{self.paper_id}.json").read_bytes(),
+            (papers._paper_dir(self.path, create=False) / f"{self.paper_id}.json").read_bytes(),
             self.record_bytes,
         )
 
