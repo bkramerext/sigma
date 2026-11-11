@@ -48,13 +48,42 @@ jobs:
       - name: Install locked dependencies once
         id: dependencies
         run: ./sigma setup
-      # ubuntu-24.04 runners already include the required Chromium libraries.
-      # Avoid apt mirror DNS outages in --with-deps (which previously blocked
-      # every browser suite before it could execute). Download the same pinned
-      # Playwright browser binary used by Project Types acceptance.
-      - name: Install Chromium once
+      # The hosted Ubuntu image supplies Chromium's shared-library dependencies.
+      # Never install OS packages here: Playwright --with-deps invokes apt and
+      # Ubuntu mirror DNS failures have blocked both browser test groups.
+      # Bound downloads and prove that Chromium can actually launch before tests.
+      - name: Prepare and smoke-test Chromium (no apt)
         id: chromium
-        run: uv run --with playwright python -m playwright install chromium
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          echo "::group::Chromium installation (max 240 seconds; no apt)"
+          if timeout --signal=TERM --kill-after=10s 240s \
+            uv run --with playwright python -m playwright install chromium \
+            > /tmp/sigma-chromium-setup.log 2>&1; then
+            cat /tmp/sigma-chromium-setup.log
+          else
+            result=$?
+            cat /tmp/sigma-chromium-setup.log
+            if [ "$result" -eq 124 ] || [ "$result" -eq 137 ]; then
+              echo "::error title=Browser infrastructure timeout::Chromium download exceeded 240 seconds. SIGMA browser acceptance was not executed."
+            else
+              echo "::error title=Browser infrastructure failure::Chromium installation failed (exit $result). SIGMA browser acceptance was not executed."
+            fi
+            exit "$result"
+          fi
+          echo "::endgroup::"
+          echo "::group::Headless Chromium launch smoke"
+          if ! timeout --signal=TERM --kill-after=10s 60s uv run --with playwright \
+            python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True); page=b.new_page(); page.goto("data:text/html,<title>SIGMA browser smoke</title>"); assert page.title()=="SIGMA browser smoke"; print("Chromium launch smoke passed:", b.version); b.close(); p.stop()' \
+            > /tmp/sigma-chromium-smoke.log 2>&1; then
+            cat /tmp/sigma-chromium-smoke.log
+            echo "::error title=Browser infrastructure failure::Chromium could not launch on this runner. SIGMA browser acceptance was not executed."
+            exit 1
+          fi
+          cat /tmp/sigma-chromium-smoke.log
+          echo "::endgroup::"
       - name: Project diagnostics copy/download browser acceptance (#525)
         if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
         shell: bash
@@ -203,6 +232,8 @@ jobs:
         with:
           name: consolidated-browser-evidence-${{ matrix.group }}
           path: |
+            /tmp/sigma-chromium-setup.log
+            /tmp/sigma-chromium-smoke.log
             /tmp/sigma-outcome-acceptance/sigma-increment13-*.png
             /tmp/sigma-t201-recovery.png
             /tmp/t201-api.log
