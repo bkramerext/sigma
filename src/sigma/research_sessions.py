@@ -15783,6 +15783,7 @@ async def _ensure_mandatory_dispatch_preflight(session_id: str, path: str) -> bo
                     phase="mandatory_preflight",
                     strategy_id=branch.get("strategy_id"),
                     role="investigator",
+                    limit=_agent_dispatch_guard_bytes(record),
                 )
             )
             branch["status"] = "paused"
