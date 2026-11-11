@@ -24,6 +24,7 @@ from sigma.text_conversion import (
     FORMAT_EFFORT,
     FORMAT_MODEL,
     MAX_CONVERSION_RESPONSE_BYTES,
+    _unwrap_redundant_numeric_math,
     convert_text,
 )
 from sigma.text_views import digest, inspect_text, save_source
@@ -280,6 +281,68 @@ async def main_async(root: Path):
         assert blocked.status_code != 200
         assert session_path.read_bytes() == session_before_conversion
         print("PASS immutable saved research text Markdown, per-block API and metrics exclusion")
+
+    # Regression: elementary integer equalities are prose; actual TeX is kept.
+    moonshine_source = (
+        "Investigate the construction of the moonshine module V♮ from the Leech lattice.\n\n"
+        "Establish why its graded dimension is J(τ) = j(τ) − 744.\n\n"
+        "Derive 196884 = 196883 + 1 and examine higher graded components."
+    )
+    moonshine_path = root / "moonshine-markdown.sigma"
+    initialize_project(moonshine_path, "Moonshine", moonshine_source)
+    generated = moonshine_source.replace("J(τ) = j(τ) − 744", r"$J(\tau) = j(\tau) - 744$").replace(
+        "196884 = 196883 + 1", "$196884 = 196883 + 1$"
+    )
+    expected = generated.replace("$196884 = 196883 + 1$", "196884 = 196883 + 1")
+
+    def moonshine_handler(request):
+        payload = json.loads(request.content)
+        assert "196884 = 196883 + 1" in payload["instructions"]
+        assert json.loads(payload["input"])["text"] == moonshine_source
+        return httpx.Response(200, json=provider_output(generated))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(moonshine_handler), **kwargs
+            ),
+        ),
+    ):
+        moonshine_result = await convert_text(str(moonshine_path), "project", "markdown")
+    assert moonshine_result["markdown"]["body"] == expected
+    assert inspect_text(moonshine_path, "project")["markdown"]["body"] == expected
+    assert inspect_project(moonshine_path).project.problem == moonshine_source
+
+    source_identity = "Keep 196884 = 196883 + 1 and 2 + 2 = 4."
+    assert (
+        _unwrap_redundant_numeric_math(
+            "Keep $196884 = 196883 + 1$ and $2 + 2 = 4$.", source_identity
+        )
+        == source_identity
+    )
+    assert (
+        _unwrap_redundant_numeric_math("$196884 = 196883 + 1$", "$196884 = 196883 + 1$")
+        == "$196884 = 196883 + 1$"
+    )
+    assert (
+        _unwrap_redundant_numeric_math(
+            "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$.",
+            source_identity,
+        )
+        == "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$."
+    )
+    code_sample = (
+        "`$196884 = 196883 + 1$`\n~~~text\n$196884 = 196883 + 1$\n~~~\n$196884 = 196883 + 1$"
+    )
+    assert _unwrap_redundant_numeric_math(code_sample, source_identity) == (
+        code_sample.rsplit("$196884 = 196883 + 1$", 1)[0] + "196884 = 196883 + 1"
+    )
+    print("PASS moonshine numeric equality stays prose; math and Markdown code preserved")
 
     # Large strategy descriptions can produce a response envelope above the
     # smaller proposal limit even though the converted body remains bounded.
