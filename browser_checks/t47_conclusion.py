@@ -325,7 +325,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             # No provider is connected in this offline fixture. The attempted
             # generation must fail safely without fabricating a numbered draft.
             expect(papers_pane.get_by_role("button", name="New paper", exact=True)).to_be_visible()
-            expect(papers_pane.get_by_role("button", name="New paper", exact=True)).to_be_enabled(timeout=10000)
+            expect(papers_pane.get_by_role("button", name="New paper", exact=True)).to_be_enabled(
+                timeout=10000
+            )
             expect(papers_pane.locator(".section-count")).to_contain_text("1 paper")
             expect(
                 papers_pane.get_by_role("button", name="Remove unfinished Paper 1")
