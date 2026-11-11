@@ -5692,9 +5692,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     researchTypeLabel(a.investigation_type).localeCompare(researchTypeLabel(b.investigation_type)) || compareSavedVersions(a, b));
   const recentRunLabels = (entry: RecentProject): string[] => {
     const runs = entry.activity_runs ?? [];
-    const visible = runs.some(run => run.status === 'active')
-      ? runs.filter(run => run.status === 'active') : runs;
-    return visible.map(run => formatRunAttribution({ ...run, mode: 'hover' }));
+    return runs.map(run => formatRunAttribution({ ...run, mode: 'hover' }));
   };
   // Running work takes precedence over a queued paper on the same project.
   // The queue API exposes paper_activity when the queued-generation feature lands.
@@ -6465,34 +6463,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       pending = true;
       try {
         const query = new URLSearchParams({ path });
-        const [sessionResponse, paperResponse, savedResponse, askResponse, configResponse] = await Promise.all([
-          fetch(`/api/projects/research-sessions?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
-          fetch(`/api/projects/papers/progress?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
-          fetch(`/api/projects/papers?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
-          fetch(`/api/projects/research-qa/activity?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
-          fetch(`/api/projects/proposals/config?${query}`, { signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
-        ]);
-        if (!sessionResponse.ok || !paperResponse.ok || !savedResponse.ok) return;
-        const sessions = await sessionResponse.json() as { sessions?: ResearchSession[] };
-        const progress = await paperResponse.json() as { progress?: PaperProgress | null };
-        const saved = await savedResponse.json() as { papers?: PaperSummary[] };
-        const ask = askResponse.ok ? await askResponse.json() as { active?: Array<{ request_id: string; creator: string; model: string; thinking: string }> } : { active: [] };
-        const config = configResponse.ok ? await configResponse.json() as { model?: string; reasoning_effort?: string } : {};
-        if (controller.signal.aborted) return;
-        const items: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> = [];
-        if (progress.progress?.status === 'active' || progress.progress?.status === 'queued') {
-          items.push({ kind: 'paper', status: progress.progress?.status === 'queued' ? 'queued' : 'active', number: Math.max(0, ...(saved.papers ?? []).map(p => p.paper_version)) + 1, model: progress.progress.model || config.model, thinking: progress.progress.reasoning_effort || config.reasoning_effort });
-        }
-        for (const session of sessions.sessions ?? []) {
-          if (session.status === 'running' || session.status === 'queued') {
-            items.push({ kind: 'session', status: session.status === 'queued' ? 'queued' : 'active', number: session.session_number, id: session.id, model: session.model, thinking: session.reasoning_effort });
-          }
-        }
-        for (const entry of ask.active ?? []) {
-          items.push({ kind: 'answer', status: 'active', id: entry.request_id, creator: entry.creator, model: entry.model, thinking: entry.thinking });
-        }
-        setActiveRuns(items);
-      } catch { /* Preserve the last known activity during transient failures. */ }
+        const response = await fetch(`/api/projects/activity-runs?${query}`, {
+          signal: controller.signal, cache: 'no-store',
+          headers: { 'X-Sigma-Error-Handled': 'true' },
+        });
+        if (!response.ok) return;
+        const body = await response.json() as { runs?: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> };
+        if (!controller.signal.aborted) setActiveRuns(body.runs ?? []);
+      } catch { /* Preserve last known activity during transient failures. */ }
       finally { pending = false; }
     };
     void poll();
@@ -6500,9 +6478,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     return () => { controller.abort(); window.clearInterval(interval); };
   }, [path, guest, view?.project.id]);
 
-  const visibleActivity = activeRuns.some(run => run.status === 'active')
-    ? activeRuns.filter(run => run.status === 'active') : activeRuns;
-  const activeRunLabels = visibleActivity.map(run => formatRunAttribution({
+  // Green takes precedence for color, not for which runs are disclosed.
+  const activeRunLabels = activeRuns.map(run => formatRunAttribution({
     ...run,
     creator: run.creator || (run.kind === 'session'
       ? sharedActivity?.artifact_authors?.session?.[run.id ?? '']
