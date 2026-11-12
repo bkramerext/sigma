@@ -4782,6 +4782,11 @@ def activity_status(path: str) -> Literal["queued", "active", "interrupted", "fa
 
         states: list[str] = []
         for row in project_collaboration.list_execution_runs(path, "paper"):
+            # Completed and discarded papers cannot contribute a live activity
+            # indicator. Do not probe their sidecar/checkpoint files on each
+            # global five-second Home activity poll as the library grows.
+            if row["status"] in {"complete", "discarded"}:
+                continue
             with paper_run_scope(row["run_id"]):
                 status = activity_status(path)
             if status is not None:
