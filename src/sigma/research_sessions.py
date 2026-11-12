@@ -7041,9 +7041,13 @@ async def control_session(
         if event:
             event.set()
         if task and not task.done():
+            # The stopped/paused checkpoint is already durable. Do not delay
+            # the control acknowledgment while the cancelled worker reconciles
+            # an in-flight provider attempt, releases billing, or sends no-op
+            # notifications. Resume's worker-idle fence still rejects a race
+            # until cleanup releases its cross-process lock.
             task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-        return _public(_read(record["project_path"], session_id))
+        return _public(record)
     # Recovery planning changes budgets and protocol slots. Hold both the
     # per-session state lock and the cross-process admission lock across the
     # read/validate/save transaction so concurrent resumes cannot overwrite it.
