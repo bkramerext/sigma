@@ -666,3 +666,61 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Paper errors are local, content-sized notices, not full-width panels.
+   Three width bands balance readable line lengths against card height.
+   The session notice's exit wrapper stays in flow for its dismiss animation. */
+.workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error {
+  position: relative;
+  box-sizing: border-box;
+  inline-size: max-content;
+  max-inline-size: min(100%, 47ch);
+  min-inline-size: 0;
+  margin: 8px 0;
+  padding: 8px 42px 9px 12px;
+  border-left-width: 3px;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error--medium {
+  max-inline-size: min(100%, 64ch);
+}
+.workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error--long {
+  max-inline-size: min(100%, 78ch);
+}
+.workspace-page .papers-pane .paper-contextual-error .session-notice-header {
+  display: block;
+  margin: 0 0 3px;
+}
+.workspace-page .papers-pane .paper-contextual-error .session-notice-title {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.workspace-page .papers-pane .paper-contextual-error p {
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+.workspace-page .papers-pane .paper-contextual-error .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 5px !important;
+  right: 5px !important;
+}
+
+/* Scoring errors use the same compact card and standard SIGMA dismiss X. */
+.workspace-page .papers-pane .paper-score-error-card {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  inline-size: max-content;
+  max-inline-size: min(100%, 68ch);
+  min-inline-size: 0;
+  margin: 8px 0;
+  padding: 8px 42px 9px 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.workspace-page .papers-pane .paper-score-error-card .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 5px !important;
+  right: 5px !important;
+}
