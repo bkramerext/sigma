@@ -76,7 +76,22 @@ def make_scored_sample_fixture(directory: Path) -> bytes:
     record = {
         "paper_id": paper_id,
         "project_id": "$SIGMA_SAMPLE_PROJECT_ID",
-        "draft": {"title": "Public Warp Drive PDF acceptance fixture"},
+        "paper_version": 1,
+        "created_at": "2026-11-05T01:00:00+00:00",
+        "snapshot_sha256": "a" * 64,
+        "draft": {
+            "title": "Public Warp Drive PDF acceptance fixture",
+            "abstract": "An offline test paper with a verified score.",
+            "sections": [],
+        },
+        "generation": {
+            "mode": "api_key",
+            "model": "fixture-model",
+            "reasoning_effort": "low",
+            "call_limit": 1,
+            "publication_status": "proofreading_complete",
+        },
+        "validation_warnings": [],
         "tex_source": tex,
         "pdf_sha256": sha,
         "pdf_size_bytes": len(pdf),
