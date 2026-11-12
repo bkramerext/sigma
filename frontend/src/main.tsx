@@ -2900,6 +2900,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const request = useRef<AbortController | null>(null);
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
+  const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
   const selectedRunIdRef = useRef<string | null>(null);
@@ -3164,6 +3165,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           const next = (selected?.progress ?? body.progress ?? null) as PaperProgress | null;
           setPaperProgress(next);
           if (next?.status !== 'active' && next?.status !== 'queued') {
+            if (paperStopAwaitingCheckpoint.current?.runId === runId) {
+              paperStopAwaitingCheckpoint.current = null;
+              setPhase('');
+              if (next?.status === 'cancelled')
+                setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+            }
             if (next === null) setNewPaperRequested(false);
             void refresh(undefined, true);
           }
@@ -3432,30 +3439,33 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function cancelGeneration(runId: string | null = selectedRunIdRef.current) {
     const target = paperRuns.find(run => run.run_id === runId);
-    if (paperStopPending.current || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
+      || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
     paperStopPending.current = true;
     setPhase('Stopping paper…');
     try {
       const response = await fetch('/api/projects/papers/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only' }),
+        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only', request_only: true }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
-      if (result.cancelled) {
+      if (result.stop_requested) {
+        // Stop is requested, not yet a completed cancellation. Keep the
+        // progress pane polling until the backend saves its terminal status.
+        paperStopAwaitingCheckpoint.current = { runId };
         if (runId === selectedRunIdRef.current) {
           deliberatePaperStop.current = true;
-          setPaperProgress(current => current ? { ...current, status: 'cancelled' } : current);
           request.current?.abort();
         }
+      } else if (result.cancelled) {
+        setPhase('');
         setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+        void refresh(selected?.paper_id, true);
       } else {
-        setSuccess('No active paper generation was found. Checking saved versions.');
+        setPhase('');
+        void refresh(selected?.paper_id, true);
       }
-      setPhase('');
-      // The durable cancel acknowledgment is enough to clear the pending
-      // control. Reload the (potentially large) saved paper state separately.
-      void refresh(selected?.paper_id, true);
     } catch (cause) {
       setPhase('');
       setError(errorMessage(cause));
