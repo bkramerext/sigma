@@ -187,6 +187,25 @@ with sync_playwright() as playwright:
     }
     assert settings_hover["backgroundImage"] == "none", settings_hover
     assert settings_hover["radius"] != "4px", settings_hover
+    # Project About's approved copper-brown fill is the SINGLE hover reference
+    # for every visible Home pill, not only Settings.
+    for selector in (
+        ".administrator-settings-link",
+        ".global-model-pill",
+        ".project-google-signin",
+        ".api-connection > summary",
+    ):
+        pill = grid.locator(selector)
+        if pill.count() and pill.is_enabled():
+            actual = hover_style(selector)
+            for property_name in ("background", "backgroundImage", "borderColor", "shadow"):
+                assert actual[property_name] == about_hover[property_name], {
+                    "pill": selector,
+                    "property": property_name,
+                    "expected": about_hover,
+                    "actual": actual,
+                }
+    assert about_hover["background"] == "rgb(58, 41, 28)", about_hover
 
     # The restored pill cycles user-wide defaults (not project settings),
     # prompting before a cost-tier increase and preserving unrelated limits.
@@ -588,6 +607,40 @@ with sync_playwright() as playwright:
             "home": home_value,
             "project": project_pill_geometry[key],
         }
+    # All interactive Project header pills use the same copper-brown hover
+    # background as About; do not require disabled controls to change color.
+    def project_hover_style(selector):
+        pill = controls.locator(selector)
+        pill.hover()
+        page.wait_for_timeout(200)
+        return pill.evaluate(
+            """node => {
+                const css = getComputedStyle(node);
+                return {
+                    background: css.backgroundColor,
+                    backgroundImage: css.backgroundImage,
+                    borderColor: css.borderTopColor,
+                };
+            }"""
+        )
+
+    reference = project_hover_style(".about-action")
+    assert reference["background"] == "rgb(58, 41, 28)", reference
+    for selector in (
+        ".administrator-settings-link",
+        ".project-global-settings-pill",
+        ".project-google-signin",
+        ".api-connection > summary",
+        ".global-model-pill",
+    ):
+        pill = controls.locator(selector)
+        if pill.count() and pill.is_enabled():
+            actual = project_hover_style(selector)
+            assert actual == reference, {
+                "pill": selector,
+                "expected": reference,
+                "actual": actual,
+            }
     with page.expect_download() as download_info:
         page.get_by_role("button", name="Export project").click()
         page.get_by_role("dialog", name="Export Project").get_by_role(
