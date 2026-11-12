@@ -10952,7 +10952,9 @@ async def _generate_impl(
             else None
         )
         replay = _verify_section_recovery(
-            work, replay, long_form=long_form,
+            work,
+            replay,
+            long_form=long_form,
             resumed_checkpoint=checkpoint is not None and compatible,
         )
 

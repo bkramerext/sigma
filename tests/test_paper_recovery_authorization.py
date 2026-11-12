@@ -28,15 +28,11 @@ class VerifiedPaperRecoveryTests(TestCase):
     def test_single_section_and_no_recovery_remain_supported(self) -> None:
         work = {**self.work, "section_dispatches": {"1": [{"attempt": 1}]}}
         self.assertEqual(
-            papers._verify_section_recovery(
-                work, (1,), long_form=True, resumed_checkpoint=True
-            ),
+            papers._verify_section_recovery(work, (1,), long_form=True, resumed_checkpoint=True),
             (1,),
         )
         self.assertIsNone(
-            papers._verify_section_recovery(
-                work, None, long_form=True, resumed_checkpoint=True
-            )
+            papers._verify_section_recovery(work, None, long_form=True, resumed_checkpoint=True)
         )
 
     def test_changed_dispatches_or_invalid_replay_are_rejected_before_provider(self) -> None:
@@ -60,8 +56,6 @@ class VerifiedPaperRecoveryTests(TestCase):
         # an explicit durable receipt. Play is the actual authorization.
         work = {**self.work, "section_drafts": {}}
         self.assertEqual(
-            papers._verify_section_recovery(
-                work, (1, 2), long_form=True, resumed_checkpoint=True
-            ),
+            papers._verify_section_recovery(work, (1, 2), long_form=True, resumed_checkpoint=True),
             (1, 2),
         )
