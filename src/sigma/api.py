@@ -993,8 +993,10 @@ def papers_progress_view(path: str, run_id: str | None = None):
     with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
         progress = papers.progress_status(path)
         preflight = papers.needs_preflight_on_open(path)
+        stop_pending = papers.stop_request_pending(path)
     return {
         "progress": progress,
+        "stop_pending": stop_pending,
         "preflight_needed": preflight,
         "runs": papers.run_progress_list(path),
     }
