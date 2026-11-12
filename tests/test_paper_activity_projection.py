@@ -73,7 +73,9 @@ class PublishedPaperProjectionTests(TestCase):
             "failure_reason": "Published Paper does not match its creator reservation",
         }
         with (
-            patch.object(project_collaboration, "list_execution_runs", return_value=[self.reservation]),
+            patch.object(
+                project_collaboration, "list_execution_runs", return_value=[self.reservation]
+            ),
             patch.object(project_collaboration, "collaborator_identity", return_value=self.author),
             patch.object(project_collaboration, "is_project_owner", return_value=True),
             patch.object(papers, "progress_status", return_value=progress),
@@ -94,11 +96,14 @@ class PublishedPaperProjectionTests(TestCase):
             "generation": {"progress_run_id": uuid4().hex},
         }
         with (
-            patch.object(project_collaboration, "list_execution_runs", return_value=[self.reservation]),
+            patch.object(
+                project_collaboration, "list_execution_runs", return_value=[self.reservation]
+            ),
             patch.object(project_collaboration, "collaborator_identity", return_value=self.author),
             patch.object(project_collaboration, "is_project_owner", return_value=True),
             patch.object(
-                papers, "progress_status",
+                papers,
+                "progress_status",
                 return_value={"status": "failed", "stage": "scoring", "paper_id": self.paper_id},
             ),
             patch.object(papers, "needs_preflight_on_open", return_value=False),

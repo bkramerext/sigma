@@ -142,7 +142,9 @@ class PaperRunIsolationTests(TestCase):
                         with patch.object(
                             papers,
                             "inspect_project",
-                            return_value=SimpleNamespace(project=SimpleNamespace(id="test-project")),
+                            return_value=SimpleNamespace(
+                                project=SimpleNamespace(id="test-project")
+                            ),
                         ):
                             result = await asyncio.wait_for(
                                 papers.discard_work(self.path, "test-project"), timeout=5
