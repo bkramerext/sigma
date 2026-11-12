@@ -6447,8 +6447,10 @@ async def start_session(
     except ValueError as exc:
         raise ProjectError("A valid idempotency key is required") from exc
     _require_current_local_backend()
-    view, guard = _snapshot(path)
-    project_collaboration.register_owner(view)
+    # Large owner-only and collaborative bundles must not block unrelated
+    # API requests while their frozen research inputs are decoded.
+    view, guard = await asyncio.to_thread(_snapshot, path)
+    await asyncio.to_thread(project_collaboration.register_owner, view)
     if (
         browser_presence_required
         and not research_preferences.allow_unattended_background_execution()
@@ -6462,7 +6464,11 @@ async def start_session(
         raise ProjectError("Project changed; reopen it before starting research")
     selected_ids = list(dict.fromkeys(strategy_ids or [strategy_id]))
     existing = next(
-        (record for record in _all(view.path) if record.get("idempotency_key") == idempotency_key),
+        (
+            record
+            for record in await asyncio.to_thread(_all, view.path)
+            if record.get("idempotency_key") == idempotency_key
+        ),
         None,
     )
     if existing is not None:
@@ -6972,9 +6978,12 @@ async def control_session(
     action: str,
     additional_calls: int = 0,
     browser_presence_required: bool = False,
+    acknowledge_only: bool = False,
 ) -> dict[str, Any]:
     if type(browser_presence_required) is not bool:
         raise ProjectError("Browser execution origin must be a boolean")
+    if type(acknowledge_only) is not bool:
+        raise ProjectError("Fast control acknowledgment must be a boolean")
     if action not in {"pause", "resume", "stop", "repair"}:
         raise ProjectError("Unknown research session action")
     # 'repair' is an explicit protocol-completion authorization, distinct from
@@ -7028,6 +7037,9 @@ async def control_session(
                 record["portfolio_decision"] = _portfolio_decision(record)
             _event(record, "stopped" if action == "stop" else "paused", record["message"])
             record["updated_at"] = _now()
+            # Keep this checkpoint/read/mutate/save transaction synchronous
+            # under the session lock. Yielding here can race with an in-flight
+            # sandbox result and lose its Stop-time provenance.
             _save(record["project_path"], record)
             logging.getLogger("sigma.lifecycle").info(
                 "session.%s project_id=%s session_id=%s calls_used=%s",
@@ -7041,8 +7053,16 @@ async def control_session(
         if event:
             event.set()
         if task and not task.done():
+            # The stopped/paused checkpoint is already durable. Browser control
+            # may acknowledge now and allow worker/billing cleanup to finish.
+            # Resume's worker-idle fence prevents a new dispatch until cleanup
+            # releases its cross-process lock.
             task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+            if not acknowledge_only:
+                # Retain existing completion semantics for API/CLI callers.
+                await asyncio.gather(task, return_exceptions=True)
+        if acknowledge_only:
+            return _public(record)
         return _public(_read(record["project_path"], session_id))
     # Recovery planning changes budgets and protocol slots. Hold both the
     # per-session state lock and the cross-process admission lock across the

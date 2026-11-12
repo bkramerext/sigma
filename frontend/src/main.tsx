@@ -1787,16 +1787,44 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     return () => controller.abort();
   }, [load, reportReadFailure]);
 
+  const sessionPollPending = useRef(false);
   useEffect(() => {
     if (!activeSession) return;
     const stopWatching = watchResearchProviderActivity(path, projectId);
-    const poll = () => {
-      if (document.visibilityState === 'visible') void load().catch(reportReadFailure);
+    let alive = true;
+    const poll = async () => {
+      if (!alive || document.visibilityState !== 'visible' || sessionPollPending.current) return;
+      sessionPollPending.current = true;
+      try {
+        // Read only the active session during frequent progress polling. The
+        // full history and Current Understanding are rebuilt on meaningful
+        // milestones, not every two seconds in every collaborator's browser.
+        const response = await fetch(
+          `/api/projects/research-sessions/${encodeURIComponent(activeSession.id)}?${new URLSearchParams({ path })}`,
+          { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } },
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Could not read research progress');
+        if (!alive) return;
+        const current = sessionForDisplay(data);
+        if (!current) throw new Error('Research progress response was invalid');
+        setSessions(sessions => sessions.map(item => item.id === current.id ? current : item));
+        if (current.status !== activeSession.status
+          || current.steps.length !== activeSession.steps.length
+          || current.artifacts.length !== activeSession.artifacts.length) {
+          void load(current.id).catch(reportReadFailure);
+        }
+      } catch (cause) {
+        if (alive) reportReadFailure(cause);
+      } finally {
+        sessionPollPending.current = false;
+      }
     };
-    const timer = window.setInterval(poll, 2000);
-    document.addEventListener('visibilitychange', poll);
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', poll); stopWatching(); };
-  }, [activeSession?.id, activeSession?.status, load, path, projectId, reportReadFailure]);
+    const tick = () => { void poll(); };
+    const timer = window.setInterval(tick, 2000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { alive = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', tick); stopWatching(); };
+  }, [activeSession?.id, activeSession?.status, activeSession?.steps.length, activeSession?.artifacts.length, load, path, projectId, reportReadFailure]);
 
   const sponsoredSession = cloud?.target === 'hosted'
     || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
@@ -1813,11 +1841,15 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         setConfirmStart(true);
         return;
       }
-      const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`);
-      const current = await response.json();
+      // Neither read depends on the other; avoid two serial network RTTs.
+      const [response, limitResponse] = await Promise.all([
+        fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`),
+        fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`),
+      ]);
+      const [current, currentLimits] = await Promise.all([
+        response.json(), limitResponse.json(),
+      ]);
       if (!response.ok) throw new Error(current.error ?? 'Could not read AI configuration');
-      const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
-      const currentLimits = await limitResponse.json();
       if (!limitResponse.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
       const validation = validateLimitDraft(draftLimits(currentLimits));
       if (!validation.value) {
@@ -1891,12 +1923,13 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     try {
       let recoveryAction: 'pause' | 'resume' | 'stop' | 'repair' = action;
       let authorizedCalls = 0;
+      let releaseRetries = 0;
       for (;;) {
         try {
           // The backend's preflight authorization responses are handled by
           // the two confirmations below, not global Request Failed toasts.
           // Unexpected errors are still reported by the enclosing catch.
-          const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
+          const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume", request_only: action === 'stop' || action === 'pause' }, undefined, true);
           // A successful control response contains the authoritative new status.
           // Do not keep the button busy for an unrelated whole-project reload.
           const acknowledged = sessionForDisplay(accepted);
@@ -1905,6 +1938,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           break;
         } catch (cause) {
           const message = errorMessage(cause);
+          // Fast Stop acknowledges a durable fence before the old worker
+          // finishes cleanup. Avoid surfacing a transient Resume race as a
+          // failure or dispatching a replacement while that lock is held.
+          if (action === 'resume' && message.includes('Session execution is still releasing resources')
+            && releaseRetries++ < 12) {
+            await new Promise<void>(resolve => window.setTimeout(resolve, 250));
+            continue;
+          }
           const attemptShortfall = message.match(/Resume with exactly (\d+) explicitly authorized additional attempts/);
           if (action === 'resume' && authorizedCalls === 0 && attemptShortfall) {
             const count = Number(attemptShortfall[1]);
@@ -2868,6 +2909,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const request = useRef<AbortController | null>(null);
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
+  const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
+  const [paperStopReconciliation, setPaperStopReconciliation] = useState(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
   const selectedRunIdRef = useRef<string | null>(null);
@@ -3118,11 +3161,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     }
   }
   useEffect(() => {
-    if (!['active', 'queued'].includes(paperProgress?.status ?? '')) return;
+    // An immediate Stop can precede the first progress frame. Continue
+    // polling its own durable run until cancellation is actually saved.
+    if (!paperStopReconciliation && !['active', 'queued'].includes(paperProgress?.status ?? '')) return;
     let stopped = false;
     const poll = async () => {
       try {
-        const runId = selectedRunIdRef.current;
+        const pending = paperStopAwaitingCheckpoint.current;
+        const runId = pending ? pending.runId : selectedRunIdRef.current;
         const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path, ...(runId ? { run_id: runId } : {}) })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const body = await response.json();
         if (!stopped && response.ok) {
@@ -3130,9 +3176,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           setPaperRuns(runs);
           const selected = runId ? runs.find(run => run.run_id === runId) : null;
           const next = (selected?.progress ?? body.progress ?? null) as PaperProgress | null;
-          setPaperProgress(next);
-          if (next?.status !== 'active' && next?.status !== 'queued') {
-            if (next === null) setNewPaperRequested(false);
+          const isSelected = selectedRunIdRef.current === runId;
+          if (isSelected) setPaperProgress(next);
+          const stopping = paperStopAwaitingCheckpoint.current?.runId === runId
+            && body.stop_pending === true;
+          if (next?.status !== 'active' && next?.status !== 'queued' && !stopping) {
+            if (paperStopAwaitingCheckpoint.current?.runId === runId) {
+              paperStopAwaitingCheckpoint.current = null;
+              setPaperStopReconciliation(false);
+              setPhase('');
+              if (next?.status === 'cancelled')
+                setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+            }
+            if (next === null && isSelected) setNewPaperRequested(false);
             void refresh(undefined, true);
           }
         }
@@ -3140,7 +3196,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     };
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [path, paperProgress?.status, selectedRunId]);
+  }, [path, paperProgress?.status, selectedRunId, paperStopReconciliation]);
   // Poll even when this collaborator is idle; another creator's Paper may
   // become active without changing the project's content revision.
   useEffect(() => {
@@ -3400,30 +3456,34 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function cancelGeneration(runId: string | null = selectedRunIdRef.current) {
     const target = paperRuns.find(run => run.run_id === runId);
-    if (paperStopPending.current || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
+      || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
     paperStopPending.current = true;
     setPhase('Stopping paper…');
     try {
       const response = await fetch('/api/projects/papers/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only' }),
+        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only', request_only: true }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
-      if (result.cancelled) {
+      if (result.stop_requested) {
+        // Stop is requested, not yet a completed cancellation. Keep the
+        // progress pane polling until the backend saves its terminal status.
+        paperStopAwaitingCheckpoint.current = { runId };
+        setPaperStopReconciliation(true);
         if (runId === selectedRunIdRef.current) {
           deliberatePaperStop.current = true;
-          setPaperProgress(current => current ? { ...current, status: 'cancelled' } : current);
           request.current?.abort();
         }
+      } else if (result.cancelled) {
+        setPhase('');
         setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+        void refresh(selected?.paper_id, true);
       } else {
-        setSuccess('No active paper generation was found. Checking saved versions.');
+        setPhase('');
+        void refresh(selected?.paper_id, true);
       }
-      setPhase('');
-      // The durable cancel acknowledgment is enough to clear the pending
-      // control. Reload the (potentially large) saved paper state separately.
-      void refresh(selected?.paper_id, true);
     } catch (cause) {
       setPhase('');
       setError(errorMessage(cause));
@@ -3630,7 +3690,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (!deliberatePaperStop.current)
           setError('Paper stream disconnected. Check current progress and saved versions.');
       }
-      await refresh(selected?.paper_id);
+      // A deliberate Stop is still reconciling its saved checkpoint. The
+      // progress poll will refresh at the terminal transition; an immediate
+      // full preflight here can undo the fast acknowledgment.
+      if (!deliberatePaperStop.current) await refresh(selected?.paper_id);
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
         const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');

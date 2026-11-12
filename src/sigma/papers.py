@@ -11711,20 +11711,44 @@ async def generate(
             _generation_tasks.pop(key, None)
 
 
-async def cancel_generation(path: str) -> bool:
-    """Explicitly cancel this project's active generation, not a disconnected viewer."""
+def _cancellable_generation_task(path: str) -> asyncio.Task[dict[str, Any]] | None:
+    """Find the original submission owner, including before generate() enters."""
     key = _paper_state_key(path)
-    # The API submission task is registered before any await, while the
-    # inner generation task is registered only once that coroutine begins.
-    # Cancel the outer owner: awaiting it forwards cancellation to the inner
-    # task and runs its checkpoint and billing cleanup.
     task = _submission_tasks.get(key)
     if task is None or task.done():
         task = _generation_tasks.get(key)
-    if task is None or task.done():
+    return task if task is not None and not task.done() else None
+
+
+def stop_request_pending(path: str) -> bool:
+    """True while an accepted Stop awaits the worker's durable cleanup."""
+    task = _cancellable_generation_task(path)
+    return task is not None and task.cancelling() > 0
+
+
+def request_cancel_generation(path: str) -> bool:
+    """Request Stop without claiming the paper is already cancelled.
+
+    The submitted task remains registered until cancellation handling,
+    checkpoint preservation, and billing cleanup actually finish. Recovery
+    continues to treat a crash before cleanup as interrupted, not completed.
+    The caller must poll the durable progress state for the final outcome.
+    """
+    task = _cancellable_generation_task(path)
+    if task is None:
         return False
-    logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
-    task.cancel()
+    if task.cancelling() == 0:
+        logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
+        task.cancel()
+    return True
+
+
+async def cancel_generation(path: str) -> bool:
+    """Wait for full Stop completion (legacy callers and explicit tests)."""
+    task = _cancellable_generation_task(path)
+    if task is None:
+        return False
+    request_cancel_generation(path)
     await asyncio.gather(task, return_exceptions=True)
     return True
 

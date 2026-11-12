@@ -243,6 +243,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/test_provider_schema_contract.py"],
             [*python, "python", "tests/test_paper_admission_fast_path.py"],
             [*python, "python", "tests/test_paper_stop_preflight.py"],
+            [*python, "python", "tests/test_responsiveness_controls.py"],
         ]
     # CI has a separate fast Ruff job; preserve lint/format for local ./sigma test.
     if command == "test" and os.environ.get("SIGMA_CI_SEPARATE_RUFF") == "1":

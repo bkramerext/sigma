@@ -316,7 +316,7 @@ async def require_cloud_inference_binding(
     path: str,
     *,
     require_project: bool = True,
-) -> None:
+) -> tuple[Any, Any] | None:
     """Require explicit project/account intent before admitting sponsored inference."""
     memory_guard.require_capacity()
     # Local inference uses the user's personal ChatGPT connection even when
@@ -335,6 +335,9 @@ async def require_cloud_inference_binding(
 
     if not cloud_credential(credential):
         raise HTTPException(503, "Sponsored cloud inference is not configured.")
+    # Admission callers may reuse this authorized project and connection.
+    # Avoid re-reading a large bundle and re-resolving the provider binding.
+    return view, credential
 
 
 @demo_app.get("/")
@@ -641,6 +644,7 @@ class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
     additional_calls: int = Field(default=0, ge=0, le=12)
     browser_presence_required: bool = Field(default=False, strict=True)
+    request_only: bool = Field(default=False, strict=True)
 
 
 class ResearchInterventionRequest(OpenRequest):
@@ -717,6 +721,7 @@ class PaperCancelRequest(OpenRequest):
     run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
+    request_only: bool = False
 
 
 class PaperDiscardRequest(PaperCancelRequest):
@@ -988,8 +993,10 @@ def papers_progress_view(path: str, run_id: str | None = None):
     with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
         progress = papers.progress_status(path)
         preflight = papers.needs_preflight_on_open(path)
+        stop_pending = papers.stop_request_pending(path)
     return {
         "progress": progress,
+        "stop_pending": stop_pending,
         "preflight_needed": preflight,
         "runs": papers.run_progress_list(path),
     }
@@ -997,11 +1004,12 @@ def papers_progress_view(path: str, run_id: str | None = None):
 
 @app.post("/api/projects/papers/cancel")
 async def paper_cancel_view(body: PaperCancelRequest):
+    control_started = perf_counter()
     # Stop is a safety/control operation, not a new inference admission.
     # Do not wait for (or require) the current AI connection: a provider outage,
     # account switch, or memory-pressure preflight must never prevent Stop.
     # Project identity and creator authorization remain mandatory.
-    view = inspect_project(body.path)
+    view = await run_in_threadpool(inspect_project, body.path)
     if view.project.id != body.expected_project_id:
         raise HTTPException(404, "Project not found or access denied.")
     if body.run_id is None:
@@ -1011,7 +1019,21 @@ async def paper_cancel_view(body: PaperCancelRequest):
     else:
         project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
-        return {"cancelled": await papers.cancel_generation(body.path)}
+        if body.request_only:
+            # Stop is accepted and cancellation scheduled; cleanup may still
+            # be running. Never return "cancelled" before it is durable.
+            requested = papers.request_cancel_generation(body.path)
+            logging.getLogger("sigma.responsiveness").info(
+                "paper.stop_ack duration_ms=%.1f request_only=true",
+                (perf_counter() - control_started) * 1000,
+            )
+            return {"stop_requested": requested}
+        cancelled = await papers.cancel_generation(body.path)
+        logging.getLogger("sigma.responsiveness").info(
+            "paper.stop_ack duration_ms=%.1f request_only=false",
+            (perf_counter() - control_started) * 1000,
+        )
+        return {"cancelled": cancelled}
 
 
 @app.post("/api/projects/papers/discard")
@@ -1249,7 +1271,8 @@ def paper_delete_view(paper_id: str, path: str):
 
 @app.post("/api/projects/papers")
 async def paper_generate_view(body: PaperGenerateRequest, request: Request):
-    await require_cloud_inference_binding(
+    admission_started = perf_counter()
+    verified_view = await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
 
@@ -1277,24 +1300,42 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     reservation: dict[str, Any] | None = None
     run_id: str | None = None
     if shared:
-        admission_view = inspect_project(body.path)
-        project_collaboration.register_owner(admission_view)
+        admission_view = (
+            verified_view[0]
+            if verified_view
+            else await run_in_threadpool(inspect_project, body.path)
+        )
+        await run_in_threadpool(project_collaboration.register_owner, admission_view)
         run_id = body.run_id or uuid4().hex
         if body.run_id is not None:
-            existing = project_collaboration.execution_run(
-                body.path, "paper", run_id, operator=True, missing_ok=True
+            existing = await run_in_threadpool(
+                project_collaboration.execution_run,
+                body.path,
+                "paper",
+                run_id,
+                operator=True,
+                missing_ok=True,
             )
             if existing is not None and existing.get("artifact_id"):
                 raise ProjectError("This Paper run is already published; open the saved PDF.")
-        account = await auth_context()
+        account = verified_view[1] if verified_view else await auth_context()
         config = await papers.configuration(view=admission_view, context=account)
         if not config["available"]:
             raise ProjectError(config["message"])
-        reservation = project_collaboration.reserve_execution_run(
+        # Disk-backed sequence and SQLite admission are synchronous. Run them
+        # off the API event loop so another user's Stop remains responsive.
+        saved_max = (
+            await run_in_threadpool(
+                papers.next_paper_number_for_activity, body.path, include_reserved=False
+            )
+            - 1
+        )
+        reservation = await run_in_threadpool(
+            project_collaboration.reserve_execution_run,
             body.path,
             "paper",
             run_id,
-            papers.next_paper_number_for_activity(body.path, include_reserved=False) - 1,
+            saved_max,
             model=config["model"],
             thinking=config["reasoning_effort"],
         )
@@ -1436,6 +1477,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             # generation task retains its own checkpoints and lifecycle.
             viewer_connected = False
 
+    logging.getLogger("sigma.responsiveness").info(
+        "paper.start_ack duration_ms=%.1f", (perf_counter() - admission_started) * 1000
+    )
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
@@ -1859,6 +1903,7 @@ def mock_research_start_view(
 @app.post("/api/projects/research-sessions/start")
 async def research_start_view(body: ResearchStartRequest):
     """Independent Session admission; per-session state already has durable IDs."""
+    admission_started = perf_counter()
     try:
         result = await research_sessions.start_session(
             body.path,
@@ -1896,16 +1941,28 @@ async def research_start_view(body: ResearchStartRequest):
             status_code=400,
         )
     if isinstance(result.get("id"), str):
-        project_collaboration.note_artifact_author(
-            body.path, "session", result["id"], created_only=True
+        await run_in_threadpool(
+            project_collaboration.note_artifact_author,
+            body.path,
+            "session",
+            result["id"],
+            created_only=True,
         )
+    logging.getLogger("sigma.responsiveness").info(
+        "session.start_ack duration_ms=%.1f", (perf_counter() - admission_started) * 1000
+    )
     return result
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
-    project_collaboration.require_execution_operator(
-        body.path, "session", session_id, "Research session"
+    control_started = perf_counter()
+    await run_in_threadpool(
+        project_collaboration.require_execution_operator,
+        body.path,
+        "session",
+        session_id,
+        "Research session",
     )
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
@@ -1921,7 +1978,9 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         )
         if simulated is None:
             raise HTTPException(404, "Not found")
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        await run_in_threadpool(
+            project_collaboration.note_artifact_author, body.path, "session", session_id
+        )
         return simulated
 
     result = await research_sessions.control_session(
@@ -1930,8 +1989,21 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         body.action,
         additional_calls=body.additional_calls,
         browser_presence_required=body.browser_presence_required,
+        acknowledge_only=body.request_only,
     )
-    project_collaboration.note_artifact_author(body.path, "session", session_id, created_only=True)
+    await run_in_threadpool(
+        project_collaboration.note_artifact_author,
+        body.path,
+        "session",
+        session_id,
+        created_only=True,
+    )
+    logging.getLogger("sigma.responsiveness").info(
+        "session.control_ack action=%s duration_ms=%.1f request_only=%s",
+        body.action,
+        (perf_counter() - control_started) * 1000,
+        body.request_only,
+    )
     return result
 
 
