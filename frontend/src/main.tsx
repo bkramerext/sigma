@@ -1880,6 +1880,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     submittingStart.current = true;
     // On click, replace Start with the green pulse before any backend work.
     setAdmittingSession(true);
+    setExpanded(true);
+    window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
     setBusy(true); setError('');
     try {
       idempotencyKey.current ??= crypto.randomUUID();
@@ -2162,6 +2164,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }, [activeSession?.id, onRevealNewSession, sessions.length]);
 
   const runningCount = activeSessionCount;
+  const pendingSessionName = admittingSession ? 'Starting session' : '';
+  const pendingSessionMetadata = formatRunAttribution({
+    kind: 'session', creator: viewerEmail, model: config?.model, thinking: config?.reasoning_effort,
+  });
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
@@ -2184,7 +2190,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
         </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={sessionControls.play}><CirclePlusIcon/></button>}
       </div>
-      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
+      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running{admittingSession ? ' · 1 starting' : ''}</p>
     </header>
 
     {guest && guestSessionCard && <GuestFeatureCard title="Research sessions"
@@ -2194,10 +2200,26 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
-      {sessions.length ? <ol className="session-list" aria-label="Research sessions">
+      {(sessions.length || admittingSession) ? <ol className="session-list" aria-label="Research sessions">
+        {admittingSession && <li className="session-row session-admission-pending" aria-label="Session admission pending" role="status" aria-live="polite">
+          <div className="session-row-heading">
+            <div className="session-summary">
+              <div className="session-title-line">
+                <span className="session-row-title">{pendingSessionName}</span>
+                <span className="research-running-indicator-frame" aria-label="Starting session · awaiting server acceptance" data-tooltip="Starting session · awaiting server acceptance"><span className="research-running-indicator"/></span>
+                <span className="session-status session-running" aria-label="Session starting">starting<i aria-hidden="true"/></span>
+              </div>
+              <small className="session-run-metadata">{pendingSessionMetadata || 'Research session'} · awaiting server acceptance</small>
+              <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · preparing research references and admission</small>
+            </div>
+          </div>
+        </li>}
         {orderedSessions.map(item => {
-          const currentAction = (readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action)
-            .replace(/\bpaused\b/gi, 'stopped').replace(/\bpausing\b/gi, 'stopping').replace(/\bpause\b/gi, 'stop');
+          const pendingAction = pendingSessionAction?.id === item.id ? pendingSessionAction.action : null;
+          const currentAction = pendingAction === 'resume' ? 'Resuming session… awaiting server acceptance'
+            : pendingAction === 'stop' || pendingAction === 'pause' ? 'Stopping session… awaiting server acknowledgment'
+            : (readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action)
+              .replace(/\bpaused\b/gi, 'stopped').replace(/\bpausing\b/gi, 'stopping').replace(/\bpause\b/gi, 'stop');
           const sessionExpanded = expandedSessionIds.has(item.id);
           const creator = artifactAuthors?.[item.id];
           const attributionEnforced = Boolean(viewerEmail && projectOwnerEmail);
@@ -2211,10 +2233,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
                   {!guest && canControl && sessionOffersResume(item) && !(pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume') && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
                   {pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume' && <span className="research-running-indicator-frame" role="status" aria-label={`Resuming Session ${item.session_number}`} data-tooltip="Resuming session · awaiting server acceptance"><span className="research-running-indicator"/></span>}
-                  {!guest && canControl && ['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                  {!guest && canControl && !pendingAction && ['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
-                  {!guest && canRemove && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
-                  {!guest && canRemove && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+                  {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
+                  {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status === 'paused' ? 'stopped' : item.status}`} aria-label={`Lifecycle status: ${item.status === 'paused' ? 'stopped' : item.status}`} data-tooltip={formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{item.status === 'running' || item.status === 'stopped' || item.status === 'paused' ? <>{item.status === 'paused' ? 'stopped' : item.status}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{item.status}</>}</span>
                 {sessionControlFailures[item.id]
