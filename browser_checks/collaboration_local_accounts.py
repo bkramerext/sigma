@@ -491,10 +491,9 @@ def exercise(ui: str, workspaces: Path) -> None:
             ui + "/api/projects/research-sessions", params={"path": path}
         )
         assert primed.status == 200, primed.text()
-        assert any(
-            run["status"] == "running"
-            for run in get_json(primed)["sessions"]
-        ), "Fixture failed to promote one queued mock before freezing"
+        assert any(run["status"] == "running" for run in get_json(primed)["sessions"]), (
+            "Fixture failed to promote one queued mock before freezing"
+        )
         held = owner_context.request.post(
             ui + "/api/__fixture/collaboration-freeze-sessions",
             headers={"Origin": ui},

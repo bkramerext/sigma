@@ -399,6 +399,35 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         assert guest_b["export"] == 404, guest_b
         other_context.close()
 
+        # Warm project reopen must render from the in-tab cache without waiting
+        # for the backend's (deliberately delayed) consistency revalidation.
+        page.evaluate(
+            """() => {
+              const original = window.fetch.bind(window);
+              window.__sigmaOriginalFetch = original;
+              window.__sigmaOpenRevalidations = 0;
+              window.fetch = (request, options) => {
+                if (String(request).endsWith('/api/projects/open')) {
+                  window.__sigmaOpenRevalidations += 1;
+                  return new Promise(resolve => setTimeout(resolve, 2500))
+                    .then(() => original(request, options));
+                }
+                return original(request, options);
+              };
+            }"""
+        )
+        recent_entry = page.locator("#recent-panel button.recent-open").filter(
+            has_text=re.compile(r"Did Jesus Use Cannabis\\? v[12]")
+        )
+        expect(recent_entry.first).to_be_visible()
+        recent_entry.first.click()
+        expect(page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\\? v[12]"))).to_be_visible(
+            timeout=1500
+        )
+        assert page.evaluate("window.__sigmaOpenRevalidations") >= 1
+        expect(page.get_by_text("Opening project…")).to_have_count(0)
+        page.evaluate("window.fetch = window.__sigmaOriginalFetch")
+
         assert not [
             request
             for request in mutation_requests

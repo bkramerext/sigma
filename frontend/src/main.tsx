@@ -6664,7 +6664,13 @@ function HomeCatalog({ onOpen, getCachedView, cacheScope, guest = false, onTabCh
   const [savedProjects, setSavedProjects] = useState<RecentProject[]>(() => recentProjectListCache.get(cacheScope) ?? []);
   const [savedLoading, setSavedLoading] = useState(() => !recentProjectListCache.has(cacheScope));
   useEffect(() => {
-    if (!savedLoading) recentProjectListCache.set(cacheScope, savedProjects);
+    if (savedLoading) return;
+    recentProjectListCache.delete(cacheScope);
+    recentProjectListCache.set(cacheScope, savedProjects);
+    if (recentProjectListCache.size > 6) {
+      const oldest = recentProjectListCache.keys().next().value;
+      if (oldest !== undefined) recentProjectListCache.delete(oldest);
+    }
   }, [cacheScope, savedProjects, savedLoading]);
   const recent = useRef<HTMLButtonElement>(null);
   const mostRecent = useRef<HTMLButtonElement>(null);
@@ -8061,7 +8067,15 @@ function App() {
   const [openedFromCache, setOpenedFromCache] = useState(false);
   const cacheScope = projectCacheScope(cloud);
   const rememberProject = useCallback((view: ProjectView) => {
-    recentProjectViewCache.set(projectViewCacheKey(cacheScope, view.path), view);
+    const key = projectViewCacheKey(cacheScope, view.path);
+    // Retain a small hot set of full views, not an unbounded history of large
+    // research projects. Metadata listing remains cached independently.
+    recentProjectViewCache.delete(key);
+    recentProjectViewCache.set(key, view);
+    if (recentProjectViewCache.size > 6) {
+      const oldest = recentProjectViewCache.keys().next().value;
+      if (oldest !== undefined) recentProjectViewCache.delete(oldest);
+    }
   }, [cacheScope]);
   const getCachedProject = useCallback((path: string): ProjectView | undefined =>
     recentProjectViewCache.get(projectViewCacheKey(cacheScope, path)), [cacheScope]);
