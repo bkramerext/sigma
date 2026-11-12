@@ -47,7 +47,11 @@ class ResponsiveControlTests(TestCase):
                 with (
                     patch.object(research_sessions, "_read", return_value=deepcopy(record)),
                     patch.object(research_sessions, "_recover", side_effect=lambda value: value),
-                    patch.object(research_sessions, "_save", side_effect=lambda _path, value: saved.append(deepcopy(value))),
+                    patch.object(
+                        research_sessions,
+                        "_save",
+                        side_effect=lambda _path, value: saved.append(deepcopy(value)),
+                    ),
                     patch.object(research_sessions, "_event"),
                     patch.object(research_sessions, "_public", side_effect=lambda value: value),
                     patch.dict(research_sessions._tasks, {session_id: task}),
@@ -93,9 +97,7 @@ class ResponsiveControlTests(TestCase):
                     first_key = papers._paper_state_key(path)
                 with papers.paper_run_scope(second_run):
                     second_key = papers._paper_state_key(path)
-                with patch.dict(
-                    papers._submission_tasks, {first_key: first, second_key: second}
-                ):
+                with patch.dict(papers._submission_tasks, {first_key: first, second_key: second}):
                     await entered.wait()
                     with papers.paper_run_scope(first_run):
                         self.assertTrue(papers.request_cancel_generation(path))
@@ -130,8 +132,12 @@ class ResponsiveControlTests(TestCase):
                         return_value=SimpleNamespace(project=SimpleNamespace(id="project-1")),
                     ),
                     patch.object(api.project_collaboration, "execution_run") as run_acl,
-                    patch.object(api.project_collaboration, "require_paper_draft_operator") as draft_acl,
-                    patch.object(api.papers, "request_cancel_generation", return_value=True) as stop,
+                    patch.object(
+                        api.project_collaboration, "require_paper_draft_operator"
+                    ) as draft_acl,
+                    patch.object(
+                        api.papers, "request_cancel_generation", return_value=True
+                    ) as stop,
                     patch.object(
                         api,
                         "require_cloud_inference_binding",
