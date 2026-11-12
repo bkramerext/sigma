@@ -3330,6 +3330,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [eli5Error, setEli5Error] = useState('');
   const [eli5ErrorId, setEli5ErrorId] = useState('');
   const explainingRef = useRef<Set<string>>(new Set());
+  const latestExplanationTarget = useRef('');
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   const [paperPopupPlacement, setPaperPopupPlacement] = useState({ left: 0, above: false });
   // One viewport-anchored confirmation for the target run. It cannot end up
@@ -3496,7 +3497,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // A background collaborator refresh must not undo the newly selected
       // restart step's optimistic checkmark state before admission returns.
       if (!paperRewindAdmissionPending.current &&
-          !(hasPaperStopIntent(currentId) && generationRunning))
+          !(hasPaperStopIntent(currentId) && ['active', 'queued'].includes(ownedProgress?.status ?? '')))
         setPaperProgress(ownedProgress as PaperProgress | null);
       setPapers(list.papers as PaperSummary[]);
       setNextPaperNumber(typeof list.next_paper_number === 'number' ? list.next_paper_number : null);
@@ -3553,7 +3554,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) { if (!obsolete()) setError(errorMessage(cause)); }
     finally {
       if (!initialPaperActivityReported.current) { initialPaperActivityReported.current = true; onInitialActivity(null); }
-      if (!silent && !obsolete()) setLoading(false);
+      if (!obsolete()) setLoading(false);
     }
   }
   useEffect(() => {
@@ -3593,6 +3594,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         }
       } catch { /* Preserve persisted state until connectivity returns. */ }
     };
+    void poll();
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [path, paperProgress?.status, selectedRunId, paperStopReconciliation]);
@@ -3999,6 +4001,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function explainPaper(paper: PaperSummary) {
     if (explainingRef.current.has(paper.paper_id)) return;
+    latestExplanationTarget.current = paper.paper_id;
     setEli5Error('');
     setEli5ErrorId('');
     // The currently open record already contains its archived explanation.
@@ -4030,9 +4033,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (typeof data.markdown !== "string" || !data.markdown.trim()) throw new Error("The explanation was empty.");
         markdown = data.markdown;
       }
-      setSelected({ ...record, eli5: { version: 2, source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
-      setEli5Id(paper.paper_id);
-      setExpandedPaperId(paper.paper_id);
+      // Parallel balloon requests must not move the open card backward when
+      // an older request completes after a newer click.
+      if (latestExplanationTarget.current === paper.paper_id) {
+        setSelected({ ...record, eli5: { version: 2, source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
+        setEli5Id(paper.paper_id);
+        setExpandedPaperId(paper.paper_id);
+      }
     } catch (cause) { setEli5ErrorId(paper.paper_id); setEli5Error(errorMessage(cause)); }
     finally {
       explainingRef.current.delete(paper.paper_id);
@@ -4962,9 +4969,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   model: run.progress?.model || run.model,
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
-                {' · '}{optimisticPaperStop?.runId === run.run_id
-                  ? 'Stopping'
-                   : hasPaperStopIntent(run.run_id) ? 'Stopped' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
+                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopped' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
                 {' · Elapsed '}{savedPaperElapsed(Math.max(0, run.progress?.elapsed_seconds ?? 0))}
