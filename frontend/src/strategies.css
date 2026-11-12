@@ -313,7 +313,7 @@
 .workspace-page .workspace-pane-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; padding: 16px 0; border-bottom: 1px solid var(--workspace-line); }
 .workspace-page .workspace-pane-heading h2 { margin: 0; flex: 0 0 auto; color: var(--sigma-copper-foreground); font-size: 23px; line-height: 1.3; }
 .workspace-page .workspace-pane-heading h2 button { margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
-.workspace-page .workspace-pane-heading h2 button:hover:not(:disabled) { color: var(--sigma-copper-foreground); text-decoration: underline; text-underline-offset: 4px; }
+.workspace-page .workspace-pane-heading h2 button:hover:not(:disabled) { color: var(--sigma-copper-foreground); text-decoration: none; }
 .workspace-page .workspace-pane-heading p { min-width: 0; flex: 1 1 250px; margin: 0; color: var(--workspace-muted); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .workspace-page .strategies-pane-heading { justify-content: flex-start; }
 .workspace-page .research-session-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 4px 24px; color: #c4d0da; }
