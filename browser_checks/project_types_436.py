@@ -607,6 +607,7 @@ with sync_playwright() as playwright:
             "home": home_value,
             "project": project_pill_geometry[key],
         }
+
     # All interactive Project header pills use the same copper-brown hover
     # background as About; do not require disabled controls to change color.
     def project_hover_style(selector):
