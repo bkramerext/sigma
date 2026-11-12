@@ -3420,6 +3420,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       } else {
         setSuccess('No active paper generation was found. Checking saved versions.');
       }
+      setPhase('');
       // The durable cancel acknowledgment is enough to clear the pending
       // control. Reload the (potentially large) saved paper state separately.
       void refresh(selected?.paper_id, true);
