@@ -272,9 +272,23 @@ def check_home_list_uses_only_paper_records(root: Path) -> None:
             assert len(rows) == 1 and rows[0]["available"], rows
             assert rows[0]["paper_count"] == 1, rows
             assert rows[0]["best_paper_score"] == 70, rows
-        # Paper details and the Papers list must also remain metadata-only.
+        # Paper details, project opens and list endpoints must use metadata
+        # pointers only. In particular an increasing PDF library must not
+        # introduce PDF reads on ordinary Home → Project navigation.
         assert papers.list_papers(view.path)[0]["score"]["total"] == 70
         assert papers.get_paper(view.path, paper_id, include_tex=False)["score"]["total"] == 70
+        with TestClient(app) as client:
+            response = client.post("/api/projects/open", json={"path": view.path, "compact": True})
+            assert response.status_code == 200, response.text
+            response = client.get("/api/projects/papers", params={"path": view.path})
+            assert response.status_code == 200, response.text
+            assert response.json()["paper_count"] == 1
+            response = client.get(
+                "/api/projects/collaboration",
+                params={"path": view.path, "include_authors": "false"},
+            )
+            assert response.status_code == 200, response.text
+            assert "artifact_authors" not in response.json()
         # Corrupt individual paper records must not hide the saved project.
         paper_dir = Path(view.path) / "artifacts" / "generated_papers"
         paper_dir.mkdir(parents=True, exist_ok=True)
