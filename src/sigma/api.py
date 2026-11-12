@@ -1080,7 +1080,7 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
             body.path,
             "paper",
             run_id,
-            papers.next_paper_number_for_activity(body.path) - 1,
+            papers.next_paper_number_for_activity(body.path, include_reserved=False) - 1,
             model=config["model"],
             thinking=config["reasoning_effort"],
         )
@@ -1273,7 +1273,8 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     reservation: dict[str, Any] | None = None
     run_id: str | None = None
     if shared:
-        project_collaboration.register_owner(inspect_project(body.path))
+        admission_view = inspect_project(body.path)
+        project_collaboration.register_owner(admission_view)
         run_id = body.run_id or uuid4().hex
         if body.run_id is not None:
             existing = project_collaboration.execution_run(
@@ -1282,14 +1283,14 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             if existing is not None and existing.get("artifact_id"):
                 raise ProjectError("This Paper run is already published; open the saved PDF.")
         account = await auth_context()
-        config = await papers.configuration(view=inspect_project(body.path), context=account)
+        config = await papers.configuration(view=admission_view, context=account)
         if not config["available"]:
             raise ProjectError(config["message"])
         reservation = project_collaboration.reserve_execution_run(
             body.path,
             "paper",
             run_id,
-            papers.next_paper_number_for_activity(body.path) - 1,
+            papers.next_paper_number_for_activity(body.path, include_reserved=False) - 1,
             model=config["model"],
             thinking=config["reasoning_effort"],
         )
