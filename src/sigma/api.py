@@ -1013,11 +1013,20 @@ async def paper_cancel_view(body: PaperCancelRequest):
     if view.project.id != body.expected_project_id:
         raise HTTPException(404, "Project not found or access denied.")
     if body.run_id is None:
-        project_collaboration.require_paper_draft_operator(
-            body.path, body.expected_project_id, controlling_active=True
+        await run_in_threadpool(
+            project_collaboration.require_paper_draft_operator,
+            body.path,
+            body.expected_project_id,
+            controlling_active=True,
         )
     else:
-        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+        await run_in_threadpool(
+            project_collaboration.execution_run,
+            body.path,
+            "paper",
+            body.run_id,
+            operator=True,
+        )
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
         if body.request_only:
             # Stop is accepted and cancellation scheduled; cleanup may still
@@ -1307,17 +1316,6 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         )
         await run_in_threadpool(project_collaboration.register_owner, admission_view)
         run_id = body.run_id or uuid4().hex
-        if body.run_id is not None:
-            existing = await run_in_threadpool(
-                project_collaboration.execution_run,
-                body.path,
-                "paper",
-                run_id,
-                operator=True,
-                missing_ok=True,
-            )
-            if existing is not None and existing.get("artifact_id"):
-                raise ProjectError("This Paper run is already published; open the saved PDF.")
         account = verified_view[1] if verified_view else await auth_context()
         config = await papers.configuration(view=admission_view, context=account)
         if not config["available"]:
@@ -1341,6 +1339,11 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         )
         if reservation is None:
             raise ProjectError("Paper reservation is unavailable.")
+        # The atomic reservation already verified permanent creator ownership,
+        # discarded state and published artifacts. Avoid a separate SQLite ACL
+        # read before it; a published run still cannot be dispatched twice.
+        if reservation.get("artifact_id"):
+            raise ProjectError("This Paper run is already published; open the saved PDF.")
     else:
         project_collaboration.reserve_paper_draft(
             body.path,
