@@ -110,9 +110,7 @@ class SampleCopyTests(unittest.TestCase):
             self.assertEqual(sample["investigation_type"], "medical")
             self.assertEqual(sample["difficulty"], "hard")
             self.assertEqual(sample["strategy_count"], 3)
-            copied = samples.open_sample_project(
-                "fully-implantable-cochlear-microphone-placement"
-            )
+            copied = samples.open_sample_project("fully-implantable-cochlear-microphone-placement")
 
         project = inspect_project(copied.path).project
         self.assertEqual(project.investigation_type, "medical")
