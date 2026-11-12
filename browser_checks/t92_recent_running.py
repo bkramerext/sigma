@@ -190,13 +190,15 @@ with sync_playwright() as playwright:
     expect(project_groups_title).to_be_visible()
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     initial = metadata.inner_text()
+    assert initial.startswith("Hard difficulty · 3 strategies · 0 papers"), initial
     assert "Running" not in initial and initial.count(" · ") == 2, initial
-    assert "0 papers" in initial, initial
+    assert project_path not in initial, initial
+    activity = entry.locator("xpath=..").locator(".recent-activity-jump")
+    expect(activity).to_have_count(0)
 
     running.add(project_id)
-    expect(metadata).to_contain_text(" · Running · ", timeout=10000)
-    label = metadata.locator(".recent-running")
-    assert label.evaluate("e => getComputedStyle(e).color") == "rgb(143, 189, 154)"
+    expect(activity).to_be_visible(timeout=10000)
+    expect(metadata).to_have_text(initial)
     category_indicator = recent_group.locator("summary .research-running-indicator")
     expect(category_indicator).to_have_count(0)
     recent_group.locator("summary").click()
@@ -210,7 +212,7 @@ with sync_playwright() as playwright:
     expect(category_indicator).to_have_count(0)
     for width, height in ((1280, 720), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
-        expect(label).to_be_visible()
+        expect(activity).to_be_visible()
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
 
     page.reload()
@@ -220,8 +222,11 @@ with sync_playwright() as playwright:
         recent_group.locator("summary").click()
     entry = recent.get_by_role("button", name=project_title, exact=True)
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
-    expect(metadata).to_contain_text(" · Running · ", timeout=10000)
+    activity = entry.locator("xpath=..").locator(".recent-activity-jump")
+    expect(activity).to_be_visible(timeout=10000)
+    expect(metadata).to_have_text(initial)
     running.clear()
+    expect(activity).to_have_count(0, timeout=10000)
     expect(metadata).to_have_text(initial, timeout=10000)
 
     # Unavailable records remain in storage but never reach the Saved UI.
@@ -328,7 +333,7 @@ with sync_playwright() as playwright:
     expect(recent_flat.locator("li")).to_have_count(12, timeout=8000)
     expect(recent_flat.get_by_text("Most Recent Fixture 11")).to_be_visible()
     expect(recent_flat.get_by_text("Most Recent Fixture 12")).to_be_visible()
-    expect(recent_flat.locator(".recent-running")).to_have_count(2)
+    expect(recent_flat.locator(".recent-activity-jump")).to_have_count(2)
     most_recent_activity["active"] = False
     page.reload()
     page.get_by_role("tab", name="Most Recent", exact=True).click()

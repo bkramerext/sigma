@@ -724,3 +724,43 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 }
 .recent-activity-jump:disabled { cursor: default; }
 .recent-activity-jump:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+
+/* The clickable activity pulse sits vertically centered just beside the
+   project title; neither hover nor focus paints a yellow backdrop. */
+.home-page .home-recents .recent-title-row > .recent-activity-jump {
+  align-self: center;
+  flex: 0 0 15px;
+  width: 15px;
+  height: 22px;
+  min-width: 15px;
+  min-height: 22px;
+  top: 0;
+  margin: 0 8px 0 -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  filter: none;
+}
+.home-page .home-recents .recent-title-row > .recent-activity-jump:is(:hover, :active, :focus) {
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+.home-page .home-recents .recent-title-row > .recent-activity-jump:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.home-page .home-recents .recent-meta-row { min-width: 0; }
+.home-page .home-recents .recent-meta-row > small { min-width: 0; max-width: 100%; }
+.home-page .home-recents .recent-meta-row > small > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

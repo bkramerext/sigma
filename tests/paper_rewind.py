@@ -91,7 +91,10 @@ class SavedPaperRewindTests(TestCase):
 
     def test_typesetting_uses_frozen_evidence_and_validated_manuscript(self) -> None:
         options = paper_rewind.describe(self.path, self.paper_id, self.view.project.id)
-        self.assertEqual([option["id"] for option in options["stages"]], ["typesetting", "writing"])
+        self.assertEqual(
+            [option["id"] for option in options["stages"]],
+            ["started", "typesetting", "writing"],
+        )
         with papers.paper_run_scope(uuid4().hex):
             first = self._new("typesetting")
             self.assertTrue(first["created"])
@@ -121,6 +124,37 @@ class SavedPaperRewindTests(TestCase):
         )
         self.assertEqual(papers.get_pdf(self.path, self.paper_id), self.pdf)
 
+    def test_started_restart_reuses_frozen_evidence_without_downstream_work(self) -> None:
+        with papers.paper_run_scope(uuid4().hex):
+            result = self._new("started")
+            self.assertTrue(result["created"])
+            work = papers._load_work(self.path)
+            self.assertIsNotNone(work)
+            assert work is not None
+            self.assertEqual(work["rewind_origin"]["stage"], "started")
+            self.assertEqual(work["snapshot_sha256"], papers._snapshot(self.path)[1])
+            self.assertIn("frozen_package", work)
+            self.assertEqual(work["progress"]["stage"], "snapshot")
+            self.assertEqual(work["progress"]["status"], "paused")
+            admitted = papers.preflight(
+                self.path,
+                expected_project_id=self.view.project.id,
+                expected_binding=self.binding["identity"],
+                mode=self.binding["mode"],
+                model=self.config["model"],
+                reasoning_effort=self.config["reasoning_effort"],
+            )
+            self.assertTrue(admitted["resume_available"], admitted)
+            self.assertNotIn("validated_draft", work)
+            self.assertNotIn("plan", work)
+            self.assertEqual(work["evidence_notes"], [])
+            self.assertEqual(work["provider_calls"], 0)
+        self.assertEqual(
+            (papers._paper_dir(self.path, create=False) / f"{self.paper_id}.json").read_bytes(),
+            self.record_bytes,
+        )
+        self.assertEqual(papers.get_pdf(self.path, self.paper_id), self.pdf)
+
     def test_writing_restart_cannot_mutate_published_paper(self) -> None:
         with papers.paper_run_scope(uuid4().hex):
             self._new("writing")
@@ -129,6 +163,16 @@ class SavedPaperRewindTests(TestCase):
             assert work is not None
             self.assertNotIn("validated_draft", work)
             self.assertEqual(work["rewind_origin"]["stage"], "writing")
+            admitted = papers.preflight(
+                self.path,
+                expected_project_id=self.view.project.id,
+                expected_binding=self.binding["identity"],
+                mode=self.binding["mode"],
+                model=self.config["model"],
+                reasoning_effort=self.config["reasoning_effort"],
+            )
+            self.assertTrue(admitted["resume_available"], admitted)
+            self.assertTrue(admitted["checkpoint_exists"], admitted)
             with self.assertRaisesRegex(ProjectError, "already has unfinished"):
                 self._new("typesetting")
         self.assertEqual(

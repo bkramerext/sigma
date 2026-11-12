@@ -739,7 +739,7 @@ def exercise(ui: str, workspaces: Path) -> None:
                     )].find(button => button.getAttribute('aria-label')
                         === 'Open active work in ' + project);
                     const lines = (indicator?.getAttribute('data-tooltip') || '').split('\\n')
-                        .slice(1).filter(Boolean);
+                        .filter(Boolean);
                     return lines.every(line => !line.includes('(running)'))
                         && lines.some(line => line.includes('(queued)'))
                         && lines.length === 6
@@ -846,11 +846,15 @@ def exercise(ui: str, workspaces: Path) -> None:
             data={"path": path, "action": "stop"},
         )
         assert stopped.status == 200, stopped.text()
-        unfrozen = owner_context.request.post(
-            ui + "/api/__fixture/collaboration-unfreeze-sessions",
+        # Permit queued->running admission but continue holding stage-1 progress.
+        # Otherwise two browser polls may finish the promoted mock before its
+        # creator sends Stop, masking the handoff we intend to verify.
+        armed_handoff = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-arm-freeze-sessions",
             headers={"Origin": ui},
+            data={"path": path},
         )
-        assert unfrozen.status == 200, unfrozen.text()
+        assert armed_handoff.status == 200, armed_handoff.text()
         visible = get_json(
             member_context.request.get(
                 ui + "/api/projects/research-sessions", params={"path": path}
@@ -868,9 +872,25 @@ def exercise(ui: str, workspaces: Path) -> None:
             data={"path": path, "action": "stop"},
         )
         assert own_stop.status == 200, own_stop.text()
-        check = get_json(
-            owner_context.request.get(ui + "/api/projects/research-sessions", params={"path": path})
+        unfrozen = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-unfreeze-sessions",
+            headers={"Origin": ui},
         )
+        assert unfrozen.status == 200, unfrozen.text()
+        # Verify both creators' Stop checkpoints persist after unfreezing.
+        check = {}
+        for _attempt in range(30):
+            check = get_json(
+                owner_context.request.get(
+                    ui + "/api/projects/research-sessions", params={"path": path}
+                )
+            )
+            stopped_rows = [
+                row for row in check["sessions"] if row["id"] in {first_run["id"], second_run["id"]}
+            ]
+            if len(stopped_rows) == 2 and all(row["status"] == "stopped" for row in stopped_rows):
+                break
+            time.sleep(0.1)
         assert {row["id"] for row in check["sessions"]} >= {
             first_run["id"],
             second_run["id"],
@@ -879,7 +899,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             row["status"] == "stopped"
             for row in check["sessions"]
             if row["id"] in {first_run["id"], second_run["id"]}
-        )
+        ), check
         # Owner catalog standards are projected into the SAVED shared project.
         # A member's own custom types/preferences must not override them.
         standards_before = get_json(owner_context.request.get(ui + "/api/project-types"))

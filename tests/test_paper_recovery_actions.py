@@ -68,6 +68,63 @@ class PaperRecoveryActionsTests(TestCase):
                 asyncio.run(api.papers_discard_view(self._body(run_id)))
             discard.assert_not_awaited()
 
+    def test_owner_may_remove_stopped_collaborator_paper(self) -> None:
+        run_id = "a" * 32
+        with (
+            patch.object(
+                api,
+                "inspect_project",
+                return_value=SimpleNamespace(project=SimpleNamespace(id="project-1")),
+            ),
+            patch.object(
+                api.project_collaboration,
+                "execution_run",
+                return_value={"run_id": run_id},
+            ) as acl,
+            patch.object(api.project_collaboration, "is_project_owner", return_value=True),
+            patch.object(api.papers, "progress_status", return_value={"status": "cancelled"}),
+            patch.object(
+                api.papers,
+                "discard_work",
+                new_callable=AsyncMock,
+                return_value={"discarded": True},
+            ),
+            patch.object(api.project_collaboration, "discard_execution_run") as discard_index,
+        ):
+            result = asyncio.run(api.papers_discard_view(self._body(run_id)))
+            self.assertEqual(result, {"discarded": True})
+            acl.assert_called_once_with("/unused/project.json", "paper", run_id)
+            discard_index.assert_called_once_with(
+                "/unused/project.json", "paper", run_id, owner_terminal=True
+            )
+
+    def test_owner_cannot_remove_active_collaborator_paper(self) -> None:
+        run_id = "b" * 32
+
+        def verify_access(_path, _kind, _run_id, *, operator=False):
+            if operator:
+                raise ProjectError("Only the original execution creator may control this run")
+            return {"run_id": run_id}
+
+        with (
+            patch.object(
+                api,
+                "inspect_project",
+                return_value=SimpleNamespace(project=SimpleNamespace(id="project-1")),
+            ),
+            patch.object(
+                api.project_collaboration,
+                "execution_run",
+                side_effect=verify_access,
+            ),
+            patch.object(api.project_collaboration, "is_project_owner", return_value=True),
+            patch.object(api.papers, "progress_status", return_value={"status": "active"}),
+            patch.object(api.papers, "discard_work", new_callable=AsyncMock) as discard,
+        ):
+            with self.assertRaises(ProjectError):
+                asyncio.run(api.papers_discard_view(self._body(run_id)))
+            discard.assert_not_awaited()
+
     def test_guest_cannot_remove_unpublished_work(self) -> None:
         with (
             patch.object(api.cloud_workspaces, "current", return_value=SimpleNamespace(guest=True)),
