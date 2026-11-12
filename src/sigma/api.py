@@ -316,7 +316,7 @@ async def require_cloud_inference_binding(
     path: str,
     *,
     require_project: bool = True,
-) -> tuple[Any, dict[str, Any]] | None:
+) -> tuple[Any, Any] | None:
     """Require explicit project/account intent before admitting sponsored inference."""
     memory_guard.require_capacity()
     # Local inference uses the user's personal ChatGPT connection even when
