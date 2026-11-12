@@ -3492,6 +3492,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "provider_change_history",
         "model_change_history",
         "rewind_origin",
+        "rewind_validation_done",
     }
     rewind_origin = value.get("rewind_origin")
     if rewind_origin is not None and (
@@ -3501,7 +3502,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         or re.fullmatch(r"[0-9a-f]{32}", rewind_origin["paper_id"]) is None
         or type(rewind_origin["paper_version"]) is not int
         or rewind_origin["paper_version"] < 1
-        or rewind_origin["stage"] not in {"started", "writing", "typesetting"}
+        or rewind_origin["stage"] not in {"started", "writing", "validation", "typesetting"}
         or not isinstance(rewind_origin["pdf_sha256"], str)
         or re.fullmatch(r"[0-9a-f]{64}", rewind_origin["pdf_sha256"]) is None
     ):
@@ -3540,6 +3541,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
+    if "rewind_validation_done" in value and (
+        type(value["rewind_validation_done"]) is not bool
+        or not isinstance(rewind_origin, dict)
+        or rewind_origin.get("stage") != "validation"
+        or not isinstance(value.get("validated_draft"), dict)
+    ):
+        raise ProjectError("Paper restart validation marker is invalid")
     if "validated_draft" in value:
         PaperDraft.model_validate(value["validated_draft"])
     if "validated_warnings" in value and (
@@ -5179,6 +5187,30 @@ def _validate_with_local_recovery(
             "paper.validation_recovered repair=local_retry"
         )
         return repaired, warnings
+
+
+def _revalidate_rewind_manuscript(
+    work: dict[str, Any], package: dict[str, Any]
+) -> tuple[PaperDraft, list[str]]:
+    """Repeat deterministic validation, never a paid authoring request.
+
+    The caller commits the checked manuscript and completion marker together.
+    If interrupted before that checkpoint, validation is safe to retry.
+    """
+    origin = work.get("rewind_origin")
+    if (
+        not isinstance(origin, dict)
+        or origin.get("stage") != "validation"
+        or work.get("rewind_validation_done") is True
+        or not isinstance(work.get("validated_draft"), dict)
+    ):
+        raise ProjectError("Paper validation restart checkpoint is unavailable")
+    draft = PaperDraft.model_validate(work["validated_draft"])
+    checked, warnings = _validate_with_local_recovery(draft, package, work)
+    work["validated_draft"] = checked.model_dump()
+    work["validated_warnings"] = list(warnings)
+    work["rewind_validation_done"] = True
+    return checked, warnings
 
 
 def _research_completion_limitations(package: dict[str, Any]) -> list[str]:
@@ -9926,6 +9958,17 @@ async def _generate_impl(
                 "evidence_indexed"
             ):
                 resume_floor = "evidence"
+            origin = incoming_checkpoint.get("rewind_origin")
+            if isinstance(origin, dict) and origin.get("stage") == "writing":
+                # Frozen evidence and the saved restart choice keep earlier
+                # checklist steps checked while new writing is prepared.
+                resume_floor = "writing"
+            elif (
+                isinstance(origin, dict)
+                and origin.get("stage") == "validation"
+                and incoming_checkpoint.get("rewind_validation_done") is not True
+            ):
+                resume_floor = "validation"
         stage_order = (
             "queued",
             "snapshot",
@@ -10827,8 +10870,21 @@ async def _generate_impl(
             _material_evidence_omissions(work.get("omitted_evidence", [])) if long_form else []
         )
         if work.get("validated_draft") is not None:
-            draft = PaperDraft.model_validate(work["validated_draft"])
-            validation_warnings = list(work["validated_warnings"])
+            origin = work.get("rewind_origin")
+            if (
+                isinstance(origin, dict)
+                and origin.get("stage") == "validation"
+                and work.get("rewind_validation_done") is not True
+            ):
+                await report("validation", None, None)
+                draft, validation_warnings = _revalidate_rewind_manuscript(work, package)
+                # Save accepted validation before the next stage; never
+                # require the previous authoring request to be repeated.
+                _save_work(path, work)
+                await report("validation", None, None, "milestone")
+            else:
+                draft = PaperDraft.model_validate(work["validated_draft"])
+                validation_warnings = list(work["validated_warnings"])
             obligation_reconciliation = _reconcile_obligations(draft, package)
         else:
             if not one_shot_validation_started:

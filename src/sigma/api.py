@@ -742,7 +742,7 @@ class PaperRewindRequest(OpenRequest):
     expected_binding: str = Field(min_length=1, max_length=512)
     source_pdf_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    stage: Literal["started", "writing", "typesetting"]
+    stage: Literal["started", "writing", "validation", "typesetting"]
     confirm_restart: Literal[True]
     run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
