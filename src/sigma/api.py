@@ -1047,17 +1047,29 @@ async def paper_cancel_view(body: PaperCancelRequest):
 
 @app.post("/api/projects/papers/discard")
 async def papers_discard_view(body: PaperDiscardRequest):
-    await require_cloud_inference_binding(
-        body.expected_binding, body.expected_project_id, body.path
-    )
+    # Removing unpublished work is a provider-free recovery operation.
+    # A disconnected account must not strand a checkpoint or queue receipt.
+    view = await run_in_threadpool(inspect_project, body.path)
+    if view.project.id != body.expected_project_id:
+        raise HTTPException(404, "Project not found or access denied.")
     if body.run_id is None:
-        project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
+        await run_in_threadpool(
+            project_collaboration.require_paper_draft_operator, body.path, body.expected_project_id
+        )
     else:
-        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+        await run_in_threadpool(
+            project_collaboration.execution_run,
+            body.path,
+            "paper",
+            body.run_id,
+            operator=True,
+        )
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
         result = await papers.discard_work(body.path, body.expected_project_id)
     if body.run_id is not None:
-        project_collaboration.discard_execution_run(body.path, "paper", body.run_id)
+        await run_in_threadpool(
+            project_collaboration.discard_execution_run, body.path, "paper", body.run_id
+        )
     return result
 
 
