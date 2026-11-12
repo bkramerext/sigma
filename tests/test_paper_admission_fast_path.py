@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest import TestCase
+from unittest import TestCase, main
 from unittest.mock import patch
 
 from sigma import papers
@@ -48,3 +48,7 @@ class PaperAdmissionFastPathTests(TestCase):
                 papers.next_paper_number_for_activity("/not-needed", include_reserved=False) - 1
             )
             self.assertEqual(saved_max, 19)
+
+
+if __name__ == "__main__":
+    main()
