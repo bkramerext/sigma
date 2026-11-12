@@ -316,7 +316,7 @@ async def require_cloud_inference_binding(
     path: str,
     *,
     require_project: bool = True,
-) -> None:
+) -> Any | None:
     """Require explicit project/account intent before admitting sponsored inference."""
     memory_guard.require_capacity()
     # Local inference uses the user's personal ChatGPT connection even when
@@ -335,6 +335,9 @@ async def require_cloud_inference_binding(
 
     if not cloud_credential(credential):
         raise HTTPException(503, "Sponsored cloud inference is not configured.")
+    # Admission callers may reuse this already authorized project snapshot.
+    # Avoid parsing a potentially large project bundle a second time.
+    return view
 
 
 @demo_app.get("/")
@@ -717,6 +720,7 @@ class PaperCancelRequest(OpenRequest):
     run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
+    request_only: bool = False
 
 
 class PaperDiscardRequest(PaperCancelRequest):
@@ -1001,7 +1005,7 @@ async def paper_cancel_view(body: PaperCancelRequest):
     # Do not wait for (or require) the current AI connection: a provider outage,
     # account switch, or memory-pressure preflight must never prevent Stop.
     # Project identity and creator authorization remain mandatory.
-    view = inspect_project(body.path)
+    view = await run_in_threadpool(inspect_project, body.path)
     if view.project.id != body.expected_project_id:
         raise HTTPException(404, "Project not found or access denied.")
     if body.run_id is None:
@@ -1011,6 +1015,10 @@ async def paper_cancel_view(body: PaperCancelRequest):
     else:
         project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
+        if body.request_only:
+            # Stop is accepted and cancellation scheduled; cleanup may still
+            # be running. Never return "cancelled" before it is durable.
+            return {"stop_requested": papers.request_cancel_generation(body.path)}
         return {"cancelled": await papers.cancel_generation(body.path)}
 
 
@@ -1249,7 +1257,7 @@ def paper_delete_view(paper_id: str, path: str):
 
 @app.post("/api/projects/papers")
 async def paper_generate_view(body: PaperGenerateRequest, request: Request):
-    await require_cloud_inference_binding(
+    verified_view = await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
 
@@ -1277,8 +1285,8 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     reservation: dict[str, Any] | None = None
     run_id: str | None = None
     if shared:
-        admission_view = inspect_project(body.path)
-        project_collaboration.register_owner(admission_view)
+        admission_view = verified_view or await run_in_threadpool(inspect_project, body.path)
+        await run_in_threadpool(project_collaboration.register_owner, admission_view)
         run_id = body.run_id or uuid4().hex
         if body.run_id is not None:
             existing = project_collaboration.execution_run(
@@ -1290,11 +1298,20 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         config = await papers.configuration(view=admission_view, context=account)
         if not config["available"]:
             raise ProjectError(config["message"])
-        reservation = project_collaboration.reserve_execution_run(
+        # Disk-backed sequence and SQLite admission are synchronous. Run them
+        # off the API event loop so another user's Stop remains responsive.
+        saved_max = (
+            await run_in_threadpool(
+                papers.next_paper_number_for_activity, body.path, include_reserved=False
+            )
+            - 1
+        )
+        reservation = await run_in_threadpool(
+            project_collaboration.reserve_execution_run,
             body.path,
             "paper",
             run_id,
-            papers.next_paper_number_for_activity(body.path, include_reserved=False) - 1,
+            saved_max,
             model=config["model"],
             thinking=config["reasoning_effort"],
         )
