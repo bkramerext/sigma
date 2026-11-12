@@ -415,7 +415,7 @@ class RecentProject:
     hidden_by_family_pin: bool = False
     error: str | None = None
     project_type_snapshot: dict | None = None
-    paper_count: int = 0
+    paper_count: int | None = None
     best_paper_score: int | None = None
     paper_activity: str | None = None
     shared: bool = False
@@ -634,7 +634,9 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
             view = _project_header(entry["path"])
             if view.id != entry["id"]:
                 raise ProjectError("Project identity changed")
-            paper_metadata = {"paper_count": 0, "best_paper_score": None}
+            # The lightweight listing has not loaded paper metadata yet.
+            # None means unknown; zero is reserved for a verified empty project.
+            paper_metadata = {"paper_count": None, "best_paper_score": None}
             if not lightweight and not activity_only:
                 from sigma import paper_scores
 
