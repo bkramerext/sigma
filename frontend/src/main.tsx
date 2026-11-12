@@ -6783,11 +6783,13 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   const [baseline, setBaseline] = useState(initial);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
-  const [initialGroupSettings] = useState<SharedProjectInfo | null>(() => {
-    const snapshot = preloadedGroupSettings.get(initial.path) ?? null;
-    preloadedGroupSettings.delete(initial.path);
-    return snapshot;
-  });
+  // State initializers must be pure: StrictMode may invoke them twice.
+  const [initialGroupSettings] = useState<SharedProjectInfo | null>(
+    () => preloadedGroupSettings.get(initial.path) ?? null,
+  );
+  useEffect(() => {
+    if (initialGroupSettings) preloadedGroupSettings.delete(initial.path);
+  }, [initialGroupSettings, initial.path]);
   const [shared, setShared] = useState<SharedProjectInfo | null>(initialGroupSettings);
   const [collaborators, setCollaborators] = useState<string[]>(() => initialGroupSettings?.collaborators ?? []);
   const [adding, setAdding] = useState(false);
