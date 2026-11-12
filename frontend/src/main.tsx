@@ -7770,12 +7770,14 @@ function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, gu
         if (!next) return entry;
         const changed = entry.research_running !== next.research_running
           || entry.paper_activity !== next.paper_activity
+          || entry.paper_generating !== (next.paper_activity === 'active')
           || entry.answer_active !== next.answer_active;
         if (!changed) return entry;
         return {
           ...entry,
           research_running: next.research_running,
           paper_activity: next.paper_activity,
+          paper_generating: next.paper_activity === 'active',
           answer_active: next.answer_active,
           activity_author: next.activity_author,
           // Do not navigate using a run ID from an earlier activity snapshot.
