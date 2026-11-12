@@ -977,6 +977,24 @@ def check_completed_paper_count_does_not_slow_activity(root: Path) -> None:
     ):
         assert papers.activity_status(view.path) is None
 
+    published = [
+        {**row, "artifact_id": f"{number + 1000:032x}",
+         "creator_email": "owner@example.com", "runner_email": "owner@example.com",
+         "number": number}
+        for number, row in enumerate(historical, start=1)
+    ]
+    with (
+        patch.object(project_collaboration, "list_execution_runs", return_value=published),
+        patch.object(project_collaboration, "collaborator_identity", return_value="owner@example.com"),
+        patch.object(project_collaboration, "is_project_owner", return_value=True),
+        patch.object(papers, "progress_status", side_effect=AssertionError("Read completed checkpoint")),
+        patch.object(papers, "needs_preflight_on_open", side_effect=AssertionError("Scanned completed run")),
+        patch.object(papers, "_published_artifact_for_run", side_effect=AssertionError("Probed completed PDF")),
+    ):
+        runs = papers.run_progress_list(view.path)
+    assert len(runs) == 200
+    assert all(run["status"] == "complete" and run["paper_id"] for run in runs)
+
 
 def check_run_activity_aggregation_and_lightweight_poll() -> None:
     """Mixed runs retain queued entries, immutable authors and low-cost reads."""
