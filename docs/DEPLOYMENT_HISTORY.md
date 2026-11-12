@@ -9,6 +9,62 @@ procedure and does not authorize a release.** Use
 procedure and [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md) for live host and
 incident guidance.
 
+## 2026-11-12 — SIGMA v0.4.0 production deployment complete
+
+The approved source cutoff was
+`dae6de2690fa47e79bd53fb98ace565ad5789210`. Release SHA
+`02cd31299deb9581bf31de60aafcfe057012733a` is a merge commit directly over
+that cutoff, with the v0.4.0 version/release-notes changes and a browser
+acceptance fix for wrapped Q/A titles. No later development commits were
+included and no Git tag was created. Exact SHA workflows passed: SIGMA
+verification, Ruff lint/format, frontend build, and browser verification.
+
+Preflight on existing VM `sigma-gce-01` confirmed it was running the previous
+working release `7ee1b409a73702bb3451e477e7a33410b86a41c4`, with healthy
+backend/frontend/edge services and persistent state mounted at
+`/srv/sigma-state` from `/dev/sdb`, ext4 UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. The local pre-deployment state backup
+was made on the existing boot disk (UUID
+`016a55ad-ee12-4ca2-ba46-31afd363950e`) at
+`/var/backups/sigma-state-v040-pre-02cd31299deb9581-20261112T0007Z/state`.
+It contains 148 files (44 MB); checksum/metadata dry-run comparison found no
+differences, and the restore verifier passed before service restart. Backup
+and schema flags reflected the verified backup and absence of a schema change.
+
+The guarded deployment helper ran from 00:08:36 UTC to 00:10:43 UTC on
+November 12, 2026, using the host-only release SSH identity and the exact
+release SHA. It reported: “PASS: release ... started; container health,
+service release and state mount verified.” `release_image.py verify` also
+confirmed both production images were built from that SHA. Backend image is
+`sha256:fdc1a232c78af6f8d11c74f4aba66d8c6d2f25ae97dac6d632573d14b858140c`,
+frontend image is
+`sha256:4db36792c38f77e0a94ec11363d5b46d58aac58b151248e9855fb928647ee789`,
+and edge image remains
+`sha256:cf1bd22f2415bc99b785ece1df2c49d32985ac4ac42d84df335be17350593693`.
+The service is active, all three containers are healthy, the release checkout
+is pinned to the exact SHA, the persistent mount is unchanged, and the
+maintenance snippet is absent. The deployment helper retains the previous
+working release for rollback.
+
+Production acceptance passed: DNS A and private-port checks, HTTP-to-HTTPS
+redirect, HTTPS certificate/root, SPA deep link, hosted API status, and
+Google sign-in readiness (`enabled`, `ready`, `target=hosted`, mock auth off).
+Unauthenticated `/api/health` returned the expected 401. Real Chrome verified
+the guest welcome flow, 25 sample projects, opening sample research content,
+and About `Version 0.4.0 · Build 02cd312`; no research or paper generation was
+triggered. The post-deployment read-only state verifier passed all three
+SQLite integrity checks, 3 identities/workspaces, 19 project records, 43
+artifacts, one matching TeX/PDF paper pair, 10 terminal history rows, and 46
+accounting rows ($5.938237 recorded/reserved; 15 reserved or unknown).
+This matches the pre-cutover preservation baseline. No paid inference was run.
+
+Authenticated access to existing member Sessions/Papers/Q&A and provider-backed
+Source Material Resume were not exercised without using a real member session;
+the backed-up and live preserved state passed aggregate integrity checks, and
+Source Material recovery behavior passed exact-SHA automated tests. The live
+two-real-account collaboration smoke test remains separately pending. These
+acceptance limits do not block the deployment.
+
 ## Authorization record — SIGMA v0.1.5 / issue #337
 
 | Authorization | Record | Scope |

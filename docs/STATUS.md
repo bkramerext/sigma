@@ -1,5 +1,37 @@
 # SIGMA status
 
+## 2026-11-12 — SIGMA v0.4.0 production deployment complete
+
+Production runs v0.4.0 from merged release SHA
+`02cd31299deb9581bf31de60aafcfe057012733a`, whose parent is the approved
+source cutoff `dae6de2690fa47e79bd53fb98ace565ad5789210`. Exact-SHA Ruff,
+frontend build, SIGMA verification, and browser verification workflows all
+passed. The guarded deployment helper started the release at 00:08:36 UTC and
+reported success at 00:10:43 UTC on November 12.
+
+Before cutover, the existing service and persistent state mount were verified.
+A root-owned mode-0700 local backup was created on the existing boot disk at
+`/var/backups/sigma-state-v040-pre-02cd31299deb9581-20261112T0007Z/state` and
+verified with checksum/metadata comparison and the read-only restore verifier.
+The production state disk remains mounted read-write at `/srv/sigma-state`
+from `/dev/sdb` (ext4, UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`). The post-deployment verifier passed
+three SQLite integrity checks and found 3 identities/workspaces, 19 project
+records, 43 research artifacts, one TeX/PDF pair, 10 terminal historical job
+rows, and 46 accounting rows ($5.938237 recorded/reserved, including 15
+reserved or unknown outcomes).
+
+Backend and frontend containers are healthy and built from the release SHA;
+the edge container is healthy. Public HTTPS, HTTP redirect, TLS, SPA deep link,
+hosted Google-auth readiness, and same-origin API checks passed. Anonymous
+health correctly returns 401; Guest Mode sample browsing passed in real
+Chrome. About displays `Version 0.4.0 · Build 02cd312`. Maintenance is off.
+No paid inference was run. Existing project/session/paper/Q&A records were
+preserved; authenticated member access and provider-backed Resume were not
+exercised during production acceptance. The separately pending live
+two-real-account collaboration smoke test remains outstanding. See
+`DEPLOYMENT_HISTORY.md` for detailed results and image IDs.
+
 ## 2026-11-08 — SIGMA v0.2.2 production deployment complete
 
 Production now runs SIGMA v0.2.2 from merged `main` SHA
