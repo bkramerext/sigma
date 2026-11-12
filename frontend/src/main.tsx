@@ -3170,6 +3170,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const initialPaperActivityReported = useRef(false);
   const [paperClock, setPaperClock] = useState(() => Date.now());
   const [error, setError] = useState('');
+  // A successful publication supersedes the earlier generation error,
+  // even when the draft card has already been replaced by a saved paper.
+  const generationErrorRunId = useRef<string | null>(null);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(() => initialPaperListing.current === null);
   const [expandedPaperId, setExpandedPaperId] = useState('');
@@ -4290,6 +4293,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     selectPaperRun(runId);
     const controller = new AbortController(); request.current = controller;
     setPaperPlayIntent((continuationAvailable || resumeSelectedRun) && !restartBeforePlay ? 'resuming' : 'starting');
+    generationErrorRunId.current = null;
     setBusy(true); setPhase('Compiling publication standards…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
@@ -4420,6 +4424,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // Paper list/evidence refresh. Keep reconciliation best-effort.
       if (!deliberatePaperStop.current) void refresh(selected?.paper_id, true);
       if (!controller.signal.aborted) {
+        generationErrorRunId.current = runId;
         const message = errorMessage(cause);
         const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
         setError(disconnected && requestDispatched
@@ -4507,7 +4512,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     : paperProgress?.status === 'interrupted' && !paperProgress.detail?.startsWith('Restored from Paper ') ? paperProgress.detail ?? '' : '';
   // A durable published paper supersedes the failed authoring receipt. Errors
   // for that run cannot remain in the project-wide contextual notice.
-  const paperNoticeMessage = selectedRun?.paper_id ? '' : error || paperProgressFailure;
+  const errorRunPublished = !!generationErrorRunId.current &&
+    paperRuns.some(run => run.run_id === generationErrorRunId.current && !!run.paper_id);
+  const paperNoticeMessage = selectedRun?.paper_id || errorRunPublished ? '' : error || paperProgressFailure;
   const paperNoticeKey = [
     paperProgress?.started_at ?? '',
     paperProgress?.status ?? '',
@@ -4703,7 +4710,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       kind="research-pause-guidance paper-contextual-error"
       ariaLabel="Paper generation feedback"
       dismissLabel="Dismiss paper generation notice"
-      onDismiss={() => { setDismissedPaperNoticeKey(paperNoticeKey); setError(''); }}>
+      onDismiss={() => { setDismissedPaperNoticeKey(paperNoticeKey); setError(''); generationErrorRunId.current = null; }}>
       <p>{paperNoticeCopy ? paperNoticeCopy.description : paperErrorSummary(paperNoticeMessage)}</p>
       {paperNoticeCopy && <p><strong>Next:</strong> {paperNoticeCopy.next}</p>}
     </SessionNotice>}
@@ -4762,8 +4769,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 model: paperProgress?.model || selectedRun?.model || model,
                 thinking: paperProgress?.reasoning_effort || selectedRun?.thinking || effort,
               }) || 'Paper metadata unavailable'}
-              {!stoppingSelectedPaper && ' · '}{stoppingSelectedPaper ? ''
-                : paperRestartPending ? 'Restarting'
+              {!stoppingSelectedPaper && !paperRestartPending && ' · '}{stoppingSelectedPaper || paperRestartPending ? ''
                 : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming' : 'Starting')
                 : paperProgress?.status === 'active' ? 'Generating'
                 : paperProgress?.status === 'queued' ? 'Queued'
