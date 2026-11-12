@@ -5033,12 +5033,13 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
   const idleTitleRef = useRef<HTMLButtonElement>(null);
+  const activeTitleRef = useRef<HTMLButtonElement>(null);
   const hasActivity = activityStatus === undefined
     ? researchRunning || paperRunning || paperQueued || askRunning : activityStatus !== null;
   const queuedOnly = activityStatus === undefined
     ? paperQueued && !researchRunning && !paperRunning && !askRunning : activityStatus === 'queued';
   useLayoutEffect(() => {
-    const button = idleTitleRef.current;
+    const button = activeTitleRef.current ?? idleTitleRef.current;
     const row = button?.parentElement;
     if (!button || !row) return;
 
@@ -5078,7 +5079,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
-        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
+        ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
           ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
