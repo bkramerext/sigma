@@ -3024,6 +3024,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [restartReady, setRestartReady] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
+  const [confirmDiscardRunId, setConfirmDiscardRunId] = useState<string | null>(null);
   const [confirmRestartDraft, setConfirmRestartDraft] = useState(false);
   const [confirmPlayRestartDraft, setConfirmPlayRestartDraft] = useState(false);
   const [confirmRecoverDraft, setConfirmRecoverDraft] = useState(false);
@@ -3586,16 +3587,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
 
   async function discardDraft() {
     if (busy || request.current !== null || ['active', 'queued'].includes(paperProgress?.status ?? '')) return;
-    if (!paperProgress && !restartableCheckpoint && !checkpointMismatch) {
+    if (!paperProgress && !restartableCheckpoint && !checkpointMismatch && !selectedRunIdRef.current) {
       setNewPaperRequested(false); setConfirmDiscardDraft(false); setResetConfirm(false);
       return;
     }
-    if (!binding) { setError('Connect an eligible AI provider before discarding saved unfinished paper work.'); return; }
     setBusy(true); setError('');
     try {
       const response = await fetch('/api/projects/papers/discard', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding, confirm_discard: true }),
+        body: JSON.stringify({ path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding || 'stop-only', confirm_discard: true }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished paper work.');
@@ -3653,13 +3653,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
-  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null) {
+  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null, resumeSelectedRun = false) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     const runId = selectedRunIdRef.current ?? crypto.randomUUID().replaceAll('-', '');
     selectPaperRun(runId);
     const controller = new AbortController(); request.current = controller;
-    setPaperPlayIntent(continuationAvailable && !restartBeforePlay ? 'resuming' : 'starting');
+    setPaperPlayIntent((continuationAvailable || resumeSelectedRun) && !restartBeforePlay ? 'resuming' : 'starting');
     setBusy(true); setPhase('Compiling publication standards…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
