@@ -2163,7 +2163,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     revealSession(revealId, true, new URLSearchParams(window.location.search).get('reveal_session') === revealId);
   }, [activeSession?.id, onRevealNewSession, sessions.length]);
 
-  const runningCount = activeSessionCount;
+  const stoppingSessionId = pendingSessionAction?.action === 'stop' || pendingSessionAction?.action === 'pause'
+    ? pendingSessionAction.id : null;
+  const runningCount = activeSessionCount -
+    (sessions.some(item => item.id === stoppingSessionId && ['queued', 'running'].includes(item.status)) ? 1 : 0);
   const pendingSessionName = admittingSession ? 'Starting session' : '';
   const pendingSessionMetadata = formatRunAttribution({
     kind: 'session', creator: viewerEmail, model: config?.model, thinking: config?.reasoning_effort,
@@ -2184,13 +2187,13 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
       <div className="sessions-heading-actions strategy-heading-actions">
         {sessionControls.confirming ? sessionControls.starting
-          ? <span className="research-running-indicator-frame" role="status" aria-label="Starting research session" data-tooltip="Starting session · awaiting server acceptance"><span className="research-running-indicator"/></span>
+          ? null // The pending Session row owns the one visible green pulse.
           : <>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
         </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={sessionControls.play}><CirclePlusIcon/></button>}
       </div>
-      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running{admittingSession ? ' · 1 starting' : ''}</p>
+      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running{stoppingSessionId ? ' · 1 stopping' : ''}{admittingSession ? ' · 1 starting' : ''}</p>
     </header>
 
     {guest && guestSessionCard && <GuestFeatureCard title="Research sessions"
@@ -2206,6 +2209,9 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
             <div className="session-summary">
               <div className="session-title-line">
                 <span className="session-row-title">{pendingSessionName}</span>
+                <div className="session-heading-actions">
+                  <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session (available after server acceptance)" data-tooltip="Stop available after session starts" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>
+                </div>
                 <span className="session-status session-running" aria-label="Session starting · awaiting server acceptance" data-tooltip="Starting session · awaiting server acceptance">starting<i aria-hidden="true"/></span>
               </div>
               <small className="session-run-metadata">{pendingSessionMetadata || 'Research session'} · awaiting server acceptance</small>
@@ -2234,13 +2240,12 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
                   {!guest && canControl && sessionOffersResume(item) && !(pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume') && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
-                  {pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume' && <span className="research-running-indicator-frame" role="status" aria-label={`Resuming Session ${item.session_number}`} data-tooltip="Resuming session · awaiting server acceptance"><span className="research-running-indicator"/></span>}
-                  {!guest && canControl && !pendingAction && ['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={busy} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                  {!guest && canControl && (pendingAction === 'resume' || pendingAction === 'stop' || pendingAction === 'pause' || (!pendingAction && ['queued', 'running'].includes(item.status))) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={pendingAction === 'stop' || pendingAction === 'pause' ? `Stopping Session ${item.session_number}` : `Stop Session ${item.session_number}`} data-tooltip={pendingAction === 'resume' ? 'Stop available after Resume is accepted' : pendingAction ? 'Stopping session · awaiting server acknowledgment' : `Stop Session ${item.session_number}`} disabled={busy || !!pendingAction} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
-                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? `${statusLabel} · awaiting server acknowledgment` : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{statusLabel === 'running' || statusLabel === 'resuming' || statusLabel === 'stopped' || statusLabel === 'stopping' ? <>{statusLabel}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{statusLabel}</>}</span>
+                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? `${statusLabel} · awaiting server acknowledgment` : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{(pendingAction === 'stop' || pendingAction === 'pause') ? statusLabel : statusLabel === 'running' || statusLabel === 'resuming' || statusLabel === 'stopped' ? <>{statusLabel}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{statusLabel}</>}</span>
                 {sessionControlFailures[item.id]
                   ? (!sessionControlFailures[item.id].dismissed && <SessionNotice key={`${item.id}:control:${sessionControlFailures[item.id].serial}`}
                       number={item.session_number}
@@ -2255,7 +2260,9 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                   : (['paused', 'stopped', 'failed'].includes(item.status) || (item.provider_usage_limited && item.status === 'ended'))
                     && <SessionRenderBoundary key={`${item.id}:notice:${sessionNoticeKey(item)}`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} status notice could not be displayed; its saved record remains in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel} · awaiting server acknowledgment` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
-                <small className="session-progress-inline">Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</small>
+                <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
+                  ? 'Stopping · awaiting server acknowledgment · saved findings remain available'
+                  : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</>}</small>
                 {strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
                 {strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
@@ -2948,6 +2955,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
+  // Visual-only Stop intent: never modify the saved run or claim cancellation
+  // before the server confirms it. Shared runs retain their exact run IDs.
+  const [optimisticPaperStop, setOptimisticPaperStop] = useState<{ runId: string | null } | null>(null);
   const [paperStopReconciliation, setPaperStopReconciliation] = useState(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
@@ -3221,6 +3231,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           if (next?.status !== 'active' && next?.status !== 'queued' && !stopping) {
             if (paperStopAwaitingCheckpoint.current?.runId === runId) {
               paperStopAwaitingCheckpoint.current = null;
+              setOptimisticPaperStop(null);
               setPaperStopReconciliation(false);
               setPhase('');
               if (next?.status === 'cancelled')
@@ -3497,7 +3508,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
       || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
     paperStopPending.current = true;
+    // Immediately remove this run's green pulse and change its status/metadata.
+    // The Stop receipt will decide whether we keep or roll back this display.
+    setOptimisticPaperStop({ runId });
     setPhase('Stopping paper…');
+    setError('');
     try {
       const response = await fetch('/api/projects/papers/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
@@ -3515,16 +3530,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           request.current?.abort();
         }
       } else if (result.cancelled) {
+        setOptimisticPaperStop(null);
         setPhase('');
         setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
         void refresh(selected?.paper_id, true);
       } else {
+        // Nothing was running: restore the real control state.
+        setOptimisticPaperStop(null);
         setPhase('');
         void refresh(selected?.paper_id, true);
       }
     } catch (cause) {
+      // Rejected Stop must restore the pulsing state and usable controls.
+      setOptimisticPaperStop(null);
       setPhase('');
       setError(errorMessage(cause));
+      void refresh(selected?.paper_id, true);
     } finally {
       paperStopPending.current = false;
     }
@@ -3751,15 +3772,16 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const planningRetry = continuationAvailable && resumeDetails !== null &&
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
-  const generationRunning = !deliberatePaperStop.current && (
+  const stoppingSelectedPaper = optimisticPaperStop !== null && optimisticPaperStop.runId === selectedRunId;
+  const generationRunning = stoppingSelectedPaper || (!deliberatePaperStop.current && (
     paperProgress?.status === 'active' || paperProgress?.status === 'queued' ||
     (request.current !== null && !['cancelled', 'interrupted', 'failed', 'complete'].includes(paperProgress?.status ?? ''))
-  );
+  ));
   const generating = busy || generationRunning;
   // Speculative presentation: Play disappears and the familiar green pulse
   // appears before evidence preflight or server reservation finishes. Never
   // treat this as an accepted run or assign an unreserved Paper number.
-  const paperStartOptimistic = busy && request.current !== null && !deliberatePaperStop.current
+  const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
     && !['active', 'queued'].includes(paperProgress?.status ?? '');
   // The brief transition after Stop is not a second-paper conflict. A Play
   // control can only advertise concurrency as its disabled reason when a
@@ -3907,8 +3929,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={draftDisplayTitle} data-paper-version={assignedPaperNumber ?? undefined}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={draftDisplayTitle} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              badge={paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? <span className={`research-running-indicator paper-title-activity${!paperStartOptimistic && paperProgress?.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperStartOptimistic ? 'Paper starting' : paperProgress?.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperStartOptimistic ? 'Starting paper · awaiting server acceptance' : formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
-              beforeCopy={paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
+              badge={!stoppingSelectedPaper && (paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued') ? <span className={`research-running-indicator paper-title-activity${!paperStartOptimistic && paperProgress?.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperStartOptimistic ? 'Paper starting' : paperProgress?.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperStartOptimistic ? 'Starting paper · awaiting server acceptance' : formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
+              beforeCopy={stoppingSelectedPaper ? <span className="paper-real-title paper-draft-title">Stopping paper…</span> : paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && canControlDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? (assignedPaperNumber !== null ? `Resume Paper ${assignedPaperNumber}` : 'Resume paper') : 'Generate paper'} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
                   {confirmRecoverDraft && recoverySection !== null && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Authorize unfinished paper section recovery">
@@ -3926,7 +3948,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     </div>
                   </div></div>}
                 </span>}
-                {generationRunning && !paperStartOptimistic && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip="Stop paper generation" disabled={loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip={stoppingSelectedPaper ? 'Stopping paper · awaiting server confirmation' : paperStartOptimistic ? 'Stop available after paper starts' : 'Stop paper generation'} disabled={loading || paperStartOptimistic || stoppingSelectedPaper} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {canStartOver && canControlDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(false); setConfirmRestartDraft(true); }}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
                   {confirmRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm start over on paper generation">
@@ -3949,17 +3971,21 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 </span>}
               </>}/>
           </div></div>
-          {paperStartOptimistic && <p className="saved-paper-meta" role="status">
+          {(paperStartOptimistic || stoppingSelectedPaper) && <p className="saved-paper-meta" role="status">
             {formatRunAttribution({ kind: 'paper', creator: viewerEmail || activeDraftCreator, model, thinking: effort }) || 'Paper'}
-            {' · Starting · awaiting server acceptance'}
+            {stoppingSelectedPaper
+              ? paperStopReconciliation ? ' · Stopping · saving checkpoint' : ' · Stopping · awaiting server acknowledgment'
+              : ' · Starting · awaiting server acceptance'}
           </p>}
           <div id="paper-draft-content" className="paper-draft-content" hidden={!draftPaperExpanded}>
       {checkpointMismatch && !generating && <p className="ai-paper-restart-notice" role="status">{checkpointMismatch.incomplete_one_shot
         ? 'The previous writing attempt stopped before saving a draft and cannot resume.'
         : 'Research or AI settings changed; this checkpoint cannot resume.'} Saved research and papers remain. Use Play to confirm a new attempt, or Start over to reset without playing.</p>}
-      {busy && (paperStartOptimistic || restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{paperStartOptimistic ? 'Starting paper…' : phase}</span></p>}
+      {busy && !stoppingSelectedPaper && (paperStartOptimistic || restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{paperStartOptimistic ? 'Starting paper…' : phase}</span></p>}
       {paperProgress && !paperStartOptimistic && !restartingCheckpoint && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
-        {paperProgress.status === 'active' || paperProgress.status === 'queued'
+        {stoppingSelectedPaper
+          ? <strong>Stopping paper · {paperStopReconciliation ? 'saving checkpoint' : 'awaiting server acknowledgment'}</strong>
+          : paperProgress.status === 'active' || paperProgress.status === 'queued'
           ? <>
               <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>
               <PaperStageSteps progress={paperProgress}/>
@@ -3979,19 +4005,21 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           <div className="saved-paper-row">
             <div className="saved-paper-heading">
               <strong className="paper-real-title">Paper {run.number}</strong>
-              {(run.status === 'active' || run.status === 'queued') && <span className={`research-running-indicator paper-title-activity${run.status === 'queued' ? ' paper-queued-indicator' : ''}`}
+              {!(optimisticPaperStop && optimisticPaperStop.runId === run.run_id) && (run.status === 'active' || run.status === 'queued') && <span className={`research-running-indicator paper-title-activity${run.status === 'queued' ? ' paper-queued-indicator' : ''}`}
                 aria-label={run.status === 'queued' ? 'Paper queued' : 'Paper generating'}
                 data-tooltip={formatRunAttribution({ kind: 'paper', number: run.number, creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking, mode: 'hover' })}/>}
               {run.can_control && <button type="button" className="text-view-link session-start-link" data-tooltip="Open your paper"
                 onClick={() => { selectPaperRun(run.run_id); setNewPaperRequested(false); setDraftPaperExpanded(true); void refresh(undefined, true); }}>Open</button>}
               {run.can_control && (run.status === 'active' || run.status === 'queued') && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
-                aria-label={`Stop Paper ${run.number}`} data-tooltip="Stop paper generation" onClick={() => void cancelGeneration(run.run_id)}>
+                aria-label={`Stop Paper ${run.number}`} data-tooltip={optimisticPaperStop?.runId === run.run_id ? 'Stopping paper · awaiting server confirmation' : 'Stop paper generation'} disabled={optimisticPaperStop?.runId === run.run_id} onClick={() => void cancelGeneration(run.run_id)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
               </button>}
             </div>
             <p className="saved-paper-meta">{formatRunAttribution({ kind: 'paper', creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking })}
-              {' · '}{run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued' : run.status === 'interrupted' ? 'Interrupted' : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
+              {' · '}{optimisticPaperStop?.runId === run.run_id
+                ? paperStopReconciliation ? 'Stopping · saving checkpoint' : 'Stopping · awaiting server acknowledgment'
+                : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued' : run.status === 'interrupted' ? 'Interrupted' : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
             </p>
             {run.progress?.stage && run.progress.started_at && typeof run.progress.current !== 'undefined' &&
               <div className="ai-paper-status ai-paper-progress" role="status"><PaperStageSteps progress={run.progress as PaperProgress}/></div>}
