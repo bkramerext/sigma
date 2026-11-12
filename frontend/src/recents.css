@@ -603,7 +603,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   button.recent-save-as,
   button.recent-forget
 ),
-.home-page .home-samples a.recent-title-star {
+.home-page .home-samples :is(a, button).recent-title-star {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -631,7 +631,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   .home-recents button.recent-title-shared,
   .home-recents button.recent-save-as,
   .home-recents button.recent-forget,
-  .home-samples a.recent-title-star,
+  .home-samples :is(a, button).recent-title-star,
   .home-projects-heading button.home-icon-action
 ):is(:hover, :focus-visible):not(:disabled) {
   color: #fff2e9 !important;
