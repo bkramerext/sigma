@@ -2984,6 +2984,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     return () => window.removeEventListener('sigma-reveal-papers', reveal);
   }, [path, onSectionOpened]);
   const request = useRef<AbortController | null>(null);
+  const paperSubmissionDispatched = useRef(false);
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
@@ -3541,6 +3542,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const target = paperRuns.find(run => run.run_id === runId);
     if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
       || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    if (runId === selectedRunIdRef.current && paperStartOptimistic && !paperSubmissionDispatched.current) {
+      // Before dispatch, Stop simply cancels preparation. No run or provider
+      // operation needs to be stopped, and no paid call is replayed.
+      setOptimisticPaperStop({ runId });
+      setPhase('Stopping paper…');
+      deliberatePaperStop.current = true;
+      request.current?.abort();
+      return;
+    }
     paperStopPending.current = true;
     // Immediately remove this run's green pulse and change its status/metadata.
     // The Stop receipt will decide whether we keep or roll back this display.
@@ -3548,12 +3558,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     setPhase('Stopping paper…');
     setError('');
     try {
-      const response = await fetch('/api/projects/papers/cancel', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only', request_only: true }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
+      let result: { stop_requested?: boolean; cancelled?: boolean } = {};
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const response = await fetch('/api/projects/papers/cancel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only', request_only: true }),
+        });
+        result = await response.json();
+        if (!response.ok) throw new Error('Could not cancel paper generation.');
+        if (result.stop_requested || result.cancelled || !paperSubmissionDispatched.current) break;
+        // The paper was submitted but its worker has not yet been registered.
+        // Preserve the Stop intent and retry without showing the Play button.
+        await new Promise<void>(resolve => window.setTimeout(resolve, 250));
+      }
       if (result.stop_requested) {
         // Stop is requested, not yet a completed cancellation. Keep the
         // progress pane polling until the backend saves its terminal status.
@@ -3680,6 +3697,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null, resumeSelectedRun = false) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
+    paperSubmissionDispatched.current = false;
     const runId = selectedRunIdRef.current ?? crypto.randomUUID().replaceAll('-', '');
     selectPaperRun(runId);
     const controller = new AbortController(); request.current = controller;
@@ -3754,6 +3772,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
         : 'Compiling publication standards…');
       requestDispatched = true;
+      paperSubmissionDispatched.current = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
           ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}),
@@ -3825,7 +3844,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               ? `${message} Check My Work versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
               : message);
       }
-    } finally { finishProvider(); request.current = null; deliberatePaperStop.current = false; setBusy(false); }
+    } finally {
+      if (deliberatePaperStop.current && !requestDispatched) {
+        setOptimisticPaperStop(null);
+        setPhase('');
+        setNewPaperRequested(false);
+        void refresh(undefined, true);
+      }
+      finishProvider();
+      request.current = null;
+      paperSubmissionDispatched.current = false;
+      deliberatePaperStop.current = false;
+      setBusy(false);
+    }
   }
   const planningFallback = continuationAvailable && Boolean(resumeDetails?.planning_fallback_available);
   const planningRetry = continuationAvailable && resumeDetails !== null &&
@@ -4007,7 +4038,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     </div>
                   </div></div>}
                 </span>}
-                {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip={stoppingSelectedPaper ? 'Stopping paper · awaiting server confirmation' : paperStartOptimistic ? 'Stop available after paper starts' : 'Stop paper generation'} disabled={loading || paperStartOptimistic || stoppingSelectedPaper} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip={stoppingSelectedPaper ? 'Stopping paper' : 'Stop paper generation'} disabled={loading || stoppingSelectedPaper} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {canStartOver && canControlDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(false); setConfirmRestartDraft(true); }}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
                   {confirmRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm start over on paper generation">
