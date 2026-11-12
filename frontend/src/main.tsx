@@ -1787,16 +1787,44 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     return () => controller.abort();
   }, [load, reportReadFailure]);
 
+  const sessionPollPending = useRef(false);
   useEffect(() => {
     if (!activeSession) return;
     const stopWatching = watchResearchProviderActivity(path, projectId);
-    const poll = () => {
-      if (document.visibilityState === 'visible') void load().catch(reportReadFailure);
+    let alive = true;
+    const poll = async () => {
+      if (!alive || document.visibilityState !== 'visible' || sessionPollPending.current) return;
+      sessionPollPending.current = true;
+      try {
+        // Read only the active session during frequent progress polling. The
+        // full history and Current Understanding are rebuilt on meaningful
+        // milestones, not every two seconds in every collaborator's browser.
+        const response = await fetch(
+          `/api/projects/research-sessions/${encodeURIComponent(activeSession.id)}?${new URLSearchParams({ path })}`,
+          { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } },
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Could not read research progress');
+        if (!alive) return;
+        const current = sessionForDisplay(data);
+        if (!current) throw new Error('Research progress response was invalid');
+        setSessions(sessions => sessions.map(item => item.id === current.id ? current : item));
+        if (current.status !== activeSession.status
+          || current.steps.length !== activeSession.steps.length
+          || current.artifacts.length !== activeSession.artifacts.length) {
+          void load(current.id).catch(reportReadFailure);
+        }
+      } catch (cause) {
+        if (alive) reportReadFailure(cause);
+      } finally {
+        sessionPollPending.current = false;
+      }
     };
-    const timer = window.setInterval(poll, 2000);
-    document.addEventListener('visibilitychange', poll);
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', poll); stopWatching(); };
-  }, [activeSession?.id, activeSession?.status, load, path, projectId, reportReadFailure]);
+    const tick = () => { void poll(); };
+    const timer = window.setInterval(tick, 2000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { alive = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', tick); stopWatching(); };
+  }, [activeSession?.id, activeSession?.status, activeSession?.steps.length, activeSession?.artifacts.length, load, path, projectId, reportReadFailure]);
 
   const sponsoredSession = cloud?.target === 'hosted'
     || (cloud?.target === 'local' && cloud.funding.selectedConnection === 'sponsored');
@@ -1813,11 +1841,15 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         setConfirmStart(true);
         return;
       }
-      const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`);
-      const current = await response.json();
+      // Neither read depends on the other; avoid two serial network RTTs.
+      const [response, limitResponse] = await Promise.all([
+        fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`),
+        fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`),
+      ]);
+      const [current, currentLimits] = await Promise.all([
+        response.json(), limitResponse.json(),
+      ]);
       if (!response.ok) throw new Error(current.error ?? 'Could not read AI configuration');
-      const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
-      const currentLimits = await limitResponse.json();
       if (!limitResponse.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
       const validation = validateLimitDraft(draftLimits(currentLimits));
       if (!validation.value) {
