@@ -1024,7 +1024,7 @@ with sync_playwright() as playwright:
         ),
     )
     page.reload()
-    play = page.get_by_role("button", name="Resume paper")
+    play = page.get_by_role("button", name="Resume paper", exact=True)
     expect(play).to_be_enabled(timeout=10000)
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
     restart = page.get_by_role("button", name="Start over on paper generation")
@@ -1055,7 +1055,7 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers", simulate_generation)
     play.click()
-    expect(page.get_by_role("button", name="Resume paper")).to_be_enabled(timeout=10000)
+    expect(page.get_by_role("button", name="Resume paper", exact=True)).to_be_enabled(timeout=10000)
     assert dispatched == ["POST"], dispatched
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
 

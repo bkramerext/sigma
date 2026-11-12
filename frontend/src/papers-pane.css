@@ -639,3 +639,34 @@
   user-select: none !important;
   -webkit-user-select: none !important;
 }
+
+/* Anchored Paper checkpoint confirmation: one popup near the clicked step,
+   clamped to the viewport, never an inline card displacing the manuscript. */
+.paper-step-restart-popup {
+  position: fixed;
+  z-index: 1300;
+  box-sizing: border-box;
+  width: min(430px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid #73583e;
+  border-radius: 7px;
+  background: #101b26;
+  box-shadow: 0 14px 35px #000b;
+  color: #dce7f0;
+}
+.paper-step-restart-popup p { margin: 0 0 10px; }
+.paper-step-restart-popup .session-remove-confirm-actions { display: flex; gap: 12px; }
+.paper-step-restart-popup .text-view-link { color: var(--sigma-copper-foreground); }
+.workspace-page .papers-pane .saved-paper-meta .paper-inline-score {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sigma-copper-foreground);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
