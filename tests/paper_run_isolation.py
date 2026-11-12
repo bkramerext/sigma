@@ -63,6 +63,61 @@ class PaperRunIsolationTests(TestCase):
         self.assertEqual(papers._work_file(self.path, create=False), legacy_file)
         self.assertTrue(legacy_file.is_file())
 
+    def test_resumed_collaborator_keeps_original_creator(self) -> None:
+        with (
+            papers.paper_run_scope(self.first, number=12),
+            patch.object(
+                papers.project_collaboration, "execution_run",
+                return_value={"number": 12, "creator_email": "original@example.test"},
+            ),
+            patch.object(
+                papers.project_collaboration, "collaborator_identity",
+                return_value="executor@example.test",
+            ),
+        ):
+            self.assertEqual(papers._paper_original_creator(self.path), "original@example.test")
+
+    def test_published_checkpoint_returns_scoring_as_resume_stage(self) -> None:
+        paper_id = uuid4().hex
+        work = self.saved_work("fixture")
+        work["published_paper_id"] = paper_id
+        self.assertEqual(papers._unfinished_resume_stage(work), "scoring")
+
+    def test_published_creator_recovery_preserves_pdf_and_rejects_wrong_run(self) -> None:
+        paper_id = uuid4().hex
+        creator = "original@example.test"
+        executor = "executor@example.test"
+        pdf = b"%PDF-1.4\nfixture\n"
+        with papers.paper_run_scope(self.first, number=12):
+            papers._save(
+                self.path,
+                {
+                    "paper_id": paper_id,
+                    "paper_version": 12,
+                    "created_by": executor,
+                    "generation": {"progress_run_id": self.first},
+                },
+                pdf,
+            )
+            saved = papers._read_one(self.path, paper_id)
+            reservation = {"number": 12, "creator_email": creator}
+            with self.assertRaisesRegex(ProjectError, "saved execution"):
+                papers._align_published_creator(self.path, saved, reservation, self.second)
+            with self.assertRaisesRegex(ProjectError, "saved execution"):
+                papers._align_published_creator(
+                    self.path, saved, {"number": 13, "creator_email": creator}, self.first,
+                )
+            self.assertEqual(
+                papers._read_one(self.path, paper_id)["created_by"], executor
+            )
+            aligned = papers._align_published_creator(self.path, saved, reservation, self.first)
+            self.assertEqual(aligned["created_by"], creator)
+            self.assertEqual(papers._read_one(self.path, paper_id)["created_by"], creator)
+            self.assertEqual(
+                (papers._paper_dir(self.path) / f"{paper_id}.pdf").read_bytes(), pdf
+            )
+            papers._align_published_creator(self.path, aligned, reservation, self.first)
+
     def test_cancelled_queue_does_not_erase_earlier_progress(self) -> None:
         """The next queued attempt is not the progress history of the Paper."""
         with papers.paper_run_scope(self.first):

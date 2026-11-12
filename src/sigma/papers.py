@@ -165,6 +165,16 @@ def paper_run_scope(run_id: str, *, number: int | None = None) -> Iterator[None]
         _paper_run_id.reset(token)
 
 
+def _paper_original_creator(path: str) -> str | None:
+    """Bind publication to its original creator, not a collaborator on Resume."""
+    run_id = _paper_run_id.get()
+    if run_id is not None:
+        reservation = project_collaboration.execution_run(path, "paper", run_id, operator=True)
+        if reservation is not None:
+            return reservation["creator_email"]
+    return project_collaboration.collaborator_identity(path)
+
+
 def _paper_state_key(path: str) -> str:
     project_key = str(project_path(path).resolve())
     run_id = _paper_run_id.get()
@@ -3216,6 +3226,75 @@ def _stored_paper_record_json(record: dict[str, Any]) -> bytes:
     return _json(stored)
 
 
+def _align_published_creator(
+    path: str,
+    record: dict[str, Any],
+    reservation: Mapping[str, Any],
+    run_id: str,
+) -> dict[str, Any]:
+    """Repair legacy executor-as-author metadata, never a different saved PDF.
+
+    The run's original creator is authoritative. Correct old published records
+    only when their reserved number and durable run ID both match.
+    """
+    def belongs_to_run(item: Mapping[str, Any]) -> bool:
+        generation = item.get("generation")
+        return (
+            item.get("paper_version") == reservation["number"]
+            and isinstance(generation, dict)
+            and generation.get("progress_run_id") == run_id
+        )
+
+    if not belongs_to_run(record):
+        raise ProjectError("Published paper does not match its saved execution.")
+    original_creator = reservation["creator_email"]
+    if record.get("created_by") == original_creator:
+        return record
+
+    descriptor = _paper_version_lock(path)
+    try:
+        current = _read_one(path, record["paper_id"])
+        if not belongs_to_run(current) or current.get("pdf_sha256") != record.get("pdf_sha256"):
+            raise ProjectError("Saved paper changed during publication recovery.")
+        if current.get("created_by") not in {record.get("created_by"), original_creator}:
+            raise ProjectError("Saved paper attribution changed during publication recovery.")
+        if current.get("created_by") != original_creator:
+            if not _valid_pdf_file(path, current):
+                raise ProjectError("Saved PDF could not be verified for publication recovery.")
+            current["created_by"] = original_creator
+            encoded = _stored_paper_record_json(current)
+            if len(encoded) > MAX_PAPER_BYTES:
+                raise ProjectError("Saved paper metadata exceeds the storage limit.")
+            target = project_path(path)
+            identifier = _paper_id(record["paper_id"])
+            if target.suffix == ".json":
+                from sigma.projects import save_project_artifacts
+
+                save_project_artifacts(
+                    target, {f"artifacts/papers/{identifier}.json": encoded}
+                )
+            else:
+                file = _paper_dir(path, create=False) / f"{identifier}.json"
+                staged = _stage(file.parent, encoded)
+                try:
+                    os.replace(staged, file)
+                    fd = os.open(file.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                finally:
+                    staged.unlink(missing_ok=True)
+            logging.getLogger("sigma.lifecycle").info(
+                "paper.creator_reconciled paper_id=%s run_id=%s", identifier, run_id
+            )
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+    record["created_by"] = original_creator
+    return record
+
+
 @project_collaboration.fenced_checkpoint
 def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
     target = project_path(path)
@@ -5261,6 +5340,8 @@ def _unfinished_resume_stage(work: Mapping[str, Any] | None) -> str | None:
     """
     if not work:
         return None
+    if work.get("published_paper_id"):
+        return "scoring"
     if not isinstance(work.get("frozen_package"), dict):
         return None
     progress = work.get("progress") or {}
@@ -10859,11 +10940,9 @@ async def _generate_impl(
                     path, "paper", run_id_for_publication, operator=True
                 )
                 if reservation is not None:
-                    if (
-                        saved_record.get("paper_version") != reservation["number"]
-                        or saved_record.get("created_by") != reservation["creator_email"]
-                    ):
-                        raise ProjectError("Published Paper does not match its creator reservation")
+                    saved_record = _align_published_creator(
+                        path, saved_record, reservation, run_id_for_publication
+                    )
                     project_collaboration.note_execution_artifact_author(
                         path, "paper", run_id_for_publication, paper_id
                     )
@@ -11418,7 +11497,7 @@ async def _generate_impl(
             "paper_id": identifier,
             "paper_version": _paper_run_number.get(),
             "project_id": view.project.id,
-            "created_by": project_collaboration.collaborator_identity(path),
+            "created_by": _paper_original_creator(path),
             "created_at": timestamp,
             "snapshot_sha256": snapshot_hash,
             "snapshot": package,
