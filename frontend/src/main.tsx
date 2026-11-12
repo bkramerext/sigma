@@ -6793,7 +6793,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialGroupSettings);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { dialog.current?.showModal(); }, []);
@@ -6806,6 +6806,11 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     setError('');
   }, [initial]);
   useEffect(() => {
+    // Home already supplied a valid collaboration snapshot. Do not initiate
+    // another request just because the dialog mounted. A later revision
+    // change still triggers the ordinary refresh path.
+    if (initialGroupSettings && (collaborationRevision === undefined
+      || collaborationRevision === initialGroupSettings.revision)) return;
     const controller = new AbortController();
     const json = async (url: string) => {
       const response = await fetch(url, { signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
@@ -6821,7 +6826,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
       setError('Shared project settings could not be loaded.');
       setLoading(false);
     }, 8000);
-    void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path })}`)
+    void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, include_authors: 'false' })}`)
       .then((saved: SharedProjectInfo) => {
         if (controller.signal.aborted) return;
         setShared(saved);
