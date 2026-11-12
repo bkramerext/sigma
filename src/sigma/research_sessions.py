@@ -6447,8 +6447,10 @@ async def start_session(
     except ValueError as exc:
         raise ProjectError("A valid idempotency key is required") from exc
     _require_current_local_backend()
-    view, guard = _snapshot(path)
-    project_collaboration.register_owner(view)
+    # Large owner-only and collaborative bundles must not block unrelated
+    # API requests while their frozen research inputs are decoded.
+    view, guard = await asyncio.to_thread(_snapshot, path)
+    await asyncio.to_thread(project_collaboration.register_owner, view)
     if (
         browser_presence_required
         and not research_preferences.allow_unattended_background_execution()
@@ -6462,7 +6464,11 @@ async def start_session(
         raise ProjectError("Project changed; reopen it before starting research")
     selected_ids = list(dict.fromkeys(strategy_ids or [strategy_id]))
     existing = next(
-        (record for record in _all(view.path) if record.get("idempotency_key") == idempotency_key),
+        (
+            record
+            for record in await asyncio.to_thread(_all, view.path)
+            if record.get("idempotency_key") == idempotency_key
+        ),
         None,
     )
     if existing is not None:
@@ -6998,7 +7004,7 @@ async def control_session(
     state_lock = _session_state_lock(session_id)
     if action in {"stop", "pause"}:
         async with state_lock:
-            record = _recover(_read(path, session_id))
+            record = _recover(await asyncio.to_thread(_read, path, session_id))
             if action == "stop":
                 if record["status"] in {"stopped", "completed", "ended", "failed"}:
                     return _public(record)
@@ -7028,7 +7034,7 @@ async def control_session(
                 record["portfolio_decision"] = _portfolio_decision(record)
             _event(record, "stopped" if action == "stop" else "paused", record["message"])
             record["updated_at"] = _now()
-            _save(record["project_path"], record)
+            await asyncio.to_thread(_save, record["project_path"], record)
             logging.getLogger("sigma.lifecycle").info(
                 "session.%s project_id=%s session_id=%s calls_used=%s",
                 "stopped" if action == "stop" else "paused",
