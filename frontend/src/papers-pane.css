@@ -729,3 +729,13 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Standard SIGMA dismiss X for contextual paper-step errors. */
+.paper-inline-feedback {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.paper-inline-feedback > span { flex: 1; min-width: 0; }
+.paper-inline-feedback > button { flex: 0 0 auto; }

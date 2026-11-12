@@ -503,7 +503,11 @@ def project_activity_runs(
         session_active = has_active_session(path, project_id=project.id)
     if pending_answers is None:
         pending_answers = research_qa.list_pending_answers(path)
-    if not session_active and paper_status not in {"active", "queued"} and not pending_answers:
+    # A run's live sidecar is authoritative even when the old project-wide
+    # activity hint has not caught up with a collaborator's execution.
+    paper_runs = papers.run_progress_list(path)
+    has_active_paper = any(run["status"] in {"active", "queued"} for run in paper_runs)
+    if not session_active and not has_active_paper and not pending_answers:
         return []
 
     # Reading author rows is authorized by _membership even for projects that
@@ -514,8 +518,7 @@ def project_activity_runs(
         authors = {}
 
     runs: list[dict[str, Any]] = []
-    if paper_status in {"active", "queued"}:
-        paper_runs = papers.run_progress_list(path)
+    if has_active_paper or paper_status in {"active", "queued"}:
         for paper in paper_runs:
             if paper["status"] not in {"active", "queued"}:
                 continue
@@ -647,14 +650,19 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 try:
                     pending_answers = research_qa.list_pending_answers(view.path)
                     answer_active = bool(pending_answers)
-                    if not activity_only:
-                        activity_runs = project_activity_runs(
-                            view.path,
-                            project=view,
-                            paper_status=paper_status,
-                            session_active=session_active,
-                            pending_answers=pending_answers,
-                        )
+                    activity_runs = project_activity_runs(
+                        view.path,
+                        project=view,
+                        paper_status=paper_status,
+                        session_active=session_active,
+                        pending_answers=pending_answers,
+                    )
+                    # Home, the project title, and the favicon see exactly the
+                    # same paper activity rather than three different hints.
+                    if any(run["kind"] == "paper" and run["status"] == "active" for run in activity_runs):
+                        paper_status = "active"
+                    elif any(run["kind"] == "paper" and run["status"] == "queued" for run in activity_runs):
+                        paper_status = "queued"
                 except (ProjectError, OSError, ValueError):
                     # Activity decoration must not prevent Saved Projects loading.
                     pass
@@ -725,6 +733,7 @@ def recent_activity() -> dict:
                 "id": item["id"],
                 "research_running": item["research_running"],
                 "paper_activity": item["paper_activity"],
+                "activity_runs": item["activity_runs"],
                 "activity_author": item["activity_author"],
                 "answer_active": item["answer_active"],
             }
