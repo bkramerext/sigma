@@ -1928,7 +1928,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           // The backend's preflight authorization responses are handled by
           // the two confirmations below, not global Request Failed toasts.
           // Unexpected errors are still reported by the enclosing catch.
-          const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
+          const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume", request_only: action === 'stop' || action === 'pause' }, undefined, true);
           // A successful control response contains the authoritative new status.
           // Do not keep the button busy for an unrelated whole-project reload.
           const acknowledged = sessionForDisplay(accepted);
