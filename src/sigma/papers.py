@@ -8228,6 +8228,7 @@ async def _generate_long_draft(
     on_output_delta: Callable[[int], Awaitable[None]] | None = None,
     on_planning_output_delta: Callable[[], Awaitable[None]] | None = None,
     authorized_recovery_section: int | None = None,
+    authorized_recovery_sections: tuple[int, ...] | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     writing_methodology = publication_reference_compiler.guidance(
@@ -9221,11 +9222,14 @@ or document markup."""
         and is_unwritten_placeholder(LongSectionDraft.model_validate(saved_sections[str(number)]))
     ]
     if uncertain or placeholders:
+        replay = authorized_recovery_sections
+        if replay is None and authorized_recovery_section is not None:
+            replay = (authorized_recovery_section,)
         permitted = (
-            type(authorized_recovery_section) is int
-            and not placeholders
-            and len(uncertain) == 1
-            and _recoverable_dispatched_sections(state) == [authorized_recovery_section]
+            not placeholders
+            and replay is not None
+            and list(replay) == _recoverable_dispatched_sections(state)
+            and len(replay) == len(uncertain)
         )
         if not permitted:
             detail = ", ".join([*uncertain, *placeholders])
@@ -9237,15 +9241,13 @@ or document markup."""
                 "remain intact. Explicitly review the incomplete work before paid recovery."
             )
         logging.getLogger("sigma.lifecycle").info(
-            "paper.section_recovery_authorized project_id=%s section=%d "
-            "saved_sections=%d prior_dispatches=%d",
+            "paper.section_recovery_authorized project_id=%s sections=%s saved_sections=%d",
             project_id or "unknown",
-            authorized_recovery_section,
+            list(replay),
             len(saved_sections),
-            len(dispatches[str(authorized_recovery_section)]),
         )
-    elif authorized_recovery_section is not None:
-        raise ProjectError("Paper section recovery authorization is stale; no AI call was made")
+    elif authorized_recovery_section is not None or authorized_recovery_sections is not None:
+        raise ProjectError("Paper section recovery checkpoint changed; no AI call was made")
 
     if fast_path:
         pending = [
@@ -10430,6 +10432,7 @@ async def _generate_impl(
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
     authorized_provider_change: bool = False,
+    authorized_recovery_sections: list[int] | None = None,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True), _paper_model_selection_scope():
         project_key = _paper_state_key(path)
@@ -10909,23 +10912,31 @@ async def _generate_impl(
             # here can be retried without losing prior attempted-call totals.
             if reset_ledger is not None:
                 _clear_reset_ledger(path)
-        # A recovery authorization is single-request and section-specific.
-        # Validate against durable dispatch history before any new paid work
-        # (including optional publication reference compilation) can begin.
-        if authorized_recovery_section is not None:
+        # Play is the user's explicit authorization to resume the exact set
+        # of interrupted sections. Validate the durable dispatch records
+        # before any provider call; changed or injected sets fail closed.
+        replay = (
+            tuple(authorized_recovery_sections)
+            if authorized_recovery_sections is not None
+            else (authorized_recovery_section,)
+            if authorized_recovery_section is not None
+            else None
+        )
+        if replay is not None:
             eligible = _recoverable_dispatched_sections(work)
             if (
-                type(authorized_recovery_section) is not int
+                not replay
+                or any(type(number) is not int or number < 1 or number > 48 for number in replay)
+                or list(replay) != sorted(set(replay))
                 or not long_form
                 or checkpoint is None
                 or not compatible
-                or eligible != [authorized_recovery_section]
+                or eligible != list(replay)
                 or not work.get("plan")
                 or len(work.get("section_drafts", {})) == 0
             ):
                 raise ProjectError(
-                    "Paper section recovery authorization does not match the saved "
-                    "checkpoint; no additional AI request was made."
+                    "Paper recovery no longer matches the saved checkpoint; no AI request was made."
                 )
 
         async def finalize_published(saved_record: dict[str, Any]) -> dict[str, Any]:
@@ -11382,6 +11393,7 @@ async def _generate_impl(
                 on_output_delta=lambda number: report_activity("sections", number),
                 on_planning_output_delta=lambda: report_activity("planning"),
                 authorized_recovery_section=authorized_recovery_section,
+                authorized_recovery_sections=replay,
             )
             model = config["model"]
             long_form = True
@@ -12217,6 +12229,7 @@ async def generate(
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
     authorized_provider_change: bool = False,
+    authorized_recovery_sections: list[int] | None = None,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
@@ -12244,6 +12257,7 @@ async def generate(
             browser_presence_required,
             authorized_recovery_section,
             authorized_provider_change,
+            authorized_recovery_sections,
         )
     )
     _generation_tasks[key] = task

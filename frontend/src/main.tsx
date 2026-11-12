@@ -4390,12 +4390,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         setPhase('Resuming work; the current Model/Thinking selection applies to the next AI call.');
       }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
-      const approvedRecovery = recoverSection ?? (pendingRecovery.length === 1 ? pendingRecovery[0] : null);
-      if (approvedRecovery !== null &&
-          (pendingRecovery.length !== 1 || pendingRecovery[0] !== approvedRecovery))
+      if (recoverSection !== null &&
+          (pendingRecovery.length !== 1 || pendingRecovery[0] !== recoverSection))
         throw new Error('The saved paper changed. Resume using its latest checkpoint.');
-      if (pendingRecovery.length > 1)
-        throw new Error('Several sections have incomplete attempts. Restart from Write sections to regenerate them.');
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.draft_recovery_available
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
@@ -4404,7 +4401,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       paperSubmissionDispatched.current = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsOverride ?? includeDiagramsAndTables,
-          ...(approvedRecovery !== null ? { authorized_recovery_section: approvedRecovery } : {}),
+          ...(pendingRecovery.length ? { authorized_recovery_sections: pendingRecovery } : {}),
           authorized_provider_change: authorizedProviderChange }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
