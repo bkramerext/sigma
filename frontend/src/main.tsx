@@ -4863,7 +4863,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             <PaperTimeline expanded={expandedPaperId === paper.paper_id} metadata={<>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · {(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : paperModelThinkingLabel(paper.generation)} · <button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
               progress={{
                 status: scoringId === paper.paper_id ? 'active' : 'complete',
-                stage: scoringId === paper.paper_id ? 'scoring' : 'complete',
+                stage: scoringId === paper.paper_id ? 'scoring' : paper.score ? 'complete' : 'score_failed',
                 current: null, total: null, started_at: paper.created_at,
                 elapsed_seconds: paper.generation.generation_elapsed_seconds ?? 0,
               }}
