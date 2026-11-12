@@ -6978,9 +6978,12 @@ async def control_session(
     action: str,
     additional_calls: int = 0,
     browser_presence_required: bool = False,
+    acknowledge_only: bool = False,
 ) -> dict[str, Any]:
     if type(browser_presence_required) is not bool:
         raise ProjectError("Browser execution origin must be a boolean")
+    if type(acknowledge_only) is not bool:
+        raise ProjectError("Fast control acknowledgment must be a boolean")
     if action not in {"pause", "resume", "stop", "repair"}:
         raise ProjectError("Unknown research session action")
     # 'repair' is an explicit protocol-completion authorization, distinct from
@@ -7047,13 +7050,17 @@ async def control_session(
         if event:
             event.set()
         if task and not task.done():
-            # The stopped/paused checkpoint is already durable. Do not delay
-            # the control acknowledgment while the cancelled worker reconciles
-            # an in-flight provider attempt, releases billing, or sends no-op
-            # notifications. Resume's worker-idle fence still rejects a race
-            # until cleanup releases its cross-process lock.
+            # The stopped/paused checkpoint is already durable. Browser control
+            # may acknowledge now and allow worker/billing cleanup to finish.
+            # Resume's worker-idle fence prevents a new dispatch until cleanup
+            # releases its cross-process lock.
             task.cancel()
-        return _public(record)
+            if not acknowledge_only:
+                # Retain existing completion semantics for API/CLI callers.
+                await asyncio.gather(task, return_exceptions=True)
+        if acknowledge_only:
+            return _public(record)
+        return _public(await asyncio.to_thread(_read, record["project_path"], session_id))
     # Recovery planning changes budgets and protocol slots. Hold both the
     # per-session state lock and the cross-process admission lock across the
     # read/validate/save transaction so concurrent resumes cannot overwrite it.
