@@ -3448,6 +3448,35 @@ def _recoverable_dispatched_sections(state: Mapping[str, Any]) -> list[int]:
     ]
 
 
+def _verify_section_recovery(
+    work: Mapping[str, Any],
+    requested: tuple[int, ...] | None,
+    *,
+    long_form: bool,
+    resumed_checkpoint: bool,
+) -> tuple[int, ...] | None:
+    """One check for all explicitly resumed, previously dispatched sections.
+
+    A Play click is permission to retry precisely the unsaved dispatches in
+    the matching checkpoint, not permission to replay arbitrary paid work.
+    """
+    if requested is None:
+        return None
+    if (
+        not requested
+        or any(type(number) is not int or number < 1 or number > 48 for number in requested)
+        or tuple(sorted(set(requested))) != requested
+        or not long_form
+        or not resumed_checkpoint
+        or not work.get("plan")
+        or tuple(_recoverable_dispatched_sections(work)) != requested
+    ):
+        raise ProjectError(
+            "Paper recovery no longer matches the saved checkpoint; no AI request was made."
+        )
+    return requested
+
+
 def _paper_progress_counts_valid(current: Any, total: Any) -> bool:
     """Zero completed work is valid; a nonempty total is required for numbered stages."""
     if current is None or total is None:
@@ -10922,22 +10951,10 @@ async def _generate_impl(
             if authorized_recovery_section is not None
             else None
         )
-        if replay is not None:
-            eligible = _recoverable_dispatched_sections(work)
-            if (
-                not replay
-                or any(type(number) is not int or number < 1 or number > 48 for number in replay)
-                or list(replay) != sorted(set(replay))
-                or not long_form
-                or checkpoint is None
-                or not compatible
-                or eligible != list(replay)
-                or not work.get("plan")
-                or len(work.get("section_drafts", {})) == 0
-            ):
-                raise ProjectError(
-                    "Paper recovery no longer matches the saved checkpoint; no AI request was made."
-                )
+        replay = _verify_section_recovery(
+            work, replay, long_form=long_form,
+            resumed_checkpoint=checkpoint is not None and compatible,
+        )
 
         async def finalize_published(saved_record: dict[str, Any]) -> dict[str, Any]:
             """Resume scoring/finalization from the immutable published PDF.
