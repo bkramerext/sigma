@@ -3492,7 +3492,26 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "provider_change_history",
         "model_change_history",
         "rewind_origin",
+        "rewind_validation_done",
+        "checkpoint_revalidate_pending",
+        "unfinished_restart_request_id",
+        "unfinished_restart_stage",
     }
+    if "unfinished_restart_stage" in value and (
+        value["unfinished_restart_stage"] not in _PAPER_RESTART_ORDER
+        or not isinstance(value.get("unfinished_restart_request_id"), str)
+    ):
+        raise ProjectError("Paper restart stage metadata is invalid")
+    if "unfinished_restart_request_id" in value and (
+        not isinstance(value["unfinished_restart_request_id"], str)
+        or re.fullmatch(r"[0-9a-f]{32}", value["unfinished_restart_request_id"]) is None
+    ):
+        raise ProjectError("Paper checkpoint restart request ID is invalid")
+    if "checkpoint_revalidate_pending" in value and (
+        type(value["checkpoint_revalidate_pending"]) is not bool
+        or not isinstance(value.get("validated_draft"), dict)
+    ):
+        raise ProjectError("Paper checkpoint validation restart marker is invalid")
     rewind_origin = value.get("rewind_origin")
     if rewind_origin is not None and (
         not isinstance(rewind_origin, dict)
@@ -3501,7 +3520,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         or re.fullmatch(r"[0-9a-f]{32}", rewind_origin["paper_id"]) is None
         or type(rewind_origin["paper_version"]) is not int
         or rewind_origin["paper_version"] < 1
-        or rewind_origin["stage"] not in {"started", "writing", "typesetting"}
+        or rewind_origin["stage"] not in {"started", "writing", "validation", "typesetting"}
         or not isinstance(rewind_origin["pdf_sha256"], str)
         or re.fullmatch(r"[0-9a-f]{64}", rewind_origin["pdf_sha256"]) is None
     ):
@@ -3540,6 +3559,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
         raise ProjectError("Saved paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
+    if "rewind_validation_done" in value and (
+        type(value["rewind_validation_done"]) is not bool
+        or not isinstance(rewind_origin, dict)
+        or rewind_origin.get("stage") != "validation"
+        or not isinstance(value.get("validated_draft"), dict)
+    ):
+        raise ProjectError("Paper restart validation marker is invalid")
     if "validated_draft" in value:
         PaperDraft.model_validate(value["validated_draft"])
     if "validated_warnings" in value and (
@@ -5018,6 +5044,229 @@ async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
         return {"discarded": True}
 
 
+# Restart boundaries for an UNFINISHED Paper. A step is clickable only
+# when the preceding work actually has a durable checkpoint. Listing
+# capabilities does not authorize anything or make a provider call.
+_PAPER_RESTART_ORDER = (
+    "started",
+    "review",
+    "evidence",
+    "planning",
+    "writing",
+    "validation",
+    "typesetting",
+    "pdf",
+)
+_PAPER_RESTART_PROGRESS = {
+    "started": "queued",
+    "review": "publication_compilation",
+    "evidence": "evidence",
+    "planning": "planning",
+    "writing": "writing",
+    "validation": "validation",
+    "typesetting": "proofreading",
+    "pdf": "compile",
+}
+
+
+def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
+    if not work or work.get("published_paper_id"):
+        return []
+    if not isinstance(work.get("frozen_package"), dict):
+        return []
+    kind = work.get("kind")
+    stages = ["started"]
+    if isinstance(work.get("writing_sources"), list):
+        stages.append("review")
+    if kind == "long_form":
+        if work.get("evidence_indexed") or work.get("evidence_notes"):
+            stages.append("evidence")
+        if work.get("evidence_indexed") or work.get("plan"):
+            stages.append("planning")
+        if isinstance(work.get("plan"), dict):
+            stages.append("writing")
+    elif kind == "one_shot" and (
+        work.get("one_shot_draft") is not None or work.get("validated_draft") is not None
+    ):
+        stages.append("writing")
+    if isinstance(work.get("validated_draft"), dict):
+        stages.extend(("validation", "typesetting"))
+    if isinstance(work.get("proofread_ready"), dict):
+        stages.append("pdf")
+    return stages
+
+
+def unfinished_restart_options(path: str) -> dict[str, Any]:
+    work = _load_work(path)
+    if work is None:
+        raise ProjectError("This unfinished Paper has no restart checkpoint.")
+    if work.get("published_paper_id"):
+        raise ProjectError("This Paper is already published; use its published step bar.")
+    progress = progress_status(path)
+    if progress is None or progress.get("status") in {"queued", "active"}:
+        raise ProjectError("Stop this Paper before restarting a previous step.")
+    stages = _unfinished_restart_stages(work)
+    if not stages:
+        raise ProjectError("This Paper has no usable restart checkpoint.")
+    return {
+        "snapshot_sha256": work["snapshot_sha256"],
+        "stages": stages,
+        "resume_stage": (
+            "compile"
+            if work.get("proofread_ready")
+            else "validation"
+            if work.get("checkpoint_revalidate_pending") is True
+            else "proofreading"
+            if work.get("validated_draft")
+            else "writing"
+            if work.get("plan")
+            else "planning"
+            if work.get("evidence_indexed")
+            else "publication_compilation"
+            if work.get("writing_sources")
+            else "queued"
+        ),
+    }
+
+
+async def restart_unfinished_step(
+    path: str,
+    expected_project_id: str,
+    expected_snapshot_sha256: str,
+    stage: str,
+    *,
+    request_id: str | None = None,
+) -> dict[str, Any]:
+    """Rewind a stopped draft, retaining frozen evidence and attempted-call totals.
+
+    This operation is provider-free. A separate, explicit Play performs the
+    future AI calls; the in-flight gate prevents rewinding an active task.
+    """
+    if stage not in _PAPER_RESTART_ORDER:
+        raise ProjectError("Unknown unfinished Paper restart step.")
+    if request_id is None:
+        request_id = uuid4().hex
+    elif re.fullmatch(r"[0-9a-f]{32}", request_id) is None:
+        raise ProjectError("Paper restart request identity is invalid.")
+    async with _paper_operation(path, generating=False):
+        view = inspect_project(path)
+        if view.project.id != expected_project_id:
+            raise ProjectError("Project changed; reopen the Paper before restarting.")
+        work = _load_work(path)
+        if work is None or work.get("snapshot_sha256") != expected_snapshot_sha256:
+            raise ProjectError("Paper checkpoint changed; reopen before restarting.")
+        if work.get("unfinished_restart_request_id") == request_id:
+            if work.get("unfinished_restart_stage") not in {None, stage}:
+                raise ProjectError("Paper restart request was reused for a different step.")
+            return {
+                "stage": stage,
+                "snapshot_sha256": work["snapshot_sha256"],
+                "progress": progress_status(path),
+                "created": False,
+            }
+        if stage not in _unfinished_restart_stages(work):
+            raise ProjectError("The selected Paper step has no verified checkpoint.")
+        progress = progress_status(path)
+        if progress is None or progress.get("status") in {"queued", "active"}:
+            raise ProjectError("Stop this Paper before restarting it.")
+        key = _paper_state_key(path)
+        if (key in _submission_tasks and not _submission_tasks[key].done()) or (
+            key in _generation_tasks and not _generation_tasks[key].done()
+        ):
+            raise ProjectError("Paper generation is still releasing resources.")
+        previous_calls = int(work.get("provider_calls", 0))
+        previous_calls += int(work.get("publication_compiler_calls", 0))
+        previous_calls += int((work.get("proofreading") or {}).get("provider_calls_attempted", 0))
+        # Keep the schema-bounded recent history while preserving the separate
+        # lifetime provider-call aggregate across arbitrarily many restarts.
+        history = list(work.get("prior_runs", []))[-99:]
+        history.append(
+            {
+                "provider_calls_attempted": previous_calls,
+                "snapshot_sha256": work["snapshot_sha256"],
+                "model": work["model"],
+                "reset_at": _now(),
+            }
+        )
+        next_work = _new_work(
+            work["snapshot_sha256"],
+            work["project_id"],
+            work["binding_fingerprint"],
+            work["model"],
+            work["reasoning_effort"],
+            provider_calls_total=int(work.get("provider_calls_total", previous_calls)),
+            prior_runs=history,
+            kind=work["kind"],
+        )
+        next_work["frozen_package"] = work["frozen_package"]
+        next_work["unfinished_restart_request_id"] = request_id
+        next_work["unfinished_restart_stage"] = stage
+        next_work["include_diagrams"] = bool(work.get("include_diagrams", True))
+
+        # Restore only earlier completed stages, never a later result or
+        # an ambiguous dispatch marker from the previous authoring attempt.
+        ordinal = _PAPER_RESTART_ORDER.index(stage)
+        if ordinal >= _PAPER_RESTART_ORDER.index("evidence"):
+            for field in ("writing_sources", "writing_source_selection", "publication_compilation"):
+                if field in work:
+                    next_work[field] = work[field]
+        if ordinal >= _PAPER_RESTART_ORDER.index("planning"):
+            for field in (
+                "evidence_strategy",
+                "evidence_indexed",
+                "evidence_notes",
+                "preserved_evidence_notes",
+                "next_batch",
+                "omitted_evidence",
+                "reduction_input",
+                "reduction_next_group",
+                "reduction_output",
+                "reduction_note_compaction_events",
+                "reduction_source_refs_omitted",
+                "conflict_notes",
+                "conflict_note_count",
+            ):
+                if field in work:
+                    next_work[field] = work[field]
+        if ordinal >= _PAPER_RESTART_ORDER.index("writing") and work.get("kind") == "long_form":
+            if not isinstance(work.get("plan"), dict):
+                raise ProjectError("Writing plan checkpoint is unavailable.")
+            next_work["plan"] = work["plan"]
+        if ordinal >= _PAPER_RESTART_ORDER.index("validation"):
+            next_work["validated_draft"] = work["validated_draft"]
+            next_work["validated_warnings"] = list(work.get("validated_warnings", []))
+        if stage == "validation":
+            next_work["checkpoint_revalidate_pending"] = True
+        if stage == "pdf":
+            next_work["proofread_ready"] = work["proofread_ready"]
+        now = _now()
+        next_work["progress"] = {
+            "run_id": _paper_run_id.get() or uuid4().hex,
+            "status": "paused",
+            "stage": _PAPER_RESTART_PROGRESS[stage],
+            "current": None,
+            "total": None,
+            "started_at": now,
+            "updated_at": now,
+            "elapsed_seconds": 0,
+            "detail": "Restart checkpoint prepared · ready to resume",
+        }
+        _clear_queue_status(path)
+        _active_progress.pop(_paper_state_key(path), None)
+        _save_work(path, next_work)
+        persisted = _load_work(path)
+        if (
+            persisted is None
+            or persisted.get("progress", {}).get("stage") != _PAPER_RESTART_PROGRESS[stage]
+        ):
+            raise ProjectError("Paper checkpoint was not durably restored.")
+        return {
+            "stage": stage,
+            "snapshot_sha256": next_work["snapshot_sha256"],
+            "progress": progress_status(path),
+        }
+
+
 async def restart_work(
     path: str,
     expected_project_id: str,
@@ -5179,6 +5428,36 @@ def _validate_with_local_recovery(
             "paper.validation_recovered repair=local_retry"
         )
         return repaired, warnings
+
+
+def _revalidate_rewind_manuscript(
+    work: dict[str, Any], package: dict[str, Any]
+) -> tuple[PaperDraft, list[str]]:
+    """Repeat deterministic validation, never a paid authoring request.
+
+    The caller commits the checked manuscript and completion marker together.
+    If interrupted before that checkpoint, validation is safe to retry.
+    """
+    origin = work.get("rewind_origin")
+    published_rewind = (
+        isinstance(origin, dict)
+        and origin.get("stage") == "validation"
+        and work.get("rewind_validation_done") is not True
+    )
+    checkpoint_rewind = work.get("checkpoint_revalidate_pending") is True
+    if not (published_rewind or checkpoint_rewind) or not isinstance(
+        work.get("validated_draft"), dict
+    ):
+        raise ProjectError("Paper validation restart checkpoint is unavailable")
+    draft = PaperDraft.model_validate(work["validated_draft"])
+    checked, warnings = _validate_with_local_recovery(draft, package, work)
+    work["validated_draft"] = checked.model_dump()
+    work["validated_warnings"] = list(warnings)
+    if published_rewind:
+        work["rewind_validation_done"] = True
+    if checkpoint_rewind:
+        work["checkpoint_revalidate_pending"] = False
+    return checked, warnings
 
 
 def _research_completion_limitations(package: dict[str, Any]) -> list[str]:
@@ -9926,6 +10205,17 @@ async def _generate_impl(
                 "evidence_indexed"
             ):
                 resume_floor = "evidence"
+            origin = incoming_checkpoint.get("rewind_origin")
+            if isinstance(origin, dict) and origin.get("stage") == "writing":
+                # Frozen evidence and the saved restart choice keep earlier
+                # checklist steps checked while new writing is prepared.
+                resume_floor = "writing"
+            elif (
+                isinstance(origin, dict)
+                and origin.get("stage") == "validation"
+                and incoming_checkpoint.get("rewind_validation_done") is not True
+            ):
+                resume_floor = "validation"
         stage_order = (
             "queued",
             "snapshot",
@@ -10827,8 +11117,21 @@ async def _generate_impl(
             _material_evidence_omissions(work.get("omitted_evidence", [])) if long_form else []
         )
         if work.get("validated_draft") is not None:
-            draft = PaperDraft.model_validate(work["validated_draft"])
-            validation_warnings = list(work["validated_warnings"])
+            origin = work.get("rewind_origin")
+            if (
+                isinstance(origin, dict)
+                and origin.get("stage") == "validation"
+                and work.get("rewind_validation_done") is not True
+            ) or work.get("checkpoint_revalidate_pending") is True:
+                await report("validation", None, None)
+                draft, validation_warnings = _revalidate_rewind_manuscript(work, package)
+                # Save accepted validation before the next stage; never
+                # require the previous authoring request to be repeated.
+                _save_work(path, work)
+                await report("validation", None, None, "milestone")
+            else:
+                draft = PaperDraft.model_validate(work["validated_draft"])
+                validation_warnings = list(work["validated_warnings"])
             obligation_reconciliation = _reconcile_obligations(draft, package)
         else:
             if not one_shot_validation_started:
@@ -12094,6 +12397,7 @@ def preflight(
         "provider_calls_lifetime_total": work_state.get("provider_calls_total", 0),
         "provider_calls_remaining": calls_remaining,
         "checkpoint_can_restart": work is not None,
+        "restart_stages": _unfinished_restart_stages(work),
         "restart_ready": bool(reset_ledger is not None and not reset_ledger["attempt_started"]),
         # A previous long-form planning attempt should not trap an eligible
         # small-scope project in repeated paid planning calls. Offer an

@@ -1042,7 +1042,11 @@ def _guest_project_route_allowed(method: str, path: str) -> bool:
         resource, identifier = parts[3:]
         if resource == "research-sessions" and identifier:
             return True
-        if resource == "papers" and identifier and identifier != "preflight":
+        if (
+            resource == "papers"
+            and identifier
+            and identifier not in {"preflight", "unfinished-checkpoints"}
+        ):
             return True
         if resource == "research-executions" and identifier:
             return True
@@ -1055,13 +1059,8 @@ def _guest_project_route_allowed(method: str, path: str) -> bool:
         and parts[6]
     ):
         return True
-    if (
-        len(parts) == 5
-        and parts[:3] == ["", "api", "projects"]
-        and parts[3] == "papers"
-        and parts[4]
-    ):
-        return True
+    # The five-segment Paper read is handled above, with restricted
+    # internal checkpoint routes explicitly excluded.
     return bool(
         len(parts) == 6
         and parts[:3] == ["", "api", "projects"]

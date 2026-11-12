@@ -67,14 +67,19 @@ def describe(path: str, paper_id: str, project_id: str) -> dict[str, Any]:
                 "description": "Restart from the beginning using the verified frozen evidence; rerun review, evidence extraction, writing and publication.",
             },
             {
-                "id": "typesetting",
-                "label": "Validated manuscript",
-                "description": "Keep the saved manuscript; rerun validation, TeX, proofreading and PDF generation.",
+                "id": "writing",
+                "label": "Write sections",
+                "description": "Reuse frozen evidence to author a new manuscript and rebuild the PDF.",
             },
             {
-                "id": "writing",
-                "label": "Writing",
-                "description": "Reuse the original research evidence; write a new manuscript and rebuild the PDF.",
+                "id": "validation",
+                "label": "Validate",
+                "description": "Recheck the archived manuscript against frozen evidence, then proofread and rebuild the PDF.",
+            },
+            {
+                "id": "typesetting",
+                "label": "Proofread",
+                "description": "Keep the saved validated manuscript and redo proofreading, PDF generation and scoring.",
             },
         ],
         "include_diagrams": source["generation"].get("include_diagrams", True),
@@ -93,7 +98,7 @@ async def create(
     expected_snapshot_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Seed the current (newly reserved) run; source publication stays immutable."""
-    if stage not in {"started", "typesetting", "writing"}:
+    if stage not in {"started", "writing", "validation", "typesetting"}:
         raise ProjectError("Unknown Paper restart checkpoint.")
     if not config.get("available"):
         raise ProjectError(config.get("message") or "AI provider unavailable.")
@@ -142,20 +147,50 @@ async def create(
         work["frozen_package"] = source["snapshot"]
         work["include_diagrams"] = bool(source["generation"].get("include_diagrams", True))
         work["rewind_origin"] = origin
-        if stage == "typesetting":
+        if stage != "started":
+            # Earlier editorial work belongs to this immutable publication.
+            # Reuse its actual saved guidance/checklist when still valid.
+            # Otherwise the compiler's normal fingerprint check fails closed.
+            previous_guidance = source["generation"].get("writing_sources")
+            if (
+                isinstance(previous_guidance, list)
+                and len(previous_guidance) <= 3
+                and all(
+                    isinstance(item, dict)
+                    and all(isinstance(item.get(key), str) for key in ("url", "excerpt", "sha256"))
+                    for item in previous_guidance
+                )
+            ):
+                work["writing_sources"] = previous_guidance
+                choice = source["generation"].get("writing_source_selection")
+                if isinstance(choice, str):
+                    work["writing_source_selection"] = choice
+            previous_compilation = source["generation"].get("publication_compilation")
+            if (
+                isinstance(previous_compilation, dict)
+                and isinstance(previous_compilation.get("fingerprint"), str)
+                and papers.publication_reference_compiler.validate(
+                    previous_compilation, previous_compilation["fingerprint"]
+                )
+            ):
+                work["publication_compilation"] = previous_compilation
+        if stage in {"validation", "typesetting"}:
+            # This is an archived, checksum-verified manuscript, not an AI
+            # dispatch replay. Validation may be repeated deterministically.
             work["validated_draft"] = source["draft"].model_dump()
             work["validated_warnings"] = list(paper.get("validation_warnings", []))
+        if stage == "validation":
+            work["rewind_validation_done"] = False
         now = papers._now()
         work["progress"] = {
             "run_id": papers._paper_run_id.get() or uuid4().hex,
             "status": "paused",
-            "stage": (
-                "validation"
-                if stage == "typesetting"
-                else "snapshot"
-                if stage == "started"
-                else "writing"
-            ),
+            "stage": {
+                "started": "queued",
+                "writing": "writing",
+                "validation": "validation",
+                "typesetting": "proofreading",
+            }[stage],
             "current": None,
             "total": None,
             "started_at": now,

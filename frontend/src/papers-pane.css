@@ -550,24 +550,40 @@
   box-shadow: none;
 }
 
-/* Only persisted, verified checkpoint boundaries are clickable. The checked
-   icon stays in the li pseudo-element, and pressing a stage doesn't shift it. */
-.workspace-page .papers-pane .paper-stage-list .paper-step-restart,
-.workspace-page .papers-pane .paper-stage-list .paper-step-restart:is(:hover, :focus-visible) {
-  display: inline;
-  margin: 0;
-  padding: 0;
+/* Plain stages do not suggest editable/copyable text. Only verified
+   restart steps have a shaded hit region and ordinary pointer cursor. */
+.workspace-page .papers-pane .paper-stage-list li,
+.workspace-page .papers-pane .paper-stage-list li > strong {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.workspace-page .papers-pane .paper-stage-list .paper-step-restart {
+  display: inline-flex;
+  align-items: center;
+  margin: -3px -6px;
+  padding: 3px 6px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
+  border-radius: 4px;
+  background: rgba(162, 111, 69, .18);
   box-shadow: none;
   color: inherit;
   font: inherit;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.workspace-page .papers-pane .paper-stage-list .paper-step-restart:is(:hover, :focus-visible) strong {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.workspace-page .papers-pane .paper-stage-list .paper-step-restart:hover {
+  background: rgba(162, 111, 69, .31);
+}
+.workspace-page .papers-pane .paper-stage-list .paper-step-restart:focus-visible {
+  outline: 2px solid var(--sigma-copper-foreground);
+  outline-offset: 2px;
+}
+.workspace-page .papers-pane .paper-stage-list .paper-step-restart strong {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .workspace-page .papers-pane .paper-step-restart-confirm {
   padding: 10px 12px;
@@ -593,3 +609,64 @@
 .workspace-page .papers-pane .saved-paper-card .paper-draft-content { text-align: left; }
 
 .workspace-page .papers-pane .paper-checkpoint-check { margin: 8px 0; font-size: 12px; }
+
+/* Unfinished Papers share the same step actions as their Play/Start over
+   controls. The next stopped step remains current (copper), not disabled. */
+.workspace-page .papers-pane .paper-stage-list li.is-next {
+  color: var(--sigma-copper-foreground);
+}
+/* A running or resumable step is emphasized by weight, never recolored. */
+.workspace-page .papers-pane .paper-stage-list li:is(.is-active, .is-next) > strong,
+.workspace-page .papers-pane .paper-stage-list li:is(.is-active, .is-next) > .paper-step-restart strong {
+  font-weight: 700;
+}
+/* Started remains an ordinary-looking checked step even though it invokes
+   the same Start over action as the control in the title row. */
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Wait"] .paper-step-restart,
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Wait"] .paper-step-restart:hover {
+  background: transparent;
+}
+.workspace-page .papers-pane .paper-stage-list li,
+.workspace-page .papers-pane .paper-stage-list li > strong,
+.workspace-page .papers-pane .paper-stage-list li > span {
+  cursor: default !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+.workspace-page .papers-pane .paper-stage-list button.paper-step-restart,
+.workspace-page .papers-pane .paper-stage-list button.paper-step-restart strong {
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* Anchored Paper checkpoint confirmation: one popup near the clicked step,
+   clamped to the viewport, never an inline card displacing the manuscript. */
+.paper-step-restart-popup {
+  position: fixed;
+  z-index: 1300;
+  box-sizing: border-box;
+  width: min(430px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid #73583e;
+  border-radius: 7px;
+  background: #101b26;
+  box-shadow: 0 14px 35px #000b;
+  color: #dce7f0;
+}
+.paper-step-restart-popup p { margin: 0 0 10px; }
+.paper-step-restart-popup .session-remove-confirm-actions { display: flex; gap: 12px; }
+.paper-step-restart-popup .text-view-link { color: var(--sigma-copper-foreground); }
+.workspace-page .papers-pane .saved-paper-meta .paper-inline-score {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sigma-copper-foreground);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
