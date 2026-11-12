@@ -25,23 +25,36 @@ class PaperStopPreflightTests(TestCase):
     def test_authorized_stop_does_not_depend_on_connected_provider(self) -> None:
         with (
             patch.object(
-                api, "inspect_project", return_value=SimpleNamespace(project=SimpleNamespace(id="project-1"))
+                api,
+                "inspect_project",
+                return_value=SimpleNamespace(project=SimpleNamespace(id="project-1")),
             ),
-            patch.object(api.project_collaboration, "execution_run", return_value={"number": 1}) as authorized,
-            patch.object(api.papers, "cancel_generation", new_callable=AsyncMock, return_value=True) as stopped,
             patch.object(
-                api, "require_cloud_inference_binding",
+                api.project_collaboration, "execution_run", return_value={"number": 1}
+            ) as authorized,
+            patch.object(
+                api.papers, "cancel_generation", new_callable=AsyncMock, return_value=True
+            ) as stopped,
+            patch.object(
+                api,
+                "require_cloud_inference_binding",
                 side_effect=AssertionError("Stop must not check the provider connection"),
             ),
         ):
-            self.assertEqual(asyncio.run(api.paper_cancel_view(self._request())), {"cancelled": True})
-            authorized.assert_called_once_with("/unused/project.json", "paper", "a" * 32, operator=True)
+            self.assertEqual(
+                asyncio.run(api.paper_cancel_view(self._request())), {"cancelled": True}
+            )
+            authorized.assert_called_once_with(
+                "/unused/project.json", "paper", "a" * 32, operator=True
+            )
             stopped.assert_awaited_once_with("/unused/project.json")
 
     def test_wrong_project_identity_cannot_stop(self) -> None:
         with (
             patch.object(
-                api, "inspect_project", return_value=SimpleNamespace(project=SimpleNamespace(id="project-2"))
+                api,
+                "inspect_project",
+                return_value=SimpleNamespace(project=SimpleNamespace(id="project-2")),
             ),
             patch.object(api.papers, "cancel_generation", new_callable=AsyncMock) as stopped,
         ):
@@ -53,11 +66,16 @@ class PaperStopPreflightTests(TestCase):
     def test_non_creator_still_cannot_stop(self) -> None:
         with (
             patch.object(
-                api, "inspect_project", return_value=SimpleNamespace(project=SimpleNamespace(id="project-1"))
+                api,
+                "inspect_project",
+                return_value=SimpleNamespace(project=SimpleNamespace(id="project-1")),
             ),
             patch.object(
-                api.project_collaboration, "execution_run",
-                side_effect=ProjectError("Only the original execution creator may control this run."),
+                api.project_collaboration,
+                "execution_run",
+                side_effect=ProjectError(
+                    "Only the original execution creator may control this run."
+                ),
             ),
             patch.object(api.papers, "cancel_generation", new_callable=AsyncMock) as stopped,
         ):
