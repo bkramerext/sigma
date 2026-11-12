@@ -7490,17 +7490,17 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, cacheScope,
       if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
       requestPending = true;
       try {
-        const lightweight = firstLoad;
+        const firstPaint = firstLoad;
         firstLoad = false;
-        // Only lightweight identity refreshes belong on the navigation path.
-        // A paper-score hydration is background-only, and at most once per
-        // minute per account. Existing cached scores remain visible.
-        if (!lightweight && Date.now() - (recentPaperMetadataFetchedAt.get(cacheScope) ?? 0) < 60_000) return;
-        await load(controller.signal, lightweight);
+        // Always refresh cheap identities so new/copied projects appear
+        // promptly. Only the background hydration fetches paper scores.
+        const paperMetadataDue =
+          Date.now() - (recentPaperMetadataFetchedAt.get(cacheScope) ?? 0) >= 60_000;
+        await load(controller.signal, firstPaint || !paperMetadataDue);
         if (!controller.signal.aborted) {
           setError('');
-          // Render project names now; hydrate paper scores/activity afterward.
-          if (lightweight) window.setTimeout(() => void refresh(), 250);
+          // Render names first, then hydrate paper decorations asynchronously.
+          if (firstPaint && paperMetadataDue) window.setTimeout(() => void refresh(), 250);
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -7514,7 +7514,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, cacheScope,
     };
     // Only the selected Home tab polls. The other tab remains mounted but
     // inactive, avoiding duplicate full-project scans and index-lock pressure.
-    const interval = window.setInterval(() => void refresh(), 30_000);
+    const interval = window.setInterval(() => void refresh(), 5000);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
     void refresh();
