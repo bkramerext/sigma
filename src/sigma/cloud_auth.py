@@ -1292,6 +1292,7 @@ async def middleware(request: Request, call_next):
             "/api/projects/collaboration/leave",
             "/api/projects/samples/open",
             "/api/projects/research-sessions/mock",
+            "/api/projects/papers/discard",  # Provider-free removal; ACL and run fencing apply.
             "/api/projects/guest-copy",
         }
         project_write = (
