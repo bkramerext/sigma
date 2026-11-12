@@ -469,7 +469,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         ).to_be_visible(timeout=1800)
         page.wait_for_function("window.__sigmaOpenRevalidations > 0", timeout=1800)
         expect(page.get_by_text("Opening project…")).to_have_count(0)
-        page.evaluate("window.fetch = window.__sigmaOriginalFetch")
+        page.evaluate("() => { window.fetch = window.__sigmaOriginalFetch; }")
 
         assert not [
             request

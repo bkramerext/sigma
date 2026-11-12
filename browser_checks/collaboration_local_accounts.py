@@ -517,7 +517,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             page.goto(url)
             page.wait_for_function(
                 """({first, second, owner, member, firstStatus, secondStatus}) => {
-                    const tip = document.querySelector('.project-header-title-action')
+                    const tip = document.querySelector('.project-header-title-action .research-running-indicator-frame')
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 2
@@ -624,7 +624,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             assert {run["status"] for run in sessions} == {"active", "queued"}, runs
             page.wait_for_function(
                 """({owner, member}) => {
-                    const tip = document.querySelector('.project-header-title-action')
+                    const tip = document.querySelector('.project-header-title-action .research-running-indicator-frame')
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 4
@@ -705,7 +705,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             }, mixed
             page.wait_for_function(
                 """({owner, member}) => {
-                    const tip = document.querySelector('.project-header-title-action')
+                    const tip = document.querySelector('.project-header-title-action .research-running-indicator-frame')
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 6
