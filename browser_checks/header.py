@@ -153,8 +153,33 @@ with sync_playwright() as playwright:
     assert idle_title.get_attribute("data-tooltip") is None
     idle_title.hover()
     expect(idle_title).to_have_css("text-decoration-line", "none")
-    expect(idle_title).to_have_css("background-color", "rgba(0, 0, 0, 0)")
-    expect(page.get_by_role("tooltip")).to_have_count(0)
+    expect(idle_title).to_have_css("background-color", "rgb(48, 36, 24)")
+    title_geometry = idle_title.evaluate(
+        """button => {
+          const box = button.getBoundingClientRect();
+          const row = button.closest('.project-header-title-row').getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(button);
+          const lines = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.top < box.bottom + 1);
+          return { width: box.width, maxLine: Math.max(...lines.map(rect => rect.width)), rowWidth: row.width };
+        }"""
+    )
+    assert abs(title_geometry["width"] - title_geometry["maxLine"]) <= 6, title_geometry
+    assert title_geometry["width"] < title_geometry["rowWidth"] * 0.8, title_geometry
+    title_tooltip = page.get_by_role("tooltip")
+    expect(title_tooltip).to_have_text("Toggle all project sections")
+    title_box = idle_title.bounding_box()
+    tooltip_box = title_tooltip.bounding_box()
+    assert title_box and tooltip_box
+    assert (
+        abs(
+            (title_box["x"] + title_box["width"] / 2)
+            - (tooltip_box["x"] + tooltip_box["width"] / 2)
+        )
+        < 3
+    ), (title_box, tooltip_box)
+    assert tooltip_box["y"] >= title_box["y"] + title_box["height"] + 4
+    page.mouse.move(0, 0)
     toggles = {
         name: page.locator(f"#{heading_id} .workspace-section-disclosure")
         for name, heading_id in (
@@ -566,6 +591,53 @@ with sync_playwright() as playwright:
     page.keyboard.press("Enter")
     expect(page.locator(".home-slogan")).to_be_visible()
     assert page.locator(".home-topline .api-connection > summary").evaluate(PILL) != []
+
+    # A wrapped title must highlight a single rectangle covering the longer
+    # of its two lines (not the full available header column).
+    wrapped_name = "Complex regional analysis for a collaborative research project"
+    wrapped = page.request.post(
+        API_ORIGIN + "/api/projects/create",
+        data={"title": wrapped_name, "problem": "Verify two-line title hover width."},
+    )
+    assert wrapped.status == 201, wrapped.text()
+    page.set_viewport_size({"width": 480, "height": 800})
+    page.goto(f"{UI_ORIGIN}/project?{urlencode({'path': wrapped.json()['path']})}")
+    wrapped_title = page.get_by_role("button", name="Toggle all project sections")
+    expect(wrapped_title).to_be_visible()
+    wrapped_title.hover()
+    expect(wrapped_title).to_have_css("background-color", "rgb(48, 36, 24)")
+    wrapped_geometry = wrapped_title.evaluate(
+        """button => {
+          const box = button.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(button);
+          const lines = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.top < box.bottom + 1);
+          return { width: box.width, lineWidths: lines.map(rect => rect.width),
+            available: button.parentElement.getBoundingClientRect().width };
+        }"""
+    )
+    assert len(wrapped_geometry["lineWidths"]) == 2, wrapped_geometry
+    assert abs(wrapped_geometry["width"] - max(wrapped_geometry["lineWidths"])) <= 6, (
+        wrapped_geometry
+    )
+    assert wrapped_geometry["width"] < wrapped_geometry["available"], wrapped_geometry
+    expect(page.get_by_role("tooltip")).to_have_text("Toggle all project sections")
+    wrapped_button_box = wrapped_title.bounding_box()
+    wrapped_tooltip_box = page.get_by_role("tooltip").bounding_box()
+    assert wrapped_button_box and wrapped_tooltip_box
+    assert (
+        abs(
+            wrapped_button_box["x"]
+            + wrapped_button_box["width"] / 2
+            - (wrapped_tooltip_box["x"] + wrapped_tooltip_box["width"] / 2)
+        )
+        < 3
+    ), (wrapped_button_box, wrapped_tooltip_box)
+    assert wrapped_tooltip_box["y"] >= wrapped_button_box["y"] + wrapped_button_box["height"] + 4
+    wrapped_title.click()
+    expect(page.locator("#project-pane-heading .workspace-section-disclosure")).to_have_attribute(
+        "aria-expanded", "false"
+    )
     assert not errors, errors
     browser.close()
     print(

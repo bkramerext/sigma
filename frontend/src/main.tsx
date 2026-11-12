@@ -4236,7 +4236,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       {success && <p className="ai-paper-status" role="status">{success}</p>}
 
       </>
-      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { if (guest) { setScoreDialog(null); setGuestScorePreview(true); return; } const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={guest || !!scoreConfig?.available && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoreUnavailableReason={!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available ? 'A compiled PDF is required to rescore this paper.' : !scoreConfig ? 'Checking current AI model and connection…' : scoreConfig.available ? '' : scoreConfig.message} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
+      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => { if (guest) { setScoreDialog(null); setGuestScorePreview(true); return; } const paper = papers.find(item => item.paper_id === scoreDialog.paperId); if (paper) void scorePaper(paper, true); }} canRescore={guest || !!scoreConfig?.available && !!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available} rescoreUnavailableReason={!papers.find(item => item.paper_id === scoreDialog.paperId)?.pdf_available ? 'A compiled PDF is required to rescore this paper.' : !scoreConfig ? '' : scoreConfig.available ? '' : scoreConfig.message} rescoring={scoringId === scoreDialog.paperId} error={scoreError}/>} 
       </div>
     </div>
   </section>;
@@ -5032,17 +5032,55 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const idleTitleRef = useRef<HTMLButtonElement>(null);
   const hasActivity = activityStatus === undefined
     ? researchRunning || paperRunning || paperQueued || askRunning : activityStatus !== null;
   const queuedOnly = activityStatus === undefined
     ? paperQueued && !researchRunning && !paperRunning && !askRunning : activityStatus === 'queued';
+  useLayoutEffect(() => {
+    const button = idleTitleRef.current;
+    const row = button?.parentElement;
+    if (!button || !row) return;
+
+    // Layout the title at the full available column width to find its actual
+    // text fragments (one or two lines), then shrink the hit/highlight box to
+    // the longest visible line. Measuring the natural max-content width would
+    // incorrectly suppress wrapping for longer project titles.
+    const measure = () => {
+      if (!button.isConnected) return;
+      button.style.width = '100%';
+      const available = button.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(button);
+      const longest = Math.max(0, ...Array.from(range.getClientRects())
+        .filter(rect => rect.width > 0 && rect.top < available.bottom + 1)
+        .map(rect => rect.width));
+      button.style.width = longest > 0
+        ? `${Math.min(available.width, Math.ceil(longest + 4))}px`
+        : '';
+    };
+    measure();
+    // Watch the enclosing track, not the button whose width we adjust.
+    // Ignore height-only changes to avoid observer/reflow feedback loops.
+    let lastWidth = row.getBoundingClientRect().width;
+    const observer = new ResizeObserver(() => {
+      const width = row.getBoundingClientRect().width;
+      if (Math.abs(width - lastWidth) < 0.5) return;
+      lastWidth = width;
+      measure();
+    });
+    observer.observe(row);
+    let disposed = false;
+    void document.fonts.ready.then(() => { if (!disposed) measure(); });
+    return () => { disposed = true; observer.disconnect(); };
+  }, [projectTitle, hasActivity, projectArtwork]);
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
         ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
-          ? <button type="button" className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
+          ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>

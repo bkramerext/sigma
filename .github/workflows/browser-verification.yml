@@ -206,6 +206,9 @@ jobs:
           curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/model_availability.py
+          # Fit the project-title hover rectangle to the longer rendered
+          # line and center its tooltip. Reuse the already running fixture.
+          uv run --with playwright python browser_checks/project_title_hover.py
       - name: Obligation recovery and public legal pages browser acceptance
         # Independent suites should all run, even after another suite fails.
         if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
