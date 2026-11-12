@@ -1042,7 +1042,11 @@ def _guest_project_route_allowed(method: str, path: str) -> bool:
         resource, identifier = parts[3:]
         if resource == "research-sessions" and identifier:
             return True
-        if resource == "papers" and identifier and identifier != "preflight":
+        if (
+            resource == "papers"
+            and identifier
+            and identifier not in {"preflight", "unfinished-checkpoints"}
+        ):
             return True
         if resource == "research-executions" and identifier:
             return True

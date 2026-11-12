@@ -3142,13 +3142,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const paperStepRestartPopup = useRef<HTMLDivElement | null>(null);
   const [paperStepRestartPlacement, setPaperStepRestartPlacement] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
-    if (!paperStepRestart && !unfinishedStepRestart) { setPaperStepRestartPlacement(null); return; }
+    if (!paperStepRestart && !unfinishedStepRestart && !confirmRestartDraft) { setPaperStepRestartPlacement(null); return; }
     const place = () => {
       const anchor = paperStepRestartAnchor.current;
       const popup = paperStepRestartPopup.current;
       if (!anchor?.isConnected || !popup) {
         setPaperStepRestart(null);
         setUnfinishedStepRestart(null);
+        setConfirmRestartDraft(false);
         return;
       }
       const rect = anchor.getBoundingClientRect();
@@ -3165,7 +3166,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperStepRestartPlacement({ left, top });
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); setPaperStepRestart(null); setUnfinishedStepRestart(null); }
+      if (event.key === 'Escape') { event.preventDefault(); setPaperStepRestart(null); setUnfinishedStepRestart(null); setConfirmRestartDraft(false); }
     };
     const closeOnOutside = (event: PointerEvent) => {
       const target = event.target;
@@ -3173,6 +3174,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         && !paperStepRestartAnchor.current?.contains(target)) {
         setPaperStepRestart(null);
         setUnfinishedStepRestart(null);
+        setConfirmRestartDraft(false);
       }
     };
     place();
@@ -3186,7 +3188,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       document.removeEventListener('keydown', closeOnEscape);
       document.removeEventListener('pointerdown', closeOnOutside);
     };
-  }, [paperStepRestart, unfinishedStepRestart]);
+  }, [paperStepRestart, unfinishedStepRestart, confirmRestartDraft]);
   const paperRewindAdmissionPending = useRef(false);
   const paperRewindStopAfterAdmission = useRef(false);
   const [paperStepChecking, setPaperStepChecking] = useState<{ id: string; stage: SavedPaperRestartStage } | null>(null);
@@ -3228,7 +3230,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (!confirmRestartDraft && !confirmDiscardDraft && !confirmPlayRestartDraft && !confirmRecoverDraft) return;
     const dismissOutside = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
-      if (!event.target.closest('.paper-remove-anchor')) {
+      const inStepPopup = paperStepRestartPopup.current?.contains(event.target);
+      const inStepAnchor = paperStepRestartAnchor.current?.contains(event.target);
+      if (!event.target.closest('.paper-remove-anchor') && !inStepPopup && !inStepAnchor) {
         setConfirmRestartDraft(false);
         setConfirmDiscardDraft(false);
       }
@@ -4298,7 +4302,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } else void generatePaper();
   };
   const startOverPaperFromControl = (anchor: HTMLButtonElement) => {
-    positionPaperPopup(anchor, 280, 180);
+    paperStepRestartAnchor.current = anchor;
+    setPaperStepRestart(null);
+    setUnfinishedStepRestart(null);
     setConfirmDiscardDraft(false); setConfirmRestartDraft(true);
   };
   const resumeOtherPaperRun = (run: PaperRun) => {
@@ -4404,13 +4410,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip={stoppingSelectedPaper ? 'Stopping paper' : 'Stop paper generation'} disabled={loading || stoppingSelectedPaper} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {canStartOver && canControlDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => startOverPaperFromControl(event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
-                  {confirmRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm start over on paper generation">
-                    <p>Start over this paper? Unfinished generation progress will be discarded. Saved papers and research history will remain.</p>
-                    <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link" disabled={busy} onClick={() => void restartCheckpoint()}>Confirm</button>
-                      <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRestartDraft(false)}>Cancel</button>
-                    </div>
-                  </div></div>}
+
                 </span>}
                 {!generationRunning && (canRemoveDraft || (selectedRun !== undefined && !['active', 'queued', 'complete'].includes(selectedRun.status))) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
@@ -4460,7 +4460,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {unfinishedStepChecking?.key === paperUnfinishedOptionsKey(selectedRunId) &&
           <p role="status" className="paper-checkpoint-check">Checking saved checkpoints…</p>}
         {unfinishedStepCheckError?.key === paperUnfinishedOptionsKey(selectedRunId) &&
-          <p role="alert" className="ai-paper-warning">{unfinishedStepCheckError.message}</p>
+          <p role="alert" className="ai-paper-warning">{unfinishedStepCheckError.message}</p>}
         {!stoppingSelectedPaper && paperProgress.detail?.startsWith('Retrying') && <span className="paper-progress-substep">{paperProgress.detail}</span>}
         {/* Failure details are presented once in the contextual, dismissible paper card above. */}
       </div>}
@@ -4687,6 +4687,20 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       {success && <p className="ai-paper-status" role="status">{success}</p>}
 
       </>
+      {confirmRestartDraft && createPortal(
+        <div ref={paperStepRestartPopup} className="paper-step-restart-popup" role="dialog"
+          aria-label="Confirm start over on paper generation" aria-modal="false"
+          style={paperStepRestartPlacement
+            ? { left: paperStepRestartPlacement.left, top: paperStepRestartPlacement.top }
+            : { left: 12, top: 12, visibility: 'hidden' }}>
+          <p>Start over this paper? Unfinished generation progress will be discarded. Research and other Papers remain.</p>
+          <div className="session-remove-confirm-actions">
+            <button type="button" className="text-view-link" disabled={busy}
+              onClick={() => void restartCheckpoint()}>Confirm</button>
+            <button type="button" className="text-view-link" onClick={() => setConfirmRestartDraft(false)}>Cancel</button>
+          </div>
+        </div>, document.body
+      )}
       {unfinishedStepRestart && createPortal(
         <div ref={paperStepRestartPopup} className="paper-step-restart-popup" role="dialog"
           aria-label="Confirm unfinished Paper checkpoint restart" aria-modal="false"

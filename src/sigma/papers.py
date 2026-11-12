@@ -5042,8 +5042,14 @@ async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
 # when the preceding work actually has a durable checkpoint. Listing
 # capabilities does not authorize anything or make a provider call.
 _PAPER_RESTART_ORDER = (
-    "started", "review", "evidence", "planning", "writing",
-    "validation", "typesetting", "pdf",
+    "started",
+    "review",
+    "evidence",
+    "planning",
+    "writing",
+    "validation",
+    "typesetting",
+    "pdf",
 )
 _PAPER_RESTART_PROGRESS = {
     "started": "queued",
@@ -5100,12 +5106,18 @@ def unfinished_restart_options(path: str) -> dict[str, Any]:
         "snapshot_sha256": work["snapshot_sha256"],
         "stages": stages,
         "resume_stage": (
-            "compile" if work.get("proofread_ready")
-            else "validation" if work.get("checkpoint_revalidate_pending") is True
-            else "proofreading" if work.get("validated_draft")
-            else "writing" if work.get("plan")
-            else "planning" if work.get("evidence_indexed")
-            else "publication_compilation" if work.get("writing_sources")
+            "compile"
+            if work.get("proofread_ready")
+            else "validation"
+            if work.get("checkpoint_revalidate_pending") is True
+            else "proofreading"
+            if work.get("validated_draft")
+            else "writing"
+            if work.get("plan")
+            else "planning"
+            if work.get("evidence_indexed")
+            else "publication_compilation"
+            if work.get("writing_sources")
             else "queued"
         ),
     }
@@ -5158,12 +5170,14 @@ async def restart_unfinished_step(
         previous_calls += int(work.get("publication_compiler_calls", 0))
         previous_calls += int((work.get("proofreading") or {}).get("provider_calls_attempted", 0))
         history = list(work.get("prior_runs", []))
-        history.append({
-            "provider_calls_attempted": previous_calls,
-            "snapshot_sha256": work["snapshot_sha256"],
-            "model": work["model"],
-            "reset_at": _now(),
-        })
+        history.append(
+            {
+                "provider_calls_attempted": previous_calls,
+                "snapshot_sha256": work["snapshot_sha256"],
+                "model": work["model"],
+                "reset_at": _now(),
+            }
+        )
         next_work = _new_work(
             work["snapshot_sha256"],
             work["project_id"],
@@ -5187,19 +5201,29 @@ async def restart_unfinished_step(
                     next_work[field] = work[field]
         if ordinal >= _PAPER_RESTART_ORDER.index("planning"):
             for field in (
-                "evidence_strategy", "evidence_indexed", "evidence_notes",
-                "preserved_evidence_notes", "next_batch", "omitted_evidence",
-                "reduction_input", "reduction_next_group", "reduction_output",
-                "reduction_note_compaction_events", "reduction_source_refs_omitted",
-                "conflict_notes", "conflict_note_count",
+                "evidence_strategy",
+                "evidence_indexed",
+                "evidence_notes",
+                "preserved_evidence_notes",
+                "next_batch",
+                "omitted_evidence",
+                "reduction_input",
+                "reduction_next_group",
+                "reduction_output",
+                "reduction_note_compaction_events",
+                "reduction_source_refs_omitted",
+                "conflict_notes",
+                "conflict_note_count",
             ):
                 if field in work:
                     next_work[field] = work[field]
-        if ordinal >= _PAPER_RESTART_ORDER.index("writing"):
-            if work.get("kind") == "long_form":
-                if not isinstance(work.get("plan"), dict):
-                    raise ProjectError("Writing plan checkpoint is unavailable.")
-                next_work["plan"] = work["plan"]
+        if (
+            ordinal >= _PAPER_RESTART_ORDER.index("writing")
+            and work.get("kind") == "long_form"
+        ):
+            if not isinstance(work.get("plan"), dict):
+                raise ProjectError("Writing plan checkpoint is unavailable.")
+            next_work["plan"] = work["plan"]
         if ordinal >= _PAPER_RESTART_ORDER.index("validation"):
             next_work["validated_draft"] = work["validated_draft"]
             next_work["validated_warnings"] = list(work.get("validated_warnings", []))
@@ -5212,15 +5236,21 @@ async def restart_unfinished_step(
             "run_id": _paper_run_id.get() or uuid4().hex,
             "status": "paused",
             "stage": _PAPER_RESTART_PROGRESS[stage],
-            "current": None, "total": None,
-            "started_at": now, "updated_at": now, "elapsed_seconds": 0,
+            "current": None,
+            "total": None,
+            "started_at": now,
+            "updated_at": now,
+            "elapsed_seconds": 0,
             "detail": "Restart checkpoint prepared · ready to resume",
         }
         _clear_queue_status(path)
         _active_progress.pop(_paper_state_key(path), None)
         _save_work(path, next_work)
         persisted = _load_work(path)
-        if persisted is None or persisted.get("progress", {}).get("stage") != _PAPER_RESTART_PROGRESS[stage]:
+        if (
+            persisted is None
+            or persisted.get("progress", {}).get("stage") != _PAPER_RESTART_PROGRESS[stage]
+        ):
             raise ProjectError("Paper checkpoint was not durably restored.")
         return {
             "stage": stage,
@@ -11081,10 +11111,10 @@ async def _generate_impl(
         if work.get("validated_draft") is not None:
             origin = work.get("rewind_origin")
             if (
-                (isinstance(origin, dict) and origin.get("stage") == "validation"
-                 and work.get("rewind_validation_done") is not True)
-                or work.get("checkpoint_revalidate_pending") is True
-            ):
+                isinstance(origin, dict)
+                and origin.get("stage") == "validation"
+                and work.get("rewind_validation_done") is not True
+            ) or work.get("checkpoint_revalidate_pending") is True:
                 await report("validation", None, None)
                 draft, validation_warnings = _revalidate_rewind_manuscript(work, package)
                 # Save accepted validation before the next stage; never

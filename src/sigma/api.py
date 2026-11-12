@@ -738,13 +738,19 @@ class PaperRestartRequest(OpenRequest):
 
 
 class PaperUnfinishedRewindRequest(OpenRequest):
-    run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    run_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     request_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     stage: Literal[
-        "started", "review", "evidence", "planning", "writing",
-        "validation", "typesetting", "pdf",
+        "started",
+        "review",
+        "evidence",
+        "planning",
+        "writing",
+        "validation",
+        "typesetting",
+        "pdf",
     ]
     confirm_restart: Literal[True]
 
@@ -1125,11 +1131,8 @@ async def papers_restart_view(body: PaperRestartRequest):
 
 
 @app.get("/api/projects/papers/unfinished-checkpoints")
-def paper_unfinished_checkpoints(path: str, run_id: str | None = None):
-    if run_id is None:
-        project_collaboration.require_paper_draft_operator(path, inspect_project(path).project.id)
-    else:
-        project_collaboration.execution_run(path, "paper", run_id, operator=True)
+def paper_unfinished_checkpoints(path: str, run_id: str):
+    project_collaboration.execution_run(path, "paper", run_id, operator=True)
     with papers.paper_run_scope(run_id):
         return papers.unfinished_restart_options(path)
 
@@ -1139,16 +1142,14 @@ async def paper_unfinished_rewind(body: PaperUnfinishedRewindRequest):
     # An interrupted draft belongs to its creator, not every collaborator.
     # This is provider-free; actual dispatch still requires a fresh Play
     # preflight and an authorized connected provider.
-    if body.run_id is None:
-        project_collaboration.require_paper_draft_operator(
-            body.path, body.expected_project_id
-        )
-    else:
-        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+    project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
     with papers.paper_run_scope(body.run_id):
         return await papers.restart_unfinished_step(
-            body.path, body.expected_project_id, body.expected_snapshot_sha256,
-            body.stage, request_id=body.request_id,
+            body.path,
+            body.expected_project_id,
+            body.expected_snapshot_sha256,
+            body.stage,
+            request_id=body.request_id,
         )
 
 

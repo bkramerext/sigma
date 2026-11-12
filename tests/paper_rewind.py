@@ -281,69 +281,92 @@ class SavedPaperRewindTests(TestCase):
         ref = package["sources"][0]["id"]
         plan = {
             **paper["draft"],
-            "sections": [{
-                "heading": "Finding",
-                "purpose": "Explain the frozen source and its bounded result.",
-                "evidence_refs": [ref],
-                "claim_ids": ["C1"],
-            }],
+            "sections": [
+                {
+                    "heading": "Finding",
+                    "purpose": "Explain the frozen source and its bounded result.",
+                    "evidence_refs": [ref],
+                    "claim_ids": ["C1"],
+                }
+            ],
         }
         papers.LongPaperPlan.model_validate(plan)
         work = papers._new_work(
-            digest, self.view.project.id, "f" * 64,
-            self.config["model"], self.config["reasoning_effort"], kind="long_form",
+            digest,
+            self.view.project.id,
+            "f" * 64,
+            self.config["model"],
+            self.config["reasoning_effort"],
+            kind="long_form",
             provider_calls_total=4,
         )
-        work.update({
-            "frozen_package": package,
-            "writing_sources": [],
-            "evidence_indexed": True,
-            "evidence_strategy": "structured_v1",
-            "plan": plan,
-            "validated_draft": paper["draft"],
-            "validated_warnings": [],
-            "provider_calls": 4,
-            "progress": {
-                "run_id": run_id,
-                "status": "paused",
-                "stage": "proofreading",
-                "current": None,
-                "total": None,
-                "started_at": papers._now(),
-                "updated_at": papers._now(),
-                "elapsed_seconds": 100,
-                "detail": "Stopped before proofreading",
-            },
-        })
+        work.update(
+            {
+                "frozen_package": package,
+                "writing_sources": [],
+                "evidence_indexed": True,
+                "evidence_strategy": "structured_v1",
+                "plan": plan,
+                "validated_draft": paper["draft"],
+                "validated_warnings": [],
+                "provider_calls": 4,
+                "progress": {
+                    "run_id": run_id,
+                    "status": "paused",
+                    "stage": "proofreading",
+                    "current": None,
+                    "total": None,
+                    "started_at": papers._now(),
+                    "updated_at": papers._now(),
+                    "elapsed_seconds": 100,
+                    "detail": "Stopped before proofreading",
+                },
+            }
+        )
         papers._save_work(self.path, work)
         return package, work
 
     def test_unfinished_stages_are_gated_by_real_checkpoints(self) -> None:
         run_id = uuid4().hex
         with papers.paper_run_scope(run_id):
-            package, work = self._stopped_long_form(run_id)
+            _package, work = self._stopped_long_form(run_id)
             options = papers.unfinished_restart_options(self.path)
             self.assertEqual(
                 options["stages"],
-                ["started", "review", "evidence", "planning",
-                 "writing", "validation", "typesetting"],
+                [
+                    "started",
+                    "review",
+                    "evidence",
+                    "planning",
+                    "writing",
+                    "validation",
+                    "typesetting",
+                ],
             )
             self.assertEqual(options["resume_stage"], "proofreading")
             self.assertNotIn("pdf", options["stages"])
             with self.assertRaisesRegex(ProjectError, "verified checkpoint"):
-                asyncio.run(papers.restart_unfinished_step(
-                    self.path, self.view.project.id,
-                    work["snapshot_sha256"], "pdf",
-                ))
-            self.assertEqual(papers._load_work(self.path)["provider_calls"], 4)
+                asyncio.run(
+                    papers.restart_unfinished_step(
+                        self.path,
+                        self.view.project.id,
+                        work["snapshot_sha256"],
+                        "pdf",
+                    )
+                )
+            persisted = papers._load_work(self.path)
+            assert persisted is not None
+            self.assertEqual(persisted["provider_calls"], 4)
 
     def test_unfinished_writing_restart_preserves_plan_and_paid_call_history(self) -> None:
         run_id = uuid4().hex
         with papers.paper_run_scope(run_id):
-            package, work = self._stopped_long_form(run_id)
-            result = asyncio.run(papers.restart_unfinished_step(
-                self.path, self.view.project.id, work["snapshot_sha256"], "writing"
-            ))
+            _package, work = self._stopped_long_form(run_id)
+            result = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path, self.view.project.id, work["snapshot_sha256"], "writing"
+                )
+            )
             self.assertEqual(result["stage"], "writing")
             next_work = papers._load_work(self.path)
             self.assertIsNotNone(next_work)
@@ -362,9 +385,11 @@ class SavedPaperRewindTests(TestCase):
         run_id = uuid4().hex
         with papers.paper_run_scope(run_id):
             package, work = self._stopped_long_form(run_id)
-            result = asyncio.run(papers.restart_unfinished_step(
-                self.path, self.view.project.id, work["snapshot_sha256"], "validation"
-            ))
+            result = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path, self.view.project.id, work["snapshot_sha256"], "validation"
+                )
+            )
             self.assertEqual(result["stage"], "validation")
             next_work = papers._load_work(self.path)
             self.assertIsNotNone(next_work)
@@ -381,33 +406,49 @@ class SavedPaperRewindTests(TestCase):
         run_id = uuid4().hex
         request_id = uuid4().hex
         with papers.paper_run_scope(run_id):
-            package, work = self._stopped_long_form(run_id)
-            first = asyncio.run(papers.restart_unfinished_step(
-                self.path, self.view.project.id, work["snapshot_sha256"], "writing",
-                request_id=request_id,
-            ))
+            _package, work = self._stopped_long_form(run_id)
+            first = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path,
+                    self.view.project.id,
+                    work["snapshot_sha256"],
+                    "writing",
+                    request_id=request_id,
+                )
+            )
             restored = papers._load_work(self.path)
             self.assertIsNotNone(restored)
             assert restored is not None
-            second = asyncio.run(papers.restart_unfinished_step(
-                self.path, self.view.project.id, work["snapshot_sha256"], "writing",
-                request_id=request_id,
-            ))
+            second = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path,
+                    self.view.project.id,
+                    work["snapshot_sha256"],
+                    "writing",
+                    request_id=request_id,
+                )
+            )
             self.assertFalse(second["created"])
             self.assertEqual(first["snapshot_sha256"], second["snapshot_sha256"])
-            self.assertEqual(papers._load_work(self.path)["prior_runs"], restored["prior_runs"])
+            persisted = papers._load_work(self.path)
+            assert persisted is not None
+            self.assertEqual(persisted["prior_runs"], restored["prior_runs"])
 
     def test_unfinished_proofreading_restart_clears_later_outputs(self) -> None:
         run_id = uuid4().hex
         with papers.paper_run_scope(run_id):
-            package, work = self._stopped_long_form(run_id)
+            _package, work = self._stopped_long_form(run_id)
             with self.assertRaisesRegex(ProjectError, "changed"):
-                asyncio.run(papers.restart_unfinished_step(
-                    self.path, self.view.project.id, "a" * 64, "typesetting"
-                ))
-            result = asyncio.run(papers.restart_unfinished_step(
-                self.path, self.view.project.id, work["snapshot_sha256"], "typesetting"
-            ))
+                asyncio.run(
+                    papers.restart_unfinished_step(
+                        self.path, self.view.project.id, "a" * 64, "typesetting"
+                    )
+                )
+            result = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path, self.view.project.id, work["snapshot_sha256"], "typesetting"
+                )
+            )
             next_work = papers._load_work(self.path)
             assert next_work is not None
             self.assertIn("validated_draft", next_work)
