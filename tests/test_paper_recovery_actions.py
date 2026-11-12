@@ -68,6 +68,18 @@ class PaperRecoveryActionsTests(TestCase):
                 asyncio.run(api.papers_discard_view(self._body(run_id)))
             discard.assert_not_awaited()
 
+    def test_guest_cannot_remove_unpublished_work(self) -> None:
+        with (
+            patch.object(api.cloud_workspaces, "current", return_value=SimpleNamespace(guest=True)),
+            patch.object(api.cloud_workspaces, "enabled", return_value=True),
+            patch.object(api.cloud_auth, "current_principal", return_value=None),
+            patch.object(api.papers, "discard_work", new_callable=AsyncMock) as discard,
+        ):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(api.papers_discard_view(self._body()))
+            self.assertEqual(error.exception.status_code, 403)
+            discard.assert_not_awaited()
+
     def test_wrong_project_never_discards(self) -> None:
         with (
             patch.object(
