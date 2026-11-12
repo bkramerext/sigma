@@ -294,19 +294,45 @@ with sync_playwright() as playwright:
     ).bounding_box()
     last_title_rect = title_rects[-1]
     assert copied_icon_box and copied_icon_box["x"] > markdown_box["x"]
-    assert markdown_box["x"] >= last_title_rect["right"] - 1, (markdown_box, last_title_rect)
-    assert abs(markdown_box["x"] - last_title_rect["right"] - 14) <= 2, (
-        markdown_box,
-        last_title_rect,
+    same_title_line = (
+        abs(
+            (markdown_box["y"] + markdown_box["height"] / 2)
+            - (last_title_rect["y"] + last_title_rect["height"] / 2)
+        )
+        < 14
     )
+    if same_title_line:
+        assert markdown_box["x"] >= last_title_rect["right"] - 1, (
+            markdown_box,
+            last_title_rect,
+        )
+        assert abs(markdown_box["x"] - last_title_rect["right"] - 14) <= 2, (
+            markdown_box,
+            last_title_rect,
+        )
+    else:
+        # Long titles can leave too little room for both actions on their last
+        # text line. In that case the inline action group wraps below the title;
+        # keep its standard title gap and ensure it does not overlap the text.
+        assert markdown_box["y"] >= last_title_rect["y"] + last_title_rect["height"] - 1, (
+            markdown_box,
+            last_title_rect,
+        )
+        assert abs(markdown_box["x"] - last_title_rect["x"] - 14) <= 2, (
+            markdown_box,
+            last_title_rect,
+        )
     markdown_glyph = markdown_icon.locator("svg.markdown-logo").bounding_box()
     assert markdown_glyph and normal_icon_box
     left_glyph_gap = markdown_glyph["x"] - last_title_rect["right"]
     right_glyph_gap = normal_icon_box["x"] - (markdown_glyph["x"] + markdown_glyph["width"])
-    assert abs(left_glyph_gap - right_glyph_gap) <= 3, (
-        left_glyph_gap,
-        right_glyph_gap,
-    )
+    if same_title_line:
+        assert abs(left_glyph_gap - right_glyph_gap) <= 3, (
+            left_glyph_gap,
+            right_glyph_gap,
+        )
+    else:
+        assert normal_copy_box["x"] - (markdown_box["x"] + markdown_box["width"]) == 12
     assert normal_copy_box and normal_icon_box
     assert copied_icon_box == normal_copy_box
     assert (
@@ -315,13 +341,16 @@ with sync_playwright() as playwright:
         .bounding_box()
         == normal_icon_box
     )
-    assert (
-        abs(
-            (copied_icon_box["y"] + copied_icon_box["height"] / 2)
-            - (last_title_rect["y"] + last_title_rect["height"] / 2)
+    if same_title_line:
+        assert (
+            abs(
+                (copied_icon_box["y"] + copied_icon_box["height"] / 2)
+                - (last_title_rect["y"] + last_title_rect["height"] / 2)
+            )
+            < 14
         )
-        < 14
-    )
+    else:
+        assert copied_icon_box["y"] >= last_title_rect["y"] + last_title_rect["height"] - 1
     expect(card.locator(".saved-paper-expand")).to_have_attribute(
         "aria-expanded", expanded_before_copy
     )
