@@ -7225,7 +7225,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
 }
 
 type ActivityRunTarget = { kind: AttributionKind; status: 'active' | 'queued'; id?: string; number?: number; creator?: string | null; model?: string; thinking?: string };
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; activity_author?: string | null; answer_active?: boolean; activity_runs?: ActivityRunTarget[]; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number | null; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; activity_author?: string | null; answer_active?: boolean; activity_runs?: ActivityRunTarget[]; error: string | null };
 // Saved groups by title without the terminal version; versions sort numerically descending.
 // Most Recent intentionally keeps last-accessed ordering.
 const savedVersionSuffix = /\s+(?:v(?:ersion)?\s*(\d+(?:\.\d+)*)|\(\s*v(?:ersion)?\s*(\d+(?:\.\d+)*)\s*\))$/i;
@@ -7644,7 +7644,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{difficultyDescription(entry.difficulty)}{entry.strategy_count !== null && <> · {strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}</>}{entry.best_paper_score != null && <> · Best score {entry.best_paper_score}/100</>}</span></small></div>
+          <div className="recent-meta-row"><small><span>{difficultyDescription(entry.difficulty)}{entry.strategy_count !== null && <> · {strategyCount(entry.strategy_count)}</>}{entry.paper_count != null && <> · {paperCount(entry.paper_count)}</>}{entry.best_paper_score != null && <> · Best score {entry.best_paper_score}/100</>}</span></small></div>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
       </li>)}</ul>
