@@ -296,7 +296,7 @@
   background: #3b3029; border-color: #ac7054;
 }
 .workspace-page .papers-pane .paper-draft-process-control:disabled {
-  opacity: .5; cursor: not-allowed;
+  opacity: .5; cursor: default;
 }
 .workspace-page .papers-pane .paper-draft-card .paper-draft-content { margin-top: 3px; }
 .workspace-page .papers-pane .paper-draft-card .ai-paper-progress {
@@ -331,7 +331,7 @@
 .workspace-page .papers-pane .paper-draft-restart { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; padding: 3px; border: 0; background: transparent; color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-draft-restart svg { width: 20px; height: 20px; }
 .workspace-page .papers-pane .paper-draft-restart:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: #3b3029; }
-.workspace-page .papers-pane .paper-draft-restart:disabled { opacity: .5; cursor: not-allowed; }
+.workspace-page .papers-pane .paper-draft-restart:disabled { opacity: .5; cursor: default; }
 
 /* Numbered paper hover uses underline only, matching numbered sessions. */
 .workspace-page .papers-pane .saved-paper-title-toggle:is(:hover,:focus-visible) { text-decoration: underline; text-underline-offset: 3px; color: inherit; background: transparent; }
