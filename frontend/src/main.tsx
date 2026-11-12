@@ -3169,7 +3169,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           const next = (selected?.progress ?? body.progress ?? null) as PaperProgress | null;
           const isSelected = selectedRunIdRef.current === runId;
           if (isSelected) setPaperProgress(next);
-          if (next?.status !== 'active' && next?.status !== 'queued') {
+          const stopping = paperStopAwaitingCheckpoint.current?.runId === runId
+            && body.stop_pending === true;
+          if (next?.status !== 'active' && next?.status !== 'queued' && !stopping) {
             if (paperStopAwaitingCheckpoint.current?.runId === runId) {
               paperStopAwaitingCheckpoint.current = null;
               setPaperStopReconciliation(false);
