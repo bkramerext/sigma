@@ -161,7 +161,7 @@ class ResponsiveControlTests(TestCase):
         body = api.ResearchControlRequest(
             path="/unused/project.json", action="stop", request_only=True
         )
-        request = SimpleNamespace(state=SimpleNamespace(cloud_principal=None))
+        request = api.Request({"type": "http", "method": "POST", "headers": []})
         with (
             patch.object(api.project_collaboration, "require_execution_operator") as acl,
             patch.object(api.project_collaboration, "note_artifact_author") as author,
@@ -180,7 +180,9 @@ class ResponsiveControlTests(TestCase):
             )
             acl.assert_called_once()
             author.assert_called_once()
-            self.assertTrue(stop.await_args.kwargs["acknowledge_only"])
+            self.assertIsNotNone(stop.await_args)
+            if stop.await_args is not None:
+                self.assertTrue(stop.await_args.kwargs["acknowledge_only"])
 
 
 if __name__ == "__main__":
