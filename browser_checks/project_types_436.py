@@ -90,7 +90,7 @@ with sync_playwright() as playwright:
     expect(grid).to_be_visible()
     expect(grid.locator(".home-about-button")).to_have_text("About SIGMA")
     assert grid.evaluate("node => getComputedStyle(node).gridTemplateAreas") == (
-        '"model-column google" "model-column chatgpt"'
+        '"model-column identity"'
     )
     about_rect = grid.locator(".home-about-button").bounding_box()
     settings_rect = grid.locator(".home-settings-pill").bounding_box()
@@ -129,9 +129,7 @@ with sync_playwright() as playwright:
     assert abs(model_rect["y"] - chatgpt_rect["y"]) < 3
     # Match Project's 12px row spacing in both Home pill columns.
     home_model_gap = model_rect["y"] - (about_rect["y"] + about_rect["height"])
-    home_identity_gap = chatgpt_rect["y"] - (
-        google_rect["y"] + google_rect["height"]
-    )
+    home_identity_gap = chatgpt_rect["y"] - (google_rect["y"] + google_rect["height"])
     assert abs(home_model_gap - 12) <= 1, home_model_gap
     assert abs(home_identity_gap - 12) <= 1, home_identity_gap
     # Home's full control group must sit the same distance from the right
@@ -208,7 +206,12 @@ with sync_playwright() as playwright:
     # Create requires a title, a non-blank Research Subject, and a selected
     # project type; Desired Outcomes and Paper Requirements stay optional.
     create = new_dialog.get_by_role("button", name="Create", exact=True)
-    expect(new_dialog.get_by_text("Project title, Research Subject, and project type are required", exact=False)).to_be_visible()
+    expect(
+        new_dialog.get_by_text(
+            "Project name, Research category, and Research Subject are required",
+            exact=False,
+        )
+    ).to_be_visible()
     expect(create).to_be_disabled()
     new_dialog.locator("#project-name").fill("New project validation")
     expect(create).to_be_disabled()
@@ -519,8 +522,12 @@ with sync_playwright() as playwright:
     project_rects = {
         "about": controls.locator(".about-action").bounding_box(),
         "settings": controls.locator(".project-global-settings-pill").bounding_box(),
-        "google": controls.locator(".project-identity-pill-stack > .project-google-signin").bounding_box(),
-        "chatgpt": controls.locator(".project-identity-pill-stack > .api-connection > summary").bounding_box(),
+        "google": controls.locator(
+            ".project-identity-pill-stack > .project-google-signin"
+        ).bounding_box(),
+        "chatgpt": controls.locator(
+            ".project-identity-pill-stack > .api-connection > summary"
+        ).bounding_box(),
         "model": controls.locator(".global-model-pill").bounding_box(),
     }
     assert all(project_rects.values()), project_rects
@@ -1443,18 +1450,18 @@ with sync_playwright() as playwright:
         == 0
     )
     start_button.click()
-    start_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
+    start_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
     expect(start_group).to_contain_text("at Started")
     start_group.get_by_role("button", name="Cancel").click()
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
+    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
     expect(restart_group).to_be_visible()
     assert rewind_calls == []
     restart_group.get_by_role("button", name="Cancel").click()
     expect(restart_group).to_have_count(0)
     assert rewind_calls == []
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
+    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
     confirm = restart_group.get_by_role("button", name="Confirm", exact=True)
     expect(confirm).to_be_enabled(timeout=10000)
     confirm.click()
