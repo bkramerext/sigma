@@ -507,7 +507,12 @@ def project_activity_runs(
     # activity hint has not caught up with a collaborator's execution.
     paper_runs = papers.run_progress_list(path)
     has_active_paper = any(run["status"] in {"active", "queued"} for run in paper_runs)
-    if not session_active and not has_active_paper and not pending_answers:
+    if (
+        not session_active
+        and paper_status not in {"active", "queued"}
+        and not has_active_paper
+        and not pending_answers
+    ):
         return []
 
     # Reading author rows is authorized by _membership even for projects that
@@ -650,19 +655,25 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 try:
                     pending_answers = research_qa.list_pending_answers(view.path)
                     answer_active = bool(pending_answers)
-                    activity_runs = project_activity_runs(
-                        view.path,
-                        project=view,
-                        paper_status=paper_status,
-                        session_active=session_active,
-                        pending_answers=pending_answers,
-                    )
-                    # Home, the project title, and the favicon see exactly the
-                    # same paper activity rather than three different hints.
-                    if any(run["kind"] == "paper" and run["status"] == "active" for run in activity_runs):
-                        paper_status = "active"
-                    elif any(run["kind"] == "paper" and run["status"] == "queued" for run in activity_runs):
-                        paper_status = "queued"
+                    if not activity_only:
+                        activity_runs = project_activity_runs(
+                            view.path,
+                            project=view,
+                            paper_status=paper_status,
+                            session_active=session_active,
+                            pending_answers=pending_answers,
+                        )
+                        # Home and the project title share one live run projection.
+                        if any(
+                            run["kind"] == "paper" and run["status"] == "active"
+                            for run in activity_runs
+                        ):
+                            paper_status = "active"
+                        elif any(
+                            run["kind"] == "paper" and run["status"] == "queued"
+                            for run in activity_runs
+                        ):
+                            paper_status = "queued"
                 except (ProjectError, OSError, ValueError):
                     # Activity decoration must not prevent Saved Projects loading.
                     pass
@@ -733,7 +744,6 @@ def recent_activity() -> dict:
                 "id": item["id"],
                 "research_running": item["research_running"],
                 "paper_activity": item["paper_activity"],
-                "activity_runs": item["activity_runs"],
                 "activity_author": item["activity_author"],
                 "answer_active": item["answer_active"],
             }

@@ -2871,7 +2871,7 @@ function PaperActivityLine({ progress }: { progress: PaperProgress }) {
 
 type SavedPaperRestartStage = 'started' | 'writing' | 'validation' | 'typesetting' | 'scoring';
 type UnfinishedPaperRestartStage = 'started' | 'review' | 'evidence' | 'planning' | 'writing' | 'validation' | 'typesetting' | 'pdf';
-type UnfinishedPaperRestartOptions = { snapshot_sha256: string; stages: UnfinishedPaperRestartStage[]; resume_stage: PaperProgress['stage'] };
+type UnfinishedPaperRestartOptions = { snapshot_sha256: string; stages: UnfinishedPaperRestartStage[]; resume_stage: PaperProgress['stage']; published_paper_id?: string };
 const PAPER_UNFINISHED_STAGES: readonly (UnfinishedPaperRestartStage | null)[] = [
   'started', 'review', 'evidence', 'planning', 'writing', 'validation', 'typesetting', 'pdf', null, null,
 ];
@@ -3014,7 +3014,7 @@ function paperTimingLabel(progress: PaperProgress, now: number): string {
   return paperElapsed(seconds);
 }
 
-function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, projectOwnerEmail, draftCreatorEmail, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; viewerEmail?: string; projectOwnerEmail?: string | null; draftCreatorEmail?: string; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
+function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, projectOwnerEmail, draftCreatorEmail, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; viewerEmail?: string; projectOwnerEmail?: string | null; draftCreatorEmail?: string; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean, activeRunIds: string[]) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
   const ai = useAI();
   const initialPaperListing = useRef<InitialPaperListing | null>(takeInitialPaperListing(path, projectId));
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
@@ -3611,6 +3611,27 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         (selectedRunIdRef.current === runId && ['active', 'queued'].includes(paperProgress?.status ?? ''));
       const options = await fetchUnfinishedPaperSteps(runId, undefined, inFlight);
       const requestedStep = PAPER_UNFINISHED_STAGES.indexOf(stage);
+      if (options.published_paper_id) {
+        // A completed PDF is a satisfied checkpoint, not a failed draft.
+        // The run may have published while this card was still on screen.
+        let published = papers.find(item => item.paper_id === options.published_paper_id);
+        if (!published) {
+          const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, {
+            cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+          });
+          const latest = await readPaperResponse(response, 'Finding saved paper');
+          setPapers(Array.isArray(latest.papers) ? latest.papers as PaperSummary[] : []);
+          published = (latest.papers as PaperSummary[] | undefined)?.find(
+            item => item.paper_id === options.published_paper_id,
+          );
+        }
+        if (!published) throw new Error('Saved paper is unavailable; refresh this project.');
+        setUnfinishedStepCheckError(null);
+        if (requestedStep >= 7 && published.pdf_available) void scorePaper(published);
+        else void proposePaperStepRestart(published, publishedPaperTarget(requestedStep), anchor);
+        void refresh(undefined, true);
+        return;
+      }
       const target = paperUnfinishedCheckpointForStep(requestedStep, options.stages);
       if (!options.stages.includes(target)) throw new Error('This Paper has no verified restart checkpoint.');
       setUnfinishedStepRestart({ runId, number, stage: target, snapshot_sha256: options.snapshot_sha256 });
@@ -4456,6 +4477,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   );
   const allPapersRunning = paperRuns.some(run => run.status === 'active') || generationRunning && paperProgress?.status !== 'queued';
   const allPapersQueued = !allPapersRunning && paperRuns.some(run => run.status === 'queued');
+  const activePaperRunIds = [
+    ...new Set([
+      ...paperRuns.filter(run => run.status === 'active').map(run => run.run_id),
+      ...(generationRunning && selectedRunId ? [selectedRunId] : []),
+    ]),
+  ];
+  const activePaperRunIdsKey = activePaperRunIds.join('|');
   const selectedUnfinishedOptions = unfinishedStepOptions[paperUnfinishedOptionsKey(selectedRunId)];
   // Fetch checkpoint capabilities only when an unfinished bar is expanded.
   // Never hydrate large work records on every progress heartbeat.
@@ -4543,7 +4571,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     // Use the explicit run ID; the state setter above is asynchronous.
     void generatePaper(false, null, true, run.run_id);
   };
-  useEffect(() => { onRunningChange(allPapersRunning); return () => onRunningChange(false); }, [allPapersRunning, onRunningChange]);
+  useEffect(() => {
+    onRunningChange(allPapersRunning, activePaperRunIds);
+    return () => onRunningChange(false, []);
+    // The joined IDs carry run identity without retriggering this effect for
+    // unrelated rendering changes to the array.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPapersRunning, activePaperRunIdsKey, onRunningChange]);
   useEffect(() => { onQueuedChange(allPapersQueued); return () => onQueuedChange(false); }, [allPapersQueued, onQueuedChange]);
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
     {providerChangePrompt && createPortal(
@@ -8194,6 +8228,11 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const [closing, setClosing] = useState(false);
   const [researchRunning, setResearchRunning] = useState(false);
   const [paperRunning, setPaperRunning] = useState(false);
+  const [paperActiveRunIds, setPaperActiveRunIds] = useState<string[]>([]);
+  const onPaperRunningChange = useCallback((running: boolean, runIds: string[]) => {
+    setPaperRunning(running);
+    setPaperActiveRunIds(current => current.join('|') === runIds.join('|') ? current : runIds);
+  }, []);
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
   const [activeRuns, setActiveRuns] = useState<Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }>>([]);
@@ -8215,6 +8254,10 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     return () => window.removeEventListener('sigma-run-stop-intent', onIntent);
   }, []);
   const visibleActiveRuns = activeRuns.filter(run => !optimisticStoppedRuns.has(`${run.kind}:${run.id ?? ''}`));
+  // Stop applies to ONE run. Another paper must keep its green pulse.
+  const panePaperRunning = paperActiveRunIds.length
+    ? paperActiveRunIds.some(id => !optimisticStoppedRuns.has(`paper:${id}`))
+    : paperRunning && ![...optimisticStoppedRuns].some(key => key.startsWith('paper:'));
   const [activityLoaded, setActivityLoaded] = useState(false);
   useEffect(() => {
     if (guest || !view) return;
@@ -8607,7 +8650,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     // A queued Session still belongs to Sessions when clicking the activity title.
     // Color is decided separately from the authoritative active/queued run list.
     researchRunning: (researchRunning && ![...optimisticStoppedRuns].some(key => key.startsWith('session:'))) || visibleActiveRuns.some(run => run.kind === 'session'),
-    paperRunning: (paperRunning && ![...optimisticStoppedRuns].some(key => key.startsWith('paper:'))) || visibleActiveRuns.some(run => run.kind === 'paper' && run.status === 'active'),
+    paperRunning: panePaperRunning || visibleActiveRuns.some(run => run.kind === 'paper' && run.status === 'active'),
     paperQueued: (paperQueued && ![...optimisticStoppedRuns].some(key => key.startsWith('paper:'))) || visibleActiveRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
     askRunning: visibleActiveRuns.some(run => run.kind === 'answer' && run.status === 'active'),
     activeRunLabels,
@@ -8616,8 +8659,8 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     // not conceal activity the underlying panes still report.
     activityStatus: !activityLoaded || (!activeRuns.length && !optimisticStoppedRuns.size) ? undefined
       : visibleActiveRuns.some(run => run.status === 'active') ||
-        ((paperRunning || researchRunning) && ![...optimisticStoppedRuns].some(key =>
-          key.startsWith(paperRunning ? 'paper:' : 'session:'))) ? 'active' as const
+        (panePaperRunning || (researchRunning && ![...optimisticStoppedRuns].some(key =>
+          key.startsWith('session:')))) ? 'active' as const
       : visibleActiveRuns.some(run => run.status === 'queued') || paperQueued ? 'queued' as const : null,
     onIdleProjectTitleClick: toggleSectionsFromTitle,
     onActivityClick: () => {
@@ -8964,7 +9007,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
       setAdvancedOutcomeGlobal(true);
       setAnnouncement('Advanced Outcome enabled for your account.');
     }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls} sessionControls={processControls} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton} controlsDisabled={activeMode !== null || closing || ordering || !!dragId} onRunningChange={setResearchRunning} onInitialActivity={setInitialResearchActivity} onRevealNewSession={collapseProjectAndStrategies} onSectionOpened={() => sectionOpen('sessions')}/>
-    <PapersPane collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.paper} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} draftCreatorEmail={sharedActivity?.artifact_authors?.paper_draft?.[project.id]} path={view.path} projectId={project.id} guest={guest} onRunningChange={setPaperRunning} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
+    <PapersPane collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.paper} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} draftCreatorEmail={sharedActivity?.artifact_authors?.paper_draft?.[project.id]} path={view.path} projectId={project.id} guest={guest} onRunningChange={onPaperRunningChange} onQueuedChange={setPaperQueued} onInitialActivity={setInitialPaperActivity} onSectionOpened={() => sectionOpen('papers')}/>
     {projectEditing && <ProjectClassificationDialog initial={view} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { markLocalSharedSave(); setView(next); setAnnouncement('Project settings saved.'); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {emailOpen && <ProjectEmailDialog path={view.path} projectId={project.id} title={project.title}

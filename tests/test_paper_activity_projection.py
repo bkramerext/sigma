@@ -8,6 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from sigma import papers, project_collaboration, recents, research_qa, research_sessions
+from sigma.projects import ProjectError
 
 
 class PublishedPaperProjectionTests(TestCase):
@@ -44,9 +45,7 @@ class PublishedPaperProjectionTests(TestCase):
             patch.object(
                 project_collaboration, "list_execution_runs", return_value=[self.reservation]
             ),
-            patch.object(
-                project_collaboration, "collaborator_identity", return_value=self.author
-            ),
+            patch.object(project_collaboration, "collaborator_identity", return_value=self.author),
             patch.object(project_collaboration, "is_project_owner", return_value=True),
             patch.object(papers, "progress_status", return_value=progress),
             patch.object(papers, "needs_preflight_on_open", return_value=False),
@@ -75,9 +74,7 @@ class PublishedPaperProjectionTests(TestCase):
             patch.object(
                 project_collaboration, "list_execution_runs", return_value=[self.reservation]
             ),
-            patch.object(
-                project_collaboration, "collaborator_identity", return_value=self.author
-            ),
+            patch.object(project_collaboration, "collaborator_identity", return_value=self.author),
             patch.object(project_collaboration, "is_project_owner", return_value=True),
             patch.object(papers, "progress_status", return_value=progress),
             patch.object(papers, "needs_preflight_on_open", return_value=False),
@@ -99,9 +96,7 @@ class PublishedPaperProjectionTests(TestCase):
             patch.object(
                 project_collaboration, "list_execution_runs", return_value=[self.reservation]
             ),
-            patch.object(
-                project_collaboration, "collaborator_identity", return_value=self.author
-            ),
+            patch.object(project_collaboration, "collaborator_identity", return_value=self.author),
             patch.object(project_collaboration, "is_project_owner", return_value=True),
             patch.object(papers, "progress_status", return_value=progress),
             patch.object(papers, "needs_preflight_on_open", return_value=False),
@@ -111,6 +106,51 @@ class PublishedPaperProjectionTests(TestCase):
         self.assertIsNone(run["paper_id"])
         self.assertEqual(run["status"], "failed")
         self.assertTrue(run["can_resume"])
+
+    def test_unpersisted_pdf_marker_keeps_pdf_checkpoint_rewindable(self) -> None:
+        work = {
+            "snapshot_sha256": "c" * 64,
+            "published_paper_id": self.paper_id,
+            "published_pdf_sha256": "a" * 64,
+            "frozen_package": {},
+            "kind": "one_shot",
+            "progress": {"stage": "compile"},
+            "proofread_ready": {"tex_sha256": "d" * 64},
+        }
+        with (
+            patch.object(papers, "_load_work", return_value=work),
+            patch.object(
+                papers,
+                "get_paper",
+                side_effect=ProjectError("PDF publication record is not saved"),
+            ),
+            patch.object(
+                papers,
+                "progress_status",
+                return_value={"status": "failed", "stage": "compile"},
+            ),
+        ):
+            options = papers.unfinished_restart_options(self.path)
+        self.assertIn("pdf", options["stages"])
+        self.assertEqual(options["resume_stage"], "compile")
+
+    def test_saved_pdf_checkpoint_routes_to_published_bar(self) -> None:
+        work = {
+            "snapshot_sha256": "c" * 64,
+            "published_paper_id": self.paper_id,
+            "published_pdf_sha256": "a" * 64,
+        }
+        with (
+            patch.object(papers, "_load_work", return_value=work),
+            patch.object(
+                papers,
+                "get_paper",
+                return_value={"pdf_available": True, "pdf_sha256": "a" * 64},
+            ),
+        ):
+            options = papers.unfinished_restart_options(self.path)
+        self.assertEqual(options["published_paper_id"], self.paper_id)
+        self.assertEqual(options["stages"], [])
 
 
 class ActivityProjectionTests(TestCase):

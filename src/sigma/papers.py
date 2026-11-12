@@ -4100,6 +4100,11 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
             path,
             {
                 **state["progress"],
+                **(
+                    {"paper_id": state["published_paper_id"]}
+                    if isinstance(state.get("published_paper_id"), str)
+                    else {}
+                ),
                 "model": state.get("model"),
                 "reasoning_effort": state.get("reasoning_effort"),
                 # Checkpoint authoring already has the work in memory. Store
@@ -4541,7 +4546,12 @@ def _published_artifact_for_run(
     candidate = progress.get("paper_id")
     expected_pdf = None
     if not candidate and progress.get("stage") in {
-        "compile", "pdf_check", "scoring", "score_failed", "finishing", "complete"
+        "compile",
+        "pdf_check",
+        "scoring",
+        "score_failed",
+        "finishing",
+        "complete",
     }:
         work = _load_work(path)
         if work is not None:
@@ -4585,14 +4595,18 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
             progress = progress_status(path)
             preflight_needed = needs_preflight_on_open(path)
             published_id = _published_artifact_for_run(path, row, progress)
-            if published_id and progress is not None and progress["status"] not in {
-                "active", "queued", "complete"
-            }:
+            if (
+                published_id
+                and progress is not None
+                and progress["status"] not in {"active", "queued", "complete"}
+            ):
                 # A persisted PDF is success even when later scoring failed.
                 # Do not render a phantom draft that routes clicks to the
                 # unfinished-paper restart controller.
                 progress = {
-                    **progress, "status": "complete", "stage": "complete",
+                    **progress,
+                    "status": "complete",
+                    "stage": "complete",
                     "paper_id": published_id,
                 }
                 progress.pop("failure_reason", None)
@@ -4665,6 +4679,9 @@ def activity_status(path: str) -> Literal["queued", "active", "interrupted", "fa
     if key in _queued_progress:
         return "queued"
     if key in _generating_paper_projects:
+        return "active"
+    active = _active_progress.get(key)
+    if active is not None and active.get("status") == "running":
         return "active"
     try:
         receipt = _read_queue_status(path)
@@ -5191,7 +5208,7 @@ _PAPER_RESTART_PROGRESS = {
 
 
 def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
-    if not work or work.get("published_paper_id"):
+    if not work:
         return []
     if not isinstance(work.get("frozen_package"), dict):
         return []
@@ -5242,7 +5259,7 @@ def _unfinished_resume_stage(work: Mapping[str, Any] | None) -> str | None:
     Progress sidecars describe the last observed activity; they are not a
     restart plan. Checkpoints, not the last streamed event, decide Resume.
     """
-    if not work or work.get("published_paper_id"):
+    if not work:
         return None
     if not isinstance(work.get("frozen_package"), dict):
         return None
@@ -5271,8 +5288,27 @@ def unfinished_restart_options(path: str, *, allow_active: bool = False) -> dict
     work = _load_work(path)
     if work is None:
         raise ProjectError("This unfinished Paper has no restart checkpoint.")
-    if work.get("published_paper_id"):
-        raise ProjectError("This paper is already published; use its published step bar.")
+    published_id = work.get("published_paper_id")
+    if isinstance(published_id, str):
+        try:
+            published = get_paper(path, published_id, include_tex=False)
+        except ProjectError:
+            published = None
+        if (
+            published is not None
+            and published.get("pdf_available")
+            and published.get("pdf_sha256") == work.get("published_pdf_sha256")
+        ):
+            # Publication is a satisfied checkpoint, not a draft error.
+            # The UI can now route the requested action to the saved paper.
+            return {
+                "snapshot_sha256": work["snapshot_sha256"],
+                "stages": [],
+                "resume_stage": "scoring",
+                "published_paper_id": published_id,
+            }
+        # A marker written just before PDF persistence is not publication.
+        # Its frozen proofread checkpoint remains restartable.
     progress = progress_status(path)
     # Reading completed checkpoints during active execution is safe; only
     # the separate restart mutation requires a stopped Paper.
@@ -10519,8 +10555,6 @@ async def _generate_impl(
                 saved_progress["last_progress_at"] = previous_active["last_progress_at"]
             if detail:
                 saved_progress["detail"] = detail[:160]
-            if isinstance(work.get("published_paper_id"), str):
-                saved_progress["paper_id"] = work["published_paper_id"]
             sections_total = total if stage == "sections" else None
             if sections_total is None and work:
                 for source_key in ("plan", "one_shot_draft"):
@@ -12037,10 +12071,8 @@ async def _generate_impl(
         work["published_pdf_sha256"] = hashlib.sha256(pdf).hexdigest()
         _save_work(path, work)
         _save(path, record, pdf)
-        # A tiny publication pointer survives a scoring failure or restart.
-        current_status = _read_progress_status(path)
-        if current_status is not None and current_status.get("run_id") == run_id:
-            _write_progress_status(path, {**current_status, "paper_id": record["paper_id"]})
+        # _save_work already published the tiny paper identity into the
+        # progress sidecar, independently of later scoring/finalization.
         record.pop("tex_source", None)
         record.pop("snapshot", None)
         del tex, pdf
