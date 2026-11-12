@@ -4645,7 +4645,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     // Local, single-user projects do not have a reserved run ID. Their
     // established checkpoint reset remains valid; collaboration-backed
     // papers use the unified truthful step restart controller.
-    if (!selectedRunIdRef.current) {
+    if (!selectedRunIdRef.current || !paperRuns.some(run => run.run_id === selectedRunIdRef.current)) {
       setConfirmRestartDraft(true);
       return;
     }

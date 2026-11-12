@@ -899,8 +899,11 @@ def exercise(ui: str, workspaces: Path) -> None:
               return removed.ids.every(id => !data.runs.some(run => run.run_id === id)) &&
                 data.runs.some(run => run.run_id === removed.active && run.status === 'active');
             }""",
-            arg={"path": path, "ids": [stopped_run["run_id"], next_stopped_run["run_id"]],
-                 "active": active_run["run_id"]},
+            arg={
+                "path": path,
+                "ids": [stopped_run["run_id"], next_stopped_run["run_id"]],
+                "active": active_run["run_id"],
+            },
             timeout=12000,
         )
         # Both deletion and preservation of the active run were verified
