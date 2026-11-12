@@ -428,10 +428,46 @@ class SavedPaperRewindTests(TestCase):
                 )
             )
             self.assertFalse(second["created"])
+            with self.assertRaisesRegex(ProjectError, "different step"):
+                asyncio.run(
+                    papers.restart_unfinished_step(
+                        self.path,
+                        self.view.project.id,
+                        work["snapshot_sha256"],
+                        "validation",
+                        request_id=request_id,
+                    )
+                )
             self.assertEqual(first["snapshot_sha256"], second["snapshot_sha256"])
             persisted = papers._load_work(self.path)
             assert persisted is not None
             self.assertEqual(persisted["prior_runs"], restored["prior_runs"])
+
+    def test_restart_history_remains_bounded_after_many_attempts(self) -> None:
+        run_id = uuid4().hex
+        with papers.paper_run_scope(run_id):
+            _, work = self._stopped_long_form(run_id)
+            work["prior_runs"] = [
+                {
+                    "provider_calls_attempted": 1,
+                    "snapshot_sha256": work["snapshot_sha256"],
+                    "model": work["model"],
+                    "reset_at": papers._now(),
+                }
+                for _ in range(100)
+            ]
+            papers._save_work(self.path, work)
+            result = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path, self.view.project.id, work["snapshot_sha256"], "writing"
+                )
+            )
+            self.assertEqual(result["stage"], "writing")
+            saved = papers._load_work(self.path)
+            assert saved is not None
+            self.assertEqual(len(saved["prior_runs"]), 100)
+            self.assertEqual(saved["prior_runs"][-1]["provider_calls_attempted"], 4)
+            self.assertEqual(saved["provider_calls_total"], 4)
 
     def test_unfinished_proofreading_restart_clears_later_outputs(self) -> None:
         run_id = uuid4().hex

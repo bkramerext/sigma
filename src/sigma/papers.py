@@ -3495,7 +3495,13 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "rewind_validation_done",
         "checkpoint_revalidate_pending",
         "unfinished_restart_request_id",
+        "unfinished_restart_stage",
     }
+    if "unfinished_restart_stage" in value and (
+        value["unfinished_restart_stage"] not in _PAPER_RESTART_ORDER
+        or not isinstance(value.get("unfinished_restart_request_id"), str)
+    ):
+        raise ProjectError("Paper restart stage metadata is invalid")
     if "unfinished_restart_request_id" in value and (
         not isinstance(value["unfinished_restart_request_id"], str)
         or re.fullmatch(r"[0-9a-f]{32}", value["unfinished_restart_request_id"]) is None
@@ -5150,6 +5156,8 @@ async def restart_unfinished_step(
         if work is None or work.get("snapshot_sha256") != expected_snapshot_sha256:
             raise ProjectError("Paper checkpoint changed; reopen before restarting.")
         if work.get("unfinished_restart_request_id") == request_id:
+            if work.get("unfinished_restart_stage") not in {None, stage}:
+                raise ProjectError("Paper restart request was reused for a different step.")
             return {
                 "stage": stage,
                 "snapshot_sha256": work["snapshot_sha256"],
@@ -5169,7 +5177,9 @@ async def restart_unfinished_step(
         previous_calls = int(work.get("provider_calls", 0))
         previous_calls += int(work.get("publication_compiler_calls", 0))
         previous_calls += int((work.get("proofreading") or {}).get("provider_calls_attempted", 0))
-        history = list(work.get("prior_runs", []))
+        # Keep the schema-bounded recent history while preserving the separate
+        # lifetime provider-call aggregate across arbitrarily many restarts.
+        history = list(work.get("prior_runs", []))[-99:]
         history.append(
             {
                 "provider_calls_attempted": previous_calls,
@@ -5190,6 +5200,7 @@ async def restart_unfinished_step(
         )
         next_work["frozen_package"] = work["frozen_package"]
         next_work["unfinished_restart_request_id"] = request_id
+        next_work["unfinished_restart_stage"] = stage
         next_work["include_diagrams"] = bool(work.get("include_diagrams", True))
 
         # Restore only earlier completed stages, never a later result or
