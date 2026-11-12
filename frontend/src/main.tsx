@@ -7322,6 +7322,10 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
 // last opened project view within this browser tab so returning is immediate.
 // Scope both caches to the authenticated workspace; never reuse another user's data.
 const recentProjectListCache = new Map<string, RecentProject[]>();
+// Paper counts and best scores are slow-changing decorations. Keep their
+// hydration timestamp across Home/Project navigation to avoid rescanning a
+// growing paper library every five seconds.
+const recentPaperMetadataFetchedAt = new Map<string, number>();
 const recentProjectViewCache = new Map<string, ProjectView>();
 function projectCacheScope(cloud: CloudIdentityState | null): string {
   if (!cloud?.enabled) return 'local';
@@ -7408,7 +7412,8 @@ function useDelayedProjectProgress(operation: string): string {
   return visible === operation ? visible : '';
 }
 
-function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = false, active = false, projects, setProjects, loading, setLoading }: {
+function RecentProjects({ onOpen, getCachedView, onNavigateActivity, cacheScope, flat = false, active = false, projects, setProjects, loading, setLoading }: {
+  cacheScope: string;
   onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
@@ -7460,6 +7465,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
           };
         });
       });
+      if (!lightweight) recentPaperMetadataFetchedAt.set(cacheScope, Date.now());
       setError(''); setLoading(false);
     } catch (cause) {
       if (controller.signal.aborted && !signal?.aborted) {
@@ -7484,6 +7490,10 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       try {
         const lightweight = firstLoad;
         firstLoad = false;
+        // Only lightweight identity refreshes belong on the navigation path.
+        // A paper-score hydration is background-only, and at most once per
+        // minute per account. Existing cached scores remain visible.
+        if (!lightweight && Date.now() - (recentPaperMetadataFetchedAt.get(cacheScope) ?? 0) < 60_000) return;
         await load(controller.signal, lightweight);
         if (!controller.signal.aborted) {
           setError('');
@@ -7502,7 +7512,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
     };
     // Only the selected Home tab polls. The other tab remains mounted but
     // inactive, avoiding duplicate full-project scans and index-lock pressure.
-    const interval = window.setInterval(() => void refresh(), 5000);
+    const interval = window.setInterval(() => void refresh(), 30_000);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
     void refresh();
@@ -7512,7 +7522,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [load, active]);
+  }, [load, active, cacheScope]);
   async function open(entry: RecentProject, openSettings = false, revealBestPaper = false) {
     if (pending.current) return;
     pending.current = true; setOpening(entry.id); setError('');
@@ -7789,8 +7799,8 @@ function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, gu
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>My Work</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} cacheScope={cacheScope} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} cacheScope={cacheScope} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
