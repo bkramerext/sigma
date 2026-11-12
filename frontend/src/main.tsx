@@ -4312,9 +4312,18 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperProgress(null);
       setNewPaperRequested(true);
       setDraftPaperExpanded(true);
-      // Reset is provider-free and NEVER plays automatically. Leave a fresh
-      // Paper N with Play available after its snapshot has been refreshed.
+      // The bar-and-arrow is a restart, not a reset requiring another Play.
+      // Dispatch only after the provider-free checkpoint reset and refresh.
       await refresh(selected?.paper_id, true);
+      const runId = selectedRunIdRef.current ?? crypto.randomUUID().replaceAll('-', '');
+      selectPaperRun(runId);
+      setNewPaperRequested(true);
+      setPaperProgress({
+        status: 'interrupted', stage: 'queued',
+        current: null, total: null, started_at: new Date().toISOString(),
+        elapsed_seconds: 0,
+      });
+      setResumeAfterActiveRewind(runId);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
@@ -5056,7 +5065,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           style={paperStepRestartPlacement
             ? { left: paperStepRestartPlacement.left, top: paperStepRestartPlacement.top }
             : { left: 12, top: 12, visibility: 'hidden' }}>
-          <p>Start over this Paper? Unfinished work will be discarded.</p>
+          <p>Restart this paper from Started? Later work will be discarded.</p>
           <div className="session-remove-confirm-actions">
             <button type="button" className="text-view-link" disabled={busy}
               onClick={() => { setConfirmRestartDraft(false); void restartCheckpoint(); }}>Confirm</button>

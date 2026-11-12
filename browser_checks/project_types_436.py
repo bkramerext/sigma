@@ -1298,7 +1298,7 @@ with sync_playwright() as playwright:
     assert dispatched == ["POST"], dispatched
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
 
-    # Start over clears a resumable checkpoint without playing automatically.
+    # Restart clears the checkpoint and automatically dispatches Play.
     reset_calls: list[str] = []
 
     def simulate_restart(route):
@@ -1338,9 +1338,13 @@ with sync_playwright() as playwright:
     assert reset_calls == [], reset_calls
     restart.click()
     confirm_restart.get_by_role("button", name="Confirm").click()
-    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
+    for _ in range(80):
+        if len(dispatched) >= 2:
+            break
+        page.wait_for_timeout(100)
     assert reset_calls == ["POST"], reset_calls
-    assert dispatched == ["POST"], dispatched
+    assert dispatched == ["POST"] * 2, dispatched
+    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
     # A real reload must not resurrect Start over from the reset receipt.
     page.reload()
@@ -1351,10 +1355,10 @@ with sync_playwright() as playwright:
     # The frontend refreshes preflight before dispatch; wait for the
     # intercepted request rather than racing React's async handler.
     for _ in range(50):
-        if len(dispatched) == 2:
+        if len(dispatched) == 3:
             break
         page.wait_for_timeout(100)
-    assert dispatched == ["POST", "POST"], dispatched
+    assert dispatched == ["POST"] * 3, dispatched
     expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     paper_fixture["reset_ready"] = False
     paper_fixture["checkpoint"] = True
@@ -1366,7 +1370,7 @@ with sync_playwright() as playwright:
     paper_fixture["checkpoint"] = False
 
     # Queue cancellation may leave only a stopped receipt (no saved checkpoint).
-    # Start over must still clear it without sending another provider request.
+    # Confirming restart clears the receipt and dispatches a fresh attempt.
     paper_fixture["stopped"] = True
     page.reload()
     start_over = page.get_by_role("button", name="Start over on paper generation")
@@ -1384,9 +1388,13 @@ with sync_playwright() as playwright:
     expect(queued_confirm).to_be_visible()
     assert discard_calls == [], discard_calls
     queued_confirm.get_by_role("button", name="Confirm").click()
-    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
+    for _ in range(80):
+        if len(dispatched) >= 4:
+            break
+        page.wait_for_timeout(100)
     assert discard_calls == ["POST"], discard_calls
-    assert dispatched == ["POST", "POST"], dispatched
+    assert dispatched == ["POST"] * 4, dispatched
+    expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
 
     # A stopped paid one-shot call with no saved draft cannot resume. Play
     # remains enabled but requires confirmation before restarting and making
@@ -1404,7 +1412,7 @@ with sync_playwright() as playwright:
     play_confirm = page.get_by_role("group", name="Confirm new paper generation attempt")
     expect(play_confirm).to_be_visible()
     assert reset_calls == ["POST"], reset_calls
-    assert dispatched == ["POST", "POST"], dispatched
+    assert dispatched == ["POST"] * 4, dispatched
     play_confirm.get_by_role("button", name="Cancel").click()
     expect(play_confirm).to_have_count(0)
     fresh_play.click()
@@ -1436,11 +1444,11 @@ with sync_playwright() as playwright:
     )
     play_confirm.get_by_role("button", name="Confirm", exact=True).click()
     for _ in range(80):
-        if len(dispatched) == 3:
+        if len(dispatched) == 5:
             break
         page.wait_for_timeout(100)
     assert reset_calls == ["POST", "POST"], reset_calls
-    assert dispatched == ["POST", "POST", "POST"], dispatched
+    assert dispatched == ["POST"] * 5, dispatched
     expect(page.get_by_role("button", name="Generate paper")).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_have_count(0)
 
