@@ -3237,6 +3237,7 @@ def _align_published_creator(
     The run's original creator is authoritative. Correct old published records
     only when their reserved number and durable run ID both match.
     """
+
     def belongs_to_run(item: Mapping[str, Any]) -> bool:
         generation = item.get("generation")
         return (
@@ -3270,9 +3271,7 @@ def _align_published_creator(
             if target.suffix == ".json":
                 from sigma.projects import save_project_artifacts
 
-                save_project_artifacts(
-                    target, {f"artifacts/papers/{identifier}.json": encoded}
-                )
+                save_project_artifacts(target, {f"artifacts/papers/{identifier}.json": encoded})
             else:
                 file = _paper_dir(path, create=False) / f"{identifier}.json"
                 staged = _stage(file.parent, encoded)
@@ -4360,6 +4359,7 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
                     "validation",
                     "proofreading",
                     "compile",
+                    "scoring",
                 }
             )
             or (

@@ -67,11 +67,13 @@ class PaperRunIsolationTests(TestCase):
         with (
             papers.paper_run_scope(self.first, number=12),
             patch.object(
-                papers.project_collaboration, "execution_run",
+                papers.project_collaboration,
+                "execution_run",
                 return_value={"number": 12, "creator_email": "original@example.test"},
             ),
             patch.object(
-                papers.project_collaboration, "collaborator_identity",
+                papers.project_collaboration,
+                "collaborator_identity",
                 return_value="executor@example.test",
             ),
         ):
@@ -105,17 +107,16 @@ class PaperRunIsolationTests(TestCase):
                 papers._align_published_creator(self.path, saved, reservation, self.second)
             with self.assertRaisesRegex(ProjectError, "saved execution"):
                 papers._align_published_creator(
-                    self.path, saved, {"number": 13, "creator_email": creator}, self.first,
+                    self.path,
+                    saved,
+                    {"number": 13, "creator_email": creator},
+                    self.first,
                 )
-            self.assertEqual(
-                papers._read_one(self.path, paper_id)["created_by"], executor
-            )
+            self.assertEqual(papers._read_one(self.path, paper_id)["created_by"], executor)
             aligned = papers._align_published_creator(self.path, saved, reservation, self.first)
             self.assertEqual(aligned["created_by"], creator)
             self.assertEqual(papers._read_one(self.path, paper_id)["created_by"], creator)
-            self.assertEqual(
-                (papers._paper_dir(self.path) / f"{paper_id}.pdf").read_bytes(), pdf
-            )
+            self.assertEqual((papers._paper_dir(self.path) / f"{paper_id}.pdf").read_bytes(), pdf)
             papers._align_published_creator(self.path, aligned, reservation, self.first)
 
     def test_cancelled_queue_does_not_erase_earlier_progress(self) -> None:
