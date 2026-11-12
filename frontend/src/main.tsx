@@ -2867,6 +2867,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }, [path, onSectionOpened]);
   const request = useRef<AbortController | null>(null);
   const deliberatePaperStop = useRef(false);
+  const paperStopPending = useRef(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
   const selectedRunIdRef = useRef<string | null>(null);
@@ -3399,7 +3400,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function cancelGeneration(runId: string | null = selectedRunIdRef.current) {
     const target = paperRuns.find(run => run.run_id === runId);
-    if (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? '')) return;
+    if (paperStopPending.current || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    paperStopPending.current = true;
+    setPhase('Stopping paper…');
     try {
       const response = await fetch('/api/projects/papers/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
@@ -3417,8 +3420,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       } else {
         setSuccess('No active paper generation was found. Checking saved versions.');
       }
-      await refresh(selected?.paper_id);
-    } catch (cause) { setError(errorMessage(cause)); }
+      // The durable cancel acknowledgment is enough to clear the pending
+      // control. Reload the (potentially large) saved paper state separately.
+      void refresh(selected?.paper_id, true);
+    } catch (cause) {
+      setPhase('');
+      setError(errorMessage(cause));
+    } finally {
+      paperStopPending.current = false;
+    }
   }
 
   async function discardDraft() {
