@@ -3130,8 +3130,24 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   const [nextPaperNumber, setNextPaperNumber] = useState<number | null>(() => initialPaperListing.current?.nextPaperNumber ?? null);
   const [scoringId, setScoringId] = useState('');
-  const [removingPaperId, setRemovingPaperId] = useState('');
-  const [discardingRunId, setDiscardingRunId] = useState('');
+  // Per-paper optimistic tombstones prevent unrelated actions and polling
+  // from blocking or resurrecting a paper awaiting deletion.
+  const [hiddenRemovalIds, setHiddenRemovalIds] = useState<Set<string>>(() => new Set());
+  const pendingRemovals = useRef<Set<string>>(new Set());
+  function beginPaperRemoval(id: string): boolean {
+    if (pendingRemovals.current.has(id)) return false;
+    pendingRemovals.current.add(id);
+    setHiddenRemovalIds(current => new Set(current).add(id));
+    return true;
+  }
+  function finishPaperRemoval(id: string, successful: boolean) {
+    pendingRemovals.current.delete(id);
+    if (!successful) setHiddenRemovalIds(current => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }
   const [paperRemovalErrors, setPaperRemovalErrors] = useState<Record<string, string>>({});
   const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
   const [scoreError, setScoreError] = useState('');
@@ -4041,20 +4057,23 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   function confirmPaperRemoval(id: string, button: HTMLElement) { positionPaperPopup(button, 280, 180); setConfirmDeleteId(id); setPaperMenu(null); }
 
   async function removePaper(id: string) {
-    if (removingPaperId) return;
-    setRemovingPaperId(id);
+    if (!beginPaperRemoval(id)) return;
+    setConfirmDeleteId('');
     setPaperRemovalErrors(current => ({ ...current, [id]: '' }));
+    const wasExpanded = expandedPaperId === id;
+    if (wasExpanded) setExpandedPaperId('');
+    if (selected?.paper_id === id) setSelected(null);
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { method: 'DELETE' });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not remove this paper version.');
-      const remaining = papers.filter(item => item.paper_id !== id);
-      setPapers(remaining); setConfirmDeleteId(''); setExpandedPaperId('');
-      if (selected?.paper_id === id) setSelected(null);
-      if (remaining.length) await openPaper(remaining[0].paper_id);
+      setPapers(current => current.filter(item => item.paper_id !== id));
+      finishPaperRemoval(id, true);
     } catch (cause) {
+      finishPaperRemoval(id, false);
+      if (wasExpanded) setExpandedPaperId(id);
       setPaperRemovalErrors(current => ({ ...current, [id]: errorMessage(cause) }));
-    } finally { setRemovingPaperId(''); }
+    }
   }
   async function copyPaper(id: string) {
     setCopyError('');
@@ -4171,6 +4190,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
 
   async function discardDraft() {
+    setConfirmDiscardDraft(false);
     const runId = selectedRunIdRef.current;
     if (runId) {
       await discardOtherRun(runId);
@@ -4199,9 +4219,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
 
   async function discardOtherRun(runId: string) {
-    if (discardingRunId) return;
-    setDiscardingRunId(runId);
+    if (!beginPaperRemoval(runId)) return;
+    setConfirmDiscardRun(null);
+    setConfirmDiscardDraft(false);
     setPaperRemovalErrors(current => ({ ...current, [runId]: '' }));
+    const wasSelected = selectedRunIdRef.current === runId;
+    const previousProgress = paperProgress;
+    if (wasSelected) {
+      selectPaperRun(null);
+      setNewPaperRequested(false);
+      setPaperProgress(null);
+      setContinuationAvailable(false);
+      setResumeDetails(null);
+    }
     try {
       await stopPaperBeforeMutation(runId);
       const response = await fetch('/api/projects/papers/discard', {
@@ -4213,21 +4243,18 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished Paper.');
-      if (selectedRunIdRef.current === runId) {
-        selectPaperRun(null);
-        setNewPaperRequested(false);
-        setPaperProgress(null);
-        setContinuationAvailable(false);
-        setResumeDetails(null);
-      }
-      setConfirmDiscardRun(null);
-      setConfirmDiscardDraft(false);
-      await refresh(undefined, true);
+      if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished paper.');
+      setPaperRuns(current => current.filter(run => run.run_id !== runId));
+      finishPaperRemoval(runId, true);
+      void refresh(undefined, true);
     } catch (cause) {
+      finishPaperRemoval(runId, false);
+      if (wasSelected && !selectedRunIdRef.current) {
+        selectPaperRun(runId);
+        setNewPaperRequested(true);
+        setPaperProgress(previousProgress);
+      }
       setPaperRemovalErrors(current => ({ ...current, [runId]: errorMessage(cause) }));
-    } finally {
-      setDiscardingRunId('');
     }
   }
 
@@ -4491,7 +4518,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // genuinely new work (the server reserves ownership before dispatch).
   const selectedRun = paperRuns.find(run => run.run_id === selectedRunId);
   const otherPaperRuns = paperRuns.filter(run =>
-    run.run_id !== selectedRunId && run.status !== 'complete' && !run.paper_id
+    run.run_id !== selectedRunId && run.status !== 'complete' && !run.paper_id &&
+    !hiddenRemovalIds.has(run.run_id)
   );
   const unfinishedDraftPresent = continuationAvailable || Boolean(checkpointMismatch) ||
     Boolean(restartableCheckpoint) || (paperProgress != null && paperProgress.status !== 'complete');
@@ -4506,7 +4534,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // only once the server has allocated this run's authoritative number.
   const assignedPaperNumber = selectedRun?.number ?? null;
   const draftDisplayTitle = assignedPaperNumber !== null ? `Paper ${assignedPaperNumber}` : 'New paper';
-  const orderedPapers = [...papers].sort((a, b) => b.paper_version - a.paper_version);
+  const orderedPapers = [...papers].filter(paper => !hiddenRemovalIds.has(paper.paper_id))
+    .sort((a, b) => b.paper_version - a.paper_version);
   const paperProgressFailure = paperStepRestartBusy ? ''
     : paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
     : paperProgress?.status === 'interrupted' && !paperProgress.detail?.startsWith('Restored from Paper ') ? paperProgress.detail ?? '' : '';
@@ -4523,7 +4552,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   ].join('|');
   const paperNoticeCopy = providerInterruptionCopy(paperNoticeMessage);
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
-  const showDraftPaper = !guest && !selectedRun?.paper_id && (
+  const showDraftPaper = !guest && !selectedRun?.paper_id && !hiddenRemovalIds.has(selectedRunId ?? '') && (
     newPaperRequested || generating || restartReady || continuationAvailable ||
     (paperProgress != null && paperProgress.status !== 'complete') ||
     (selectedRun != null && selectedRun.status !== 'complete')
@@ -4750,12 +4779,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
 
                 </span>}
                 {canRemoveDraft && (!generationRunning || canControlDraft) && <span className="paper-remove-anchor">
-                  <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={!!discardingRunId || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
+                  <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
                     <p>{generationRunning ? 'Stop and remove this Paper and its checkpoint?' : 'Remove this Paper and its checkpoint?'} Saved Papers remain.</p>
                     {paperRemovalErrors[selectedRunId ?? 'legacy'] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[selectedRunId ?? 'legacy']}</p>}
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link" disabled={!!discardingRunId} onClick={() => void discardDraft()}>Confirm</button>
+                      <button type="button" className="text-view-link"  onClick={() => void discardDraft()}>Confirm</button>
                       <button type="button" className="text-view-link" onClick={() => setConfirmDiscardDraft(false)}>Cancel</button>
                     </div>
                   </div></div>}
@@ -4840,7 +4869,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               </button>}
               {!guest && run.can_remove && (run.can_control || !['active', 'queued'].includes(run.status)) && <span className="paper-remove-anchor">
                 <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
-                  aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" data-paper-discard-trigger="true" disabled={!!discardingRunId || loading}
+                  aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" data-paper-discard-trigger="true" disabled={loading}
                   onClick={event => showDiscardRunConfirmation(run.run_id, event.currentTarget)}>
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
                 </button>
@@ -4903,11 +4932,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </span>}
                 </span>
                 {!guest && (!viewerEmail || viewerEmail === projectOwnerEmail || artifactAuthors?.[paper.paper_id] === viewerEmail) && <span className="paper-remove-anchor">
-                  <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={!!removingPaperId} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
+                  <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`}  onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
                     <p>Remove this paper version and its PDF? Other versions and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link" data-tooltip={`Confirm removal of Paper ${paper.paper_version}`} disabled={!!removingPaperId} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
+                      <button type="button" className="text-view-link" data-tooltip={`Confirm removal of Paper ${paper.paper_version}`}  onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
                       <button type="button" className="text-view-link" onClick={() => setConfirmDeleteId('')}>Cancel</button>
                     </div>
                   </div></div>}
@@ -5033,9 +5062,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             <p>{['active', 'queued'].includes(run.status) ? 'Stop and remove' : 'Remove'} paper {run.number} and its checkpoint? Saved papers remain.</p>
             {paperRemovalErrors[run.run_id] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[run.run_id]}</p>}
             <div className="session-remove-confirm-actions">
-              <button type="button" className="text-view-link" disabled={!!discardingRunId}
+              <button type="button" className="text-view-link" 
                 onClick={() => void discardOtherRun(run.run_id)}>Confirm</button>
-              <button type="button" className="text-view-link" disabled={!!discardingRunId}
+              <button type="button" className="text-view-link" 
                 onClick={() => setConfirmDiscardRun(null)}>Cancel</button>
             </div>
           </div>, document.body,
