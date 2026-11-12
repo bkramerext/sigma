@@ -8,7 +8,7 @@
   text-align: left; cursor: pointer;
 }
 .sigma-select .sigma-select-trigger > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sigma-select .sigma-select-trigger:disabled { opacity: .6; cursor: not-allowed; }
+.sigma-select .sigma-select-trigger:disabled { opacity: .6; cursor: default; }
 .sigma-select .sigma-select-chevron { width: 12px; height: 12px; flex: 0 0 12px; fill: none; stroke: var(--sigma-copper-foreground); stroke-width: 1.5; transition: transform 120ms ease; }
 .sigma-select .sigma-select-trigger[aria-expanded="true"] .sigma-select-chevron { transform: rotate(180deg); }
 .sigma-select .sigma-select-trigger:focus-visible, .sigma-select-options [role="option"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }

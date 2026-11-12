@@ -142,7 +142,7 @@
 }
 .workspace-page .primary-action:hover:not(:disabled), .workspace-page .strategy-form button[type="submit"]:hover:not(:disabled), .workspace-page .strategy-dialog button[type="submit"]:hover:not(:disabled) { background: linear-gradient(112deg, #d09a61, #f5d4a0 52%, #ce9a60); }
 .workspace-page .primary-action:active:not(:disabled), .workspace-page .strategy-form button[type="submit"]:active:not(:disabled), .workspace-page .strategy-dialog button[type="submit"]:active:not(:disabled) { background: #c39561; }
-.workspace-page button:disabled, .workspace-page .secondary:disabled { color: #98a4af; border-color: #39434d; background: #0a1118; box-shadow: none; cursor: not-allowed; }
+.workspace-page button:disabled, .workspace-page .secondary:disabled { color: #98a4af; border-color: #39434d; background: #0a1118; box-shadow: none; cursor: default; }
 .workspace-page .text-button { color: #b5c1cb; background: transparent; border-color: transparent; }
 .workspace-page .text-button:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; border-color: transparent; }
 .workspace-page .strategy-toggle { padding: 7px; color: var(--sigma-copper-foreground); }
@@ -330,8 +330,8 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 
 /* Compact TeX wordmark alongside the Project pane's existing export actions. */
 .workspace-page .project-pane-actions .text-view-icon.project-latex-button:not(:disabled) { color: var(--sigma-copper-foreground); }
-.workspace-page .project-pane-actions .project-latex-button:disabled { opacity: .5; cursor: not-allowed; }
-.workspace-page .project-pane-actions .project-lean-button:disabled { color: #a0aab2; cursor: not-allowed; opacity: 1; }
+.workspace-page .project-pane-actions .project-latex-button:disabled { opacity: .5; cursor: default; }
+.workspace-page .project-pane-actions .project-lean-button:disabled { color: #a0aab2; cursor: default; opacity: 1; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { width: 50px; min-width: 50px; margin-left: 0; }
 .workspace-page .project-pane-actions .text-view-icon.project-latex-button {
   box-sizing: border-box; width: 50px; min-width: 50px; height: 34px; min-height: 34px;

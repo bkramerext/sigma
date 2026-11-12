@@ -466,6 +466,12 @@ def exercise(ui: str, workspaces: Path) -> None:
                 },
             )
 
+        armed = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-arm-freeze-sessions",
+            headers={"Origin": ui},
+            data={"path": path},
+        )
+        assert armed.status == 200, armed.text()
         first_response = submit_mock(owner_context)
         second_response = submit_mock(member_context)
         assert first_response.status == 200, first_response.text()
@@ -477,6 +483,17 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert first_run["created_by"] == OWNER
         assert second_run["created_by"] == COLLABORATOR
 
+        # The local mock advances automatically on reads, unlike a real
+        # worker with an OS liveness lock. Freeze immediately after both
+        # admissions, before performing the first read of shared status.
+        # This preserves the same concurrency assertion without an accidental
+        # three-read completion race during browser startup.
+        held = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-freeze-sessions",
+            headers={"Origin": ui},
+            data={"path": path},
+        )
+        assert held.status == 200, held.text()
         # One project running slot: either creator may win; the other waits.
         # Do not impose deterministic ordering on legitimately concurrent jobs.
         status = get_json(
@@ -487,16 +504,6 @@ def exercise(ui: str, workspaces: Path) -> None:
             "running",
             "queued",
         }, statuses
-        # In a real run, an OS worker lock supplies liveness. This local mock
-        # has no worker, so freeze its explicit simulated running/queued state
-        # before other browsers begin polling, rather than racing the mock's
-        # automatic three-read completion sequence.
-        held = owner_context.request.post(
-            ui + "/api/__fixture/collaboration-freeze-sessions",
-            headers={"Origin": ui},
-            data={"path": path},
-        )
-        assert held.status == 200, held.text()
 
         # The same authenticated N/Z project windows must display every live
         # Session on its own tooltip line, with creator and queued/running state.

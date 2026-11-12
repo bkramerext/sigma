@@ -16,7 +16,7 @@
 .workspace-page .new-strategy-split > button { border-radius: 7px 0 0 7px; min-height: 50px; padding: 14px 20px; font-size: 15px; }
 .workspace-page .new-strategy-split > details > summary { list-style: none; display: grid; place-items: center; width: 44px; min-height: 50px; border: 1px solid #daa66a; border-left: 1px solid #af7c42; border-radius: 0 7px 7px 0; background: linear-gradient(115deg, #f0ca94, #bb8247); color: #1e1409; cursor: pointer; }
 .workspace-page .new-strategy-split > details > summary::-webkit-details-marker { display: none; }
-.workspace-page .new-strategy-split summary[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.workspace-page .new-strategy-split summary[aria-disabled="true"] { opacity: .5; cursor: default; }
 .workspace-page .strategy-choice-menu { position: absolute; right: 0; top: calc(100% + 6px); width: 342px; max-width: calc(100vw - 40px); background: #081521fa; border: 1px solid #b78040; border-radius: 8px; padding: 7px; box-shadow: 0 12px 36px #0008; }
 .workspace-page .strategy-choice-menu button { display: flex; align-items: center; gap: 20px; text-align: left; width: 100%; padding: 14px 16px; border: 0; border-radius: 5px; background: transparent; color: #f1e8da; font-size: 14px; font-weight: 500; }
 .workspace-page .strategy-choice-menu button > span:first-child { font-size: 21px; color: var(--sigma-copper-foreground); }
@@ -414,7 +414,7 @@
 .workspace-page .strategy-process-controls svg { width: 20px; height: 20px; fill: currentColor; }
 .workspace-page .strategy-process-controls .process-control:hover:not(:disabled) { color: #fff2e9; background: var(--copper-gradient); border-color: #ac7054; }
 .workspace-page .strategy-process-controls .process-control:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
-.workspace-page .strategy-process-controls .process-control:disabled { opacity: .45; cursor: not-allowed; }
+.workspace-page .strategy-process-controls .process-control:disabled { opacity: .45; cursor: default; }
 .workspace-page .session-heading-actions .session-mini-process-control { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 3px; margin: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--sigma-copper-foreground); }
 .workspace-page .session-heading-actions .session-mini-process-control svg { width: 20px; height: 20px; fill: currentColor; }
 .workspace-page .session-heading-actions .session-mini-process-control:hover:not(:disabled) { color: #fff2e9; background: var(--copper-gradient); border-color: #ac7054; }
@@ -860,7 +860,7 @@
 .workspace-page .command-panel { display: grid; gap: 5px; padding: 10px; }
 .workspace-page .command-panel > button[role="menuitem"] { width: 100%; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 4px; background: transparent; color: #dce5ed; text-align: left; box-shadow: none; }
 .workspace-page .command-panel > button[role="menuitem"]:hover:not(:disabled), .workspace-page .command-panel > button[role="menuitem"]:focus-visible { background: #202d38; color: var(--sigma-copper-foreground); }
-.workspace-page .command-panel > button[role="menuitem"]:disabled { color: #8898a6; cursor: not-allowed; }
+.workspace-page .command-panel > button[role="menuitem"]:disabled { color: #8898a6; cursor: default; }
 .workspace-page .command-panel > hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid #4a535b; }
 .workspace-page .command-panel > .destructive-action { color: #e7a495 !important; }
 @media (max-width: 700px) {

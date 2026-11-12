@@ -1609,7 +1609,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [busy, setBusy] = useState(false);
   // Presentation only: never manufacture a persisted running Session or run number.
   const [admittingSession, setAdmittingSession] = useState(false);
+  const stopAfterStart = useRef(false);
+  const [stoppingStartingSession, setStoppingStartingSession] = useState(false);
   const [pendingSessionAction, setPendingSessionAction] = useState<{ id: string; action: 'pause' | 'resume' | 'stop' } | null>(null);
+  const stopAfterResume = useRef<Set<string>>(new Set());
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [announcement, setAnnouncement] = useState('');
@@ -1878,6 +1881,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     if (guest) { setConfirmStart(false); setGuestSessionCard(true); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
+    stopAfterStart.current = false;
+    setStoppingStartingSession(false);
     // On click, replace Start with the green pulse before any backend work.
     setAdmittingSession(true);
     setExpanded(true);
@@ -1891,18 +1896,23 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, browser_presence_required: true, continue_using_saved_type_settings: continueWithSavedType.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
-      lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
+      // Start can be stopped before the first server response. Its identifier
+      // exists now, so honor that intent before displaying the saved row.
+      const accepted = stopAfterStart.current
+        ? await post<ResearchSession>(`research-sessions/${next.id}/control`, { path, action: 'stop', request_only: true }, undefined, true)
+        : next;
+      lastAnnouncement.current = `${accepted.id}:${accepted.status}:${accepted.current_action}`;
       // The admission response is already a complete session snapshot. Display it
       // without blocking the controls on reloading every saved session and
       // rebuilding Current Understanding; reconcile the history asynchronously.
-      const initialSnapshot = sessionForDisplay(next);
+      const initialSnapshot = sessionForDisplay(accepted);
       if (initialSnapshot) setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
       void load(next.id).catch(reportReadFailure);
       if (next.research_method_sources?.advisory) {
         setAnnouncement(next.research_method_sources.advisory);
       }
-      if (next.status === 'running' || next.status === 'queued') onRevealNewSession();
-      revealSession(next.id, next.status === 'running' || next.status === 'queued');
+      if (accepted.status === 'running' || accepted.status === 'queued') onRevealNewSession();
+      revealSession(next.id, accepted.status === 'running' || accepted.status === 'queued');
     } catch (cause) {
       // Revert the speculative pulse and unlock Play immediately. A full
       // history reconciliation is not part of the failed admission's UI path.
@@ -1918,11 +1928,19 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         void recordClientError(message, 'admission');
       }
     }
-    finally { submittingStart.current = false; setAdmittingSession(false); setBusy(false); }
+    finally { submittingStart.current = false; stopAfterStart.current = false; setStoppingStartingSession(false); setAdmittingSession(false); setBusy(false); }
   }
 
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
+    if (action === 'stop' && pendingSessionAction?.id === target.id && pendingSessionAction.action === 'resume') {
+      // The user's Stop intent wins immediately. Wait to send it until
+      // the in-flight Resume has an execution identity to stop.
+      stopAfterResume.current.add(target.id);
+      setPendingSessionAction({ id: target.id, action: 'stop' });
+      if (resumeApprovalResolver.current) answerResumeAuthorization(false);
+      return;
+    }
     setPendingSessionAction({ id: target.id, action });
     setBusy(true); setError('');
     setSessionControlFailures(current => {
@@ -1943,7 +1961,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume", request_only: action === 'stop' || action === 'pause' }, undefined, true);
           // A successful control response contains the authoritative new status.
           // Do not keep the button busy for an unrelated whole-project reload.
-          const acknowledged = sessionForDisplay(accepted);
+          const resolved = action === 'resume' && stopAfterResume.current.delete(target.id)
+            ? await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: 'stop', request_only: true }, undefined, true)
+            : accepted;
+          const acknowledged = sessionForDisplay(resolved);
           if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
           void load(target.id).catch(reportReadFailure);
           break;
@@ -1996,6 +2017,17 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }
     }
     catch (cause) {
+      if (action === 'resume' && stopAfterResume.current.delete(target.id)) {
+        // Resume may have been admitted before a network error reached the
+        // browser. Stop is idempotent even if it never started.
+        try {
+          const stopped = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: 'stop', request_only: true }, undefined, true);
+          const acknowledged = sessionForDisplay(stopped);
+          if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
+          void load(target.id).catch(reportReadFailure);
+          return;
+        } catch { /* Show the original failure and reconcile the saved state. */ }
+      }
       // Restore the Resume control without waiting on full history hydration.
       setPendingSessionAction(null);
       void load(target.id).catch(reportReadFailure);
@@ -2006,7 +2038,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }));
       void recordClientError(message, 'session_control', target.id);
     }
-    finally { setPendingSessionAction(null); setBusy(false); }
+    finally { stopAfterResume.current.delete(target.id); setPendingSessionAction(null); setBusy(false); }
   }
 
   const interventionSaved = useCallback(async (sessionId: string) => {
@@ -2167,7 +2199,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     ? pendingSessionAction.id : null;
   const runningCount = activeSessionCount -
     (sessions.some(item => item.id === stoppingSessionId && ['queued', 'running'].includes(item.status)) ? 1 : 0);
-  const pendingSessionName = admittingSession ? 'Starting session' : '';
+  const pendingSessionName = 'Session';
   const pendingSessionMetadata = formatRunAttribution({
     kind: 'session', creator: viewerEmail, model: config?.model, thinking: config?.reasoning_effort,
   });
@@ -2193,7 +2225,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
         </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={sessionControls.play}><CirclePlusIcon/></button>}
       </div>
-      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running{stoppingSessionId ? ' · 1 stopping' : ''}{admittingSession ? ' · 1 starting' : ''}</p>
+      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running{stoppingSessionId ? ' · 1 stopping' : ''}{admittingSession ? stoppingStartingSession ? ' · 1 stopping' : ' · 1 starting' : ''}</p>
     </header>
 
     {guest && guestSessionCard && <GuestFeatureCard title="Research sessions"
@@ -2204,18 +2236,18 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
       {(sessions.length || admittingSession) ? <ol className="session-list" aria-label="Research sessions">
-        {admittingSession && <li className="session-row session-admission-pending" aria-label="Session admission pending" role="status" aria-live="polite">
+        {admittingSession && <li className="session-row session-admission-pending" aria-label="Session starting" role="status" aria-live="polite">
           <div className="session-row-heading">
             <div className="session-summary">
               <div className="session-title-line">
-                <span className="session-row-title">{pendingSessionName}</span>
-                <div className="session-heading-actions">
-                  <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session (available after server acceptance)" data-tooltip="Stop available after session starts" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>
+                <span className="session-row-disclosure"><DisclosureChevron expanded={false}/><span className="session-row-title">{pendingSessionName}</span></span>
+                <div className="session-heading-actions" aria-label="Session actions">
+                  <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session" data-tooltip="Stop session" disabled={stoppingStartingSession} onClick={() => { stopAfterStart.current = true; setStoppingStartingSession(true); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>
                 </div>
-                <span className="session-status session-running" aria-label="Session starting · awaiting server acceptance" data-tooltip="Starting session · awaiting server acceptance">starting<i aria-hidden="true"/></span>
               </div>
-              <small className="session-run-metadata">{pendingSessionMetadata || 'Research session'} · awaiting server acceptance</small>
-              <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · preparing research references and admission</small>
+              <span className={`session-status session-${stoppingStartingSession ? 'stopped' : 'running'}`} aria-label={stoppingStartingSession ? 'Session stopping' : 'Session starting'}>{stoppingStartingSession ? 'stopping' : <>starting<i aria-hidden="true"/></>}</span>
+              <small className="session-run-metadata">{pendingSessionMetadata || 'Research session'} · {stoppingStartingSession ? 'Stopping' : 'Starting'}</small>
+              <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · 0 findings saved</small>
             </div>
           </div>
         </li>}
@@ -2224,8 +2256,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           const statusLabel = pendingAction === 'resume' ? 'resuming'
             : pendingAction === 'stop' || pendingAction === 'pause' ? 'stopping'
             : item.status === 'paused' ? 'stopped' : item.status;
-          const currentAction = pendingAction === 'resume' ? 'Resuming session… awaiting server acceptance'
-            : pendingAction === 'stop' || pendingAction === 'pause' ? 'Stopping session… awaiting server acknowledgment'
+          const currentAction = pendingAction === 'resume' ? 'Resuming session…'
+            : pendingAction === 'stop' || pendingAction === 'pause' ? 'Stopping session…'
             : (readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action)
               .replace(/\bpaused\b/gi, 'stopped').replace(/\bpausing\b/gi, 'stopping').replace(/\bpause\b/gi, 'stop');
           const sessionExpanded = expandedSessionIds.has(item.id);
@@ -2240,12 +2272,12 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
                   {!guest && canControl && sessionOffersResume(item) && !(pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume') && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
-                  {!guest && canControl && (pendingAction === 'resume' || pendingAction === 'stop' || pendingAction === 'pause' || (!pendingAction && ['queued', 'running'].includes(item.status))) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={pendingAction === 'stop' || pendingAction === 'pause' ? `Stopping Session ${item.session_number}` : `Stop Session ${item.session_number}`} data-tooltip={pendingAction === 'resume' ? 'Stop available after Resume is accepted' : pendingAction ? 'Stopping session · awaiting server acknowledgment' : `Stop Session ${item.session_number}`} disabled={busy || !!pendingAction} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                  {!guest && canControl && (pendingAction === 'resume' || pendingAction === 'stop' || pendingAction === 'pause' || (!pendingAction && ['queued', 'running'].includes(item.status))) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={pendingAction === 'stop' || pendingAction === 'pause' ? `Stopping Session ${item.session_number}` : `Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={pendingAction === 'stop' || pendingAction === 'pause' || (busy && pendingAction !== 'resume')} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                   {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove Session ${item.session_number}, including its saved research record and artifacts?` : `Remove Session ${item.session_number} and its saved research record and artifacts?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
-                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? `${statusLabel} · awaiting server acknowledgment` : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{(pendingAction === 'stop' || pendingAction === 'pause') ? statusLabel : statusLabel === 'running' || statusLabel === 'resuming' || statusLabel === 'stopped' ? <>{statusLabel}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{statusLabel}</>}</span>
+                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? statusLabel : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{(pendingAction === 'stop' || pendingAction === 'pause') ? statusLabel : statusLabel === 'running' || statusLabel === 'resuming' || statusLabel === 'stopped' ? <>{statusLabel}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{statusLabel}</>}</span>
                 {sessionControlFailures[item.id]
                   ? (!sessionControlFailures[item.id].dismissed && <SessionNotice key={`${item.id}:control:${sessionControlFailures[item.id].serial}`}
                       number={item.session_number}
@@ -2259,12 +2291,12 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                     </SessionNotice>)
                   : (['paused', 'stopped', 'failed'].includes(item.status) || (item.provider_usage_limited && item.status === 'ended'))
                     && <SessionRenderBoundary key={`${item.id}:notice:${sessionNoticeKey(item)}`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} status notice could not be displayed; its saved record remains in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
-                <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel} · awaiting server acknowledgment` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
+                <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel}` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
                 <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
-                  ? 'Stopping · awaiting server acknowledgment · saved findings remain available'
+                  ? 'Stopping · saved findings remain available'
                   : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</>}</small>
-                {strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
-                {strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
+                {!pendingAction && strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
+                {!pendingAction && strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
             </div>
             {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} guest={guest} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy || !canControl} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={Boolean(sessionControlFailures[item.id]) || dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
@@ -2952,12 +2984,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     return () => window.removeEventListener('sigma-reveal-papers', reveal);
   }, [path, onSectionOpened]);
   const request = useRef<AbortController | null>(null);
+  const paperSubmissionDispatched = useRef(false);
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
   // Visual-only Stop intent: never modify the saved run or claim cancellation
   // before the server confirms it. Shared runs retain their exact run IDs.
   const [optimisticPaperStop, setOptimisticPaperStop] = useState<{ runId: string | null } | null>(null);
+  const [paperPlayIntent, setPaperPlayIntent] = useState<'starting' | 'resuming'>('starting');
   const [paperStopReconciliation, setPaperStopReconciliation] = useState(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
@@ -2991,6 +3025,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [restartReady, setRestartReady] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
+  const [confirmDiscardRunId, setConfirmDiscardRunId] = useState<string | null>(null);
   const [confirmRestartDraft, setConfirmRestartDraft] = useState(false);
   const [confirmPlayRestartDraft, setConfirmPlayRestartDraft] = useState(false);
   const [confirmRecoverDraft, setConfirmRecoverDraft] = useState(false);
@@ -3507,6 +3542,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const target = paperRuns.find(run => run.run_id === runId);
     if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
       || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    if (runId === selectedRunIdRef.current && paperStartOptimistic && !paperSubmissionDispatched.current) {
+      // Before dispatch, Stop simply cancels preparation. No run or provider
+      // operation needs to be stopped, and no paid call is replayed.
+      setOptimisticPaperStop({ runId });
+      setPhase('Stopping paper…');
+      deliberatePaperStop.current = true;
+      request.current?.abort();
+      return;
+    }
     paperStopPending.current = true;
     // Immediately remove this run's green pulse and change its status/metadata.
     // The Stop receipt will decide whether we keep or roll back this display.
@@ -3514,12 +3558,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     setPhase('Stopping paper…');
     setError('');
     try {
-      const response = await fetch('/api/projects/papers/cancel', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only', request_only: true }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Could not cancel paper generation.');
+      let result: { stop_requested?: boolean; cancelled?: boolean } = {};
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const response = await fetch('/api/projects/papers/cancel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding || 'stop-only', request_only: true }),
+        });
+        result = await response.json();
+        if (!response.ok) throw new Error('Could not cancel paper generation.');
+        if (result.stop_requested || result.cancelled || !paperSubmissionDispatched.current) break;
+        // The paper was submitted but its worker has not yet been registered.
+        // Preserve the Stop intent and retry without showing the Play button.
+        await new Promise<void>(resolve => window.setTimeout(resolve, 250));
+      }
       if (result.stop_requested) {
         // Stop is requested, not yet a completed cancellation. Keep the
         // progress pane polling until the backend saves its terminal status.
@@ -3553,16 +3604,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
 
   async function discardDraft() {
     if (busy || request.current !== null || ['active', 'queued'].includes(paperProgress?.status ?? '')) return;
-    if (!paperProgress && !restartableCheckpoint && !checkpointMismatch) {
+    if (!paperProgress && !restartableCheckpoint && !checkpointMismatch && !selectedRunIdRef.current) {
       setNewPaperRequested(false); setConfirmDiscardDraft(false); setResetConfirm(false);
       return;
     }
-    if (!binding) { setError('Connect an eligible AI provider before discarding saved unfinished paper work.'); return; }
     setBusy(true); setError('');
     try {
       const response = await fetch('/api/projects/papers/discard', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding, confirm_discard: true }),
+        body: JSON.stringify({ path, run_id: selectedRunIdRef.current, expected_project_id: projectId, expected_binding: binding || 'stop-only', confirm_discard: true }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished paper work.');
@@ -3573,6 +3623,30 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       await refresh(selected?.paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
+  }
+
+  async function discardOtherRun(runId: string) {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/projects/papers/discard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({
+          path, run_id: runId, expected_project_id: projectId,
+          expected_binding: binding || 'stop-only', confirm_discard: true,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished Paper.');
+      if (selectedRunIdRef.current === runId) selectPaperRun(null);
+      setConfirmDiscardRunId(null);
+      await refresh(undefined, true);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function restartCheckpoint() {
@@ -3620,12 +3694,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
-  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null) {
+  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null, resumeSelectedRun = false) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
+    paperSubmissionDispatched.current = false;
     const runId = selectedRunIdRef.current ?? crypto.randomUUID().replaceAll('-', '');
     selectPaperRun(runId);
     const controller = new AbortController(); request.current = controller;
+    setPaperPlayIntent((continuationAvailable || resumeSelectedRun) && !restartBeforePlay ? 'resuming' : 'starting');
     setBusy(true); setPhase('Compiling publication standards…'); setError(''); setSuccess(''); setDismissedPaperNoticeKey('');
     setPaperClock(Date.now());
     let finishProvider = () => {};
@@ -3664,6 +3740,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const preflightResponse = await fetch(`/api/projects/papers/preflight?${preflightParams}`, { cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
       const preflight = await preflightResponse.json();
       if (!preflightResponse.ok) throw new Error(preflight.error ?? 'Could not size the evidence snapshot.');
+      setPaperPlayIntent(preflight.resume_available && !restartBeforePlay ? 'resuming' : 'starting');
       if (preflight.checkpoint_exists && !preflight.resume_available) {
         setCheckpointMismatch(preflight);
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
@@ -3695,6 +3772,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         ? 'Reusing the validated draft from the previous attempt; compiling its PDF…'
         : 'Compiling publication standards…');
       requestDispatched = true;
+      paperSubmissionDispatched.current = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsAndTables,
           ...(recoverSection !== null ? { authorized_recovery_section: recoverSection } : {}),
@@ -3766,23 +3844,35 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               ? `${message} Check My Work versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
               : message);
       }
-    } finally { finishProvider(); request.current = null; deliberatePaperStop.current = false; setBusy(false); }
+    } finally {
+      if (deliberatePaperStop.current && !requestDispatched) {
+        setOptimisticPaperStop(null);
+        setPhase('');
+        setNewPaperRequested(false);
+        void refresh(undefined, true);
+      }
+      finishProvider();
+      request.current = null;
+      paperSubmissionDispatched.current = false;
+      deliberatePaperStop.current = false;
+      setBusy(false);
+    }
   }
   const planningFallback = continuationAvailable && Boolean(resumeDetails?.planning_fallback_available);
   const planningRetry = continuationAvailable && resumeDetails !== null &&
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
   const stoppingSelectedPaper = optimisticPaperStop !== null && optimisticPaperStop.runId === selectedRunId;
-  const generationRunning = stoppingSelectedPaper || (!deliberatePaperStop.current && (
+  // A pending Resume may still carry the saved checkpoint's interrupted or
+  // cancelled status. The user's new Play intent takes precedence: show Stop
+  // in the same position immediately, not the old disabled Play control.
+  const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
+    && !['active', 'queued'].includes(paperProgress?.status ?? '');
+  const generationRunning = stoppingSelectedPaper || paperStartOptimistic || (!deliberatePaperStop.current && (
     paperProgress?.status === 'active' || paperProgress?.status === 'queued' ||
     (request.current !== null && !['cancelled', 'interrupted', 'failed', 'complete'].includes(paperProgress?.status ?? ''))
   ));
   const generating = busy || generationRunning;
-  // Speculative presentation: Play disappears and the familiar green pulse
-  // appears before evidence preflight or server reservation finishes. Never
-  // treat this as an accepted run or assign an unreserved Paper number.
-  const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
-    && !['active', 'queued'].includes(paperProgress?.status ?? '');
   // The brief transition after Stop is not a second-paper conflict. A Play
   // control can only advertise concurrency as its disabled reason when a
   // still-active job really blocks dispatch.
@@ -3929,7 +4019,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={draftDisplayTitle} data-paper-version={assignedPaperNumber ?? undefined}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={draftDisplayTitle} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              badge={!stoppingSelectedPaper && (paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued') ? <span className={`research-running-indicator paper-title-activity${!paperStartOptimistic && paperProgress?.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperStartOptimistic ? 'Paper starting' : paperProgress?.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperStartOptimistic ? 'Starting paper · awaiting server acceptance' : formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
+              badge={!stoppingSelectedPaper && (paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued') ? <span className={`research-running-indicator paper-title-activity${!paperStartOptimistic && paperProgress?.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Paper resuming' : 'Paper starting') : paperProgress?.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming paper' : 'Starting paper') : formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
               beforeCopy={stoppingSelectedPaper ? <span className="paper-real-title paper-draft-title">Stopping paper…</span> : paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && canControlDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? (assignedPaperNumber !== null ? `Resume Paper ${assignedPaperNumber}` : 'Resume paper') : 'Generate paper'} disabled={paperPlayDisabled} onClick={event => { setDraftPaperExpanded(true); if (checkpointMismatch) { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmPlayRestartDraft(true); } else if (recoverySection !== null) { positionPaperPopup(event.currentTarget, 300, 190); setConfirmRestartDraft(false); setConfirmDiscardDraft(false); setConfirmRecoverDraft(true); } else void generatePaper(); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
@@ -3948,7 +4038,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     </div>
                   </div></div>}
                 </span>}
-                {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip={stoppingSelectedPaper ? 'Stopping paper · awaiting server confirmation' : paperStartOptimistic ? 'Stop available after paper starts' : 'Stop paper generation'} disabled={loading || paperStartOptimistic || stoppingSelectedPaper} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip={stoppingSelectedPaper ? 'Stopping paper' : 'Stop paper generation'} disabled={loading || stoppingSelectedPaper} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {canStartOver && canControlDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(false); setConfirmRestartDraft(true); }}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
                   {confirmRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm start over on paper generation">
@@ -3975,13 +4065,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             {formatRunAttribution({ kind: 'paper', creator: viewerEmail || activeDraftCreator, model, thinking: effort }) || 'Paper'}
             {stoppingSelectedPaper
               ? paperStopReconciliation ? ' · Stopping · saving checkpoint' : ' · Stopping · awaiting server acknowledgment'
-              : ' · Starting · awaiting server acceptance'}
+              : paperPlayIntent === 'resuming' ? ' · Resuming paper…' : ' · Starting paper…'}
           </p>}
           <div id="paper-draft-content" className="paper-draft-content" hidden={!draftPaperExpanded}>
       {checkpointMismatch && !generating && <p className="ai-paper-restart-notice" role="status">{checkpointMismatch.incomplete_one_shot
         ? 'The previous writing attempt stopped before saving a draft and cannot resume.'
         : 'Research or AI settings changed; this checkpoint cannot resume.'} Saved research and papers remain. Use Play to confirm a new attempt, or Start over to reset without playing.</p>}
-      {busy && !stoppingSelectedPaper && (paperStartOptimistic || restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{paperStartOptimistic ? 'Starting paper…' : phase}</span></p>}
+      {busy && !stoppingSelectedPaper && (paperStartOptimistic || restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming paper…' : 'Starting paper…') : phase}</span></p>}
       {paperProgress && !paperStartOptimistic && !restartingCheckpoint && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
         {stoppingSelectedPaper
           ? <strong>Stopping paper · {paperStopReconciliation ? 'saving checkpoint' : 'awaiting server acknowledgment'}</strong>
@@ -4010,9 +4100,37 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 data-tooltip={formatRunAttribution({ kind: 'paper', number: run.number, creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking, mode: 'hover' })}/>}
               {run.can_control && <button type="button" className="text-view-link session-start-link" data-tooltip="Open your paper"
                 onClick={() => { selectPaperRun(run.run_id); setNewPaperRequested(false); setDraftPaperExpanded(true); void refresh(undefined, true); }}>Open</button>}
+              {run.can_control && ['interrupted', 'failed', 'cancelled'].includes(run.status) && <button type="button"
+                className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
+                aria-label={`Resume Paper ${run.number}`} data-tooltip="Resume paper generation" disabled={busy || loading || !binding}
+                onClick={() => {
+                  selectPaperRun(run.run_id);
+                  setPaperProgress(run.progress as PaperProgress | null);
+                  setNewPaperRequested(true);
+                  setDraftPaperExpanded(true);
+                  void generatePaper(false, null, true);
+                }}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
+              </button>}
+              {run.can_control && ['interrupted', 'failed', 'cancelled'].includes(run.status) && <span className="paper-remove-anchor">
+                <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
+                  aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" disabled={busy || loading}
+                  onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardRunId(run.run_id); }}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
+                </button>
+                {confirmDiscardRunId === run.run_id && <div className="paper-remove-actions" style={paperPopupStyle}>
+                  <div className="research-stop-confirm" role="group" aria-label={`Confirm removing unfinished Paper ${run.number}`}>
+                    <p>Remove unfinished Paper {run.number} and its checkpoint? Saved papers remain.</p>
+                    <div className="session-remove-confirm-actions">
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => void discardOtherRun(run.run_id)}>Confirm</button>
+                      <button type="button" className="text-view-link" onClick={() => setConfirmDiscardRunId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>}
+              </span>}
               {run.can_control && (run.status === 'active' || run.status === 'queued') && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
-                aria-label={`Stop Paper ${run.number}`} data-tooltip={optimisticPaperStop?.runId === run.run_id ? 'Stopping paper · awaiting server confirmation' : 'Stop paper generation'} disabled={optimisticPaperStop?.runId === run.run_id} onClick={() => void cancelGeneration(run.run_id)}>
+                aria-label={`Stop Paper ${run.number}`} data-tooltip={optimisticPaperStop?.runId === run.run_id ? 'Stopping paper' : 'Stop paper generation'} disabled={optimisticPaperStop?.runId === run.run_id} onClick={() => void cancelGeneration(run.run_id)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
               </button>}
             </div>
