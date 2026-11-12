@@ -481,7 +481,7 @@
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 /* Match the apparent Email→Settings whitespace throughout Project actions.
