@@ -3926,7 +3926,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     </div>
                   </div></div>}
                 </span>}
-                {generationRunning && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip="Stop paper generation" disabled={loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                {generationRunning && !paperStartOptimistic && canControlDraft && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={assignedPaperNumber !== null ? `Stop Paper ${assignedPaperNumber}` : 'Stop paper generation'} data-tooltip="Stop paper generation" disabled={loading} onClick={() => void cancelGeneration()}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
                 {canStartOver && canControlDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardDraft(false); setConfirmRestartDraft(true); }}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
                   {confirmRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm start over on paper generation">
@@ -3949,6 +3949,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 </span>}
               </>}/>
           </div></div>
+          {paperStartOptimistic && <p className="saved-paper-meta" role="status">
+            {formatRunAttribution({ kind: 'paper', creator: viewerEmail || activeDraftCreator, model, thinking: effort }) || 'Paper'}
+            {' · Starting · awaiting server acceptance'}
+          </p>}
           <div id="paper-draft-content" className="paper-draft-content" hidden={!draftPaperExpanded}>
       {checkpointMismatch && !generating && <p className="ai-paper-restart-notice" role="status">{checkpointMismatch.incomplete_one_shot
         ? 'The previous writing attempt stopped before saving a draft and cannot resume.'
