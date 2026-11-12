@@ -730,12 +730,83 @@
   text-underline-offset: 3px;
 }
 
-/* Standard SIGMA dismiss X for contextual paper-step errors. */
-.paper-inline-feedback {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+/* All paper-step errors use an intrinsic width rather than filling the
+   entire paper row. The size bands balance readable line counts and height. */
+.workspace-page .papers-pane .paper-inline-feedback {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  inline-size: max-content;
+  max-inline-size: min(100%, 50ch);
+  min-inline-size: 0;
+  margin: 8px 0;
+  padding: 8px 42px 9px 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
-.paper-inline-feedback > span { flex: 1; min-width: 0; }
-.paper-inline-feedback > button { flex: 0 0 auto; }
+.workspace-page .papers-pane .paper-inline-feedback--medium {
+  max-inline-size: min(100%, 64ch);
+}
+.workspace-page .papers-pane .paper-inline-feedback--long {
+  max-inline-size: min(100%, 78ch);
+}
+.workspace-page .papers-pane .paper-inline-feedback > span { display: block; min-width: 0; }
+.workspace-page .papers-pane .paper-inline-feedback .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 5px !important;
+  right: 5px !important;
+}
+
+/* Generation and scoring errors share the same content-sized behavior.
+   Preserve the in-flow exit slot and SIGMA's established copper styling. */
+.workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error {
+  position: relative;
+  box-sizing: border-box;
+  inline-size: max-content;
+  max-inline-size: min(100%, 47ch);
+  min-inline-size: 0;
+  margin: 8px 0;
+  padding: 8px 42px 9px 12px;
+  border-left-width: 3px;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error--medium {
+  max-inline-size: min(100%, 64ch);
+}
+.workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error--long {
+  max-inline-size: min(100%, 78ch);
+}
+.workspace-page .papers-pane .paper-contextual-error .session-notice-header {
+  display: block;
+  margin: 0 0 3px;
+}
+.workspace-page .papers-pane .paper-contextual-error .session-notice-title {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.workspace-page .papers-pane .paper-contextual-error p {
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+.workspace-page .papers-pane .paper-contextual-error .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 5px !important;
+  right: 5px !important;
+}
+.workspace-page .papers-pane .paper-score-error-card {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  inline-size: max-content;
+  max-inline-size: min(100%, 68ch);
+  min-inline-size: 0;
+  margin: 8px 0;
+  padding: 8px 42px 9px 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.workspace-page .papers-pane .paper-score-error-card .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 5px !important;
+  right: 5px !important;
+}
