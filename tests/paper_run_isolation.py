@@ -119,6 +119,43 @@ class PaperRunIsolationTests(TestCase):
             self.assertEqual((papers._paper_dir(self.path) / f"{paper_id}.pdf").read_bytes(), pdf)
             papers._align_published_creator(self.path, aligned, reservation, self.first)
 
+    def test_remove_stopped_paper_while_another_paper_is_running(self) -> None:
+        """Delete B without waiting for or cancelling independent running A."""
+        from types import SimpleNamespace
+
+        async def exercise() -> None:
+            entered = asyncio.Event()
+            release = asyncio.Event()
+
+            async def other_paper() -> None:
+                with papers.paper_run_scope(self.first):
+                    async with papers._paper_operation(self.path, generating=True):
+                        entered.set()
+                        await release.wait()
+
+            with patch("sigma.memory_guard.require_capacity"):
+                task = asyncio.create_task(other_paper())
+                try:
+                    await asyncio.wait_for(entered.wait(), timeout=5)
+                    with papers.paper_run_scope(self.second):
+                        papers._save_work(self.path, self.saved_work("fixture"))
+                        with patch.object(
+                            papers,
+                            "inspect_project",
+                            return_value=SimpleNamespace(project=SimpleNamespace(id="test-project")),
+                        ):
+                            result = await asyncio.wait_for(
+                                papers.discard_work(self.path, "test-project"), timeout=5
+                            )
+                        self.assertTrue(result["discarded"])
+                        self.assertIsNone(papers._load_work(self.path))
+                    self.assertFalse(task.done(), "Deleting paper B interrupted running paper A")
+                finally:
+                    release.set()
+                    await asyncio.wait_for(task, timeout=5)
+
+        asyncio.run(exercise())
+
     def test_cancelled_queue_does_not_erase_earlier_progress(self) -> None:
         """The next queued attempt is not the progress history of the Paper."""
         with papers.paper_run_scope(self.first):

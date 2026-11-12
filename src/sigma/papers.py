@@ -4645,7 +4645,10 @@ def _published_artifact_for_run(
     if (
         not published.get("pdf_available")
         or published.get("paper_version") != row["number"]
-        or published.get("created_by") != row["creator_email"]
+        or (
+            published.get("created_by") != row["creator_email"]
+            and published.get("generation", {}).get("progress_run_id") != row["run_id"]
+        )
         or (expected_pdf is not None and published.get("pdf_sha256") != expected_pdf)
     ):
         return None
