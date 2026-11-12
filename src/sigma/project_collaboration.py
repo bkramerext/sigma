@@ -841,6 +841,8 @@ def reserve_execution_run(
             "creator_email": email,
             "model": model,
             "thinking": thinking,
+            "status": "reserved",
+            "artifact_id": None,
         }
 
 
