@@ -29,16 +29,20 @@ def title_geometry(locator):
     )
 
 
-def check_centered_tooltip(page, title):
+def check_pointer_tooltip(page, title):
     tooltip = page.get_by_role("tooltip")
     expect(tooltip).to_have_text("Toggle all project sections")
     title_box = title.bounding_box()
     tip_box = tooltip.bounding_box()
     assert title_box and tip_box
-    assert (
-        abs(title_box["x"] + title_box["width"] / 2 - (tip_box["x"] + tip_box["width"] / 2)) < 4
-    ), (title_box, tip_box)
-    assert tip_box["y"] >= title_box["y"] + title_box["height"] + 4
+    # Project titles may occupy a wide header track. Position next to the
+    # actual pointer over the text, not the center of the title's hit box.
+    expected_left = max(
+        8,
+        min(page.viewport_size["width"] - tip_box["width"] - 8, title_box["x"] + 12 + 14),
+    )
+    assert abs(tip_box["x"] - expected_left) <= 4, (title_box, tip_box)
+    assert tip_box["y"] >= title_box["y"] + 12 + 12
 
 
 def main():
@@ -103,14 +107,14 @@ def main():
                         break
                 assert len(geometry["lines"]) == 2, geometry
 
-            title.hover()
+            title.hover(position={"x": 12, "y": 12})
             expect(title).to_have_css("background-color", "rgb(48, 36, 24)")
             expect(title).to_have_css("text-decoration-line", "none")
             geometry = title_geometry(title)
             assert geometry["lines"], geometry
             assert abs(geometry["width"] - max(geometry["lines"])) <= 6, geometry
             assert geometry["width"] < geometry["rowWidth"] * 0.96, geometry
-            check_centered_tooltip(page, title)
+            check_pointer_tooltip(page, title)
             title.click()
             expect(
                 page.locator("#project-pane-heading .workspace-section-disclosure")
@@ -118,7 +122,7 @@ def main():
             page.mouse.move(0, 0)
         assert not errors, errors
         browser.close()
-        print("PASS project title hover fits text, tooltip is centered and click behavior remains")
+        print("PASS project title hover fits text, tooltip follows pointer and click behavior remains")
 
 
 if __name__ == "__main__":
