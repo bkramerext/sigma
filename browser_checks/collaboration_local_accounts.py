@@ -466,6 +466,12 @@ def exercise(ui: str, workspaces: Path) -> None:
                 },
             )
 
+        armed = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-arm-freeze-sessions",
+            headers={"Origin": ui},
+            data={"path": path},
+        )
+        assert armed.status == 200, armed.text()
         first_response = submit_mock(owner_context)
         second_response = submit_mock(member_context)
         assert first_response.status == 200, first_response.text()
