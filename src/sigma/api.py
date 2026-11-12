@@ -1287,7 +1287,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     run_id: str | None = None
     if shared:
         admission_view = (
-            verified_view[0] if verified_view else await run_in_threadpool(inspect_project, body.path)
+            verified_view[0]
+            if verified_view
+            else await run_in_threadpool(inspect_project, body.path)
         )
         await run_in_threadpool(project_collaboration.register_owner, admission_view)
         run_id = body.run_id or uuid4().hex
