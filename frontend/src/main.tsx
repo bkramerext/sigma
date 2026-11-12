@@ -3863,16 +3863,16 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
   const stoppingSelectedPaper = optimisticPaperStop !== null && optimisticPaperStop.runId === selectedRunId;
-  const generationRunning = stoppingSelectedPaper || (!deliberatePaperStop.current && (
+  // A pending Resume may still carry the saved checkpoint's interrupted or
+  // cancelled status. The user's new Play intent takes precedence: show Stop
+  // in the same position immediately, not the old disabled Play control.
+  const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
+    && !['active', 'queued'].includes(paperProgress?.status ?? '');
+  const generationRunning = stoppingSelectedPaper || paperStartOptimistic || (!deliberatePaperStop.current && (
     paperProgress?.status === 'active' || paperProgress?.status === 'queued' ||
     (request.current !== null && !['cancelled', 'interrupted', 'failed', 'complete'].includes(paperProgress?.status ?? ''))
   ));
   const generating = busy || generationRunning;
-  // Speculative presentation: Play disappears and the familiar green pulse
-  // appears before evidence preflight or server reservation finishes. Never
-  // treat this as an accepted run or assign an unreserved Paper number.
-  const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
-    && !['active', 'queued'].includes(paperProgress?.status ?? '');
   // The brief transition after Stop is not a second-paper conflict. A Play
   // control can only advertise concurrency as its disabled reason when a
   // still-active job really blocks dispatch.
