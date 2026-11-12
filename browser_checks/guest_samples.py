@@ -280,7 +280,8 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             "async () => (await (await fetch('/api/projects/samples')).json()).projects"
         )
         sample_id = next(
-            row["id"] for row in rows
+            row["id"]
+            for row in rows
             if row["title"] == "Warp Drive Design v9 (acceptance fixture)"
         )
         pdf_response = httpx.get(
