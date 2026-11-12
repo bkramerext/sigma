@@ -5217,10 +5217,7 @@ async def restart_unfinished_step(
             ):
                 if field in work:
                     next_work[field] = work[field]
-        if (
-            ordinal >= _PAPER_RESTART_ORDER.index("writing")
-            and work.get("kind") == "long_form"
-        ):
+        if ordinal >= _PAPER_RESTART_ORDER.index("writing") and work.get("kind") == "long_form":
             if not isinstance(work.get("plan"), dict):
                 raise ProjectError("Writing plan checkpoint is unavailable.")
             next_work["plan"] = work["plan"]

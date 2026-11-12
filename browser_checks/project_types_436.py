@@ -1035,16 +1035,21 @@ with sync_playwright() as playwright:
     meta = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta')
     score = meta.get_by_role("button", name="Score", exact=True)
     expect(score).to_be_enabled()
+    # The score is now an underlined inline action, not a separate
+    # trailing "See score" control.
     score_position = meta.evaluate(
         """node => {
-          const text = node.querySelector('p').getBoundingClientRect();
-          const button = node.querySelector('button').getBoundingClientRect();
-          return {gap: button.left - text.right, baseline: Math.abs(
-            button.bottom - text.bottom)};
+          const text = node.querySelector('p');
+          const button = node.querySelector('button');
+          const style = getComputedStyle(button);
+          return {inline: button.parentElement === text,
+            underlined: style.textDecorationLine.includes('underline'),
+            label: button.textContent.trim()};
         }"""
     )
-    assert 0 <= score_position["gap"] <= 30, score_position
-    assert score_position["baseline"] < 12, score_position
+    assert score_position["inline"] is True, score_position
+    assert score_position["underlined"] is True, score_position
+    assert score_position["label"] == "Score", score_position
 
     # Verify a real Play dispatch (locally intercepted, never sent to AI).
     dispatched: list[str] = []

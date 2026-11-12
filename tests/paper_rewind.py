@@ -274,7 +274,6 @@ class SavedPaperRewindTests(TestCase):
             assert loaded is not None
             self.assertEqual(loaded["rewind_origin"]["stage"], "typesetting")
 
-
     def _stopped_long_form(self, run_id: str) -> tuple[dict, dict]:
         paper = papers.get_paper(self.path, self.paper_id, include_tex=False)
         package, digest = papers._snapshot(self.path)
@@ -456,6 +455,7 @@ class SavedPaperRewindTests(TestCase):
             self.assertNotIn("proofread_ready", next_work)
             self.assertEqual(result["progress"]["stage"], "proofreading")
             self.assertEqual(papers.get_pdf(self.path, self.paper_id), self.pdf)
+
 
 if __name__ == "__main__":
     main()
