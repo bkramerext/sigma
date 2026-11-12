@@ -765,6 +765,17 @@ def collaborator_identity(path: str) -> str | None:
         return None
 
 
+def is_project_owner(path: str) -> bool:
+    """Check ownership only for an authenticated member of this project."""
+    workspace = cloud_workspaces.current()
+    principal = cloud_auth.current_principal()
+    if workspace is None or workspace.guest or principal is None or principal.role == "guest":
+        return False
+    with _db() as db:
+        row, _actor = _membership(db, path)
+        return row["owner_hash"] == workspace.subject_hash
+
+
 def reserve_execution_run(
     path: str,
     kind: str,
@@ -901,7 +912,9 @@ def execution_run(
         return dict(row)
 
 
-def discard_execution_run(path: str, kind: str, run_id: str) -> None:
+def discard_execution_run(
+    path: str, kind: str, run_id: str, *, owner_terminal: bool = False
+) -> None:
     """Tombstone an explicitly discarded unpublished run; never reuse its number."""
     from sigma.projects import ProjectError, project_path
 
@@ -912,15 +925,21 @@ def discard_execution_run(path: str, kind: str, run_id: str) -> None:
     path = str(project_path(path))
     with _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        _membership(db, path)
+        project, _actor = _membership(db, path)
+        workspace, _email = _identity()
+        owner_allowed = (
+            owner_terminal and kind == "paper" and project["owner_hash"] == workspace.subject_hash
+        )
         changed = db.execute(
             """UPDATE shared_run_reservations SET status='discarded'
-               WHERE path=? AND kind=? AND run_id=? AND creator_hash=?
-               AND artifact_id IS NULL""",
-            (path, kind, run_id, _identity()[0].subject_hash),
+               WHERE path=? AND kind=? AND run_id=? AND artifact_id IS NULL
+               AND (creator_hash=? OR ?)""",
+            (path, kind, run_id, workspace.subject_hash, int(owner_allowed)),
         ).rowcount
         if changed != 1:
-            raise ProjectError("Only the creator can discard an unpublished execution.")
+            raise ProjectError(
+                "Only the creator can discard unfinished work, or the project owner after it stops."
+            )
         db.commit()
 
 

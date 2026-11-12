@@ -62,6 +62,11 @@ def describe(path: str, paper_id: str, project_id: str) -> dict[str, Any]:
         "snapshot_sha256": paper["snapshot_sha256"],
         "stages": [
             {
+                "id": "started",
+                "label": "Started",
+                "description": "Restart from the beginning using the verified frozen evidence; rerun review, evidence extraction, writing and publication.",
+            },
+            {
                 "id": "typesetting",
                 "label": "Validated manuscript",
                 "description": "Keep the saved manuscript; rerun validation, TeX, proofreading and PDF generation.",
@@ -88,7 +93,7 @@ async def create(
     expected_snapshot_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Seed the current (newly reserved) run; source publication stays immutable."""
-    if stage not in {"typesetting", "writing"}:
+    if stage not in {"started", "typesetting", "writing"}:
         raise ProjectError("Unknown Paper restart checkpoint.")
     if not config.get("available"):
         raise ProjectError(config.get("message") or "AI provider unavailable.")
@@ -144,7 +149,13 @@ async def create(
         work["progress"] = {
             "run_id": papers._paper_run_id.get() or uuid4().hex,
             "status": "paused",
-            "stage": "validation" if stage == "typesetting" else "writing",
+            "stage": (
+                "validation"
+                if stage == "typesetting"
+                else "snapshot"
+                if stage == "started"
+                else "writing"
+            ),
             "current": None,
             "total": None,
             "started_at": now,

@@ -742,7 +742,7 @@ class PaperRewindRequest(OpenRequest):
     expected_binding: str = Field(min_length=1, max_length=512)
     source_pdf_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    stage: Literal["writing", "typesetting"]
+    stage: Literal["started", "writing", "typesetting"]
     confirm_restart: Literal[True]
     run_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
 
@@ -1064,17 +1064,33 @@ async def papers_discard_view(body: PaperDiscardRequest):
         )
     else:
         await run_in_threadpool(
-            project_collaboration.execution_run,
-            body.path,
-            "paper",
-            body.run_id,
-            operator=True,
+            project_collaboration.execution_run, body.path, "paper", body.run_id
         )
+    owner_terminal = False
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
+        if body.run_id is not None:
+            progress = await run_in_threadpool(papers.progress_status, body.path)
+            owner_terminal = (
+                progress is not None
+                and progress.get("status") in {"cancelled", "failed", "interrupted", "stopped"}
+                and await run_in_threadpool(project_collaboration.is_project_owner, body.path)
+            )
+            if not owner_terminal:
+                await run_in_threadpool(
+                    project_collaboration.execution_run,
+                    body.path,
+                    "paper",
+                    body.run_id,
+                    operator=True,
+                )
         result = await papers.discard_work(body.path, body.expected_project_id)
     if body.run_id is not None:
         await run_in_threadpool(
-            project_collaboration.discard_execution_run, body.path, "paper", body.run_id
+            project_collaboration.discard_execution_run,
+            body.path,
+            "paper",
+            body.run_id,
+            owner_terminal=owner_terminal,
         )
     return result
 

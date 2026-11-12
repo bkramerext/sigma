@@ -1693,17 +1693,23 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   useEffect(() => { onRunningChange(Boolean(runningSession)); }, [runningSession?.id, onRunningChange]);
 
   useEffect(() => {
-    const revealRunningSession = () => {
-      const active = sessions.find(item => item.status === 'running')
+    const revealRunningSession = (event: Event) => {
+      const requested = (event as CustomEvent<string>).detail;
+      const active = (requested ? sessions.find(item => item.id === requested) : null)
+        ?? sessions.find(item => item.status === 'running')
         ?? sessions.find(item => item.status === 'queued');
-      if (active) {
-        // Header navigation must not collapse unrelated panes and shift the layout.
-        revealSession(active.id, true);
+      // Expanding a shared run never requires being its starter.
+      if (active) revealSession(active.id, true);
+      else {
+        onSectionOpened();
+        setExpanded(true);
+        window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
+        requestAnimationFrame(() => document.getElementById('sessions-heading')?.scrollIntoView({ block: 'center' }));
       }
     };
     window.addEventListener('sigma-reveal-running-session', revealRunningSession);
     return () => window.removeEventListener('sigma-reveal-running-session', revealRunningSession);
-  }, [sessions]);
+  }, [sessions, path, onSectionOpened]);
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
@@ -1933,10 +1939,13 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
 
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
+    if (action === 'stop' || action === 'pause')
+      window.dispatchEvent(new CustomEvent('sigma-run-stop-intent', { detail: { kind: 'session', id: target.id } }));
     if (action === 'stop' && pendingSessionAction?.id === target.id && pendingSessionAction.action === 'resume') {
       // The user's Stop intent wins immediately. Wait to send it until
       // the in-flight Resume has an execution identity to stop.
       stopAfterResume.current.add(target.id);
+      window.dispatchEvent(new CustomEvent('sigma-run-stop-intent', { detail: { kind: 'session', id: target.id } }));
       setPendingSessionAction({ id: target.id, action: 'stop' });
       if (resumeApprovalResolver.current) answerResumeAuthorization(false);
       return;
@@ -2017,6 +2026,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }
     }
     catch (cause) {
+      if (action === 'stop' || action === 'pause')
+        window.dispatchEvent(new CustomEvent('sigma-run-stop-intent', { detail: { kind: 'session', id: target.id, clear: true } }));
       if (action === 'resume' && stopAfterResume.current.delete(target.id)) {
         // Resume may have been admitted before a network error reached the
         // browser. Stop is idempotent even if it never started.
@@ -2340,24 +2351,17 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
   return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
 }
-function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, onRewind, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; onRewind?: (element: HTMLElement) => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
+function SavedPaperTitle({ title, itemLabel, expanded, controls, onToggle, copyName, copied, onCopy, beforeCopy, actions, copyInTitle = true, inlineTitleActions = false, badge }: { title: string; itemLabel: string; expanded: boolean; controls: string; onToggle: () => void; copyName: string; copied: boolean; onCopy: () => void; beforeCopy?: ReactNode; actions?: ReactNode; copyInTitle?: boolean; inlineTitleActions?: boolean; badge?: ReactNode }) {
   const titleLabel = `${expanded ? 'Collapse' : 'Expand'} ${itemLabel}: ${title}`;
-  const hint = onRewind ? `${expanded ? 'Collapse' : 'Expand'} · Shift-click to restart from checkpoint` : undefined;
-  const choose = (event: { shiftKey: boolean; preventDefault: () => void; stopPropagation: () => void; currentTarget: HTMLElement }) => {
-    if (event.shiftKey && onRewind) {
-      event.preventDefault();
-      event.stopPropagation();
-      onRewind(event.currentTarget);
-    } else onToggle();
-  };
+  const choose = () => onToggle();
   const onKey = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      choose(event);
+      choose();
     }
   };
-  const disclosure = <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={hint} onClick={choose} onKeyDown={event => { if (event.shiftKey && event.key === 'Enter') { event.preventDefault(); choose(event); } }}><DisclosureChevron expanded={expanded}/></button>;
-  const titleButton = <span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} data-tooltip={hint} onClick={choose} onKeyDown={onKey}>{title}</span>;
+  const disclosure = <button type="button" className="saved-paper-expand" aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={choose}><DisclosureChevron expanded={expanded}/></button>;
+  const titleButton = <span className="saved-paper-title-toggle" role="button" tabIndex={0} aria-label={titleLabel} aria-expanded={expanded} aria-controls={controls} onClick={choose} onKeyDown={onKey}>{title}</span>;
   if (inlineTitleActions) return <div className="saved-paper-title-line">{disclosure}<h4 className="saved-paper-title">{badge}{titleButton}<span className="saved-paper-title-tools">{beforeCopy}{copyInTitle && <CopyToClipboardButton name={copyName} copied={copied} onCopy={onCopy}/>}{actions}</span></h4></div>;
   return <div className="saved-paper-title-line">
     {disclosure}
@@ -2748,7 +2752,7 @@ function paperModelThinkingLabel(generation: PaperSummary['generation']): string
 }
 
 type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; substep_started_at?: string | null; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete'; model?: string; reasoning_effort?: string };
-type PaperRun = { run_id: string; number: number; creator_email: string; model: string; thinking: string; created_at: number; status: PaperProgress['status']; progress: Partial<PaperProgress> | null; paper_id?: string | null; can_control: boolean; preflight_needed?: boolean };
+type PaperRun = { run_id: string; number: number; creator_email: string; model: string; thinking: string; created_at: number; status: PaperProgress['status']; progress: Partial<PaperProgress> | null; paper_id?: string | null; can_control: boolean; can_remove?: boolean; preflight_needed?: boolean };
 
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; publication_requirement_reconciliation?: { text: string; status: 'missing' | 'needs_review'; note: string }[]; editorial_overlap_warnings?: string[]; snapshot: { sources: { id: string; kind: string }[] } };
 
@@ -2865,14 +2869,29 @@ function PaperActivityLine({ progress }: { progress: PaperProgress }) {
   return <span className="paper-activity-line">{paperActivityLabel(progress, now)}</span>;
 }
 
-function PaperStageSteps({ progress }: { progress: PaperProgress }) {
+type SavedPaperRestartStage = 'started' | 'writing' | 'typesetting';
+function PaperStageSteps({ progress, onRestart, onRescore }: { progress: PaperProgress; onRestart?: (stage: SavedPaperRestartStage) => void; onRescore?: () => void }) {
   const display = paperDisplayProgress(progress);
   const index = PAPER_STAGES.findIndex(group => (group.stages as readonly string[]).includes(display.stage));
   return <ol className="session-strategy-live-status paper-stage-list" aria-label="Paper generation steps">
-    {PAPER_STAGES.map((group, step) => <li key={group.label} data-paper-step={group.label} className={step === index ? (display.stage === 'score_failed' ? 'is-upcoming' : progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : progress.status === 'complete' ? 'is-past' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
-      <strong>{paperStageLabel(step, index, display)}</strong>
-      {step === index && <PaperActivityLine progress={progress} />}
-    </li>)}
+    {PAPER_STAGES.map((group, step) => {
+      const checked = step < index || (step === index && progress.status === 'complete' && display.stage !== 'score_failed');
+      // Restart is offered only at verified durable boundaries: the original
+      // frozen evidence at Started, the writing input, and the manuscript
+      // before validation. Finish (and other stages) are not checkpoints.
+      const restartStage: SavedPaperRestartStage | null = checked && onRestart
+        ? step === 0 ? 'started' : step === 4 ? 'writing' : step === 5 ? 'typesetting' : null
+        : null;
+      return <li key={group.label} data-paper-step={group.label} className={step === index ? (display.stage === 'score_failed' ? 'is-upcoming' : progress.status === 'queued' ? 'is-queued' : progress.status === 'active' ? 'is-active' : progress.status === 'complete' ? 'is-past' : 'is-idle') : step < index ? 'is-past' : 'is-upcoming'}>
+        {restartStage ? <button type="button" className="paper-step-restart" data-tooltip="Restart paper from this step"
+          aria-label={`Restart paper at step ${step === 0 ? 'Started' : group.label}`} onClick={() => onRestart?.(restartStage)}>
+          <strong>{paperStageLabel(step, index, display)}</strong>
+        </button> : checked && step === 8 && onRescore
+          ? <button type="button" className="paper-step-restart" aria-label="Rescore paper" data-tooltip="Rescore paper" onClick={onRescore}><strong>{paperStageLabel(step, index, display)}</strong></button>
+          : <strong>{paperStageLabel(step, index, display)}</strong>}
+        {step === index && <PaperActivityLine progress={progress}/>}
+      </li>;
+    })}
   </ol>;
 }
 
@@ -2962,6 +2981,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [guestExplainPreview, setGuestExplainPreview] = useState(false);
   const [confirmNewPaper, setConfirmNewPaper] = useState(false);
   const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
+  const [expandedOtherPaperRunIds, setExpandedOtherPaperRunIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     const opened = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== 'papers') {
@@ -2973,16 +2993,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     return () => window.removeEventListener('sigma-project-section-opened', opened);
   }, [path]);
 
-  useEffect(() => {
-    const reveal = () => {
-      onSectionOpened();
-      setExpanded(true);
-      window.localStorage.setItem(`sigma.papersPane:${path}`, 'true');
-      requestAnimationFrame(() => document.getElementById('papers-heading')?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
-    };
-    window.addEventListener('sigma-reveal-papers', reveal);
-    return () => window.removeEventListener('sigma-reveal-papers', reveal);
-  }, [path, onSectionOpened]);
   const request = useRef<AbortController | null>(null);
   const paperSubmissionDispatched = useRef(false);
   const deliberatePaperStop = useRef(false);
@@ -2997,6 +3007,27 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
   const selectedRunIdRef = useRef<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  useEffect(() => {
+    const reveal = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      onSectionOpened();
+      setExpanded(true);
+      window.localStorage.setItem(`sigma.papersPane:${path}`, 'true');
+      if (id && paperRuns.some(run => run.run_id === id && run.run_id !== selectedRunIdRef.current)) {
+        setExpandedOtherPaperRunIds(current => new Set(current).add(id));
+      }
+      if (id && selectedRunIdRef.current === id) setDraftPaperExpanded(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const item = id
+          ? document.querySelector<HTMLElement>(`[data-paper-run="${CSS.escape(id)}"]`)
+            ?? (selectedRunIdRef.current === id ? document.querySelector<HTMLElement>('.paper-draft-card') : null)
+          : null;
+        (item ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
+      }));
+    };
+    window.addEventListener('sigma-reveal-papers', reveal);
+    return () => window.removeEventListener('sigma-reveal-papers', reveal);
+  }, [path, onSectionOpened, paperRuns]);
   function selectPaperRun(runId: string | null) {
     selectedRunIdRef.current = runId;
     setSelectedRunId(runId);
@@ -3042,24 +3073,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
-  const [rewindDialog, setRewindDialog] = useState<{
-    paper: PaperSummary;
-    options: { source_pdf_sha256: string; snapshot_sha256: string; include_diagrams: boolean; stages: Array<{ id: 'writing' | 'typesetting'; label: string; description: string }> } | null;
+  const [paperStepRestart, setPaperStepRestart] = useState<{
+    paper: PaperSummary; stage: SavedPaperRestartStage;
+    options: { source_pdf_sha256: string; snapshot_sha256: string; include_diagrams: boolean } | null;
+    checking: boolean; error: string;
   } | null>(null);
-  const [rewindStage, setRewindStage] = useState<'typesetting' | 'writing'>('typesetting');
-  const [rewindBusy, setRewindBusy] = useState(false);
-  const [rewindError, setRewindError] = useState('');
-  const rewindReturnFocus = useRef<HTMLElement | null>(null);
-  const rewindCancelRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => { if (rewindDialog) rewindCancelRef.current?.focus(); }, [rewindDialog?.paper.paper_id]);
-  useEffect(() => {
-    if (!rewindDialog) return;
-    const dismiss = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !rewindBusy) { event.preventDefault(); setRewindDialog(null); rewindReturnFocus.current?.focus(); }
-    };
-    document.addEventListener('keydown', dismiss);
-    return () => document.removeEventListener('keydown', dismiss);
-  }, [rewindDialog, rewindBusy]);
+  const [paperStepRestartBusy, setPaperStepRestartBusy] = useState(false);
+  const [paperStepChecking, setPaperStepChecking] = useState<{ id: string; stage: SavedPaperRestartStage } | null>(null);
+  const [paperStepCheckError, setPaperStepCheckError] = useState<{ id: string; message: string } | null>(null);
   const [eli5Id, setEli5Id] = useState('');
   const [explainingId, setExplainingId] = useState('');
   const [eli5Error, setEli5Error] = useState('');
@@ -3317,75 +3338,98 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const paperDeepLinkHandled = useRef(false);
   useEffect(() => {
     if (loading || paperDeepLinkHandled.current) return;
-    const requested = new URLSearchParams(window.location.search).get('reveal_paper');
-    if (!requested) return;
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('reveal_paper');
+    const requestedRun = params.get('reveal_paper_run');
+    if (!requested && !requestedRun) return;
+    if (requestedRun && !paperRuns.some(run => run.run_id === requestedRun)
+      && selectedRunIdRef.current !== requestedRun) return;
     paperDeepLinkHandled.current = true;
     onSectionOpened();
     setExpanded(true);
     window.localStorage.setItem(`sigma.papersPane:${path}`, 'true');
-    if (requested === 'draft') setDraftPaperExpanded(true);
-    else if (papers.some(paper => paper.paper_id === requested)) {
+    if (requestedRun) {
+      if (selectedRunIdRef.current === requestedRun) setDraftPaperExpanded(true);
+      else setExpandedOtherPaperRunIds(current => new Set(current).add(requestedRun));
+    } else if (requested === 'draft') setDraftPaperExpanded(true);
+    else if (requested && papers.some(paper => paper.paper_id === requested)) {
       setExpandedPaperId(requested);
       void openPaper(requested);
     }
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      const element = requested === 'draft'
+      const element = requestedRun
+        ? document.querySelector<HTMLElement>(`[data-paper-run="${CSS.escape(requestedRun)}"]`)
+          ?? (selectedRunIdRef.current === requestedRun ? document.querySelector<HTMLElement>('.paper-draft-card') : null)
+        : requested === 'draft'
         ? document.querySelector<HTMLElement>('.paper-draft-card')
         : Array.from(document.querySelectorAll<HTMLElement>('[data-paper-id]'))
             .find(item => item.dataset.paperId === requested);
       (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
     }));
-  }, [loading, papers, path, onSectionOpened]);
-  async function openPaperRewind(paper: PaperSummary, element: HTMLElement) {
-    if (guest || rewindBusy) return;
-    rewindReturnFocus.current = element;
-    setRewindDialog({ paper, options: null });
-    setRewindStage('typesetting');
-    setRewindError('');
+  }, [loading, papers, paperRuns, path, onSectionOpened]);
+  async function proposePaperStepRestart(paper: PaperSummary, stage: SavedPaperRestartStage) {
+    if (guest || paperStepRestartBusy) return;
+    setPaperStepRestart(null);
+    setPaperStepCheckError(null);
+    setPaperStepChecking({ id: paper.paper_id, stage });
     try {
-      const response = await fetch(
-        `/api/projects/papers/${encodeURIComponent(paper.paper_id)}/rewind?${new URLSearchParams({ path })}`,
-        { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } },
-      );
-      const info = await readPaperResponse(response, 'Checking Paper checkpoints');
-      if (info.source_pdf_sha256 !== paper.pdf_sha256) throw new Error('Paper changed; refresh before restarting.');
-      setRewindDialog(current => current?.paper.paper_id === paper.paper_id ? { paper, options: info } : current);
-    } catch (cause) { setRewindError(errorMessage(cause)); }
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/rewind?${new URLSearchParams({ path })}`,
+        { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
+      const options = await readPaperResponse(response, 'Checking saved Paper checkpoints');
+      if (options.source_pdf_sha256 !== paper.pdf_sha256 || options.snapshot_sha256 !== paper.snapshot_sha256)
+        throw new Error('The Paper has changed. Reopen it before restarting.');
+      if (!Array.isArray(options.stages) || !options.stages.some((item: { id: string }) => item.id === stage))
+        throw new Error('This Paper does not have the requested verified checkpoint.');
+      setPaperStepRestart({ paper, stage, options, checking: false, error: '' });
+    } catch (cause) {
+      setPaperStepCheckError({ id: paper.paper_id, message: errorMessage(cause) });
+    } finally {
+      setPaperStepChecking(current => current?.id === paper.paper_id && current.stage === stage ? null : current);
+    }
   }
-  async function confirmPaperRewind() {
-    const dialog = rewindDialog;
-    if (!dialog?.options || rewindBusy) return;
-    if (!binding) { setRewindError('Connect an AI provider before restoring a Paper checkpoint.'); return; }
-    setRewindBusy(true);
-    setRewindError('');
+  async function confirmPaperStepRestart() {
+    const proposed = paperStepRestart;
+    if (!proposed?.options || paperStepRestartBusy) return;
+    if (!binding) {
+      setPaperStepCheckError({ id: proposed.paper.paper_id, message: 'Connect an AI provider before restarting this Paper.' });
+      setPaperStepRestart(null);
+      return;
+    }
+    // Confirm is explicit authorization for the new attempt. Close the card
+    // immediately, even while the durable checkpoint is being restored.
+    setPaperStepRestart(null);
+    setPaperStepCheckError(null);
+    setPaperStepRestartBusy(true);
     try {
       const runId = crypto.randomUUID().replaceAll('-', '');
-      const response = await fetch(`/api/projects/papers/${encodeURIComponent(dialog.paper.paper_id)}/rewind`, {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(proposed.paper.paper_id)}/rewind`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: JSON.stringify({
           path, expected_project_id: projectId, expected_binding: binding,
-          source_pdf_sha256: dialog.options.source_pdf_sha256,
-          expected_snapshot_sha256: dialog.options.snapshot_sha256,
-          stage: rewindStage, confirm_restart: true, run_id: runId,
+          source_pdf_sha256: proposed.options.source_pdf_sha256,
+          expected_snapshot_sha256: proposed.options.snapshot_sha256,
+          stage: proposed.stage, confirm_restart: true, run_id: runId,
         }),
       });
-      const restored = await readPaperResponse(response, 'Restoring Paper checkpoint');
-      if (restored.snapshot_sha256 !== dialog.options.snapshot_sha256) throw new Error('Paper restart evidence changed.');
-      selectPaperRun(restored.run_id ?? null);
+      const restored = await readPaperResponse(response, 'Preparing Paper restart');
+      if (restored.snapshot_sha256 !== proposed.options.snapshot_sha256)
+        throw new Error('Restart evidence changed. Reopen the Paper before trying again.');
+      selectPaperRun(restored.run_id ?? runId);
       setNewPaperRequested(true);
       setDraftPaperExpanded(true);
       setCheckpointMismatch(null);
       setRestartableCheckpoint(null);
       setContinuationAvailable(false);
-      setIncludeDiagramsAndTables(dialog.options.include_diagrams);
-      window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(dialog.options.include_diagrams));
-      setRewindDialog(null);
-      rewindReturnFocus.current?.focus();
-      await refresh(undefined, true);
-      setSuccess(`Restored Paper ${dialog.paper.paper_version} at ${rewindStage === 'typesetting' ? 'validated manuscript' : 'writing'}. Press Play to start a new Paper; the original is unchanged.`);
-    } catch (cause) { setRewindError(errorMessage(cause)); }
-    finally { setRewindBusy(false); }
+      setIncludeDiagramsAndTables(proposed.options.include_diagrams);
+      window.localStorage.setItem('sigma.paper.diagrams:' + projectId, String(proposed.options.include_diagrams));
+      // The restored attempt already has an authoritative run identity.
+      // Skip the full list refresh here: it can reset selection before Play.
+      setPaperStepRestartBusy(false);
+      void generatePaper(false, null, true, restored.run_id ?? runId);
+    } catch (cause) {
+      setPaperStepCheckError({ id: proposed.paper.paper_id, message: errorMessage(cause) });
+    } finally { setPaperStepRestartBusy(false); }
   }
   async function openPaper(id: string) {
     try {
@@ -3542,6 +3586,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const target = paperRuns.find(run => run.run_id === runId);
     if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
       || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    window.dispatchEvent(new CustomEvent('sigma-run-stop-intent', { detail: { kind: 'paper', id: runId || 'pending' } }));
     if (runId === selectedRunIdRef.current && paperStartOptimistic && !paperSubmissionDispatched.current) {
       // Before dispatch, Stop simply cancels preparation. No run or provider
       // operation needs to be stopped, and no paid call is replayed.
@@ -3594,6 +3639,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) {
       // Rejected Stop must restore the pulsing state and usable controls.
       setOptimisticPaperStop(null);
+      window.dispatchEvent(new CustomEvent('sigma-run-stop-intent', { detail: { kind: 'paper', id: runId || 'pending', clear: true } }));
       setPhase('');
       setError(errorMessage(cause));
       void refresh(selected?.paper_id, true);
@@ -3694,11 +3740,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
-  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null, resumeSelectedRun = false) {
+  async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null, resumeSelectedRun = false, explicitRunId?: string) {
     if (busy || !binding) return;
     deliberatePaperStop.current = false;
     paperSubmissionDispatched.current = false;
-    const runId = selectedRunIdRef.current ?? crypto.randomUUID().replaceAll('-', '');
+    // Always resume the newly restored run, never a stale selected row.
+    const runId = explicitRunId ?? selectedRunIdRef.current ?? crypto.randomUUID().replaceAll('-', '');
     selectPaperRun(runId);
     const controller = new AbortController(); request.current = controller;
     setPaperPlayIntent((continuationAvailable || resumeSelectedRun) && !restartBeforePlay ? 'resuming' : 'starting');
@@ -3815,11 +3862,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       if (!result) throw new Error('Paper generation ended without a completed version. No version was published.');
       await refresh(result.paper_id);
       setNewPaperRequested(false);
-      setSuccess(result.generation?.publication_status === 'needs_review'
-        ? result.generation?.layout_status === 'needs_review'
-          ? 'Paper saved for review. Some PDF layout warnings remain after three TeX correction passes.'
-          : 'Paper saved for review. TeX proofreading did not complete; inspect its archived diagnostics.'
-        : 'Paper saved in My Work versions. TeX proofreading completed; this does not certify independent scientific or visual review.');
+      // Successful publication is already visible in the saved Paper list.
+      // Avoid a redundant completion message; actionable review warnings stay
+      // on the Paper itself.
+      setSuccess('');
     } catch (cause) {
       if (controller.signal.aborted) {
         // An abort may also mean the dialog was unmounted. The server task
@@ -3906,6 +3952,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const canControlDraft = selectedRun ? selectedRun.can_control
     : !viewerEmail || !unfinishedDraftPresent || (draftCreatorEmail
       ? viewerEmail === draftCreatorEmail : viewerEmail === projectOwnerEmail);
+  const canRemoveDraft = selectedRun ? (selectedRun.can_remove ?? selectedRun.can_control) : canControlDraft;
   const activeDraftCreator = selectedRun?.creator_email || draftCreatorEmail;
   const draftVersion = selectedRun?.number ?? nextPaperNumber ?? (Math.max(0, ...papers.map(paper => paper.paper_version)) + 1);
   // The unreserved next number can race other collaborators. Display a number
@@ -3995,23 +4042,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <div className="ai-paper-body">
       <>
 
-      {rewindDialog && createPortal(<div className="paper-rewind-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !rewindBusy) { setRewindDialog(null); rewindReturnFocus.current?.focus(); } }}>
-        <div className="paper-rewind-dialog" role="dialog" aria-modal="true" aria-labelledby="paper-rewind-title" aria-describedby="paper-rewind-description">
-          <div className="paper-rewind-header"><h3 id="paper-rewind-title">Restart from checkpoint · Paper {rewindDialog.paper.paper_version}</h3><DialogDismissButton label="Close checkpoint restart" onClick={() => { if (!rewindBusy) { setRewindDialog(null); rewindReturnFocus.current?.focus(); } }}/></div>
-          <div className="paper-rewind-content">
-            <p id="paper-rewind-description">Start a new Paper using the saved version's verified evidence. The published Paper {rewindDialog.paper.paper_version} will remain unchanged.</p>
-            {rewindDialog.options ? <fieldset disabled={rewindBusy} className="paper-rewind-choices"><legend>Restart at</legend>
-              {rewindDialog.options.stages.map(stage => <label key={stage.id}><input type="radio" name="paper-rewind-stage" value={stage.id} checked={rewindStage === stage.id} onChange={() => setRewindStage(stage.id)}/><span><strong>{stage.label}</strong><span>{stage.description}</span></span></label>)}
-            </fieldset> : !rewindError && <p role="status">Checking saved checkpoints…</p>}
-            <p className="settings-hint">The next Play may consume AI allowance for writing, proofreading or scoring. No provider call is made when restoring the checkpoint.</p>
-            {rewindError && <p role="alert" className="error">{rewindError}</p>}
-          </div>
-          <div className="paper-rewind-footer">
-            <button ref={rewindCancelRef} type="button" className="text-view-link" disabled={rewindBusy} onClick={() => { setRewindDialog(null); rewindReturnFocus.current?.focus(); }}>Cancel</button>
-            <button type="button" className="text-view-link" disabled={!rewindDialog.options || rewindBusy || !binding} onClick={() => void confirmPaperRewind()}>{rewindBusy ? 'Restoring…' : 'Confirm restart'}</button>
-          </div>
-        </div>
-      </div>, document.body)}
       {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
       {loading && <p>Loading saved versions…</p>}
 
@@ -4049,7 +4079,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     </div>
                   </div></div>}
                 </span>}
-                {!generationRunning && canControlDraft && <span className="paper-remove-anchor">
+                {!generationRunning && (canRemoveDraft || (selectedRun !== undefined && !['active', 'queued', 'complete'].includes(selectedRun.status))) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
                     <p>Remove this unfinished paper and its checkpoint? Saved papers and research history will remain.</p>
@@ -4075,16 +4105,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       {paperProgress && !paperStartOptimistic && !restartingCheckpoint && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
         {stoppingSelectedPaper
           ? <strong>Stopping paper · {paperStopReconciliation ? 'saving checkpoint' : 'awaiting server acknowledgment'}</strong>
-          : paperProgress.status === 'active' || paperProgress.status === 'queued'
-          ? <>
-              <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>
-              <PaperStageSteps progress={paperProgress}/>
-              {paperProgress.detail?.startsWith('Retrying') && <span className="paper-progress-substep">{paperProgress.detail}</span>}
-            </>
-          : <details className="paper-stage-history">
-              <summary>Last stage: {paperProgressOperation(paperProgress)} · View steps</summary>
-              <PaperStageSteps progress={paperProgress}/>
-            </details>}
+          : (paperProgress.status === 'active' || paperProgress.status === 'queued') &&
+            <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>}
+        <PaperStageSteps progress={paperProgress}/>
+        {!stoppingSelectedPaper && paperProgress.detail?.startsWith('Retrying') && <span className="paper-progress-substep">{paperProgress.detail}</span>}
         {/* Failure details are presented once in the contextual, dismissible paper card above. */}
       </div>}
 
@@ -4094,13 +4118,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {otherPaperRuns.map(run => <article key={run.run_id} className="saved-paper-card paper-draft-card" data-paper-run={run.run_id} aria-label={`Paper ${run.number}`}>
           <div className="saved-paper-row">
             <div className="saved-paper-heading">
-              <strong className="paper-real-title">Paper {run.number}</strong>
+              <div className="saved-paper-title-line">
+                <button type="button" className="saved-paper-expand" aria-label={`${expandedOtherPaperRunIds.has(run.run_id) ? 'Collapse' : 'Expand'} steps for Paper ${run.number}`}
+                  aria-expanded={expandedOtherPaperRunIds.has(run.run_id)} aria-controls={`paper-run-steps-${run.run_id}`}
+                  onClick={() => setExpandedOtherPaperRunIds(current => {
+                    const next = new Set(current);
+                    if (next.has(run.run_id)) next.delete(run.run_id); else next.add(run.run_id);
+                    return next;
+                  })}><DisclosureChevron expanded={expandedOtherPaperRunIds.has(run.run_id)}/></button>
+                <div className="saved-paper-title-content">
+                  <div className="saved-paper-title-first-line">
+                    <h4 className="saved-paper-title">Paper {run.number}</h4>
+                    <span className="saved-paper-title-tools">
               {!(optimisticPaperStop && optimisticPaperStop.runId === run.run_id) && (run.status === 'active' || run.status === 'queued') && <span className={`research-running-indicator paper-title-activity${run.status === 'queued' ? ' paper-queued-indicator' : ''}`}
                 aria-label={run.status === 'queued' ? 'Paper queued' : 'Paper generating'}
                 data-tooltip={formatRunAttribution({ kind: 'paper', number: run.number, creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking, mode: 'hover' })}/>}
-              {run.can_control && <button type="button" className="text-view-link session-start-link" data-tooltip="Open your paper"
-                onClick={() => { selectPaperRun(run.run_id); setNewPaperRequested(false); setDraftPaperExpanded(true); void refresh(undefined, true); }}>Open</button>}
-              {run.can_control && ['interrupted', 'failed', 'cancelled'].includes(run.status) && <button type="button"
+              {run.can_control && !['active', 'queued', 'complete'].includes(run.status) && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
                 aria-label={`Resume Paper ${run.number}`} data-tooltip="Resume paper generation" disabled={busy || loading || !binding}
                 onClick={() => {
@@ -4112,7 +4145,26 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 }}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
               </button>}
-              {run.can_control && ['interrupted', 'failed', 'cancelled'].includes(run.status) && <span className="paper-remove-anchor">
+              {!run.can_control && !['active', 'queued', 'complete'].includes(run.status) && <button type="button"
+                className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
+                aria-label={`Start a new Paper after Paper ${run.number}`}
+                data-tooltip="Start a new Paper using current research (original run preserved)"
+                disabled={busy || loading || !binding}
+                onClick={() => {
+                  // A collaborator must never resume another creator's paid
+                  // execution. Starting a distinct run preserves their work.
+                  selectPaperRun(null);
+                  setPaperProgress(null);
+                  setCheckpointMismatch(null);
+                  setRestartableCheckpoint(null);
+                  setContinuationAvailable(false);
+                  setNewPaperRequested(true);
+                  setDraftPaperExpanded(true);
+                  void generatePaper();
+                }}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
+              </button>}
+              {!guest && !['active', 'queued', 'complete'].includes(run.status) && <span className="paper-remove-anchor">
                 <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
                   aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" disabled={busy || loading}
                   onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardRunId(run.run_id); }}>
@@ -4133,21 +4185,28 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 aria-label={`Stop Paper ${run.number}`} data-tooltip={optimisticPaperStop?.runId === run.run_id ? 'Stopping paper' : 'Stop paper generation'} disabled={optimisticPaperStop?.runId === run.run_id} onClick={() => void cancelGeneration(run.run_id)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
               </button>}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
             <p className="saved-paper-meta">{formatRunAttribution({ kind: 'paper', creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking })}
               {' · '}{optimisticPaperStop?.runId === run.run_id
                 ? paperStopReconciliation ? 'Stopping · saving checkpoint' : 'Stopping · awaiting server acknowledgment'
                 : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued' : run.status === 'interrupted' ? 'Interrupted' : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
+              {!run.can_control && !['active', 'queued', 'complete'].includes(run.status) && ' · Only the original creator can Resume'}
             </p>
-            {run.progress?.stage && run.progress.started_at && typeof run.progress.current !== 'undefined' &&
-              <div className="ai-paper-status ai-paper-progress" role="status"><PaperStageSteps progress={run.progress as PaperProgress}/></div>}
-            {run.progress?.detail && <p className="settings-hint">{run.progress.detail}</p>}
+            <div id={`paper-run-steps-${run.run_id}`} hidden={!expandedOtherPaperRunIds.has(run.run_id)}>
+              {run.progress?.stage && run.progress.started_at && typeof run.progress.current !== 'undefined' &&
+                <div className="ai-paper-status ai-paper-progress" role="status"><PaperStageSteps progress={run.progress as PaperProgress}/></div>}
+              {run.progress?.detail && <p className="settings-hint">{run.progress.detail}</p>}
+            </div>
           </div>
         </article>)}
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} onRewind={!guest ? element => void openPaperRewind(paper, element) : undefined} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
@@ -4172,14 +4231,32 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 </span>}
               </>}/>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · {(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : paperModelThinkingLabel(paper.generation)}{paper.score && <> · Score {paper.score.total}/100</>}</p><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? '⌛ Scoring...' : paper.score ? 'See score' : 'Score'}</button></div>
-            <p className={paper.generation.publication_status === 'needs_review' ? 'ai-paper-warning' : 'settings-hint'} role="status">{paper.generation.publication_status === 'needs_review'
-              ? paperReviewLabel(paper.generation)
-              : 'TeX proofreading complete · scientific and visual review are not implied'}</p>
+            {paper.generation.publication_status === 'needs_review' && <p className="ai-paper-warning" role="status">{paperReviewLabel(paper.generation)}</p>}
           </div>
           {copyError && <p className="error" role="alert">{copyError}</p>}
         </div>
         {eli5Error && eli5ErrorId === paper.paper_id && <p className="error" role="alert">{eli5Error}</p>}
-        <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
+        <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id}>
+          <div className="ai-paper-status ai-paper-progress paper-completed-progress" role="status">
+            <PaperStageSteps progress={{
+              status: 'complete', stage: 'complete', current: null, total: null,
+              started_at: paper.created_at,
+              elapsed_seconds: paper.generation.generation_elapsed_seconds ?? 0,
+            }} onRestart={!guest && paper.pdf_available &&
+              (!viewerEmail || viewerEmail === projectOwnerEmail || artifactAuthors?.[paper.paper_id] === viewerEmail)
+              ? stage => void proposePaperStepRestart(paper, stage) : undefined}
+              onRescore={!guest && paper.pdf_available ? () => void scorePaper(paper, true) : undefined}/>
+          </div>
+          {paperStepChecking?.id === paper.paper_id && <p role="status" className="paper-checkpoint-check">Checking saved checkpoint…</p>}
+          {paperStepCheckError?.id === paper.paper_id && <p role="alert" className="ai-paper-warning">{paperStepCheckError.message}</p>}
+          {paperStepRestart?.paper.paper_id === paper.paper_id && <div className="paper-step-restart-confirm" role="group" aria-label="Confirm Paper restart from saved checkpoint">
+            <p>Restart Paper {paper.paper_version} at {paperStepRestart.stage === 'started' ? 'Started' : paperStepRestart.stage === 'writing' ? 'Write sections' : 'Validate'}? The published Paper stays unchanged; a new Paper attempt will be prepared.</p>
+            <div className="session-remove-confirm-actions">
+              <button type="button" className="text-view-link" disabled={!paperStepRestart.options || paperStepRestartBusy || !binding} onClick={() => void confirmPaperStepRestart()}>Confirm</button>
+              <button type="button" className="text-view-link" onClick={() => setPaperStepRestart(null)}>Cancel</button>
+            </div>
+          </div>}
+          {expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
           ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""} questionHeadingAction={<CopyToClipboardButton name="explaination" copied={copiedExplanationId === paper.paper_id} onCopy={() => void copyExplanation(paper.paper_id, selected.eli5?.markdown ?? '')}/>}/></Suspense></div>
           : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>
@@ -4249,11 +4326,24 @@ function FloatingTooltip() {
   const pointerPosition = useRef({ x: 0, y: 0 });
   const tooltipPointerPosition = useRef({ x: 0, y: 0 });
   const suppressedAfterClick = useRef(new WeakSet<HTMLElement>());
+  // A Play control can be replaced by Stop underneath an unmoved cursor.
+  // The replacement is not a new hover: suppress both the tooltip and hover
+  // decoration until the pointer actually leaves that control's footprint.
+  const clickedControlRect = useRef<DOMRect | null>(null);
   const previousDescriptions = useRef(new WeakMap<HTMLElement, string | null>());
   const hoverTimer = useRef<number | null>(null);
   const clearHoverTimer = () => {
     if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
+  };
+  const insideClickedControl = (x: number, y: number) => {
+    const bounds = clickedControlRect.current;
+    return !!bounds && x >= bounds.left && x < bounds.right
+      && y >= bounds.top && y < bounds.bottom;
+  };
+  const clearClickedControl = () => {
+    clickedControlRect.current = null;
+    document.body.removeAttribute('data-sigma-control-hover-hold');
   };
   const position = useCallback(() => {
     const element = activeRef.current;
@@ -4311,13 +4401,16 @@ function FloatingTooltip() {
       pointerPosition.current = { x: event.clientX, y: event.clientY };
       const element = targetFor(event.target);
       if (document.querySelector('.project-model-confirm-popover')) { clearHoverTimer(); hide(); return; }
+      if (insideClickedControl(event.clientX, event.clientY)) return;
+      if (clickedControlRect.current) clearClickedControl();
       if (element && suppressedAfterClick.current.has(element)) return;
       if (element && element !== activeRef.current) {
         clearHoverTimer();
         hide();
         hoverTimer.current = window.setTimeout(() => {
           hoverTimer.current = null;
-          if (element.matches(':hover') && !suppressedAfterClick.current.has(element)) show(element);
+          if (element.matches(':hover') && !suppressedAfterClick.current.has(element)
+            && !insideClickedControl(pointerPosition.current.x, pointerPosition.current.y)) show(element);
         }, 400);
       }
     };
@@ -4334,6 +4427,12 @@ function FloatingTooltip() {
       clearHoverTimer();
       suppressedAfterClick.current.add(element);
       hide(element);
+      const control = event.target instanceof Element
+        ? event.target.closest<HTMLElement>('.workspace-page button.process-control') : null;
+      if (control && event instanceof MouseEvent && event.detail > 0) {
+        clickedControlRect.current = control.getBoundingClientRect();
+        document.body.setAttribute('data-sigma-control-hover-hold', '');
+      }
     };
     const onFocusIn = (event: FocusEvent) => {
       clearHoverTimer();
@@ -4346,6 +4445,9 @@ function FloatingTooltip() {
     };
     const onPointerMove = (event: PointerEvent) => {
       pointerPosition.current = { x: event.clientX, y: event.clientY };
+      if (clickedControlRect.current && !insideClickedControl(event.clientX, event.clientY)) {
+        clearClickedControl();
+      }
       if (activeRef.current && targetFor(event.target) === activeRef.current
         && activeRef.current.dataset.tooltipFollowCursor !== 'true') position();
     };
@@ -4368,6 +4470,7 @@ function FloatingTooltip() {
       document.removeEventListener('focusout', onFocusOut, true);
       window.removeEventListener('scroll', onMove, true);
       window.removeEventListener('resize', onMove);
+      clearClickedControl();
       hide();
     };
   }, [hide, position, show]);
@@ -5027,8 +5130,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   </dialog></div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -5079,7 +5182,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
-        ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
+        ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={onActivityClick ?? (() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa')))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
           ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
@@ -5125,9 +5228,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -5140,7 +5243,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick} onActivityClick={onActivityClick}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -5227,16 +5330,21 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   const [formattingAnswerId, setFormattingAnswerId] = useState('');
   const formattingRequest = useRef<AbortController | null>(null);
   const [recovery, setRecovery] = useState<{ question: string; id: string } | null>(null);
-  const requestKey = `sigma.researchQaRequest:${projectId}`;
+  // A pending question belongs to this tab and this account, not to the
+  // project's shared storage. Only completed answers are shared.
+  const qaIdentity = useCloudIdentity()?.user?.email ?? viewerEmail ?? 'local';
+  const requestKey = `sigma.researchQaRequest:${projectId}:${qaIdentity.toLowerCase()}`;
   useEffect(() => {
     dialog.current?.showModal();
+    setQuestion('');
+    setRecovery(null);
     try {
-      const saved = JSON.parse(window.localStorage.getItem(requestKey) ?? 'null') as { question?: string; id?: string } | null;
+      const saved = JSON.parse(window.sessionStorage.getItem(requestKey) ?? 'null') as { question?: string; id?: string } | null;
       if (saved?.question && saved.id) { setQuestion(saved.question); setRecovery({ question: saved.question, id: saved.id }); }
-    } catch { window.localStorage.removeItem(requestKey); }
+    } catch { window.sessionStorage.removeItem(requestKey); }
     void refresh();
     return () => { request.current?.abort(); formattingRequest.current?.abort(); };
-  }, [guest]);
+  }, [guest, requestKey]);
   async function refresh(silent = false): Promise<{ answers: ResearchQARecord[]; archiveAvailable: boolean } | null> {
     if (!silent) setLoading(true);
     try {
@@ -5330,7 +5438,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       // explicit retry available even if no previous answer was found.
       const completed = saved.answers.find(record => record.request_id === recovery.id);
       if (completed) {
-        window.localStorage.removeItem(requestKey);
+        window.sessionStorage.removeItem(requestKey);
         setRecovery(null); setQuestion(''); setExpanded(completed.qa_id); setError('');
         setSuccess('');
         return;
@@ -5341,12 +5449,12 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   async function submitQuestion(requestId: string) {
     if (!question.trim() || busy || !binding) return;
     const controller = new AbortController(); request.current = controller; setBusy(true); setError(''); setSuccess('');
-    window.localStorage.setItem(requestKey, JSON.stringify({ question, id: requestId }));
+    window.sessionStorage.setItem(requestKey, JSON.stringify({ question, id: requestId }));
     try {
       const response = await fetch('/api/projects/research-qa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ path, question, expected_project_id: projectId, expected_binding: binding, request_id: requestId }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Research Q/A failed.');
-      window.localStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(result.qa_id); setSuccess(''); await refresh();
+      window.sessionStorage.removeItem(requestKey); setRecovery(null); setQuestion(''); setExpanded(result.qa_id); setSuccess(''); await refresh();
     } catch (cause) {
       // Cancel is silent, but retain the request ID because the provider
       // might finish after the browser stops listening.
@@ -5960,7 +6068,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
         </div>
       </header>
       <div className="settings-body">
-        <fieldset disabled={busy || loading}>
+        <fieldset disabled={busy || loading} className="project-settings-editable-fields">
           <div className="settings-classification-row">
             <div>
               <label id="project-mode-label">Research category</label>
@@ -6274,7 +6382,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; activity_author?: string | null; answer_active?: boolean; activity_runs?: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; creator?: string | null; model?: string; thinking?: string }>; error: string | null };
+type ActivityRunTarget = { kind: AttributionKind; status: 'active' | 'queued'; id?: string; number?: number; creator?: string | null; model?: string; thinking?: string };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; project_type_snapshot?: ProjectTypeRecord | null; strategy_count: number | null; paper_count?: number; best_paper_score?: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; paper_generating?: boolean; paper_activity?: string | null; available: boolean; pinned: boolean; shared?: boolean; collaborator?: boolean; activity_author?: string | null; answer_active?: boolean; activity_runs?: ActivityRunTarget[]; error: string | null };
 // Saved groups by title without the terminal version; versions sort numerically descending.
 // Most Recent intentionally keeps last-accessed ordering.
 const savedVersionSuffix = /\s+(?:v(?:ersion)?\s*(\d+(?:\.\d+)*)|\(\s*v(?:ersion)?\s*(\d+(?:\.\d+)*)\s*\))$/i;
@@ -6387,9 +6496,10 @@ function useDelayedProjectProgress(operation: string): string {
   return visible === operation ? visible : '';
 }
 
-function RecentProjects({ onOpen, getCachedView, flat = false, active = false, projects, setProjects, loading, setLoading }: {
+function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = false, active = false, projects, setProjects, loading, setLoading }: {
   onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void;
   getCachedView: (path: string) => ProjectView | undefined;
+  onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   flat?: boolean;
   active?: boolean;
   projects: RecentProject[];
@@ -6608,6 +6718,11 @@ function RecentProjects({ onOpen, getCachedView, flat = false, active = false, p
         <div className="recent-entry">
           <div className="recent-title-row">
             <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(opening === entry.id || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
+            {paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`}
+              data-tooltip={recentRunLabels(entry).join('\n') || activityDescription(entry)} data-tooltip-activity="true"
+              disabled={!entry.available} onClick={() => onNavigateActivity(entry, entry.activity_runs?.find(run => run.status === 'active') ?? entry.activity_runs?.[0] ?? null)}>
+              <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/>
+            </button>}
             {entry.best_paper_score != null && entry.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
             <button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
@@ -6621,8 +6736,7 @@ function RecentProjects({ onOpen, getCachedView, flat = false, active = false, p
             setConfirmRemoveId(entry.id);
           }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>{confirmRemoveId === entry.id && <div className={`recent-remove-actions recent-remove-${confirmRemovePlacement}`}><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>{entry.collaborator ? `Stop collaborating on “${entry.title}”?` : `Remove “${entry.title}” from My Work? The project and its research will be kept in storage.`}</p><div className="recent-remove-confirm-actions"><button type="button" className="text-view-link" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" className="text-view-link" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}{paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`} data-tooltip={`Open active work in ${entry.title}${recentRunLabels(entry).length ? `\n${recentRunLabels(entry).join('\n')}` : ''}`} data-tooltip-activity="true" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/></button>} · {entry.best_paper_score != null && <>Best score {entry.best_paper_score}/100 · </>}{paperActivity(entry) && <><span className={`recent-running${paperActivity(entry) === 'queued' ? ' recent-queued' : ''}`}>{activityDescription(entry)}</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small></div>
-          <span data-tooltip={entry.path}>{entry.path}</span>
+          <div className="recent-meta-row"><small><span>{difficultyDescription(entry.difficulty)}{entry.strategy_count !== null && <> · {strategyCount(entry.strategy_count)} · {paperCount(entry.paper_count ?? 0)}</>}{entry.best_paper_score != null && <> · Best score {entry.best_paper_score}/100</>}</span></small></div>
         </div>
         {entry.error && <p className="recent-unavailable">{entry.error}</p>}
       </li>)}</ul>
@@ -6685,7 +6799,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   </div>;
 }
 
-function HomeCatalog({ onOpen, getCachedView, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void; getCachedView: (path: string) => ProjectView | undefined; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
+function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void; getCachedView: (path: string) => ProjectView | undefined; onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
   const savedTooltip = guest
     ? 'Your temporary private work in this browser (expires after inactivity or server restart).'
     : 'Show My Work. Click again to collapse or expand all.';
@@ -6745,8 +6859,8 @@ function HomeCatalog({ onOpen, getCachedView, cacheScope, guest = false, onTabCh
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>My Work</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
@@ -6790,10 +6904,11 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   </dialog>;
 }
 
-function Home({ initialPath, onOpen, getCachedView, cacheScope }: {
+function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheScope }: {
   initialPath: string;
   onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void;
   getCachedView: (path: string) => ProjectView | undefined;
+  onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   cacheScope: string;
 }) {
   const cloud = useCloudIdentity();
@@ -6932,7 +7047,7 @@ function Home({ initialPath, onOpen, getCachedView, cacheScope }: {
           {(!cloud?.enabled || cloud.authenticated) && <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>}
           </>}
         </div>
-        <HomeCatalog key={cacheScope} cacheScope={cacheScope} getCachedView={getCachedView} onOpen={onOpen} onTabChange={setCatalogTab} guest={!!cloud?.enabled && !cloud.authenticated}/>
+        <HomeCatalog key={cacheScope} cacheScope={cacheScope} getCachedView={getCachedView} onOpen={onOpen} onNavigateActivity={onNavigateActivity} onTabChange={setCatalogTab} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label={`Crafted by Brian Kramer and ${creditAdjective} OpenAI agents`} onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Crafted by Brian Kramer</span><span>and {creditAdjective} OpenAI agents.</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
@@ -7325,6 +7440,24 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const [paperQueued, setPaperQueued] = useState(false);
   const [sharedActivity, setSharedActivity] = useState<SharedProjectInfo | null>(null);
   const [activeRuns, setActiveRuns] = useState<Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }>>([]);
+  // A local Stop intent takes visual precedence until a server snapshot
+  // no longer advertises that run. It never mutates the collaborative ledger.
+  const [optimisticStoppedRuns, setOptimisticStoppedRuns] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const onIntent = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind: string; id: string; clear?: boolean }>).detail;
+      if (!detail?.kind || !detail?.id) return;
+      const key = `${detail.kind}:${detail.id}`;
+      setOptimisticStoppedRuns(current => {
+        const next = new Set(current);
+        if (detail.clear) next.delete(key); else next.add(key);
+        return next;
+      });
+    };
+    window.addEventListener('sigma-run-stop-intent', onIntent);
+    return () => window.removeEventListener('sigma-run-stop-intent', onIntent);
+  }, []);
+  const visibleActiveRuns = activeRuns.filter(run => !optimisticStoppedRuns.has(`${run.kind}:${run.id ?? ''}`));
   const [activityLoaded, setActivityLoaded] = useState(false);
   useEffect(() => {
     if (guest || !view) return;
@@ -7341,7 +7474,15 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
         });
         if (!response.ok) return;
         const body = await response.json() as { runs?: Array<{ kind: AttributionKind; status: 'active' | 'queued'; number?: number; id?: string; creator?: string | null; model?: string; thinking?: string }> };
-        if (!controller.signal.aborted) { setActiveRuns(body.runs ?? []); setActivityLoaded(true); }
+        if (!controller.signal.aborted) {
+          const runs = body.runs ?? [];
+          setActiveRuns(runs);
+          setOptimisticStoppedRuns(current => {
+            const currentIds = new Set(runs.map(run => `${run.kind}:${run.id ?? ''}`));
+            return new Set([...current].filter(key => currentIds.has(key)));
+          });
+          setActivityLoaded(true);
+        }
       } catch { /* Preserve last known activity during transient failures. */ }
       finally { pending = false; }
     };
@@ -7351,7 +7492,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   }, [path, guest, view?.project.id]);
 
   // Green takes precedence for color, not for which runs are disclosed.
-  const activeRunLabels = activeRuns.map(run => formatRunAttribution({
+  const activeRunLabels = visibleActiveRuns.map(run => formatRunAttribution({
     ...run,
     creator: run.creator || (run.kind === 'session'
       ? sharedActivity?.artifact_authors?.session?.[run.id ?? '']
@@ -7396,7 +7537,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     autoRevealed.current = true;
     const params = new URLSearchParams(window.location.search);
     // A citation/deep link takes precedence over automatic activity navigation.
-    if (params.has('reveal_session') || params.has('reveal_paper') || params.has('reveal_strategy') || params.has('reveal_project')) return;
+    if (params.has('reveal_session') || params.has('reveal_sessions') || params.has('reveal_paper') || params.has('reveal_paper_run') || params.has('reveal_qa') || params.has('reveal_strategy') || params.has('reveal_project')) return;
     const eventName = initialResearchActivity ? 'sigma-reveal-running-session'
       : initialPaperActivity ? 'sigma-reveal-papers' : null;
     if (!eventName) return;
@@ -7412,6 +7553,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const [emailOpen, setEmailOpen] = useState(false);
   const [qaOpen, setQaOpen] = useState(false);
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('reveal_qa')) setQaOpen(true);
     const revealAsk = () => setQaOpen(true);
     window.addEventListener('sigma-reveal-qa', revealAsk);
     return () => window.removeEventListener('sigma-reveal-qa', revealAsk);
@@ -7697,17 +7839,29 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null,
     // A queued Session still belongs to Sessions when clicking the activity title.
     // Color is decided separately from the authoritative active/queued run list.
-    researchRunning: researchRunning || activeRuns.some(run => run.kind === 'session'),
-    paperRunning: paperRunning || activeRuns.some(run => run.kind === 'paper' && run.status === 'active'),
-    paperQueued: paperQueued || activeRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
-    askRunning: activeRuns.some(run => run.kind === 'answer' && run.status === 'active'),
+    researchRunning: (researchRunning && ![...optimisticStoppedRuns].some(key => key.startsWith('session:'))) || visibleActiveRuns.some(run => run.kind === 'session'),
+    paperRunning: (paperRunning && ![...optimisticStoppedRuns].some(key => key.startsWith('paper:'))) || visibleActiveRuns.some(run => run.kind === 'paper' && run.status === 'active'),
+    paperQueued: (paperQueued && ![...optimisticStoppedRuns].some(key => key.startsWith('paper:'))) || visibleActiveRuns.some(run => run.kind === 'paper' && run.status === 'queued'),
+    askRunning: visibleActiveRuns.some(run => run.kind === 'answer' && run.status === 'active'),
     activeRunLabels,
     // Local-only Papers or mock runs can be active without a shared reservation.
     // The ledger is authoritative when populated, but an empty ledger must
     // not conceal activity the underlying panes still report.
-    activityStatus: !activityLoaded || !activeRuns.length ? undefined
-      : activeRuns.some(run => run.status === 'active') ? 'active' as const : 'queued' as const,
+    activityStatus: !activityLoaded || (!activeRuns.length && !optimisticStoppedRuns.size) ? undefined
+      : !visibleActiveRuns.length ? null
+      : visibleActiveRuns.some(run => run.status === 'active') ? 'active' as const : 'queued' as const,
     onIdleProjectTitleClick: toggleSectionsFromTitle,
+    onActivityClick: () => {
+      const run = visibleActiveRuns.find(item => item.status === 'active' && item.kind === 'session')
+        ?? visibleActiveRuns.find(item => item.status === 'active' && item.kind === 'paper')
+        ?? visibleActiveRuns.find(item => item.kind === 'session')
+        ?? visibleActiveRuns.find(item => item.kind === 'paper')
+        ?? visibleActiveRuns[0];
+      if (run?.kind === 'session') window.dispatchEvent(new CustomEvent('sigma-reveal-running-session', { detail: run.id }));
+      else if (run?.kind === 'paper') window.dispatchEvent(new CustomEvent('sigma-reveal-papers', { detail: run.id }));
+      else if (run?.kind === 'answer') window.dispatchEvent(new Event('sigma-reveal-qa'));
+      else window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'));
+    },
   };
   function toggleStrategiesPane() {
     if (!strategiesExpanded) sectionOpen('strategies');
@@ -8241,6 +8395,20 @@ function App() {
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
       setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path);
       navigate(projectUrl(view.path) + (openSettings ? '&settings=collaborators' : ''));
+    }} onNavigateActivity={(entry, run) => {
+      // Use the run ID already displayed on Home; no activity fetch blocks navigation.
+      const target = new URL(projectUrl(entry.path), window.location.origin);
+      if (run?.kind === 'session') {
+        if (run.id) target.searchParams.set('reveal_session', run.id);
+        else target.searchParams.set('reveal_sessions', '1');
+      } else if (run?.kind === 'paper') {
+        if (run.id) target.searchParams.set('reveal_paper_run', run.id);
+        else target.searchParams.set('reveal_paper', 'draft');
+      } else if (run?.kind === 'answer') target.searchParams.set('reveal_qa', '1');
+      const cached = getCachedProject(entry.path);
+      setOpenedFromCache(!!cached); setOpenedView(cached ?? null); setLastPath(entry.path);
+      window.localStorage.setItem('sigma.currentProject', entry.path);
+      navigate(target.pathname + target.search);
     }}/> : url.pathname === '/project' ? <ResearchDisplayBoundary key={location} label="Project workspace"><ProjectScreen
       initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined}
       revalidateCached={openedFromCache && openedView?.path === url.searchParams.get('path')}

@@ -469,6 +469,29 @@ def check_bounded_shared_conversation() -> None:
     assert all(set(item) == {"question", "answer"} for item in selected)
     assert len(json.dumps(selected).encode()) <= research_qa.MAX_PRIOR_QA_CONTEXT_BYTES + 60
 
+    # Collaboration shares completed answers, not cross-creator conversational history.
+    conversations = [
+        {
+            "question": "N's independent question?",
+            "answer": "N's answer",
+            "author_email": "n@example.org",
+        },
+        {
+            "question": "Z's independent question?",
+            "answer": "Z's answer",
+            "author_email": "z@example.org",
+        },
+        {
+            "question": "N's next question?",
+            "answer": "N's follow-up",
+            "author_email": "n@example.org",
+        },
+    ]
+    n_history = research_qa._prior_qa_context("Follow up", conversations, creator="n@example.org")
+    z_history = research_qa._prior_qa_context("Follow up", conversations, creator="z@example.org")
+    assert len(n_history) == 2 and all(item["answer"].startswith("N's") for item in n_history)
+    assert len(z_history) == 1 and z_history[0]["answer"] == "Z's answer"
+
 
 def check_ask_activity_worker_liveness() -> None:
     """Pending billing reservations do not constitute live Q/A execution."""

@@ -529,3 +529,67 @@
 }
 .paper-rewind-footer .text-view-link:disabled { opacity: .45; cursor: default; }
 .paper-rewind-footer .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+
+/* Unfinished Paper controls share the title line, without a framed Remove X. */
+.workspace-page .papers-pane .paper-draft-card .saved-paper-title-first-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.workspace-page .papers-pane .paper-draft-card .saved-paper-title-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+.workspace-page .papers-pane .paper-draft-card .saved-paper-title-tools .paper-remove-button,
+.workspace-page .papers-pane .paper-draft-card .saved-paper-title-tools .paper-remove-button:is(:hover, :focus-visible) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Only persisted, verified checkpoint boundaries are clickable. The checked
+   icon stays in the li pseudo-element, and pressing a stage doesn't shift it. */
+.workspace-page .papers-pane .paper-stage-list .paper-step-restart,
+.workspace-page .papers-pane .paper-stage-list .paper-step-restart:is(:hover, :focus-visible) {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.workspace-page .papers-pane .paper-stage-list .paper-step-restart:is(:hover, :focus-visible) strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.workspace-page .papers-pane .paper-step-restart-confirm {
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+  border: 1px solid #73583e;
+  border-radius: 6px;
+  background: #101b26;
+}
+.workspace-page .papers-pane .paper-step-restart-confirm p { margin: 0 0 8px; }
+.workspace-page .papers-pane .paper-step-restart-confirm .session-remove-confirm-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Paper progress steps stay left-aligned below a comfortable title gap. */
+.workspace-page .papers-pane .saved-paper-card .paper-stage-list {
+  justify-content: flex-start;
+  text-align: left;
+  margin: 12px 0 0;
+  padding-left: 0;
+}
+.workspace-page .papers-pane .saved-paper-card .paper-completed-progress,
+.workspace-page .papers-pane .saved-paper-card .paper-draft-content { text-align: left; }
+
+.workspace-page .papers-pane .paper-checkpoint-check { margin: 8px 0; font-size: 12px; }

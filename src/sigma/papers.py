@@ -3501,7 +3501,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         or re.fullmatch(r"[0-9a-f]{32}", rewind_origin["paper_id"]) is None
         or type(rewind_origin["paper_version"]) is not int
         or rewind_origin["paper_version"] < 1
-        or rewind_origin["stage"] not in {"writing", "typesetting"}
+        or rewind_origin["stage"] not in {"started", "writing", "typesetting"}
         or not isinstance(rewind_origin["pdf_sha256"], str)
         or re.fullmatch(r"[0-9a-f]{64}", rewind_origin["pdf_sha256"]) is None
     ):
@@ -4477,6 +4477,7 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
     if not rows:
         return []
     viewer = project_collaboration.collaborator_identity(path)
+    project_owner = project_collaboration.is_project_owner(path)
     result: list[dict[str, Any]] = []
     for row in rows:
         if row["status"] == "discarded":
@@ -4505,6 +4506,15 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
                 "preflight_needed": preflight_needed,
                 "paper_id": published_id,
                 "can_control": viewer is None or viewer == row["creator_email"],
+                "can_remove": (
+                    viewer is None
+                    or viewer == row["creator_email"]
+                    or (
+                        project_owner
+                        and not published_id
+                        and progress["status"] in {"cancelled", "failed", "interrupted", "stopped"}
+                    )
+                ),
             }
         )
     return result
@@ -8271,14 +8281,19 @@ Return the complete plan JSON matching the schema."""
             save_state(state)
     if long_plan is None:
         used_fallback = False
-        if previous_planning_failed:
+        if previous_planning_failed or (
+            isinstance(state.get("rewind_origin"), dict)
+            and state["rewind_origin"].get("stage") == "writing"
+        ):
+            # Restarting at Writing must not spend another planning call.
+            # Reconstruct the section outline from the preserved evidence.
             if progress:
                 await progress(
                     "planning",
                     None,
                     None,
                     "active",
-                    detail="Recovering outline from saved evidence",
+                    detail="Preparing section outline from saved evidence",
                 )
             used_fallback = True
             # A previous attempt reached planning and stopped without saving

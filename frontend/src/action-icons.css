@@ -509,3 +509,15 @@
   max-width: 42px;
   object-fit: contain;
 }
+
+
+/* Play can become Stop directly beneath a stationary pointer. Do not inherit
+   Play's hover styling: wait for a real pointer exit and re-entry. Keyboard
+   focus-visible styling is intentionally unaffected. */
+body[data-sigma-control-hover-hold] .workspace-page button.process-control:hover:not(:focus-visible) {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+}

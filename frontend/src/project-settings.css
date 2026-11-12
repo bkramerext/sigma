@@ -763,6 +763,15 @@
 
 /* Shared project settings: transactional collaborator editor and model pair. */
 .sigma-project-classification-dialog { width: min(660px, calc(100vw - 24px)); }
+/* Automatic classification saves must not visibly gray out Category/Difficulty.
+   Keep duplicate-save protection while the server commits the change. */
+.sigma-project-classification-dialog .project-settings-editable-fields:disabled,
+.sigma-project-classification-dialog .project-settings-editable-fields:disabled
+  :is(.research-type-picker, .sigma-difficulty-picker, button, [role="combobox"]) {
+  opacity: 1 !important;
+  color: inherit;
+}
+
 .sigma-project-classification-dialog .settings-model-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
 .sigma-project-classification-dialog .settings-model-row select { width: 100%; min-width: 0; }
 .project-collaborators { margin-top: 20px; }

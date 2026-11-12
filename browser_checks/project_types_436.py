@@ -1227,8 +1227,9 @@ with sync_playwright() as playwright:
     )
     assert 0 <= scored_position <= 30, scored_position
 
-    # Shift-click and Shift+Enter use the same real Paper heading, never its
-    # disclosure toggle. The fixture intercepts the write: no AI call is made.
+    # The outer Paper chevron controls BOTH the checked step bar and the
+    # existing summary. Restarts are explicit, on checked steps only;
+    # Shift-click is no longer a hidden alternative UI.
     rewind_calls: list[dict] = []
 
     def rewind_fixture(route):
@@ -1241,6 +1242,11 @@ with sync_playwright() as playwright:
                     "snapshot_sha256": "a" * 64,
                     "include_diagrams": True,
                     "stages": [
+                        {
+                            "id": "started",
+                            "label": "Started",
+                            "description": "Restart from original frozen evidence.",
+                        },
                         {
                             "id": "typesetting",
                             "label": "Validated manuscript",
@@ -1274,27 +1280,53 @@ with sync_playwright() as playwright:
     heading.click()
     changed = heading.get_attribute("aria-expanded")
     assert previous != changed, "Ordinary click must toggle the Paper"
+    expect(paper_row.locator(".paper-completed-progress .paper-stage-list")).to_be_visible()
+    expect(paper_row.locator(".ai-paper-preview")).to_be_visible()
+    assert paper_row.locator(".paper-stage-list li.is-past").count() == 10
     heading.click(modifiers=["Shift"])
-    rewind_dialog = page.get_by_role("dialog", name="Restart from checkpoint · Paper 1")
-    expect(rewind_dialog).to_be_visible()
-    assert heading.get_attribute("aria-expanded") == changed
+    assert heading.get_attribute("aria-expanded") != changed
+    assert page.get_by_role("dialog", name="Restart from checkpoint · Paper 1").count() == 0
+    heading.click()
+    expect(paper_row.locator(".paper-completed-progress .paper-stage-list")).to_be_visible()
+    start_button = paper_row.get_by_role("button", name="Restart paper at step Started")
+    expect(start_button).to_be_visible()
+    assert start_button.get_attribute("data-tooltip") == "Restart paper from this step"
+    expect(paper_row.get_by_role("button", name="Rescore paper")).to_be_visible()
+    assert paper_row.get_by_role("button", name="Restart paper at step Planning").count() == 0
+    assert paper_row.get_by_role("button", name="Restart paper at step Finish").count() == 0
+    assert (
+        paper_row.get_by_role(
+            "button", name="Restart paper at step Review publication standards"
+        ).count()
+        == 0
+    )
+    start_button.click()
+    start_group = paper_row.get_by_role("group", name="Confirm Paper restart from saved checkpoint")
+    expect(start_group).to_contain_text("at Started")
+    start_group.get_by_role("button", name="Cancel").click()
+    paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
+    restart_group = paper_row.get_by_role(
+        "group", name="Confirm Paper restart from saved checkpoint"
+    )
+    expect(restart_group).to_be_visible()
     assert rewind_calls == []
-    expect(rewind_dialog.get_by_role("radio", name="Validated manuscript")).to_be_checked()
-    rewind_dialog.get_by_role("button", name="Cancel").click()
-    expect(rewind_dialog).to_have_count(0)
+    restart_group.get_by_role("button", name="Cancel").click()
+    expect(restart_group).to_have_count(0)
     assert rewind_calls == []
-    heading.focus()
-    page.keyboard.press("Shift+Enter")
-    expect(rewind_dialog).to_be_visible()
-    assert heading.get_attribute("aria-expanded") == changed
-    rewind_dialog.get_by_role("radio", name="Writing").check()
-    rewind_dialog.get_by_role("button", name="Confirm restart").click()
-    expect(rewind_dialog).to_have_count(0, timeout=10000)
+    paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
+    restart_group = paper_row.get_by_role(
+        "group", name="Confirm Paper restart from saved checkpoint"
+    )
+    confirm = restart_group.get_by_role("button", name="Confirm", exact=True)
+    expect(confirm).to_be_enabled(timeout=10000)
+    confirm.click()
+    expect(restart_group).to_have_count(0, timeout=10000)
     assert len(rewind_calls) == 1, rewind_calls
     assert rewind_calls[0]["stage"] == "writing"
     assert rewind_calls[0]["source_pdf_sha256"] == "c" * 64
     assert rewind_calls[0]["expected_snapshot_sha256"] == "a" * 64
     assert rewind_calls[0]["confirm_restart"] is True
+    assert rewind_calls[0]["run_id"]
     expect(paper_row).to_be_visible()
     page.unroute("**/api/projects/papers/fixture-paper-1/rewind**")
 
