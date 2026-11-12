@@ -45,9 +45,6 @@ class PaperAdmissionFastPathTests(TestCase):
             ),
         ):
             saved_max = (
-                papers.next_paper_number_for_activity(
-                    "/not-needed", include_reserved=False
-                )
-                - 1
+                papers.next_paper_number_for_activity("/not-needed", include_reserved=False) - 1
             )
             self.assertEqual(saved_max, 19)
