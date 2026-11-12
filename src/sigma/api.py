@@ -1048,7 +1048,13 @@ async def paper_cancel_view(body: PaperCancelRequest):
 @app.post("/api/projects/papers/discard")
 async def papers_discard_view(body: PaperDiscardRequest):
     # Removing unpublished work is a provider-free recovery operation.
-    # A disconnected account must not strand a checkpoint or queue receipt.
+    # A disconnected AI provider must not strand a checkpoint or queue receipt,
+    # but guest and unauthenticated cloud users cannot mutate another's work.
+    workspace = cloud_workspaces.current()
+    if (workspace is not None and workspace.guest) or (
+        cloud_workspaces.enabled() and cloud_auth.current_principal() is None
+    ):
+        raise HTTPException(403, "Member access is required to remove Paper work.")
     view = await run_in_threadpool(inspect_project, body.path)
     if view.project.id != body.expected_project_id:
         raise HTTPException(404, "Project not found or access denied.")
