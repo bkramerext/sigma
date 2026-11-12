@@ -300,9 +300,8 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         paper_id = "f" * 32
         paper_row = page.locator(f'[data-paper-id="{paper_id}"]')
         expect(paper_row).to_be_visible(timeout=15000)
-        reveal_id = page.evaluate(
-            "new URLSearchParams(window.location.search).get('reveal_paper')"
-        )
+        reveal_query = "new URLSearchParams(window.location.search).get('reveal_paper')"
+        reveal_id = page.evaluate(reveal_query)
         assert reveal_id == paper_id
         expect(paper_row.locator(".paper-unified-timeline")).to_be_visible()
         page.get_by_role("link", name="Go back to home page").click()
