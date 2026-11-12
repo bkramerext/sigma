@@ -1,0 +1,129 @@
+{
+  "schema_version": 13,
+  "id": "16cce18f-9cdb-44bb-9ca0-7e787d79a016",
+  "title": "Optimal Microphone Placement for a Fully Implantable Cochlear Implant",
+  "problem": "Which anatomical location and sound-sensing architecture can provide the safest, most durable and highest-quality everyday hearing for a fully implantable cochlear implant, with no continuously worn external microphone? Evaluate locations across the head and body rather than treating the usual position behind the ear as optimal by default.\n\nTHE CORE DISTINCTION. Some investigational systems place an air-conduction microphone beneath skin near the mastoid or posterior external auditory canal. Others capture vibrations from the tympanic membrane or middle ear by piezoelectric/mechanical sensors; these are not interchangeable with ordinary subcutaneous acoustic microphones. Include both, explicitly accounting for preserving natural pinna and ear-canal filtering, sensor loading of delicate structures, packaging/sealing and long-term surgical risk. The optimal *site* cannot be separated from the *sensor architecture*.\n\nANATOMICAL SEARCH SPACE. Compare at least (1) beneath skin just behind the pinna/external auditory canal, (2) over temporal/mastoid bone, (3) occipital scalp, (4) other scalp or forehead sites, (5) auricle/concha/external ear canal-adjacent options, (6) tympanic membrane/umbo/ossicular chain sensors, (7) superior neck, and (8) more distant chest/torso sites as low-prior-feasibility alternatives. Include two-microphone or reference-sensor options when a near-ear sensor benefits from cancelling chewing, heartbeat, self-voice or movement noise. Eliminate unsafe sites before comparing audio performance. External devices are a performance benchmark, not an acceptable solution to the fully implanted design goal.\n\nOBSERVABLE PROBLEM. The site changes frequency response, loss through skin/tissue, wind/clothing/rubbing noise, directional hearing, occlusion and acoustic filtering, mechanical body-noise pickup, and long-term tissue response. Biological/surgical factors include skin thickness, infection/extrusion, middle-ear damage, hair and wound care, fixation, MRI access, cable fatigue, service/revision complexity and durability of moisture barriers.\n\nPRIOR ART. Start from peer-reviewed studies: Cochlear TICI feasibility (https://pmc.ncbi.nlm.nih.gov/articles/PMC12904232/), another TICI feasibility series (https://pmc.ncbi.nlm.nih.gov/articles/PMC11711238/), UmboMic middle-ear cadaver evidence (https://pmc.ncbi.nlm.nih.gov/articles/PMC13020673/), piezofilm middle-ear microphone research (https://doi.org/10.1007/s10162-024-00927-4), historical middle-ear implant microphone placement and long-term follow-up (https://karger.com/aud/article/21/5/333/44098/A-Retrospective-Multicentre-Cohort-Review-of), and microphone placement/directionality comparisons for external CIs (https://pubmed.ncbi.nlm.nih.gov/41236923/). Expand by forward/backward citation search and clinical-trial registry checks, distinguishing prototypes, FDA-authorized clinical investigations, approved products, manufacturer claims and hypotheses. For example, in the Cochlear TICI feasibility study there were microphone-related fluid ingress failures requiring revision; a technically promising placement must still pass durability scrutiny. Do not extrapolate short studies to lifetime reliability.\n\nThis is a scientific and device-engineering investigation, not surgical advice to an individual or an argument for experimental implantation without regulatory and ethics approvals.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-11-12T22:20:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-12T22:20:00+00:00",
+      "strategy_id": "f9ba3321-93f5-4e83-9fc7-7e61643ab311"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-12T22:20:00+00:00",
+      "strategy_id": "a7b87d41-b6e2-40de-9de0-495a6b450177"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-12T22:20:00+00:00",
+      "strategy_id": "45cc976b-bae7-4112-a930-59d2a8f90de2"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "f9ba3321-93f5-4e83-9fc7-7e61643ab311",
+      "title": "Audit clinical evidence and existing microphone architectures",
+      "approach": "Start with a reproducible systematic literature search through PubMed/MEDLINE, Cochrane, clinical-trial registries, engineering and otology journals, manufacturer filings, and relevant patent prior art. Distinguish peer-reviewed human implants, cadaver studies, bench experiments, animal studies, patents, and industry claims. Compare conventional external CI microphones, subcutaneous air-conduction microphones (Cochlear TICI, earlier Carina/TIKI approaches), mechanically coupled middle-ear/umbo sensors (Acclaim, UmboMic and similar work), and multi-transducer or reference-sensor configurations. Extract exact surgical placement, coupling path, diaphragm/sensor design, external/internal comparison within the same participants when available, use conditions, sample size, follow-up, complications, and conflicts. Do not mischaracterize a middle-ear vibration sensor as a microphone placed under scalp skin. Include negative findings and clinical failures. Apply PRISMA methods and risk-of-bias appraisal with an explicit publication-search cutoff. Quantify where evidence allows and mark all unverified claims.",
+      "author_kind": "human",
+      "created_at": "2026-11-12T22:20:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Evidence-graded literature map of clinical architectures, anatomical placement and outcomes, including failure cases.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "a7b87d41-b6e2-40de-9de0-495a6b450177",
+      "title": "Evaluate anatomical sites and acoustic transmission physics",
+      "approach": "Define candidate locations as physically distinct acoustic coupling paths: posterior auricular skin near the canal; mastoid/temporal scalp; occipital scalp; other scalp/forehead sites; canal- or concha-adjacent embedded structures; middle ear/umbo or ossicular vibration sensors; high cervical neck; and more distant subcutaneous trunk/chest positions as deliberately challenging comparators. Include multi-sensor placements and remote reference microphones if beneficial. For each, model air-to-skin attenuation and tissue filtering; pinna/canal directionality and localization cues; hair, skin, thickness, scars and age changes; body-conducted speech, chewing, swallowing, pulsations and rubbing/clothing noise; surgical access, infection/extrusion, vascular, nerve and ear-canal risk; charging/interference and MRI constraints; and whether an implant can be fixed securely without acoustic degradation. Specify assumptions and measurable parameters; distinguish feasible candidates from hypothetical ones. Use physical/clinical measurements when available, not intuition about keeping hair short or microphone shape. Treat hidden invasive anatomy constraints as hard exclusions until validated.",
+      "author_kind": "human",
+      "created_at": "2026-11-12T22:20:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Anatomy-aware physical comparison of head, ear, neck and remote-body locations, with hard safety constraints.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "45cc976b-bae7-4112-a930-59d2a8f90de2",
+      "title": "Choose and stress-test a durable high-quality configuration",
+      "approach": "Develop a reproducible multi-objective decision framework with safety as a non-negotiable gate, durability/revision risk as the next constraint, and sound quality as the main optimization among safe options. Define quantitative endpoints: speech recognition in quiet and noise, input SNR/noise floor, frequency response, directionality/spatial cues, microphone sensitivity after tissue thickness and scar changes, internal body-noise burden, speech/self-voice feedback, reliability of sealing/cables/adhesives/packaging, device and revision survival, MRI compatibility and patient usability. Extract comparative rates or intervals without combining unlike study endpoints. Analyze worst-case implant ageing, sweat/water ingress, trauma, hair/clothing friction, movement/exercise and infection. Propose controlled benchtop/acoustic-head, cadaver and (only after ethical approval) clinical studies, with paired comparisons and predeclared minimum clinically important differences. Produce a ranked Pareto frontier and conditional recommendations by anatomy and device architecture. If evidence cannot support a single best location, say so and identify the decisive safe experiments rather than inventing a winner.",
+      "author_kind": "human",
+      "created_at": "2026-11-12T22:20:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Safety-gated Pareto ranking and falsifiable experiments for long-term audio quality and device durability.",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "medical",
+  "active_order": [
+    "f9ba3321-93f5-4e83-9fc7-7e61643ab311",
+    "a7b87d41-b6e2-40de-9de0-495a6b450177",
+    "45cc976b-bae7-4112-a930-59d2a8f90de2"
+  ],
+  "difficulty": "hard",
+  "desired_outcomes": "Identify a conditional, evidence-based best placement or defensible Pareto-optimal set of placements for a fully implanted cochlear implant microphone or alternative acoustic sensor, prioritizing safety and long-term durability while optimizing real-world audio quality.\n\nDELIVERABLES. (1) A graded synthesis of clinical, cadaveric, engineering and device-failure evidence; (2) an anatomical feasibility map that includes near-ear, scalp, middle-ear, cervical and remote-body options; (3) a safety-gated matrix of engineering tradeoffs, including tissue attenuation, microphone directionality, body noise, cosmetic and usability aspects, and mechanical load; (4) a ranked or conditional selection of preferred architectures with uncertainty, hard exclusions and clearly stated individual anatomy dependencies; and (5) practical, falsifiable measurements and study designs capable of overturning the recommendation.\n\nDECISION POLICY. Never trade a known serious surgical hazard for modest predicted sound-quality improvement. Among acceptably safe candidates, prefer established durability or demonstrably serviceable designs before small acoustic gains. The remaining candidates must be assessed for speech-in-noise and naturalistic sound quality, not solely for detection thresholds. Missing evidence is uncertainty, not proof of safety, superiority or inferiority. Any proposed novel combination must be contrasted with previous patents and engineering literature.\n\nSUCCESS CRITERIA. The study should either identify a more promising site/sensor concept that survives independent prior-art and safety review, or establish why no single placement can currently be justified and specify the next experiments required to decide.",
+  "paper_requirements": "Use PRISMA 2020 principles for a transparent literature search, eligibility criteria, deduplication, evidence table, citation tracing, and risk-of-bias/industry-conflict analysis. Observe ICMJE recommendations for authorship, transparency, limitation statements, and medical publication. Distinguish a systematic review from a narrative review if full systematic searching is not actually performed. Quote outcomes numerically only when sourced and use consistent denominators, duration and endpoints.\n\nMETHODS AND COMPARATORS. Explicitly separate subcutaneous air-conduction microphones, osseous/soft-tissue vibration pickups and tympanic/ossicular or other internal sensors. Compare each anatomically feasible placement against the external microphone benchmark and at least two viable implant architectures. Include surgical/implantability constraints: nerves, vessels, incision and skin flap, middle-ear mechanics, access for repairs, bone fixation, MRI, cable routing, battery/charging and long-term mechanical stress.\n\nENDPOINTS. Report speech perception (quiet/noise), frequency response, acoustic gain/attenuation, SNR, directionality/localization, self-generated noise, material and sealing failure, revision/explant rate, infection/skin complications, time horizon and quality-of-life metrics. Do not infer comparative superiority from separate uncontrolled trials without accounting for device, participants and protocol. State all observed rates with study sample size and follow-up, and distinguish direct evidence from models and expert hypotheses.\n\nANALYSIS. Provide a structured location-by-architecture matrix with safety exclusions, graded durability, acoustic performance and overall confidence; a Pareto frontier or transparent sensitivity analysis of weighting; potential confounders and at least one genuine counterexample to the leading choice. Model skin thickness, tissue motion and frequency response when supported by data, but do not invent measured values.\n\nILLUSTRATIONS. Where supported by evidence, include four clearly captioned original diagrams: (1) an anatomical site map, (2) alternative sound-sensing/coupling architectures, (3) the signal and body-noise pathways, and (4) a risk-versus-sound-quality decision chart. Never label a hypothetical route as clinically validated.\n\nCONCLUSIONS. State the strongest defensible conditional recommendation and its limitations, including what would make it fail. Propose benchtop/temporal-bone/clinical validation in sequence, requiring expert surgical review and ethics approval before any human evaluation. No personalized treatment recommendation.",
+  "project_type_snapshot": null,
+  "source_material_links": [
+    {
+      "id": "d6a1be08a55243cfad346e619cf58301",
+      "kind": "link",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12904232/",
+      "uploaded_by": null,
+      "uploaded_at": "2026-11-12T22:20:00+00:00",
+      "enabled": true
+    },
+    {
+      "id": "097e5a436d414b9fb9c87ceef34be920",
+      "kind": "link",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11711238/",
+      "uploaded_by": null,
+      "uploaded_at": "2026-11-12T22:20:00+00:00",
+      "enabled": true
+    },
+    {
+      "id": "4c314ce9ea9143a4ae4701cae0db1219",
+      "kind": "link",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13020673/",
+      "uploaded_by": null,
+      "uploaded_at": "2026-11-12T22:20:00+00:00",
+      "enabled": true
+    },
+    {
+      "id": "2a36c2dbd0784961957d2914d911da7c",
+      "kind": "link",
+      "url": "https://doi.org/10.1007/s10162-024-00927-4",
+      "uploaded_by": null,
+      "uploaded_at": "2026-11-12T22:20:00+00:00",
+      "enabled": true
+    },
+    {
+      "id": "589145e9f3ad4c7887d29a31a6efa123",
+      "kind": "link",
+      "url": "https://karger.com/aud/article/21/5/333/44098/A-Retrospective-Multicentre-Cohort-Review-of",
+      "uploaded_by": null,
+      "uploaded_at": "2026-11-12T22:20:00+00:00",
+      "enabled": true
+    },
+    {
+      "id": "b452cd37c8c742f4b29ffb2d113b221b",
+      "kind": "link",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/41236923/",
+      "uploaded_by": null,
+      "uploaded_at": "2026-11-12T22:20:00+00:00",
+      "enabled": true
+    }
+  ]
+}
