@@ -171,10 +171,13 @@ with sync_playwright() as playwright:
     title_box = idle_title.bounding_box()
     tooltip_box = title_tooltip.bounding_box()
     assert title_box and tooltip_box
-    assert abs(
-        (title_box["x"] + title_box["width"] / 2)
-        - (tooltip_box["x"] + tooltip_box["width"] / 2)
-    ) < 3, (title_box, tooltip_box)
+    assert (
+        abs(
+            (title_box["x"] + title_box["width"] / 2)
+            - (tooltip_box["x"] + tooltip_box["width"] / 2)
+        )
+        < 3
+    ), (title_box, tooltip_box)
     assert tooltip_box["y"] >= title_box["y"] + title_box["height"] + 4
     page.mouse.move(0, 0)
     toggles = {
@@ -614,18 +617,22 @@ with sync_playwright() as playwright:
         }"""
     )
     assert len(wrapped_geometry["lineWidths"]) == 2, wrapped_geometry
-    assert abs(
-        wrapped_geometry["width"] - max(wrapped_geometry["lineWidths"])
-    ) <= 6, wrapped_geometry
+    assert abs(wrapped_geometry["width"] - max(wrapped_geometry["lineWidths"])) <= 6, (
+        wrapped_geometry
+    )
     assert wrapped_geometry["width"] < wrapped_geometry["available"], wrapped_geometry
     expect(page.get_by_role("tooltip")).to_have_text("Toggle all project sections")
     wrapped_button_box = wrapped_title.bounding_box()
     wrapped_tooltip_box = page.get_by_role("tooltip").bounding_box()
     assert wrapped_button_box and wrapped_tooltip_box
-    assert abs(
-        wrapped_button_box["x"] + wrapped_button_box["width"] / 2
-        - (wrapped_tooltip_box["x"] + wrapped_tooltip_box["width"] / 2)
-    ) < 3, (wrapped_button_box, wrapped_tooltip_box)
+    assert (
+        abs(
+            wrapped_button_box["x"]
+            + wrapped_button_box["width"] / 2
+            - (wrapped_tooltip_box["x"] + wrapped_tooltip_box["width"] / 2)
+        )
+        < 3
+    ), (wrapped_button_box, wrapped_tooltip_box)
     assert wrapped_tooltip_box["y"] >= wrapped_button_box["y"] + wrapped_button_box["height"] + 4
     wrapped_title.click()
     expect(page.locator("#project-pane-heading .workspace-section-disclosure")).to_have_attribute(
