@@ -98,6 +98,34 @@ class SampleCopyTests(unittest.TestCase):
         )
         self.assertEqual(project.events[-1].kind, "project.updated")
 
+    def test_medical_cochlear_microphone_sample_is_grounded_and_editable(self):
+        """Clinical sample ships literature, anatomical alternatives and safe comparisons."""
+        catalog_root = Path(__file__).resolve().parents[1] / "samples"
+        with patch.object(samples, "SAMPLES", catalog_root):
+            sample = next(
+                item
+                for item in samples.sample_projects()["projects"]
+                if item["id"] == "fully-implantable-cochlear-microphone-placement"
+            )
+            self.assertEqual(sample["investigation_type"], "medical")
+            self.assertEqual(sample["difficulty"], "hard")
+            self.assertEqual(sample["strategy_count"], 3)
+            copied = samples.open_sample_project(
+                "fully-implantable-cochlear-microphone-placement"
+            )
+
+        project = inspect_project(copied.path).project
+        self.assertEqual(project.investigation_type, "medical")
+        self.assertNotEqual(project.id, "16cce18f-9cdb-44bb-9ca0-7e787d79a016")
+        self.assertEqual(len(project.active_order), 3)
+        self.assertEqual(len(project.source_material_links), 6)
+        self.assertIn("middle ear", project.problem.lower())
+        self.assertIn("chest/torso", project.problem)
+        self.assertIn("PRISMA", project.paper_requirements)
+        self.assertIn("ICMJE", project.paper_requirements)
+        self.assertIn("safety", project.desired_outcomes.lower())
+        self.assertTrue(all(item["enabled"] for item in project.source_material_links))
+
     def test_opening_twice_creates_two_independent_recent_copies(self):
         first = samples.open_sample_project("sample")
         second = samples.open_sample_project("sample")
