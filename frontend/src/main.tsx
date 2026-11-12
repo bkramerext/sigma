@@ -1853,7 +1853,12 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
-      await load(next.id);
+      // The admission response is already a complete session snapshot. Display it
+      // without blocking the controls on reloading every saved session and
+      // rebuilding Current Understanding; reconcile the history asynchronously.
+      const initialSnapshot = sessionForDisplay(next);
+      if (initialSnapshot) setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
+      void load(next.id).catch(reportReadFailure);
       if (next.research_method_sources?.advisory) {
         setAnnouncement(next.research_method_sources.advisory);
       }
@@ -1891,7 +1896,12 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           // The backend's preflight authorization responses are handled by
           // the two confirmations below, not global Request Failed toasts.
           // Unexpected errors are still reported by the enclosing catch.
-          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
+          const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
+          // A successful control response contains the authoritative new status.
+          // Do not keep the button busy for an unrelated whole-project reload.
+          const acknowledged = sessionForDisplay(accepted);
+          if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
+          void load(target.id).catch(reportReadFailure);
           break;
         } catch (cause) {
           const message = errorMessage(cause);
@@ -1932,7 +1942,6 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           return next;
         });
       }
-      await load(target.id);
     }
     catch (cause) {
       await load(target.id).catch(() => {});
@@ -2858,6 +2867,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }, [path, onSectionOpened]);
   const request = useRef<AbortController | null>(null);
   const deliberatePaperStop = useRef(false);
+  const paperStopPending = useRef(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
   const selectedRunIdRef = useRef<string | null>(null);
@@ -3390,7 +3400,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function cancelGeneration(runId: string | null = selectedRunIdRef.current) {
     const target = paperRuns.find(run => run.run_id === runId);
-    if (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? '')) return;
+    if (paperStopPending.current || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    paperStopPending.current = true;
+    setPhase('Stopping paper…');
     try {
       const response = await fetch('/api/projects/papers/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
@@ -3408,8 +3420,16 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       } else {
         setSuccess('No active paper generation was found. Checking saved versions.');
       }
-      await refresh(selected?.paper_id);
-    } catch (cause) { setError(errorMessage(cause)); }
+      setPhase('');
+      // The durable cancel acknowledgment is enough to clear the pending
+      // control. Reload the (potentially large) saved paper state separately.
+      void refresh(selected?.paper_id, true);
+    } catch (cause) {
+      setPhase('');
+      setError(errorMessage(cause));
+    } finally {
+      paperStopPending.current = false;
+    }
   }
 
   async function discardDraft() {
