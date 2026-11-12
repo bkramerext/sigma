@@ -824,6 +824,15 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         assert active_delete_fixture.status == 200, active_delete_fixture.text()
         active_run = get_json(active_delete_fixture)
+        owner.goto(url)
+        disclosure = owner.get_by_role("button", name="Papers", exact=True)
+        if disclosure.get_attribute("aria-expanded") == "false":
+            disclosure.click()
+        expect(
+            owner.get_by_role("button", name=f"Stop Paper {active_run['number']}")
+        ).to_be_visible(timeout=20000)
+        # Keep the active run selected. The later stopped run must remain a
+        # separately controlled card, despite the shared project's polling.
         stopped_delete_fixture = owner_context.request.post(
             ui + "/api/__fixture/collaboration-paper-stopped",
             headers={"Origin": ui},
@@ -831,10 +840,6 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         assert stopped_delete_fixture.status == 200, stopped_delete_fixture.text()
         stopped_run = get_json(stopped_delete_fixture)
-        owner.goto(url)
-        disclosure = owner.get_by_role("button", name="Papers", exact=True)
-        if disclosure.get_attribute("aria-expanded") == "false":
-            disclosure.click()
         remove = owner.get_by_role(
             "button", name=f"Remove unfinished Paper {stopped_run['number']}"
         )
