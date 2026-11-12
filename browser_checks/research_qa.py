@@ -294,10 +294,13 @@ with sync_playwright() as playwright:
     ).bounding_box()
     last_title_rect = title_rects[-1]
     assert copied_icon_box and copied_icon_box["x"] > markdown_box["x"]
-    same_title_line = abs(
-        (markdown_box["y"] + markdown_box["height"] / 2)
-        - (last_title_rect["y"] + last_title_rect["height"] / 2)
-    ) < 14
+    same_title_line = (
+        abs(
+            (markdown_box["y"] + markdown_box["height"] / 2)
+            - (last_title_rect["y"] + last_title_rect["height"] / 2)
+        )
+        < 14
+    )
     if same_title_line:
         assert markdown_box["x"] >= last_title_rect["right"] - 1, (
             markdown_box,
