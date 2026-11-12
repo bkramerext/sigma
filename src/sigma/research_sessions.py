@@ -6463,12 +6463,11 @@ async def start_session(
     if view.project.id != expected_project_id:
         raise ProjectError("Project changed; reopen it before starting research")
     selected_ids = list(dict.fromkeys(strategy_ids or [strategy_id]))
+    # Reuse the admission snapshot for idempotency and frozen methodology
+    # discovery. The later locked read still checks the authoritative records.
+    initial_records = await asyncio.to_thread(_all, view.path)
     existing = next(
-        (
-            record
-            for record in await asyncio.to_thread(_all, view.path)
-            if record.get("idempotency_key") == idempotency_key
-        ),
+        (record for record in initial_records if record.get("idempotency_key") == idempotency_key),
         None,
     )
     if existing is not None:
@@ -6537,7 +6536,7 @@ async def start_session(
         view.project.title,
         view.project.problem,
         (item.approach for item in selected_strategies if item is not None),
-        _all(view.path),
+        initial_records,
         fetch_content=True,
     )
     async with _manager_lock:
