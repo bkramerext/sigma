@@ -7525,7 +7525,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
             });
             return scored[0].paper_id;
           })
-        : openSettings ? Promise.resolve(undefined)
+        : openSettings || cached?.project.id === entry.id ? Promise.resolve(undefined)
         : preloadPaperListing(entry.path, entry.id).then(() => undefined);
       const [view, paperId] = await Promise.all([
         cached?.project.id === entry.id
