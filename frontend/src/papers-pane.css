@@ -251,7 +251,17 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.workspace-page .papers-pane .saved-paper-second-line .paper-title-open-link { color: inherit; text-decoration: none; cursor: pointer; }
+/* A paper title is a text-sized link, not an invisible full-row hover target.
+   Constrain the tooltip anchor to the actual title while allowing long titles to wrap. */
+.workspace-page .papers-pane .saved-paper-second-line .paper-title-open-link {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  vertical-align: top;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
 .workspace-page .papers-pane .saved-paper-second-line .paper-title-open-link:is(:hover,:focus-visible) { text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-title-toggle { text-decoration: none; cursor: pointer; }
 .workspace-page .papers-pane .saved-paper-title-toggle:is(:hover,:focus-visible) { text-decoration: none; }
