@@ -2920,21 +2920,24 @@ def _read_version_sequence(path: str) -> int:
     return max(0, value)
 
 
-def next_paper_number_for_activity(path: str) -> int:
+def next_paper_number_for_activity(path: str, *, include_reserved: bool = True) -> int:
     """Cheap read-only paper number for activity indicators.
 
     Modern projects keep a small monotonic version sequence. Only legacy
     projects lacking that sequence need to inspect older saved paper records.
+    When an atomic reservation will immediately read the run ledger itself,
+    include_reserved=False avoids a redundant SQLite connection and ACL query.
     This never allocates a number or mutates a paper.
     """
     current = _read_version_sequence(path)
     from sigma import project_collaboration
 
-    try:
-        reserved = project_collaboration.list_execution_runs(path, "paper")
-        current = max(current, *(item["number"] for item in reserved), 0)
-    except (OSError, ValueError):
-        pass  # Legacy/unregistered project may not have a reservation table.
+    if include_reserved:
+        try:
+            reserved = project_collaboration.list_execution_runs(path, "paper")
+            current = max(current, *(item["number"] for item in reserved), 0)
+        except (OSError, ValueError):
+            pass  # Legacy/unregistered project may not have a reservation table.
     if current:
         return current + 1
     target = project_path(path)
