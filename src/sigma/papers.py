@@ -4704,6 +4704,28 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
     for row in rows:
         if row["status"] == "discarded":
             continue
+        if row["status"] == "complete" and row.get("artifact_id"):
+            # An attributed published paper has a durable ledger receipt.
+            # It does not need checkpoint, preflight or PDF inspection on
+            # every project-page listing. Fetch those only for unfinished runs.
+            published_id = row["artifact_id"]
+            result.append(
+                {
+                    **row,
+                    "status": "complete",
+                    "progress": {
+                        "status": "complete",
+                        "stage": "complete",
+                        "paper_id": published_id,
+                    },
+                    "preflight_needed": False,
+                    "paper_id": published_id,
+                    "can_control": False,
+                    "can_resume": False,
+                    "can_remove": viewer is None or viewer == row["creator_email"],
+                }
+            )
+            continue
         run_id = row["run_id"]
         with paper_run_scope(run_id):
             progress = progress_status(path)
