@@ -122,7 +122,9 @@ def main():
             page.mouse.move(0, 0)
         assert not errors, errors
         browser.close()
-        print("PASS project title hover fits text, tooltip follows pointer and click behavior remains")
+        print(
+            "PASS project title hover fits text, tooltip follows pointer and click behavior remains"
+        )
 
 
 if __name__ == "__main__":
