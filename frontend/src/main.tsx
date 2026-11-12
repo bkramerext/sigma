@@ -1923,6 +1923,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     try {
       let recoveryAction: 'pause' | 'resume' | 'stop' | 'repair' = action;
       let authorizedCalls = 0;
+      let releaseRetries = 0;
       for (;;) {
         try {
           // The backend's preflight authorization responses are handled by
@@ -1937,6 +1938,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           break;
         } catch (cause) {
           const message = errorMessage(cause);
+          // Fast Stop acknowledges a durable fence before the old worker
+          // finishes cleanup. Avoid surfacing a transient Resume race as a
+          // failure or dispatching a replacement while that lock is held.
+          if (action === 'resume' && message.includes('Session execution is still releasing resources')
+            && releaseRetries++ < 12) {
+            await new Promise(resolve => window.setTimeout(resolve, 250));
+            continue;
+          }
           const attemptShortfall = message.match(/Resume with exactly (\d+) explicitly authorized additional attempts/);
           if (action === 'resume' && authorizedCalls === 0 && attemptShortfall) {
             const count = Number(attemptShortfall[1]);
