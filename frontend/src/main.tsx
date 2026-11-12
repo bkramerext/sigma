@@ -7759,6 +7759,34 @@ function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, gu
   const [savedProjects, setSavedProjects] = useState<RecentProject[]>(() => recentProjectListCache.get(cacheScope) ?? []);
   const [savedLoading, setSavedLoading] = useState(() => !recentProjectListCache.has(cacheScope));
   useEffect(() => {
+    // The favicon's 5-second activity poll already has these booleans.
+    // Reuse them for Home badges instead of rereading every paper and session.
+    const onActivity = (event: Event) => {
+      const updates = (event as CustomEvent<RecentProject[]>).detail;
+      if (!Array.isArray(updates)) return;
+      const byId = new Map(updates.map(item => [item.id, item]));
+      setSavedProjects(current => current.map(entry => {
+        const next = byId.get(entry.id);
+        if (!next) return entry;
+        const changed = entry.research_running !== next.research_running
+          || entry.paper_activity !== next.paper_activity
+          || entry.answer_active !== next.answer_active;
+        if (!changed) return entry;
+        return {
+          ...entry,
+          research_running: next.research_running,
+          paper_activity: next.paper_activity,
+          answer_active: next.answer_active,
+          activity_author: next.activity_author,
+          // Do not navigate using a run ID from an earlier activity snapshot.
+          activity_runs: [],
+        };
+      }));
+    };
+    window.addEventListener('sigma-saved-activity', onActivity);
+    return () => window.removeEventListener('sigma-saved-activity', onActivity);
+  }, []);
+  useEffect(() => {
     if (savedLoading) return;
     recentProjectListCache.delete(cacheScope);
     recentProjectListCache.set(cacheScope, savedProjects);
@@ -9298,6 +9326,9 @@ function App() {
         const body = await response.json() as { projects: RecentProject[] };
         if (controller.signal.aborted) return;
         const all = body.projects ?? [];
+        // Home consumes this already-fetched activity summary. Never force a
+        // paper-score or historical-paper scan just to refresh running icons.
+        window.dispatchEvent(new CustomEvent('sigma-saved-activity', { detail: all }));
         setGlobalActivity(all.some(row => row.research_running || row.answer_active || row.paper_generating || row.paper_activity === 'active')
           ? 'active' : all.some(row => row.paper_activity === 'queued') ? 'queued' : null);
       } catch { /* Keep the last known activity; a transient error must not clear it. */ }
