@@ -123,6 +123,46 @@ async def start_held_paper(body: dict[str, str]):
     return {"run_id": run_id, "number": receipt["number"]}
 
 
+@app.post("/api/__fixture/collaboration-paper-stopped")
+async def create_stopped_paper(body: dict[str, str]):
+    """Real, removable run reservation while a different paper is active."""
+    path = body.get("path", "")
+    if not isinstance(path, str) or not path:
+        raise HTTPException(400, "Missing project path")
+    view = inspect_project(path)
+    project_collaboration.register_owner(view)
+    run_id = uuid4().hex
+    receipt = project_collaboration.reserve_execution_run(
+        path,
+        "paper",
+        run_id,
+        papers.next_paper_number_for_activity(path) - 1,
+        model="fixture-model",
+        thinking="medium",
+    )
+    if receipt is None:
+        raise HTTPException(409, "Paper admission unavailable")
+    with papers.paper_run_scope(run_id, number=receipt["number"]):
+        now = papers._now()
+        papers._write_progress_status(
+            path,
+            {
+                "run_id": run_id,
+                "status": "cancelled",
+                "stage": "planning",
+                "current": None,
+                "total": None,
+                "started_at": now,
+                "updated_at": now,
+                "elapsed_seconds": 8,
+                "model": "fixture-model",
+                "reasoning_effort": "medium",
+                "resume_stage": "planning",
+            },
+        )
+    return {"run_id": run_id, "number": receipt["number"]}
+
+
 @app.post("/api/__fixture/collaboration-paper-release")
 async def release_held_paper(body: dict[str, str]):
     run_id = body.get("run_id", "")

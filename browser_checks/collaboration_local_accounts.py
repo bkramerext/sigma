@@ -815,6 +815,54 @@ def exercise(ui: str, workspaces: Path) -> None:
                 data={"path": path, "run_id": paper["run_id"]},
             )
             assert released_paper.status == 200, released_paper.text()
+        # Real-Chrome regression: removing a stopped paper is independent of
+        # another active paper, including confirmation hit testing and API.
+        active_delete_fixture = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-paper-start",
+            headers={"Origin": ui},
+            data={"path": path},
+        )
+        assert active_delete_fixture.status == 200, active_delete_fixture.text()
+        active_run = get_json(active_delete_fixture)
+        stopped_delete_fixture = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-paper-stopped",
+            headers={"Origin": ui},
+            data={"path": path},
+        )
+        assert stopped_delete_fixture.status == 200, stopped_delete_fixture.text()
+        stopped_run = get_json(stopped_delete_fixture)
+        owner.goto(url)
+        disclosure = owner.get_by_role("button", name="Papers", exact=True)
+        if disclosure.get_attribute("aria-expanded") == "false":
+            disclosure.click()
+        remove = owner.get_by_role(
+            "button", name=f"Remove unfinished Paper {stopped_run['number']}"
+        )
+        expect(remove).to_be_visible(timeout=20000)
+        remove.click()
+        confirmation = owner.get_by_role(
+            "dialog", name=f"Confirm removing unfinished paper {stopped_run['number']}"
+        )
+        expect(confirmation).to_be_visible()
+        confirm = confirmation.get_by_role("button", name="Confirm", exact=True)
+        expect(confirm).to_be_enabled()
+        confirm.click()
+        expect(confirmation).not_to_be_visible(timeout=15000)
+        expect(remove).to_have_count(0)
+        run_listing = get_json(
+            owner_context.request.get(ui + "/api/projects/papers", params={"path": path})
+        )["runs"]
+        assert all(row["run_id"] != stopped_run["run_id"] for row in run_listing)
+        assert any(
+            row["run_id"] == active_run["run_id"] and row["status"] == "active"
+            for row in run_listing
+        ), "Deleting the stopped paper disturbed the active paper"
+        released_active = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-paper-release",
+            headers={"Origin": ui},
+            data={"path": path, "run_id": active_run["run_id"]},
+        )
+        assert released_active.status == 200, released_active.text()
         for home in homes:
             home.close()
 
