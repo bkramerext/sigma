@@ -29,7 +29,7 @@ textarea { resize: vertical; line-height: 1.6; }
 button { cursor: pointer; border: 0; border-radius: 5px; background: #295c4b; color: white; padding: 13px 20px; font: inherit; font-size: 13px; font-weight: 600; }
 .input-row button { white-space: nowrap; }
 button span { margin-left: 16px; }
-button:disabled { cursor: not-allowed; background: #e7e9e0; color: #68736b; }
+button:disabled { cursor: default; background: #e7e9e0; color: #68736b; }
 input:disabled, textarea:disabled { opacity: .7; }
 :focus-visible { outline: 2px solid #6b9e7e; outline-offset: 4px; }
 h1:focus, h3[tabindex]:focus { outline: none; }
