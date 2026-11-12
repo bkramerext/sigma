@@ -277,8 +277,18 @@ class CollaborationTests(TestCase):
             ),
             patch("sigma.recents._index", empty_saved_index),
             patch(
-                "sigma.recents.inspect_project",
-                return_value=SimpleNamespace(path=self.path, project=project),
+                "sigma.recents._project_header",
+                return_value=SimpleNamespace(
+                    path=self.path,
+                    id=project.id,
+                    title=project.title,
+                    investigation_type=project.investigation_type,
+                    project_type_snapshot=project.project_type_snapshot,
+                    strategy_count=len(project.active_order),
+                    difficulty=project.difficulty,
+                    ai_model="test-model",
+                    reasoning_effort="high",
+                ),
             ),
         ):
             invited, visible = shared.shared_listing()

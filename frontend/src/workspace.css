@@ -273,7 +273,10 @@
 .workspace-page .research-running-indicator-frame { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; height: 24px; overflow: visible; }
 .workspace-page .research-running-indicator-frame .research-running-indicator { margin-left: 0; }
 .workspace-page .project-header-title-action:hover,
-.workspace-page .project-header-title-idle-action:hover { background: transparent; color: var(--sigma-copper-foreground); }
+.workspace-page .project-header-title-idle-action:hover {
+  background: transparent; box-shadow: none; color: var(--workspace-copper);
+  text-decoration: none;
+}
 .workspace-page .project-header-title-action:focus-visible,
 .workspace-page .project-header-title-idle-action:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 .workspace-page .project-header-title-row { display: flex; align-items: center; gap: 2px; width: 100%; min-width: 0; overflow: hidden; white-space: nowrap; }

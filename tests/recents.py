@@ -63,6 +63,40 @@ def check_recent_list_does_not_validate_sample_pdfs(root: Path) -> None:
             assert response.headers["Server-Timing"].startswith("saved-projects;dur=")
 
 
+def check_project_list_reuses_validated_metadata(root: Path) -> None:
+    """Home polls reuse small validated headers and invalidate after an edit."""
+    from sigma import recents
+
+    view = initialize_project(
+        root / "home-header-cache-test.sigma",
+        "Home header cache",
+        "Avoid parsing old event histories on every Home refresh.",
+    )
+    open_project(view.path)
+    recents._cached_project_header.cache_clear()
+    try:
+        with patch.object(recents, "inspect_project", wraps=inspect_project) as decoder:
+            first = {item["id"]: item for item in home_projects(lightweight=True)["projects"]}
+            cold_reads = decoder.call_count
+            assert first[view.project.id]["title"] == view.project.title
+            second = {item["id"]: item for item in home_projects(lightweight=True)["projects"]}
+            assert second[view.project.id] == first[view.project.id]
+            assert decoder.call_count == cold_reads, "Unchanged Home poll decoded project history"
+            create_strategy(
+                view.path, "Additional hypothesis", "Metadata must update after a save."
+            )
+            third = {item["id"]: item for item in home_projects(lightweight=True)["projects"]}
+            assert decoder.call_count > cold_reads, (
+                "Updated project did not invalidate Home metadata"
+            )
+            assert (
+                third[view.project.id]["strategy_count"]
+                == first[view.project.id]["strategy_count"] + 1
+            )
+    finally:
+        recents._cached_project_header.cache_clear()
+
+
 def check_sample_index_metadata_does_not_decode_full_project() -> None:
     """Saved/name checks must not load project history or the project-type catalog."""
     from sigma import samples
@@ -898,6 +932,7 @@ def check(root: Path, base: Path) -> None:
     check_title_collision_avoids_deep_metadata()
     check_recent_list_does_not_validate_sample_pdfs(root)
     check_project_metadata_cache_invalidation(root)
+    check_project_list_reuses_validated_metadata(root)
     check_home_list_uses_only_paper_records(root)
     check_shallow_home_does_not_load_deep_status(root)
     check_home_session_status_cache(root)

@@ -483,11 +483,17 @@ def exercise(ui: str, workspaces: Path) -> None:
         assert first_run["created_by"] == OWNER
         assert second_run["created_by"] == COLLABORATOR
 
-        # The local mock advances automatically on reads, unlike a real
-        # worker with an OS liveness lock. Freeze immediately after both
-        # admissions, before performing the first read of shared status.
-        # This preserves the same concurrency assertion without an accidental
-        # three-read completion race during browser startup.
+        # Both mocks are initially queued. Explicitly advance the first run
+        # once before freezing; otherwise this test races the browser's
+        # background polling and can find no running run at all. The armed
+        # stage-1 guard holds a running mock, so the probe cannot finish it.
+        primed = owner_context.request.get(
+            ui + "/api/projects/research-sessions", params={"path": path}
+        )
+        assert primed.status == 200, primed.text()
+        assert any(run["status"] == "running" for run in get_json(primed)["sessions"]), (
+            "Fixture failed to promote one queued mock before freezing"
+        )
         held = owner_context.request.post(
             ui + "/api/__fixture/collaboration-freeze-sessions",
             headers={"Origin": ui},
@@ -511,7 +517,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             page.goto(url)
             page.wait_for_function(
                 """({first, second, owner, member, firstStatus, secondStatus}) => {
-                    const tip = document.querySelector('.project-header-title-action')
+                    const tip = document.querySelector('.project-header-title-action .research-running-indicator-frame')
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 2
@@ -618,7 +624,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             assert {run["status"] for run in sessions} == {"active", "queued"}, runs
             page.wait_for_function(
                 """({owner, member}) => {
-                    const tip = document.querySelector('.project-header-title-action')
+                    const tip = document.querySelector('.project-header-title-action .research-running-indicator-frame')
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 4
@@ -699,7 +705,7 @@ def exercise(ui: str, workspaces: Path) -> None:
             }, mixed
             page.wait_for_function(
                 """({owner, member}) => {
-                    const tip = document.querySelector('.project-header-title-action')
+                    const tip = document.querySelector('.project-header-title-action .research-running-indicator-frame')
                         ?.getAttribute('data-tooltip') || '';
                     const lines = tip.split('\\n').filter(Boolean);
                     return lines.length === 6

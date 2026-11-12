@@ -399,6 +399,78 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         assert guest_b["export"] == 404, guest_b
         other_context.close()
 
+        # Create a second project without navigating so this tab has its
+        # saved-list metadata but has never cached its full ProjectView.
+        cold_path = page.evaluate(
+            """async () => {
+              const catalog = await (await fetch('/api/projects/samples')).json();
+              const candidate = catalog.projects.find(
+                sample => sample.title === 'Operation Narrow Passage');
+              if (!candidate) throw new Error('Cold-open sample missing');
+              const response = await fetch('/api/projects/samples/open', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({sample_id: candidate.id})
+              });
+              if (!response.ok) throw new Error('Could not create cold-open project');
+              return (await response.json()).path;
+            }"""
+        )
+        assert cold_path != sandbox_path
+        cold_group = page.locator("#recent-panel details.recent-type-group").filter(
+            has_text="Operation Narrow Passage"
+        )
+        expect(cold_group).to_have_count(1, timeout=20000)
+        cold_group.evaluate("element => { element.open = true; }")
+        cold_entry = cold_group.locator("button.recent-open").filter(
+            has_text="Operation Narrow Passage"
+        )
+        expect(cold_entry).to_be_visible()
+
+        # Hold real open responses so browser assertions distinguish waiting on
+        # Home (cold) from immediate navigation followed by revalidation (warm).
+        page.evaluate(
+            """() => {
+              const original = window.fetch.bind(window);
+              window.__sigmaOriginalFetch = original;
+              window.__sigmaOpenRevalidations = 0;
+              window.fetch = (request, options) => {
+                if (String(request).endsWith('/api/projects/open')) {
+                  window.__sigmaOpenRevalidations += 1;
+                  return new Promise(resolve => setTimeout(resolve, 2500))
+                    .then(() => original(request, options));
+                }
+                return original(request, options);
+              };
+            }"""
+        )
+        cold_entry.click()
+        expect(cold_entry.locator(".project-opening-label")).to_have_text("Opening...")
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Operation Narrow Passage v[0-9]+"))
+        ).to_be_visible(timeout=7000)
+
+        page.get_by_role("link", name="Go back to home page").click()
+        page.get_by_role("tab", name="My Work").click()
+        warm_group = page.locator("#recent-panel details.recent-type-group").filter(
+            has_text="Did Jesus Use Cannabis?"
+        )
+        expect(warm_group).to_have_count(1)
+        warm_group.evaluate("element => { element.open = true; }")
+        warm_entry = warm_group.locator("button.recent-open").filter(
+            has_text="Did Jesus Use Cannabis?"
+        )
+        expect(warm_entry).to_be_visible()
+        page.evaluate("window.__sigmaOpenRevalidations = 0")
+        warm_entry.click()
+        expect(
+            page.get_by_role("heading", name=re.compile(r"Did Jesus Use Cannabis\? v[12]"))
+        ).to_be_visible(timeout=1800)
+        page.wait_for_function("window.__sigmaOpenRevalidations > 0", timeout=1800)
+        expect(page.get_by_text("Opening project…")).to_have_count(0)
+        page.evaluate("() => { window.fetch = window.__sigmaOriginalFetch; }")
+
         assert not [
             request
             for request in mutation_requests

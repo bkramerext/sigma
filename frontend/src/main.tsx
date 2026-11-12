@@ -5040,9 +5040,9 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
-        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true" onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
+        ? <button type="button" className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa'))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
-          ? <button type="button" className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" data-tooltip="Collapse all sections, or reopen Project when all are collapsed" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
+          ? <button type="button" className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
@@ -6318,6 +6318,20 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
   </dialog>;
 }
 
+// Home unmounts while a project is open. Retain lightweight list rows and the
+// last opened project view within this browser tab so returning is immediate.
+// Scope both caches to the authenticated workspace; never reuse another user's data.
+const recentProjectListCache = new Map<string, RecentProject[]>();
+const recentProjectViewCache = new Map<string, ProjectView>();
+function projectCacheScope(cloud: CloudIdentityState | null): string {
+  if (!cloud?.enabled) return 'local';
+  if (!cloud.authenticated || cloud.user?.role === 'guest') return 'guest';
+  return `member:${cloud.account?.workspace?.id ?? cloud.user?.email ?? ''}`;
+}
+function projectViewCacheKey(scope: string, path: string): string {
+  return `${scope}\u0000${path}`;
+}
+
 function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
@@ -6334,8 +6348,9 @@ function useDelayedProjectProgress(operation: string): string {
   return visible === operation ? visible : '';
 }
 
-function RecentProjects({ onOpen, flat = false, active = false, projects, setProjects, loading, setLoading }: {
-  onOpen: (view: ProjectView, openSettings?: boolean) => void;
+function RecentProjects({ onOpen, getCachedView, flat = false, active = false, projects, setProjects, loading, setLoading }: {
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void;
+  getCachedView: (path: string) => ProjectView | undefined;
   flat?: boolean;
   active?: boolean;
   projects: RecentProject[];
@@ -6345,7 +6360,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
 }) {
   const [opening, setOpening] = useState('');
   const [removing, setRemoving] = useState('');
-  const visibleProgress = useDelayedProjectProgress(opening ? `open:${opening}` : removing ? `remove:${removing}` : '');
+  const visibleProgress = useDelayedProjectProgress(removing ? `remove:${removing}` : '');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [saveAsEntry, setSaveAsEntry] = useState<RecentProject | null>(null);
   const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
@@ -6363,7 +6378,27 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     try {
       const response = await fetch(lightweight ? '/api/projects/recent?lightweight=true' : '/api/projects/recent', { signal: controller.signal });
       const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable.');
-      setProjects((data.projects as RecentProject[]).filter(entry => !leftProjects.current.has(entry.id)));
+      // A fast identity refresh must not erase paper/activity decorations from
+      // cached rows while their slower hydration is still in flight.
+      setProjects(current => {
+        const next = (data.projects as RecentProject[]).filter(entry => !leftProjects.current.has(entry.id));
+        if (!lightweight) return next;
+        const prior = new Map(current.map(entry => [entry.id, entry]));
+        return next.map(entry => {
+          const previous = prior.get(entry.id);
+          if (!previous || previous.path !== entry.path) return entry;
+          return {
+            ...entry,
+            paper_count: previous.paper_count,
+            best_paper_score: previous.best_paper_score,
+            research_running: previous.research_running,
+            paper_generating: previous.paper_generating,
+            paper_activity: previous.paper_activity,
+            answer_active: previous.answer_active,
+            activity_runs: previous.activity_runs,
+          };
+        });
+      });
       setError(''); setLoading(false);
     } catch (cause) {
       if (controller.signal.aborted && !signal?.aborted) {
@@ -6379,8 +6414,9 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     if (!active) return;
     const controller = new AbortController();
     let requestPending = false;
-    // Both tabs share the same data; only the first-ever request is shallow.
-    let firstLoad = loading;
+    // Each Home mount starts with a shallow request, even when cached. Never
+    // make the first paint of a returning list wait for a deep status scan.
+    let firstLoad = true;
     const refresh = async () => {
       if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
       requestPending = true;
@@ -6417,7 +6453,16 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
     };
   }, [load, active]);
   async function open(entry: RecentProject, openSettings = false) {
-    if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
+    if (pending.current) return;
+    const cached = getCachedView(entry.path);
+    if (cached?.project.id === entry.id) {
+      // Revalidate in the mounted Project screen without delaying navigation.
+      onOpen(cached, openSettings, true);
+      return;
+    }
+    pending.current = true; setOpening(entry.id); setError('');
+    // For uncached projects remain on Home with Opening... until a fully
+    // renderable project view is available (or show the error here).
     try { onOpen(await post<ProjectView>('open', { path: entry.path, compact: true }), openSettings); }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
@@ -6523,7 +6568,7 @@ function RecentProjects({ onOpen, flat = false, active = false, projects, setPro
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(opening === entry.id || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {entry.best_paper_score != null && entry.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
             <button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
@@ -6555,7 +6600,6 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opening, setOpening] = useState('');
-  const visibleProgress = useDelayedProjectProgress(opening ? `open:${opening}` : '');
   const pending = useRef(false);
   const loaded = useRef(false);
   useEffect(() => {
@@ -6596,13 +6640,13 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{visibleProgress === `open:${sample.id}` && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{opening === sample.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
 
-function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean) => void; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
+function HomeCatalog({ onOpen, getCachedView, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void; getCachedView: (path: string) => ProjectView | undefined; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
   const savedTooltip = guest
     ? 'Your temporary private work in this browser (expires after inactivity or server restart).'
     : 'Show My Work. Click again to collapse or expand all.';
@@ -6617,8 +6661,17 @@ function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: Pr
     if (guest) setTab('samples');
   }, [guest]);
   // My Work and Most Recent are two views of one list, not two independent fetches.
-  const [savedProjects, setSavedProjects] = useState<RecentProject[]>([]);
-  const [savedLoading, setSavedLoading] = useState(true);
+  const [savedProjects, setSavedProjects] = useState<RecentProject[]>(() => recentProjectListCache.get(cacheScope) ?? []);
+  const [savedLoading, setSavedLoading] = useState(() => !recentProjectListCache.has(cacheScope));
+  useEffect(() => {
+    if (savedLoading) return;
+    recentProjectListCache.delete(cacheScope);
+    recentProjectListCache.set(cacheScope, savedProjects);
+    if (recentProjectListCache.size > 6) {
+      const oldest = recentProjectListCache.keys().next().value;
+      if (oldest !== undefined) recentProjectListCache.delete(oldest);
+    }
+  }, [cacheScope, savedProjects, savedLoading]);
   const recent = useRef<HTMLButtonElement>(null);
   const mostRecent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
@@ -6653,8 +6706,8 @@ function HomeCatalog({ onOpen, guest = false, onTabChange }: { onOpen: (view: Pr
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>My Work</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
@@ -6698,8 +6751,11 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   </dialog>;
 }
 
-function Home({ initialPath, onOpen }: {
-  initialPath: string; onOpen: (view: ProjectView, openSettings?: boolean) => void;
+function Home({ initialPath, onOpen, getCachedView, cacheScope }: {
+  initialPath: string;
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void;
+  getCachedView: (path: string) => ProjectView | undefined;
+  cacheScope: string;
 }) {
   const cloud = useCloudIdentity();
   const [sharedInvite, setSharedInvite] = useState(getPendingSharedInvite);
@@ -6837,7 +6893,7 @@ function Home({ initialPath, onOpen }: {
           {(!cloud?.enabled || cloud.authenticated) && <button type="button" className="home-project-action home-icon-action" aria-label="Upload project" data-tooltip="Upload project" onClick={() => setEntry('import')}><UploadProjectIcon/></button>}
           </>}
         </div>
-        <HomeCatalog onOpen={onOpen} onTabChange={setCatalogTab} guest={!!cloud?.enabled && !cloud.authenticated}/>
+        <HomeCatalog key={cacheScope} cacheScope={cacheScope} getCachedView={getCachedView} onOpen={onOpen} onTabChange={setCatalogTab} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label={`Crafted by Brian Kramer and ${creditAdjective} OpenAI agents`} onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Crafted by Brian Kramer</span><span>and {creditAdjective} OpenAI agents.</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
@@ -7200,8 +7256,10 @@ function runningFavicon(color: 'green' | 'yellow' = 'green'): () => void {
   };
 }
 
-function ProjectScreen({ path, initialView, onClose, goHome }: {
-  path: string; initialView?: ProjectView; onClose: () => void;
+function ProjectScreen({ path, initialView, revalidateCached = false, onViewChange, onClose, goHome }: {
+  path: string; initialView?: ProjectView; revalidateCached?: boolean;
+  onViewChange: (view: ProjectView) => void;
+  onClose: () => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const cloud = useCloudIdentity();
@@ -7209,6 +7267,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   // Anonymous visitors may edit their isolated, expiring sandbox.
   const readOnlyGuest = false;
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
+  useEffect(() => { if (view) onViewChange(view); }, [view, onViewChange]);
   const [advancedOutcomeGlobal, setAdvancedOutcomeGlobal] = useState(false);
   const [guestAdvancedOutcome, setGuestAdvancedOutcome] = useState(false);
   useEffect(() => {
@@ -7536,7 +7595,24 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       if (!controller.signal.aborted) setError(errorMessage(error));
     });
     return () => controller.abort();
-  }, [path]);
+  }, [path, initialView]);
+  useEffect(() => {
+    if (!initialView || !revalidateCached) return;
+    const controller = new AbortController();
+    void post<ProjectView>('open', { path, compact: true }, controller.signal).then(fresh => {
+      if (!controller.signal.aborted) {
+        // Do not overwrite a user edit completed while refresh was in flight.
+        setView(current => current === initialView ? fresh : current);
+      }
+    }).catch(cause => {
+      if (!controller.signal.aborted) {
+        // A revoked or missing project must not continue to use a stale view.
+        setView(null);
+        setError(errorMessage(cause));
+      }
+    });
+    return () => controller.abort();
+  }, [path, initialView, revalidateCached]);
   useEffect(() => {
     if (view) document.title = `${view.project.title} · SIGMA`;
     else if (error) document.title = 'Project unavailable · SIGMA';
@@ -7988,6 +8064,21 @@ function ResearchQABrowserPage({ qaId, path }: { qaId: string; path: string }) {
 function App() {
   const cloud = useCloudIdentity();
   const [openedView, setOpenedView] = useState<ProjectView | null>(null);
+  const [openedFromCache, setOpenedFromCache] = useState(false);
+  const cacheScope = projectCacheScope(cloud);
+  const rememberProject = useCallback((view: ProjectView) => {
+    const key = projectViewCacheKey(cacheScope, view.path);
+    // Retain a small hot set of full views, not an unbounded history of large
+    // research projects. Metadata listing remains cached independently.
+    recentProjectViewCache.delete(key);
+    recentProjectViewCache.set(key, view);
+    if (recentProjectViewCache.size > 6) {
+      const oldest = recentProjectViewCache.keys().next().value;
+      if (oldest !== undefined) recentProjectViewCache.delete(oldest);
+    }
+  }, [cacheScope]);
+  const getCachedProject = useCallback((path: string): ProjectView | undefined =>
+    recentProjectViewCache.get(projectViewCacheKey(cacheScope, path)), [cacheScope]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const route = new URL(location, window.location.origin);
   const [globalActivity, setGlobalActivity] = useState<'active' | 'queued' | null>(null);
@@ -8107,10 +8198,14 @@ function App() {
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} onOpen={(view, openSettings) => {
-      setOpenedView(view); setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path); navigate(projectUrl(view.path) + (openSettings ? '&settings=collaborators' : ''));
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={(view, openSettings, fromCache) => {
+      rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
+      setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path);
+      navigate(projectUrl(view.path) + (openSettings ? '&settings=collaborators' : ''));
     }}/> : url.pathname === '/project' ? <ResearchDisplayBoundary key={location} label="Project workspace"><ProjectScreen
-      initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/></ResearchDisplayBoundary>
+      initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined}
+      revalidateCached={openedFromCache && openedView?.path === url.searchParams.get('path')}
+      onViewChange={rememberProject} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/></ResearchDisplayBoundary>
       : <><Header goHome={goHome}/><h1>Page not found</h1><a href="/" onClick={goHome}>Return Home</a></>}
   </main><FloatingTooltip/></>;
 }

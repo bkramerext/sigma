@@ -150,6 +150,11 @@ with sync_playwright() as playwright:
     # The idle project title keeps its appearance but toggles all four panes.
     idle_title = header.get_by_role("button", name="Toggle all project sections")
     expect(idle_title).to_be_visible()
+    assert idle_title.get_attribute("data-tooltip") is None
+    idle_title.hover()
+    expect(idle_title).to_have_css("text-decoration-line", "none")
+    expect(idle_title).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+    expect(page.get_by_role("tooltip")).to_have_count(0)
     toggles = {
         name: page.locator(f"#{heading_id} .workspace-section-disclosure")
         for name, heading_id in (
@@ -159,6 +164,9 @@ with sync_playwright() as playwright:
             ("Papers", "papers-heading"),
         )
     }
+    for toggle in toggles.values():
+        toggle.hover()
+        expect(toggle).to_have_css("text-decoration-line", "none")
     idle_title.click()
     for toggle in toggles.values():
         expect(toggle).to_have_attribute("aria-expanded", "false")
@@ -483,14 +491,16 @@ with sync_playwright() as playwright:
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'project-header-title project-header-title-action';
-            button.dataset.tooltipActivity = 'true';
-            button.dataset.tooltip = 'Session 1 · first@example.org · Sol / high\\nPaper 2 · second@example.org · Luna / medium';
+            // The title itself is not a tooltip target; only its pulse is.
+            button.removeAttribute('data-tooltip');
             const text = document.createElement('span');
             text.className = 'project-header-title-text';
             text.textContent = 'Extremely long AI agent reliability research title '.repeat(8);
             const frame = document.createElement('span');
             frame.className = 'research-running-indicator-frame';
             frame.setAttribute('aria-hidden', 'true');
+            frame.dataset.tooltipActivity = 'true';
+            frame.dataset.tooltip = 'Session 1 · first@example.org · Sol / high\\nPaper 2 · second@example.org · Luna / medium';
             const pulse = document.createElement('span');
             pulse.className = 'research-running-indicator';
             frame.append(pulse);
@@ -538,7 +548,10 @@ with sync_playwright() as playwright:
     # The shared floating tooltip renders one execution per entry, with
     # a subtle dividing rule. It must also allow long content to wrap.
     page.mouse.move(0, 0)
-    page.locator(".project-header-title-action").hover()
+    page.locator(".project-header-title-action").hover(position={"x": 10, "y": 4})
+    expect(page.get_by_role("tooltip")).to_have_count(0)
+    expect(page.locator(".project-header-title-action")).to_have_css("text-decoration-line", "none")
+    page.locator(".project-header-title-action .research-running-indicator-frame").hover()
     tooltip = page.get_by_role("tooltip")
     expect(tooltip.locator(".sigma-ui-activity-entry")).to_have_count(2)
     expect(tooltip.locator(".sigma-ui-activity-entry").nth(1)).to_have_css(
