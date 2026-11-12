@@ -898,7 +898,9 @@ function SessionNotice({ number, onDismiss, title, kind, ariaLabel, dismissLabel
       <div className={kind} role={kind.includes('paper-contextual-error') ? 'alert' : kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
         <div className="session-notice-header">
           <strong className="session-notice-title">{title}</strong>
-          <SessionNoticeDismiss number={number} onDismiss={dismiss} label={dismissLabel}/>
+          {kind.includes('paper-contextual-error')
+            ? <DialogDismissButton label={dismissLabel ?? 'Dismiss paper error'} onClick={dismiss}/>
+            : <SessionNoticeDismiss number={number} onDismiss={dismiss} label={dismissLabel}/>}
         </div>
         {children}
       </div>
@@ -4276,6 +4278,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     paperProgress?.detail ?? '',
   ].join('|');
   const paperNoticeCopy = providerInterruptionCopy(paperNoticeMessage);
+  const paperNoticeLength = (paperNoticeCopy?.title ?? 'Paper generation stopped').length
+    + (paperNoticeCopy?.description ?? paperErrorSummary(paperNoticeMessage)).length
+    + (paperNoticeCopy?.next?.length ?? 0);
+  // Short messages should fit on roughly one line; longer guidance gets
+  // enough width to avoid becoming a narrow, tall column.
+  const paperNoticeSize = paperNoticeLength <= 90 ? 'short' : paperNoticeLength <= 190 ? 'medium' : 'long';
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
   const showDraftPaper = !guest && (newPaperRequested || generating || restartReady || continuationAvailable ||
     (paperProgress != null && paperProgress.status !== 'complete') ||
@@ -4390,7 +4398,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       onClose={() => setGuestScorePreview(false)}/>}
     {showPaperNotice && <SessionNotice key={paperNoticeKey} number={draftVersion}
       title={paperNoticeCopy?.title ?? 'Paper generation stopped'}
-      kind="research-pause-guidance paper-contextual-error"
+      kind={`research-pause-guidance paper-contextual-error paper-contextual-error--${paperNoticeSize}`}
       ariaLabel="Paper generation feedback"
       dismissLabel="Dismiss paper generation notice"
       onDismiss={() => { setDismissedPaperNoticeKey(paperNoticeKey); setError(''); }}>
@@ -4401,7 +4409,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <div className="ai-paper-body">
       <>
 
-      {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
+      {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <DialogDismissButton label="Dismiss paper score error" onClick={() => setScoreError('')}/></p>}
       {loading && <p>Loading papers…</p>}
 
       {(showDraftPaper || otherPaperRuns.length > 0 || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
