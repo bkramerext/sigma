@@ -11720,6 +11720,12 @@ def _cancellable_generation_task(path: str) -> asyncio.Task[dict[str, Any]] | No
     return task if task is not None and not task.done() else None
 
 
+def stop_request_pending(path: str) -> bool:
+    """True while an accepted Stop awaits the worker's durable cleanup."""
+    task = _cancellable_generation_task(path)
+    return task is not None and task.cancelling() > 0
+
+
 def request_cancel_generation(path: str) -> bool:
     """Request Stop without claiming the paper is already cancelled.
 
