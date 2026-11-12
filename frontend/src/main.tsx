@@ -6816,7 +6816,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
       setError('Shared project settings could not be loaded.');
       setLoading(false);
     }, 8000);
-    void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`)
+    void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path })}`)
       .then((saved: SharedProjectInfo) => {
         if (controller.signal.aborted) return;
         setShared(saved);
@@ -7396,7 +7396,7 @@ function useDelayedProjectProgress(operation: string): string {
 }
 
 function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = false, active = false, projects, setProjects, loading, setLoading }: {
-  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void;
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   flat?: boolean;
@@ -7408,7 +7408,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
 }) {
   const [opening, setOpening] = useState('');
   const [removing, setRemoving] = useState('');
-  const visibleProgress = useDelayedProjectProgress(removing ? `remove:${removing}` : '');
+  const visibleProgress = useDelayedProjectProgress(removing ? `remove:${removing}` : opening ? `open:${opening}` : '');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [saveAsEntry, setSaveAsEntry] = useState<RecentProject | null>(null);
   const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
@@ -7500,28 +7500,41 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       document.removeEventListener('visibilitychange', refresh);
     };
   }, [load, active]);
-  async function open(entry: RecentProject, openSettings = false) {
+  async function open(entry: RecentProject, openSettings = false, revealBestPaper = false) {
     if (pending.current) return;
-    const cached = getCachedView(entry.path);
     pending.current = true; setOpening(entry.id); setError('');
-    if (cached?.project.id === entry.id) {
-      try {
-        // Still hold Home until the header artwork has decoded.
-        await onOpen(cached, openSettings, true);
-      } catch (error) { setError(errorMessage(error)); }
-      finally { pending.current = false; setOpening(''); }
-      return;
-    }
-    // For uncached projects remain on Home with Opening... until a fully
-    // renderable project view is available (or show the error here).
     try {
-      const [view] = await Promise.all([
-        post<ProjectView>('open', { path: entry.path, compact: true }),
-        preloadPaperListing(entry.path, entry.id),
+      const cached = getCachedView(entry.path);
+      // Group does not need paper metadata. The star selects its destination
+      // concurrently with opening the project, then reuses the loaded listing.
+      const paperIdPromise: Promise<string | undefined> = revealBestPaper
+        ? fetch(`/api/projects/papers?${new URLSearchParams({ path: entry.path })}`, {
+            cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+          }).then(async response => {
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Could not load paper scores.');
+            const papers = Array.isArray(payload.papers) ? payload.papers as PaperSummary[] : [];
+            const scored = papers.filter(paper => paper.pdf_available && paper.score != null)
+              .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0)
+                || right.paper_version - left.paper_version);
+            if (!scored.length) throw new Error('No scored paper with an available PDF was found.');
+            initialPaperListings.set(entry.path, {
+              projectId: entry.id, papers,
+              runs: Array.isArray(payload.runs) ? payload.runs : [],
+              nextPaperNumber: typeof payload.next_paper_number === 'number' ? payload.next_paper_number : null,
+            });
+            return scored[0].paper_id;
+          })
+        : openSettings ? Promise.resolve(undefined)
+        : preloadPaperListing(entry.path, entry.id).then(() => undefined);
+      const [view, paperId] = await Promise.all([
+        cached?.project.id === entry.id
+          ? Promise.resolve(cached)
+          : post<ProjectView>('open', { path: entry.path, compact: true }),
+        paperIdPromise,
       ]);
-      await onOpen(view, openSettings);
-    }
-    catch (error) { setError(errorMessage(error)); }
+      await onOpen(view, openSettings, cached?.project.id === entry.id, paperId);
+    } catch (cause) { setError(errorMessage(cause)); }
     finally { pending.current = false; setOpening(''); }
   }
   async function forget(entry: RecentProject) {
@@ -7538,27 +7551,6 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       await load();
     } catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setRemoving(''); }
-  }
-  async function openTopPaper(entry: RecentProject) {
-    if (pending.current) return;
-    const tab = window.open('about:blank', '_blank');
-    if (!tab) { setError('Allow pop-ups to open the top-scoring paper.'); return; }
-    tab.opener = null;
-    pending.current = true; setOpening(entry.id); setError('');
-    try {
-      const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path: entry.path })}`, { cache: 'no-store' });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? 'Could not load paper scores.');
-      const scored = (payload.papers as PaperSummary[] | undefined ?? [])
-        .filter(paper => paper.pdf_available && paper.score != null && paper.score.total >= 50)
-        .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0) || right.paper_version - left.paper_version);
-      if (!scored.length) throw new Error('No scored paper with an available PDF meets the 50-point threshold.');
-      const pdf = `/api/projects/papers/${encodeURIComponent(scored[0].paper_id)}/pdf?${new URLSearchParams({ path: entry.path, open_in_browser: 'true' })}`;
-      tab.location.replace(windowAuthUrl(pdf));
-    } catch (cause) {
-      tab.close();
-      setError(errorMessage(cause));
-    } finally { pending.current = false; setOpening(''); }
   }
   const eligibleProjects = projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable'));
   const visibleProjects = flat ? eligibleProjects : [...eligibleProjects].sort((a, b) =>
@@ -7625,13 +7617,13 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(opening === entry.id || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`}
               data-tooltip={recentRunLabels(entry).join('\n') || activityDescription(entry)} data-tooltip-activity="true"
               disabled={!entry.available} onClick={() => onNavigateActivity(entry, entry.activity_runs?.find(run => run.status === 'active') ?? entry.activity_runs?.[0] ?? null)}>
               <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/>
             </button>}
-            {entry.best_paper_score != null && entry.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
+            {entry.best_paper_score != null && entry.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void open(entry, false, true)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
             <button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
@@ -7708,7 +7700,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   </div>;
 }
 
-function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void; getCachedView: (path: string) => ProjectView | undefined; onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
+function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void; getCachedView: (path: string) => ProjectView | undefined; onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
   const savedTooltip = guest
     ? 'Your temporary private work in this browser (expires after inactivity or server restart).'
     : 'Show My Work. Click again to collapse or expand all.';
@@ -7815,7 +7807,7 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
 
 function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheScope }: {
   initialPath: string;
-  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void;
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   cacheScope: string;
@@ -9334,12 +9326,13 @@ function App() {
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache) => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
       await preloadProjectArtwork();
       setArtworkDecoded(true);
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
       setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path);
-      navigate(projectUrl(view.path) + (openSettings ? '&settings=collaborators' : ''));
+      navigate(projectUrl(view.path)
+        + (openSettings ? '&settings=collaborators' : revealPaperId ? `&reveal_paper=${encodeURIComponent(revealPaperId)}` : ''));
     }} onNavigateActivity={(entry, run) => {
       // Use the run ID already displayed on Home; no activity fetch blocks navigation.
       const target = new URL(projectUrl(entry.path), window.location.origin);
