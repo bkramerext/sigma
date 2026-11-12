@@ -997,9 +997,13 @@ def papers_progress_view(path: str, run_id: str | None = None):
 
 @app.post("/api/projects/papers/cancel")
 async def paper_cancel_view(body: PaperCancelRequest):
-    await require_cloud_inference_binding(
-        body.expected_binding, body.expected_project_id, body.path
-    )
+    # Stop is a safety/control operation, not a new inference admission.
+    # Do not wait for (or require) the current AI connection: a provider outage,
+    # account switch, or memory-pressure preflight must never prevent Stop.
+    # Project identity and creator authorization remain mandatory.
+    view = inspect_project(body.path)
+    if view.project.id != body.expected_project_id:
+        raise HTTPException(404, "Project not found or access denied.")
     if body.run_id is None:
         project_collaboration.require_paper_draft_operator(
             body.path, body.expected_project_id, controlling_active=True
