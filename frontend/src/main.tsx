@@ -1610,6 +1610,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   // Presentation only: never manufacture a persisted running Session or run number.
   const [admittingSession, setAdmittingSession] = useState(false);
   const [pendingSessionAction, setPendingSessionAction] = useState<{ id: string; action: 'pause' | 'resume' | 'stop' } | null>(null);
+  const stopAfterResume = useRef<Set<string>>(new Set());
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [announcement, setAnnouncement] = useState('');
@@ -1923,6 +1924,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
 
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
+    if (action === 'stop' && pendingSessionAction?.id === target.id && pendingSessionAction.action === 'resume') {
+      // The user's Stop intent wins immediately. Wait to send it until
+      // the in-flight Resume has an execution identity to stop.
+      stopAfterResume.current.add(target.id);
+      setPendingSessionAction({ id: target.id, action: 'stop' });
+      if (resumeApprovalResolver.current) answerResumeAuthorization(false);
+      return;
+    }
     setPendingSessionAction({ id: target.id, action });
     setBusy(true); setError('');
     setSessionControlFailures(current => {
@@ -1943,7 +1952,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume", request_only: action === 'stop' || action === 'pause' }, undefined, true);
           // A successful control response contains the authoritative new status.
           // Do not keep the button busy for an unrelated whole-project reload.
-          const acknowledged = sessionForDisplay(accepted);
+          const resolved = action === 'resume' && stopAfterResume.current.delete(target.id)
+            ? await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: 'stop', request_only: true }, undefined, true)
+            : accepted;
+          const acknowledged = sessionForDisplay(resolved);
           if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
           void load(target.id).catch(reportReadFailure);
           break;
@@ -1996,6 +2008,17 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }
     }
     catch (cause) {
+      if (action === 'resume' && stopAfterResume.current.delete(target.id)) {
+        // Resume may have been admitted before a network error reached the
+        // browser. Stop is idempotent even if it never started.
+        try {
+          const stopped = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: 'stop', request_only: true }, undefined, true);
+          const acknowledged = sessionForDisplay(stopped);
+          if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
+          void load(target.id).catch(reportReadFailure);
+          return;
+        } catch { /* Show the original failure and reconcile the saved state. */ }
+      }
       // Restore the Resume control without waiting on full history hydration.
       setPendingSessionAction(null);
       void load(target.id).catch(reportReadFailure);
@@ -2006,7 +2029,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }));
       void recordClientError(message, 'session_control', target.id);
     }
-    finally { setPendingSessionAction(null); setBusy(false); }
+    finally { stopAfterResume.current.delete(target.id); setPendingSessionAction(null); setBusy(false); }
   }
 
   const interventionSaved = useCallback(async (sessionId: string) => {
