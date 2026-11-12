@@ -490,6 +490,39 @@ class CollaborationTests(TestCase):
         assert third is not None
         self.assertEqual(third["number"], 5)
 
+    def test_paper_reservation_replay_detects_publication_without_second_acl_read(self) -> None:
+        """The atomic reservation returns publication state for solo and shared projects."""
+        for with_collaborator in (False, True):
+            with self.subTest(collaborator=with_collaborator):
+                with shared._db() as db:
+                    db.execute("DELETE FROM shared_collaborators WHERE path=?", (self.path,))
+                    if with_collaborator:
+                        db.execute(
+                            "INSERT INTO shared_collaborators(path,email) VALUES (?,?)",
+                            (self.path, self.other.email),
+                        )
+                run_id = uuid4().hex
+                receipt = shared.reserve_execution_run(
+                    self.path, "paper", run_id, 0, model="paper-model", thinking="high"
+                )
+                assert receipt is not None
+                self.assertEqual(receipt["status"], "reserved")
+                self.assertIsNone(receipt["artifact_id"])
+                with shared._db() as db:
+                    db.execute(
+                        "UPDATE shared_run_reservations SET status='complete', artifact_id=? "
+                        "WHERE path=? AND kind='paper' AND run_id=?",
+                        ("published-paper", self.path, run_id),
+                    )
+                retry = shared.reserve_execution_run(
+                    self.path, "paper", run_id, 99, model="changed-model", thinking="low"
+                )
+                assert retry is not None
+                self.assertEqual(retry["artifact_id"], "published-paper")
+                self.assertEqual(retry["status"], "complete")
+                self.assertEqual(retry["number"], receipt["number"])
+                self.assertEqual(retry["model"], "paper-model")
+
     def test_run_reservations_keep_owner_before_and_after_sharing(self) -> None:
         """The creator, not the project owner or current lease, owns a run."""
         with shared._db() as db:

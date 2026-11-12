@@ -808,7 +808,8 @@ def reserve_execution_run(
         _row_value, email = _membership(db, path)
         creator_hash = _identity()[0].subject_hash
         existing = db.execute(
-            """SELECT run_id, number, creator_hash, creator_email, model, thinking
+            """SELECT run_id, number, creator_hash, creator_email, model, thinking,
+                      status, artifact_id
                FROM shared_run_reservations
                WHERE path=? AND kind=? AND run_id=?""",
             (path, kind, run_id),
@@ -816,11 +817,7 @@ def reserve_execution_run(
         if existing is not None:
             if existing["creator_hash"] != creator_hash:
                 raise ProjectError("Only the original execution creator can resume this run.")
-            status = db.execute(
-                "SELECT status FROM shared_run_reservations WHERE path=? AND kind=? AND run_id=?",
-                (path, kind, run_id),
-            ).fetchone()
-            if status is not None and status["status"] == "discarded":
+            if existing["status"] == "discarded":
                 raise ProjectError("Discarded work cannot be resumed. Start a new run.")
             db.commit()
             return dict(existing)
@@ -844,6 +841,8 @@ def reserve_execution_run(
             "creator_email": email,
             "model": model,
             "thinking": thinking,
+            "status": "reserved",
+            "artifact_id": None,
         }
 
 
