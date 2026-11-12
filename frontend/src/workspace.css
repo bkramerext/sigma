@@ -525,7 +525,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .project-header-title-row .project-header-title-action {
   /* The button is the tooltip anchor. Size it to its rendered title, not
      the full header grid track, while retaining wrapping for long titles. */
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   display: block;
   overflow: visible;
