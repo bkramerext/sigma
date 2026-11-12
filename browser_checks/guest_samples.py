@@ -298,13 +298,13 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         starred_copy = star_open_response.value.json()
         assert not Path(starred_copy["path"]).is_relative_to(root / "saved-projects")
         paper_id = "f" * 32
-        expect(page.locator(f'[data-paper-id="{paper_id}"]')).to_be_visible(timeout=15000)
-        assert page.evaluate(
+        paper_row = page.locator(f'[data-paper-id="{paper_id}"]')
+        expect(paper_row).to_be_visible(timeout=15000)
+        reveal_id = page.evaluate(
             "new URLSearchParams(window.location.search).get('reveal_paper')"
-        ) == paper_id
-        expect(
-            page.locator(f'[data-paper-id="{paper_id}"] .paper-unified-timeline')
-        ).to_be_visible()
+        )
+        assert reveal_id == paper_id
+        expect(paper_row.locator(".paper-unified-timeline")).to_be_visible()
         page.get_by_role("link", name="Go back to home page").click()
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         samples_tab = page.get_by_role("tab", name="Samples")
