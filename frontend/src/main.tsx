@@ -3525,6 +3525,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     setUnfinishedStepRestart(null);
     setUnfinishedStepCheckError(null);
     setUnfinishedRestartBusy(true);
+    // Stop during provider-free checkpoint admission must prevent the
+    // automatic Play that otherwise follows successful restoration.
+    paperRewindAdmissionPending.current = true;
+    paperRewindStopAfterAdmission.current = false;
     const oldId = selectedRunIdRef.current;
     const oldProgress = paperProgress;
     const oldRequested = newPaperRequested;
@@ -3560,10 +3564,25 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setCheckpointMismatch(null);
       setRestartableCheckpoint(null);
       setResumeDetails(null);
+      paperRewindAdmissionPending.current = false;
+      if (paperRewindStopAfterAdmission.current) {
+        paperRewindStopAfterAdmission.current = false;
+        setOptimisticPaperStop(null);
+        setPaperProgress(current => current ? {
+          ...current, status: 'interrupted', stage: nextStage,
+          detail: 'Restart checkpoint saved · Ready to resume',
+        } : current);
+        void refresh(undefined, true);
+        return;
+      }
       // Restart confirmation means execute the selected step immediately:
       // the progress bar and Play take the identical dispatch path.
+      setUnfinishedRestartBusy(false);
       void generatePaper(false, null, true, proposed.runId ?? undefined);
     } catch (cause) {
+      paperRewindAdmissionPending.current = false;
+      paperRewindStopAfterAdmission.current = false;
+      setOptimisticPaperStop(null);
       selectPaperRun(oldId);
       setPaperProgress(oldProgress);
       setNewPaperRequested(oldRequested);
