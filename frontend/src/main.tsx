@@ -4239,7 +4239,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           ? <strong>Stopping paper · {paperStopReconciliation ? 'saving checkpoint' : 'awaiting server acknowledgment'}</strong>
           : (paperProgress.status === 'active' || paperProgress.status === 'queued') &&
             <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>}
-        <PaperStageSteps progress={paperProgress}
+        <PaperStageSteps progress={
+          // The saved plan, not the last advisory progress frame, determines
+          // where Resume will execute. A checkpoint that has an outline
+          // advances directly to writing even if Stop captured "Planning".
+          continuationAvailable && resumeDetails?.outline_complete &&
+          ['interrupted', 'failed', 'cancelled'].includes(paperProgress.status) &&
+          paperProgress.stage === 'planning'
+            ? { ...paperProgress, stage: 'writing' } : paperProgress
+        }
           onStartOver={canStartOver && canControlDraft && !busy && !loading && !!binding ? startOverPaperFromControl : undefined}
           onContinue={!generationRunning && canControlDraft && !paperPlayDisabled ? beginPaperFromControl : undefined}/>
         {!stoppingSelectedPaper && paperProgress.detail?.startsWith('Retrying') && <span className="paper-progress-substep">{paperProgress.detail}</span>}
