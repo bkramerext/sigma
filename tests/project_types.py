@@ -23,9 +23,14 @@ from sigma.projects import (
 def main() -> None:
     builtins = project_types.builtin_types()
     ids = {item.id for item in builtins}
-    assert len(ids) == 12 and "other" not in ids and "literature" in ids
+    assert len(ids) == 13 and "other" not in ids and {"literature", "medical"} <= ids
     literature = next(item for item in builtins if item.id == "literature")
     assert literature.icon["key"] == "literature"
+    medical = next(item for item in builtins if item.id == "medical")
+    assert medical.icon["key"] == "medical"
+    assert len(medical.icon["elements"][0]["children"]) >= 5
+    assert "PRISMA" in medical.research_standards_references[0]["name"]
+    assert "ICMJE" in medical.publication_standards_references[0]["name"]
     assert [item.id for item in builtins if (item.behavior or {}).get("lean")] == ["mathematical"]
 
     # Curated catalog entries stay immutable; all built-in reference guides are
@@ -34,7 +39,7 @@ def main() -> None:
     assert len(common["research_standards_references"]) == 2
     assert len(common["publication_standards_references"]) == 2
     # Four shared references and one research/publication pair for each
-    # of twelve disciplines: 28 distinct, titled, secure-source references.
+    # of thirteen disciplines: 30 distinct, titled, secure-source references.
     all_standards = [
         *(ref for field in project_types.REFERENCE_FIELDS for ref in common[field]),
         *(
