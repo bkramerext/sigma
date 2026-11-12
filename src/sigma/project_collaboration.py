@@ -949,11 +949,14 @@ def reserve_execution_run(
         }
 
 
-def list_execution_runs(path: str, kind: str) -> list[dict[str, Any]]:
-    """Authorized, bounded Paper/Session reservations for activity and recovery.
+def list_execution_runs(
+    path: str, kind: str, *, unfinished_only: bool = False
+) -> list[dict[str, Any]]:
+    """Authorized Paper/Session reservations for activity and recovery.
 
-    This is a read, not an admission lock. Never poll the session/paper record
-    files while holding the collaboration database transaction.
+    The optional unfinished-only projection lets Home activity checks avoid
+    transferring the entire history of completed papers on every poll.
+    This is a read, not an admission lock; do not read artifact contents here.
     """
     if kind not in {"paper", "session"}:
         raise ValueError("Unknown run kind")
@@ -968,8 +971,9 @@ def list_execution_runs(path: str, kind: str) -> list[dict[str, Any]]:
             """SELECT run_id, number, creator_email, runner_email, model, thinking,
                       created_at, status, artifact_id
                FROM shared_run_reservations WHERE path=? AND kind=?
+                 AND (?=0 OR status NOT IN ('complete', 'discarded'))
                ORDER BY number""",
-            (path, kind),
+            (path, kind, int(unfinished_only)),
         ).fetchall()
         return [dict(row) for row in rows]
 
