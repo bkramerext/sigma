@@ -72,10 +72,6 @@
 .workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-balloon svg { display: block; }
 .workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-hooray { width: 20px; height: 20px; color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-balloon:disabled { opacity: .85; cursor: wait; }
-.workspace-page .papers-pane .saved-paper-title-tools .ai-paper-eli5-balloon.is-explaining:disabled {
-  /* Keep the hourglass in the balloon's original slot; only the label grows rightward. */
-  width: auto; min-width: max-content; flex: 0 0 auto; justify-content: flex-start; padding: 0 4px; border-color: transparent; background: transparent; opacity: 1; cursor: progress;
-}
 .workspace-page .papers-pane .saved-paper-title-tools .ai-paper-explaining { display: inline-flex; gap: 4px; align-items: center; color: var(--sigma-copper-foreground); font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
 .workspace-page .papers-pane .saved-paper-title-tools .paper-score-link { width: auto; min-width: 0; padding: 3px 4px; margin: 0 0 0 2px; border: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: 13px/1.4 Inter, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-title-tools .paper-score-link:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; }
