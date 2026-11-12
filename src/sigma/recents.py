@@ -10,6 +10,7 @@ import unicodedata
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from time import monotonic, sleep
 from typing import Any
@@ -424,6 +425,57 @@ class RecentProject:
     answer_active: bool = False
 
 
+@dataclass(frozen=True)
+class _ProjectHeader:
+    """Validated, compact listing snapshot; full histories are never cached."""
+
+    path: str
+    id: str
+    title: str
+    investigation_type: str
+    project_type_snapshot: dict | None
+    strategy_count: int
+    difficulty: str | None
+    ai_model: str
+    reasoning_effort: str
+
+
+@lru_cache(maxsize=512)
+def _cached_project_header(path: str, fingerprint: tuple[int, int, int, int, int]) -> _ProjectHeader:
+    # Preserve the full validation contract on first read. Unchanged files
+    # need only a stat for later Home polls, not a re-decoded event history.
+    view = inspect_project(path)
+    project = view.project
+    return _ProjectHeader(
+        path=view.path,
+        id=project.id,
+        title=project.title,
+        investigation_type=project.investigation_type,
+        project_type_snapshot=project.project_type_snapshot,
+        strategy_count=len(project.active_order),
+        difficulty=project.difficulty,
+        ai_model=project.ai_model,
+        reasoning_effort=project.reasoning_effort,
+    )
+
+
+def _project_header(path: str) -> _ProjectHeader:
+    from sigma.projects import STATE, project_path
+
+    checked = project_path(path)
+    state = checked if checked.suffix == ".json" else checked / STATE
+    # A fast cached lookup must not bypass symlink and state file protections.
+    if state.is_symlink():
+        raise ProjectError("Project state cannot be a symlink")
+    info = state.stat()
+    if not stat.S_ISREG(info.st_mode):
+        raise ProjectError("Project has no regular state file")
+    return _cached_project_header(
+        str(checked),
+        (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns),
+    )
+
+
 def project_activity_runs(
     path: str,
     *,
@@ -569,8 +621,8 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
     recent = []
     for entry in entries:
         try:
-            view = inspect_project(entry["path"])
-            if str(UUID(view.project.id)) != entry["id"]:
+            view = _project_header(entry["path"])
+            if view.id != entry["id"]:
                 raise ProjectError("Project identity changed")
             paper_metadata = {"paper_count": 0, "best_paper_score": None}
             if not lightweight and not activity_only:
@@ -583,7 +635,7 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                     paper_metadata = {"paper_count": 0, "best_paper_score": None}
             paper_status = papers.activity_status(view.path) if not lightweight else None
             session_active = (
-                has_active_session(view.path, project_id=view.project.id)
+                has_active_session(view.path, project_id=view.id)
                 if not lightweight
                 else False
             )
@@ -598,7 +650,7 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                     if not activity_only:
                         activity_runs = project_activity_runs(
                             view.path,
-                            project=view.project,
+                            project=view,
                             paper_status=paper_status,
                             session_active=session_active,
                             pending_answers=pending_answers,
@@ -610,14 +662,14 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                 asdict(
                     RecentProject(
                         **entry,
-                        title=view.project.title,
-                        investigation_type=view.project.investigation_type,
-                        project_type_snapshot=view.project.project_type_snapshot,
-                        strategy_count=len(view.project.active_order),
+                        title=view.title,
+                        investigation_type=view.investigation_type,
+                        project_type_snapshot=view.project_type_snapshot,
+                        strategy_count=view.strategy_count,
                         paper_count=paper_metadata["paper_count"],
                         best_paper_score=paper_metadata["best_paper_score"],
                         paper_activity=paper_status,
-                        difficulty=view.project.difficulty,
+                        difficulty=view.difficulty,
                         research_running=session_active,
                         available=True,
                         shared=view.path in shared_paths,
@@ -625,17 +677,17 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                         activity_runs=activity_runs,
                         answer_active=answer_active,
                         activity_author=None,
-                        pinned=(view.project.id in pins.values()),
+                        pinned=(view.id in pins.values()),
                         pin_state=(
                             "unpin"
-                            if view.project.id in pins.values()
+                            if view.id in pins.values()
                             else "remove"
-                            if project_family(view.project.title) in pins
+                            if project_family(view.title) in pins
                             else "pin_remove"
                         ),
                         hidden_by_family_pin=(
-                            project_family(view.project.title) in pins
-                            and pins[project_family(view.project.title)] != view.project.id
+                            project_family(view.title) in pins
+                            and pins[project_family(view.title)] != view.id
                         ),
                     )
                 )
