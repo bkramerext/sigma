@@ -4781,7 +4781,9 @@ def activity_status(path: str) -> Literal["queued", "active", "interrupted", "fa
         from sigma import project_collaboration
 
         states: list[str] = []
-        for row in project_collaboration.list_execution_runs(path, "paper"):
+        for row in project_collaboration.list_execution_runs(
+            path, "paper", unfinished_only=True
+        ):
             # Completed and discarded papers cannot contribute a live activity
             # indicator. Do not probe their sidecar/checkpoint files on each
             # global five-second Home activity poll as the library grows.
