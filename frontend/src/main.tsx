@@ -1853,7 +1853,11 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
-      await load(next.id);
+      // The admission response is already a complete session snapshot. Display it
+      // without blocking the controls on reloading every saved session and
+      // rebuilding Current Understanding; reconcile the history asynchronously.
+      setSessions(current => [sessionForDisplay(next), ...current.filter(item => item.id !== next.id)]);
+      void load(next.id).catch(reportReadFailure);
       if (next.research_method_sources?.advisory) {
         setAnnouncement(next.research_method_sources.advisory);
       }
@@ -1891,7 +1895,11 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           // The backend's preflight authorization responses are handled by
           // the two confirmations below, not global Request Failed toasts.
           // Unexpected errors are still reported by the enclosing catch.
-          await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
+          const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
+          // A successful control response contains the authoritative new status.
+          // Do not keep the button busy for an unrelated whole-project reload.
+          setSessions(current => current.map(item => item.id === target.id ? sessionForDisplay(accepted) : item));
+          void load(target.id).catch(reportReadFailure);
           break;
         } catch (cause) {
           const message = errorMessage(cause);
@@ -1932,7 +1940,6 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           return next;
         });
       }
-      await load(target.id);
     }
     catch (cause) {
       await load(target.id).catch(() => {});
