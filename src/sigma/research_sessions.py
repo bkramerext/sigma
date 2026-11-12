@@ -7007,7 +7007,7 @@ async def control_session(
     state_lock = _session_state_lock(session_id)
     if action in {"stop", "pause"}:
         async with state_lock:
-            record = _recover(await asyncio.to_thread(_read, path, session_id))
+            record = _recover(_read(path, session_id))
             if action == "stop":
                 if record["status"] in {"stopped", "completed", "ended", "failed"}:
                     return _public(record)
@@ -7037,7 +7037,10 @@ async def control_session(
                 record["portfolio_decision"] = _portfolio_decision(record)
             _event(record, "stopped" if action == "stop" else "paused", record["message"])
             record["updated_at"] = _now()
-            await asyncio.to_thread(_save, record["project_path"], record)
+            # Keep this checkpoint/read/mutate/save transaction synchronous
+            # under the session lock. Yielding here can race with an in-flight
+            # sandbox result and lose its Stop-time provenance.
+            _save(record["project_path"], record)
             logging.getLogger("sigma.lifecycle").info(
                 "session.%s project_id=%s session_id=%s calls_used=%s",
                 "stopped" if action == "stop" else "paused",
@@ -7060,7 +7063,7 @@ async def control_session(
                 await asyncio.gather(task, return_exceptions=True)
         if acknowledge_only:
             return _public(record)
-        return _public(await asyncio.to_thread(_read, record["project_path"], session_id))
+        return _public(_read(record["project_path"], session_id))
     # Recovery planning changes budgets and protocol slots. Hold both the
     # per-session state lock and the cross-process admission lock across the
     # read/validate/save transaction so concurrent resumes cannot overwrite it.
