@@ -35,19 +35,16 @@ def check_centered_tooltip(page, title):
     title_box = title.bounding_box()
     tip_box = tooltip.bounding_box()
     assert title_box and tip_box
-    assert abs(
-        title_box["x"] + title_box["width"] / 2
-        - (tip_box["x"] + tip_box["width"] / 2)
-    ) < 4, (title_box, tip_box)
+    assert (
+        abs(title_box["x"] + title_box["width"] / 2 - (tip_box["x"] + tip_box["width"] / 2)) < 4
+    ), (title_box, tip_box)
     assert tip_box["y"] >= title_box["y"] + title_box["height"] + 4
 
 
 def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            executable_path=os.environ.get(
-                "SIGMA_BROWSER_EXECUTABLE", p.chromium.executable_path
-            ),
+            executable_path=os.environ.get("SIGMA_BROWSER_EXECUTABLE", p.chromium.executable_path),
             headless=True,
         )
         page = browser.new_page(viewport={"width": 1280, "height": 800})
@@ -80,8 +77,7 @@ def main():
         for name, wrap in [
             ("Title hover " + uuid4().hex[:8], False),
             (
-                "Complex regional analysis for a collaborative research project "
-                + uuid4().hex[:8],
+                "Complex regional analysis for a collaborative research project " + uuid4().hex[:8],
                 True,
             ),
         ]:
