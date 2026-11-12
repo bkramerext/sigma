@@ -19,9 +19,7 @@ class PaperAdmissionFastPathTests(TestCase):
             ),
         ):
             self.assertEqual(
-                papers.next_paper_number_for_activity(
-                    "/not-needed", include_reserved=False
-                ),
+                papers.next_paper_number_for_activity("/not-needed", include_reserved=False),
                 8,
             )
 
