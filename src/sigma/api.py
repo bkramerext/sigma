@@ -316,7 +316,7 @@ async def require_cloud_inference_binding(
     path: str,
     *,
     require_project: bool = True,
-) -> Any | None:
+) -> tuple[Any, dict[str, Any]] | None:
     """Require explicit project/account intent before admitting sponsored inference."""
     memory_guard.require_capacity()
     # Local inference uses the user's personal ChatGPT connection even when
@@ -335,9 +335,9 @@ async def require_cloud_inference_binding(
 
     if not cloud_credential(credential):
         raise HTTPException(503, "Sponsored cloud inference is not configured.")
-    # Admission callers may reuse this already authorized project snapshot.
-    # Avoid parsing a potentially large project bundle a second time.
-    return view
+    # Admission callers may reuse this authorized project and connection.
+    # Avoid re-reading a large bundle and re-resolving the provider binding.
+    return view, credential
 
 
 @demo_app.get("/")
@@ -644,6 +644,7 @@ class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
     additional_calls: int = Field(default=0, ge=0, le=12)
     browser_presence_required: bool = Field(default=False, strict=True)
+    request_only: bool = Field(default=False, strict=True)
 
 
 class ResearchInterventionRequest(OpenRequest):
@@ -1285,16 +1286,23 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     reservation: dict[str, Any] | None = None
     run_id: str | None = None
     if shared:
-        admission_view = verified_view or await run_in_threadpool(inspect_project, body.path)
+        admission_view = (
+            verified_view[0] if verified_view else await run_in_threadpool(inspect_project, body.path)
+        )
         await run_in_threadpool(project_collaboration.register_owner, admission_view)
         run_id = body.run_id or uuid4().hex
         if body.run_id is not None:
-            existing = project_collaboration.execution_run(
-                body.path, "paper", run_id, operator=True, missing_ok=True
+            existing = await run_in_threadpool(
+                project_collaboration.execution_run,
+                body.path,
+                "paper",
+                run_id,
+                operator=True,
+                missing_ok=True,
             )
             if existing is not None and existing.get("artifact_id"):
                 raise ProjectError("This Paper run is already published; open the saved PDF.")
-        account = await auth_context()
+        account = verified_view[1] if verified_view else await auth_context()
         config = await papers.configuration(view=admission_view, context=account)
         if not config["available"]:
             raise ProjectError(config["message"])
@@ -1921,8 +1929,12 @@ async def research_start_view(body: ResearchStartRequest):
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
-    project_collaboration.require_execution_operator(
-        body.path, "session", session_id, "Research session"
+    await run_in_threadpool(
+        project_collaboration.require_execution_operator,
+        body.path,
+        "session",
+        session_id,
+        "Research session",
     )
     cfg = cloud_auth.config()
     principal = getattr(request.state, "cloud_principal", None)
@@ -1938,7 +1950,9 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         )
         if simulated is None:
             raise HTTPException(404, "Not found")
-        project_collaboration.note_artifact_author(body.path, "session", session_id)
+        await run_in_threadpool(
+            project_collaboration.note_artifact_author, body.path, "session", session_id
+        )
         return simulated
 
     result = await research_sessions.control_session(
@@ -1947,8 +1961,15 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         body.action,
         additional_calls=body.additional_calls,
         browser_presence_required=body.browser_presence_required,
+        acknowledge_only=body.request_only,
     )
-    project_collaboration.note_artifact_author(body.path, "session", session_id, created_only=True)
+    await run_in_threadpool(
+        project_collaboration.note_artifact_author,
+        body.path,
+        "session",
+        session_id,
+        created_only=True,
+    )
     return result
 
 
