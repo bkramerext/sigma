@@ -7648,11 +7648,12 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
   </div>;
 }
 
-function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (view: ProjectView) => Promise<void> | void; guest?: boolean; active?: boolean }) {
+function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void; guest?: boolean; active?: boolean }) {
   const [projects, setProjects] = useState<SampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opening, setOpening] = useState('');
+  const visibleOpening = useDelayedProjectProgress(opening);
   const pending = useRef(false);
   const loaded = useRef(false);
   useEffect(() => {
@@ -7672,14 +7673,19 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     }).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } });
     return () => controller.abort();
   }, [active]);
-  async function open(sample: SampleProject) {
+  async function open(sample: SampleProject, revealBestPaper = false) {
     if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
     try {
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
-      // This visitor's copy remains in their private temporary workspace.
+      // A sample opens an independent working copy, never mutating the template.
       window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
       await preloadPaperListing(copy.path, copy.project.id);
-      await onOpen(copy);
+      const papers = initialPaperListings.get(copy.path)?.papers ?? [];
+      const top = revealBestPaper ? papers.filter(paper => paper.pdf_available && paper.score != null)
+        .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0)
+          || right.paper_version - left.paper_version)[0] : undefined;
+      if (revealBestPaper && !top) throw new Error('No scored paper with an available PDF was found.');
+      await onOpen(copy, false, false, top?.paper_id);
     }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
@@ -7694,7 +7700,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{opening === sample.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label={`Open high scoring paper (${sample.best_paper_score}/100)`} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void open(sample, true)}>★</button>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{visibleOpening === sample.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
