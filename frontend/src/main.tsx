@@ -3672,7 +3672,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (!deliberatePaperStop.current)
           setError('Paper stream disconnected. Check current progress and saved versions.');
       }
-      await refresh(selected?.paper_id);
+      // A deliberate Stop is still reconciling its saved checkpoint. The
+      // progress poll will refresh at the terminal transition; an immediate
+      // full preflight here can undo the fast acknowledgment.
+      if (!deliberatePaperStop.current) await refresh(selected?.paper_id);
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
         const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
