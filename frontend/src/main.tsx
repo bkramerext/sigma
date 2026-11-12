@@ -7476,7 +7476,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, cacheScope,
       window.clearTimeout(timeout);
       signal?.removeEventListener('abort', abort);
     }
-  }, []);
+  }, [cacheScope]);
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController();
