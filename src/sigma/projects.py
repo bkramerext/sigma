@@ -293,7 +293,9 @@ def _file_lock_owner() -> tuple[int, int | None]:
 
 
 @contextmanager
-def project_write_lock(value: str | Path, *, advance_revision: bool = True):
+def project_write_lock(
+    value: str | Path, *, advance_revision: bool = True, allow_project_edit: bool = False
+):
     """Serialize per-project writes before acquiring the global SQLite writer.
 
     Nested checkpoints in one task reuse the lock; child tasks and worker
@@ -309,7 +311,9 @@ def project_write_lock(value: str | Path, *, advance_revision: bool = True):
         and held.path == str(path)
         and held.owner == _file_lock_owner()
     ):
-        with project_collaboration.write_guard(str(path), advance_revision=advance_revision):
+        with project_collaboration.write_guard(
+            str(path), advance_revision=advance_revision, allow_project_edit=allow_project_edit
+        ):
             yield path
         return
 
@@ -328,7 +332,9 @@ def project_write_lock(value: str | Path, *, advance_revision: bool = True):
             token = _PROJECT_FILE_LOCK.set(state)
             try:
                 with project_collaboration.write_guard(
-                    str(path), advance_revision=advance_revision
+                    str(path),
+                    advance_revision=advance_revision,
+                    allow_project_edit=allow_project_edit,
                 ):
                     yield path
             finally:
@@ -1202,6 +1208,7 @@ def _update_project(
     *,
     _after_commit: Callable[[ProjectView], None] | None = None,
     _expected_revision: int | None = None,
+    _allow_project_edit: bool = False,
 ) -> ProjectView:
     from sigma import project_collaboration
 
@@ -1214,7 +1221,7 @@ def _update_project(
 
         try:
             with (
-                project_write_lock(path),
+                project_write_lock(path, allow_project_edit=_allow_project_edit),
                 project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
             ):
 
@@ -1237,7 +1244,7 @@ def _update_project(
     backup_temporary: Path | None = None
     try:
         with (
-            project_write_lock(path),
+            project_write_lock(path, allow_project_edit=_allow_project_edit),
             project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
         ):
             before = (path / STATE).read_bytes()
@@ -1549,6 +1556,7 @@ def update_project(
     paper_requirements: str | None = None,
     expected_revision: int | None = None,
     collaborators: list[str] | None = None,
+    semantic_update: bool = False,
 ) -> ProjectView:
     from sigma import cloud_workspaces, project_collaboration
 
@@ -1657,7 +1665,8 @@ def update_project(
             return inspect_project(value)
 
     def update(project: Project) -> Project:
-        project_collaboration.require_edit_revision(str(value), expected_revision)
+        if not semantic_update:
+            project_collaboration.require_edit_revision(str(value), expected_revision)
         current = project_settings(project)
         # These values were moved to user settings in schema 12. Ignore them
         # in project optimistic-lock checks and edits, including older callers.
@@ -1705,6 +1714,11 @@ def update_project(
             )
         if project_only(current) == project_only(effective_wanted):
             return project
+        if semantic_update and (
+            effective_wanted.investigation_type != current.investigation_type
+            or effective_wanted.difficulty != current.difficulty
+        ):
+            raise ProjectError("This edit changes only the project title and research text.")
         if (
             effective_wanted.investigation_type != current.investigation_type
             or effective_wanted.difficulty != current.difficulty
@@ -1781,6 +1795,7 @@ def update_project(
                 edit,
                 _after_commit=after_commit,
                 _expected_revision=expected_revision if shared_edit else None,
+                _allow_project_edit=semantic_update,
             )
     return _update_project(
         value,
@@ -1788,6 +1803,7 @@ def update_project(
         edit,
         _after_commit=after_commit,
         _expected_revision=expected_revision if shared_edit else None,
+        _allow_project_edit=semantic_update,
     )
 
 

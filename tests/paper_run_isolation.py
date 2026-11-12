@@ -63,6 +63,130 @@ class PaperRunIsolationTests(TestCase):
         self.assertEqual(papers._work_file(self.path, create=False), legacy_file)
         self.assertTrue(legacy_file.is_file())
 
+    def test_resumed_collaborator_keeps_original_creator(self) -> None:
+        with (
+            papers.paper_run_scope(self.first, number=12),
+            patch.object(
+                papers.project_collaboration,
+                "execution_run",
+                return_value={"number": 12, "creator_email": "original@example.test"},
+            ),
+            patch.object(
+                papers.project_collaboration,
+                "collaborator_identity",
+                return_value="executor@example.test",
+            ),
+        ):
+            self.assertEqual(papers._paper_original_creator(self.path), "original@example.test")
+
+    def test_published_checkpoint_returns_scoring_as_resume_stage(self) -> None:
+        paper_id = uuid4().hex
+        work = self.saved_work("fixture")
+        work["published_paper_id"] = paper_id
+        self.assertEqual(papers._unfinished_resume_stage(work), "scoring")
+
+    def test_published_creator_recovery_preserves_pdf_and_rejects_wrong_run(self) -> None:
+        paper_id = uuid4().hex
+        creator = "original@example.test"
+        executor = "executor@example.test"
+        pdf = b"%PDF-1.4\nfixture\n"
+        with papers.paper_run_scope(self.first, number=12):
+            papers._save(
+                self.path,
+                {
+                    "paper_id": paper_id,
+                    "paper_version": 12,
+                    "created_by": executor,
+                    "generation": {"progress_run_id": self.first},
+                },
+                pdf,
+            )
+            saved = papers._read_one(self.path, paper_id)
+            reservation = {"number": 12, "creator_email": creator}
+            with self.assertRaisesRegex(ProjectError, "saved execution"):
+                papers._align_published_creator(self.path, saved, reservation, self.second)
+            with self.assertRaisesRegex(ProjectError, "saved execution"):
+                papers._align_published_creator(
+                    self.path,
+                    saved,
+                    {"number": 13, "creator_email": creator},
+                    self.first,
+                )
+            self.assertEqual(papers._read_one(self.path, paper_id)["created_by"], executor)
+            aligned = papers._align_published_creator(self.path, saved, reservation, self.first)
+            self.assertEqual(aligned["created_by"], creator)
+            self.assertEqual(papers._read_one(self.path, paper_id)["created_by"], creator)
+            self.assertEqual((papers._paper_dir(self.path) / f"{paper_id}.pdf").read_bytes(), pdf)
+            papers._align_published_creator(self.path, aligned, reservation, self.first)
+
+    def test_remove_stopped_paper_while_another_paper_is_running(self) -> None:
+        """Delete B without waiting for or cancelling independent running A."""
+        from types import SimpleNamespace
+
+        async def exercise() -> None:
+            entered = asyncio.Event()
+            release = asyncio.Event()
+
+            async def other_paper() -> None:
+                with papers.paper_run_scope(self.first):
+                    async with papers._paper_operation(self.path, generating=True):
+                        entered.set()
+                        await release.wait()
+
+            with patch("sigma.memory_guard.require_capacity"):
+                task = asyncio.create_task(other_paper())
+                try:
+                    await asyncio.wait_for(entered.wait(), timeout=5)
+                    with papers.paper_run_scope(self.second):
+                        papers._save_work(self.path, self.saved_work("fixture"))
+                        with patch.object(
+                            papers,
+                            "inspect_project",
+                            return_value=SimpleNamespace(
+                                project=SimpleNamespace(id="test-project")
+                            ),
+                        ):
+                            result = await asyncio.wait_for(
+                                papers.discard_work(self.path, "test-project"), timeout=5
+                            )
+                        self.assertTrue(result["discarded"])
+                        self.assertIsNone(papers._load_work(self.path))
+                    self.assertFalse(task.done(), "Deleting paper B interrupted running paper A")
+                finally:
+                    release.set()
+                    await asyncio.wait_for(task, timeout=5)
+
+        asyncio.run(exercise())
+
+    def test_cancelled_queue_does_not_erase_earlier_progress(self) -> None:
+        """The next queued attempt is not the progress history of the Paper."""
+        with papers.paper_run_scope(self.first):
+            started = papers._now()
+            papers._write_progress_status(
+                self.path,
+                {
+                    "run_id": self.first,
+                    "status": "paused",
+                    "stage": "proofreading",
+                    "current": None,
+                    "total": None,
+                    "started_at": started,
+                    "updated_at": started,
+                    "elapsed_seconds": 72,
+                },
+            )
+            papers._write_queue_status(self.path, "cancelled", started)
+            progress = present(papers.progress_status(self.path))
+            self.assertEqual(progress["stage"], "proofreading")
+            self.assertEqual(progress["status"], "cancelled")
+            self.assertEqual(progress["elapsed_seconds"], 72)
+        with papers.paper_run_scope(self.second):
+            started = papers._now()
+            papers._write_queue_status(self.path, "cancelled", started)
+            progress = present(papers.progress_status(self.path))
+            self.assertEqual(progress["stage"], "queued")
+            self.assertEqual(progress["status"], "cancelled")
+
     def test_stopping_one_submitted_paper_does_not_cancel_the_other(self) -> None:
         """Two admitted Papers retain distinct tasks across a creator Stop."""
 

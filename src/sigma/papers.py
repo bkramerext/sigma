@@ -165,6 +165,16 @@ def paper_run_scope(run_id: str, *, number: int | None = None) -> Iterator[None]
         _paper_run_id.reset(token)
 
 
+def _paper_original_creator(path: str) -> str | None:
+    """Bind publication to its original creator, not a collaborator on Resume."""
+    run_id = _paper_run_id.get()
+    if run_id is not None:
+        reservation = project_collaboration.execution_run(path, "paper", run_id, operator=True)
+        if reservation is not None:
+            return reservation["creator_email"]
+    return project_collaboration.collaborator_identity(path)
+
+
 def _paper_state_key(path: str) -> str:
     project_key = str(project_path(path).resolve())
     run_id = _paper_run_id.get()
@@ -3216,6 +3226,74 @@ def _stored_paper_record_json(record: dict[str, Any]) -> bytes:
     return _json(stored)
 
 
+def _align_published_creator(
+    path: str,
+    record: dict[str, Any],
+    reservation: Mapping[str, Any],
+    run_id: str,
+) -> dict[str, Any]:
+    """Repair legacy executor-as-author metadata, never a different saved PDF.
+
+    The run's original creator is authoritative. Correct old published records
+    only when their reserved number and durable run ID both match.
+    """
+
+    def belongs_to_run(item: Mapping[str, Any]) -> bool:
+        generation = item.get("generation")
+        return (
+            item.get("paper_version") == reservation["number"]
+            and isinstance(generation, dict)
+            and generation.get("progress_run_id") == run_id
+        )
+
+    if not belongs_to_run(record):
+        raise ProjectError("Published paper does not match its saved execution.")
+    original_creator = reservation["creator_email"]
+    if record.get("created_by") == original_creator:
+        return record
+
+    descriptor = _paper_version_lock(path)
+    try:
+        current = _read_one(path, record["paper_id"])
+        if not belongs_to_run(current) or current.get("pdf_sha256") != record.get("pdf_sha256"):
+            raise ProjectError("Saved paper changed during publication recovery.")
+        if current.get("created_by") not in {record.get("created_by"), original_creator}:
+            raise ProjectError("Saved paper attribution changed during publication recovery.")
+        if current.get("created_by") != original_creator:
+            if not _valid_pdf_file(path, current):
+                raise ProjectError("Saved PDF could not be verified for publication recovery.")
+            current["created_by"] = original_creator
+            encoded = _stored_paper_record_json(current)
+            if len(encoded) > MAX_PAPER_BYTES:
+                raise ProjectError("Saved paper metadata exceeds the storage limit.")
+            target = project_path(path)
+            identifier = _paper_id(record["paper_id"])
+            if target.suffix == ".json":
+                from sigma.projects import save_project_artifacts
+
+                save_project_artifacts(target, {f"artifacts/papers/{identifier}.json": encoded})
+            else:
+                file = _paper_dir(path, create=False) / f"{identifier}.json"
+                staged = _stage(file.parent, encoded)
+                try:
+                    os.replace(staged, file)
+                    fd = os.open(file.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                finally:
+                    staged.unlink(missing_ok=True)
+            logging.getLogger("sigma.lifecycle").info(
+                "paper.creator_reconciled paper_id=%s run_id=%s", identifier, run_id
+            )
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+    record["created_by"] = original_creator
+    return record
+
+
 @project_collaboration.fenced_checkpoint
 def _save(path: str, record: dict[str, Any], pdf: bytes) -> None:
     target = project_path(path)
@@ -3368,6 +3446,35 @@ def _recoverable_dispatched_sections(state: Mapping[str, Any]) -> list[int]:
         for number in range(1, len(sections) + 1)
         if str(number) in dispatches and str(number) not in saved
     ]
+
+
+def _verify_section_recovery(
+    work: Mapping[str, Any],
+    requested: tuple[int, ...] | None,
+    *,
+    long_form: bool,
+    resumed_checkpoint: bool,
+) -> tuple[int, ...] | None:
+    """One check for all explicitly resumed, previously dispatched sections.
+
+    A Play click is permission to retry precisely the unsaved dispatches in
+    the matching checkpoint, not permission to replay arbitrary paid work.
+    """
+    if requested is None:
+        return None
+    if (
+        not requested
+        or any(type(number) is not int or number < 1 or number > 48 for number in requested)
+        or tuple(sorted(set(requested))) != requested
+        or not long_form
+        or not resumed_checkpoint
+        or not work.get("plan")
+        or tuple(_recoverable_dispatched_sections(work)) != requested
+    ):
+        raise ProjectError(
+            "Paper recovery no longer matches the saved checkpoint; no AI request was made."
+        )
+    return requested
 
 
 def _paper_progress_counts_valid(current: Any, total: Any) -> bool:
@@ -4100,8 +4207,17 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
             path,
             {
                 **state["progress"],
+                **(
+                    {"paper_id": state["published_paper_id"]}
+                    if isinstance(state.get("published_paper_id"), str)
+                    else {}
+                ),
                 "model": state.get("model"),
                 "reasoning_effort": state.get("reasoning_effort"),
+                # Checkpoint authoring already has the work in memory. Store
+                # its resume plan in the tiny receipt, never load a 100 MB
+                # manuscript on a status or heartbeat request.
+                "resume_stage": _unfinished_resume_stage(state),
             },
         )
 
@@ -4209,7 +4325,21 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "substep_started_at",
         "model",
         "reasoning_effort",
+        "resume_stage",
     )
+    # Progress frames can arrive after the last durable checkpoint. Keep the
+    # last committed resume plan unless this write provides a newer one.
+    if "resume_stage" not in state:
+        try:
+            earlier = _read_progress_status(path)
+        except (OSError, ProjectError):
+            earlier = None
+        if (
+            earlier is not None
+            and earlier.get("resume_stage")
+            and earlier.get("run_id") == state.get("run_id")
+        ):
+            state = {**state, "resume_stage": earlier["resume_stage"]}
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
     if len(encoded) > 4096:
@@ -4245,6 +4375,22 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
             or not isinstance(state.get("started_at"), str)
             or not isinstance(state.get("updated_at"), str)
             or type(state.get("elapsed_seconds")) is not int
+            or (
+                "resume_stage" in state
+                and state["resume_stage"] is not None
+                and state["resume_stage"]
+                not in {
+                    "queued",
+                    "publication_compilation",
+                    "evidence",
+                    "planning",
+                    "writing",
+                    "validation",
+                    "proofreading",
+                    "compile",
+                    "scoring",
+                }
+            )
             or (
                 "last_progress_at" in state
                 and state["last_progress_at"] is not None
@@ -4491,6 +4637,56 @@ def _read_queue_status(path: str) -> dict[str, Any] | None:
     return value
 
 
+def _published_artifact_for_run(
+    path: str, row: Mapping[str, Any], progress: Mapping[str, Any] | None
+) -> str | None:
+    """Reconcile a durable publication after interrupted scoring/finalization.
+
+    The run ledger is authoritative when attributed; older interrupted runs
+    may also carry a saved PDF pointer. Never claim publication from a progress
+    label without validating the artifact identity and recorded checksum.
+    """
+    artifact_id = row.get("artifact_id")
+    if artifact_id:
+        return str(artifact_id)
+    if not progress or progress.get("status") in {"active", "queued"}:
+        return None
+    candidate = progress.get("paper_id")
+    expected_pdf = None
+    if not candidate and progress.get("stage") in {
+        "compile",
+        "pdf_check",
+        "scoring",
+        "score_failed",
+        "finishing",
+        "complete",
+    }:
+        work = _load_work(path)
+        if work is not None:
+            candidate = work.get("published_paper_id")
+            expected_pdf = work.get("published_pdf_sha256")
+    if not isinstance(candidate, str) or not re.fullmatch(r"[0-9a-f]{32}", candidate):
+        return None
+    try:
+        published = get_paper(path, candidate, include_tex=False)
+    except ProjectError:
+        return None
+    if (
+        not published.get("pdf_available")
+        or published.get("paper_version") != row["number"]
+        or (
+            published.get("created_by") != row["creator_email"]
+            and (
+                not isinstance(published.get("generation"), dict)
+                or published["generation"].get("progress_run_id") != row["run_id"]
+            )
+        )
+        or (expected_pdf is not None and published.get("pdf_sha256") != expected_pdf)
+    ):
+        return None
+    return candidate
+
+
 def run_progress_list(path: str) -> list[dict[str, Any]]:
     """Bounded Paper activity from the reservation index and tiny sidecars.
 
@@ -4512,9 +4708,36 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
         with paper_run_scope(run_id):
             progress = progress_status(path)
             preflight_needed = needs_preflight_on_open(path)
-            published_id = row.get("artifact_id")
+            published_id = _published_artifact_for_run(path, row, progress)
+            if (
+                published_id
+                and progress is not None
+                and progress["status"] not in {"active", "queued", "complete"}
+            ):
+                # A persisted PDF is success even when later scoring failed.
+                # Do not render a phantom draft that routes clicks to the
+                # unfinished-paper restart controller.
+                progress = {
+                    **progress,
+                    "status": "complete",
+                    "stage": "complete",
+                    "paper_id": published_id,
+                }
+                progress.pop("failure_reason", None)
+                progress.pop("resume_stage", None)
+            # Older checkpoints predate the compact resume receipt. Recover
+            # their one-time view on listing, never on the hot polling path.
+            if (
+                progress is not None
+                and progress.get("status") in {"interrupted", "cancelled", "failed"}
+                and not progress.get("resume_stage")
+                and not published_id
+            ):
+                resume_stage = _unfinished_resume_stage(_load_work(path))
+                if resume_stage:
+                    progress = {**progress, "resume_stage": resume_stage}
             if progress is None and published_id:
-                progress = {"status": "complete", "stage": "complete"}
+                progress = {"status": "complete", "stage": "complete", "paper_id": published_id}
             elif progress is None:
                 progress = {
                     "status": "interrupted",
@@ -4531,7 +4754,13 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
                 "progress": progress,
                 "preflight_needed": preflight_needed,
                 "paper_id": published_id,
-                "can_control": viewer is None or viewer == row["creator_email"],
+                # Only the current executor may Stop an active Paper.
+                "can_control": viewer is None
+                or viewer == (row.get("runner_email") or row["creator_email"]),
+                # Any authorized collaborator may Resume or rewind stopped work.
+                "can_resume": viewer is not None
+                and not published_id
+                and progress["status"] in {"cancelled", "failed", "interrupted", "stopped"},
                 "can_remove": (
                     viewer is None
                     or viewer == row["creator_email"]
@@ -4564,6 +4793,9 @@ def activity_status(path: str) -> Literal["queued", "active", "interrupted", "fa
     if key in _queued_progress:
         return "queued"
     if key in _generating_paper_projects:
+        return "active"
+    active = _active_progress.get(key)
+    if active is not None and active.get("status") == "running":
         return "active"
     try:
         receipt = _read_queue_status(path)
@@ -4608,43 +4840,52 @@ def progress_status(path: str) -> dict[str, Any] | None:
     else:
         receipt = _read_queue_status(path)
         if receipt is not None:
-            elapsed = max(
-                0,
-                int(
-                    (
-                        datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"])
-                    ).total_seconds()
-                ),
-            )
-            if receipt["status"] == "queued":
+            # A queue receipt describes the LATEST admission attempt, not the
+            # amount of earlier work saved for this numbered Paper. Cancelling
+            # a queued resume must not reset its progress bar to Wait.
+            prior = _read_progress_status(path)
+            if prior is not None and prior.get("stage") not in {None, "queued"}:
+                state = {
+                    **prior,
+                    "status": ("paused" if receipt["status"] == "queued" else receipt["status"]),
+                    "detail": receipt.get("detail") or prior.get("detail"),
+                }
+            else:
+                elapsed = max(
+                    0,
+                    int(
+                        (
+                            datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"])
+                        ).total_seconds()
+                    ),
+                )
+                detail = receipt.get("detail")
+                if not detail:
+                    detail = (
+                        "The backend restarted while this paper was queued. No AI call was "
+                        "started for this queued request. Use Continue or Generate to queue it "
+                        "again; any earlier paper checkpoint remains intact."
+                        if receipt["status"] == "queued"
+                        else "Generation was interrupted before any new provider call began."
+                    )
                 return {
-                    "status": "interrupted",
+                    "status": (
+                        "interrupted" if receipt["status"] == "queued" else receipt["status"]
+                    ),
                     "stage": "queued",
                     "current": None,
                     "total": None,
                     "started_at": receipt["started_at"],
                     "elapsed_seconds": elapsed,
-                    "detail": (
-                        "The backend restarted while this paper was queued. No AI call was "
-                        "started for this queued request. Use Continue or Generate to queue it "
-                        "again; any earlier paper checkpoint remains intact."
+                    **(
+                        {"failure_reason": receipt["detail"]}
+                        if receipt["status"] == "failed" and receipt.get("detail")
+                        else {}
                     ),
+                    "detail": detail,
                 }
-            return {
-                "status": receipt["status"],
-                "stage": "queued",
-                "current": None,
-                "total": None,
-                "started_at": receipt["started_at"],
-                "elapsed_seconds": elapsed,
-                **(
-                    {"failure_reason": receipt["detail"]}
-                    if receipt["status"] == "failed" and receipt.get("detail")
-                    else {}
-                ),
-                **({"detail": receipt["detail"]} if receipt.get("detail") else {}),
-            }
-        state = _read_progress_status(path)
+        else:
+            state = _read_progress_status(path)
         if state is None:
             work = _load_work(path)
             state = work.get("progress") if work is not None else None
@@ -4675,9 +4916,16 @@ def progress_status(path: str) -> dict[str, Any] | None:
             "Paper generation stopped. Completed sections and provider-call accounting remain "
             "available; Resume uses a labeled gap for any interrupted section."
         )
+    # Status polling is sidecar-only, even for cancelled or interrupted runs.
+    # The resume plan is persisted whenever a checkpoint changes.
+    resume_stage = (
+        state.get("resume_stage") if status in {"interrupted", "cancelled", "failed"} else None
+    )
     return {
         "status": status,
         "stage": state["stage"],
+        **({"paper_id": state["paper_id"]} if isinstance(state.get("paper_id"), str) else {}),
+        **({"resume_stage": resume_stage} if resume_stage is not None else {}),
         "current": state["current"],
         "total": state["total"],
         "started_at": state["started_at"],
@@ -5029,19 +5277,23 @@ async def _restart_work_locked(
 
 
 async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
-    """Remove unpublished work without affecting saved paper versions."""
-    async with _paper_operation(path, generating=False):
-        key = _paper_state_key(path)
-        submission = _submission_tasks.get(key)
-        if submission is not None and not submission.done():
-            raise ProjectError("A paper generation submission is still active")
-        view = inspect_project(path)
-        if view.project.id != expected_project_id:
-            raise ProjectError("Paper project identity changed")
-        _clear_work(path)
-        _clear_queue_status(path)
-        _clear_reset_ledger(path)
-        return {"discarded": True}
+    """Delete exactly one idle run, independent of other running Papers."""
+    with project_collaboration.terminal_paper_cleanup(path, _paper_run_id.get()):
+        async with _paper_operation(path, generating=False):
+            key = _paper_state_key(path)
+            submission = _submission_tasks.get(key)
+            if submission is not None and not submission.done():
+                raise ProjectError("A paper generation submission is still active")
+            progress = progress_status(path)
+            if progress is not None and progress.get("status") in {"active", "queued"}:
+                raise ProjectError("Stop this Paper before removing it.")
+            view = inspect_project(path)
+            if view.project.id != expected_project_id:
+                raise ProjectError("Paper project identity changed")
+            _clear_work(path)
+            _clear_queue_status(path)
+            _clear_reset_ledger(path)
+            return {"discarded": True}
 
 
 # Restart boundaries for an UNFINISHED Paper. A step is clickable only
@@ -5070,14 +5322,14 @@ _PAPER_RESTART_PROGRESS = {
 
 
 def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
-    if not work or work.get("published_paper_id"):
+    if not work:
         return []
     if not isinstance(work.get("frozen_package"), dict):
         return []
     kind = work.get("kind")
-    stages = ["started"]
-    if isinstance(work.get("writing_sources"), list):
-        stages.append("review")
+    # The frozen package is a real review input. A review click must rerun
+    # publication standards, not silently degrade into a generic Start Over.
+    stages = ["started", "review"]
     if kind == "long_form":
         if work.get("evidence_indexed") or work.get("evidence_notes"):
             stages.append("evidence")
@@ -5085,10 +5337,29 @@ def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
             stages.append("planning")
         if isinstance(work.get("plan"), dict):
             stages.append("writing")
-    elif kind == "one_shot" and (
-        work.get("one_shot_draft") is not None or work.get("validated_draft") is not None
-    ):
-        stages.append("writing")
+    elif kind == "one_shot":
+        # A one-shot has no separate outline artifact. Once writing was
+        # reached, frozen evidence can replay that authoring call, even if
+        # the interrupted call never produced a draft checkpoint.
+        previous_stage = str((work.get("progress") or {}).get("stage", ""))
+        if (
+            previous_stage
+            in {
+                "writing",
+                "sections",
+                "validation",
+                "proofreading",
+                "compile",
+                "pdf_check",
+                "scoring",
+                "finishing",
+                "complete",
+                "retry",
+            }
+            or work.get("one_shot_draft") is not None
+            or work.get("validated_draft") is not None
+        ):
+            stages.append("writing")
     if isinstance(work.get("validated_draft"), dict):
         stages.extend(("validation", "typesetting"))
     if isinstance(work.get("proofread_ready"), dict):
@@ -5096,14 +5367,68 @@ def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
     return stages
 
 
-def unfinished_restart_options(path: str) -> dict[str, Any]:
+def _unfinished_resume_stage(work: Mapping[str, Any] | None) -> str | None:
+    """The one durable prediction of what Play will execute next.
+
+    Progress sidecars describe the last observed activity; they are not a
+    restart plan. Checkpoints, not the last streamed event, decide Resume.
+    """
+    if not work:
+        return None
+    if work.get("published_paper_id"):
+        return "scoring"
+    if not isinstance(work.get("frozen_package"), dict):
+        return None
+    progress = work.get("progress") or {}
+    pending = work.get("unfinished_restart_stage")
+    if progress.get("status") == "paused" and pending in _PAPER_RESTART_PROGRESS:
+        return _PAPER_RESTART_PROGRESS[pending]
+    if work.get("proofread_ready"):
+        return "compile"
+    if work.get("checkpoint_revalidate_pending") is True:
+        return "validation"
+    if work.get("validated_draft"):
+        return "proofreading"
+    if work.get("plan"):
+        return "writing"
+    if work.get("evidence_indexed"):
+        return "planning"
+    if isinstance(work.get("publication_compilation"), dict):
+        return "writing" if work.get("kind") == "one_shot" else "evidence"
+    # Source selection without a compiled checklist is still Review, not
+    # Wait or Writing. The presence of an empty selection is meaningful.
+    return "publication_compilation"
+
+
+def unfinished_restart_options(path: str, *, allow_active: bool = False) -> dict[str, Any]:
     work = _load_work(path)
     if work is None:
         raise ProjectError("This unfinished Paper has no restart checkpoint.")
-    if work.get("published_paper_id"):
-        raise ProjectError("This Paper is already published; use its published step bar.")
+    published_id = work.get("published_paper_id")
+    if isinstance(published_id, str):
+        try:
+            published = get_paper(path, published_id, include_tex=False)
+        except ProjectError:
+            published = None
+        if (
+            published is not None
+            and published.get("pdf_available")
+            and published.get("pdf_sha256") == work.get("published_pdf_sha256")
+        ):
+            # Publication is a satisfied checkpoint, not a draft error.
+            # The UI can now route the requested action to the saved paper.
+            return {
+                "snapshot_sha256": work["snapshot_sha256"],
+                "stages": [],
+                "resume_stage": "scoring",
+                "published_paper_id": published_id,
+            }
+        # A marker written just before PDF persistence is not publication.
+        # Its frozen proofread checkpoint remains restartable.
     progress = progress_status(path)
-    if progress is None or progress.get("status") in {"queued", "active"}:
+    # Reading completed checkpoints during active execution is safe; only
+    # the separate restart mutation requires a stopped Paper.
+    if progress is None or (progress.get("status") in {"active", "queued"} and not allow_active):
         raise ProjectError("Stop this Paper before restarting a previous step.")
     stages = _unfinished_restart_stages(work)
     if not stages:
@@ -5111,21 +5436,7 @@ def unfinished_restart_options(path: str) -> dict[str, Any]:
     return {
         "snapshot_sha256": work["snapshot_sha256"],
         "stages": stages,
-        "resume_stage": (
-            "compile"
-            if work.get("proofread_ready")
-            else "validation"
-            if work.get("checkpoint_revalidate_pending") is True
-            else "proofreading"
-            if work.get("validated_draft")
-            else "writing"
-            if work.get("plan")
-            else "planning"
-            if work.get("evidence_indexed")
-            else "publication_compilation"
-            if work.get("writing_sources")
-            else "queued"
-        ),
+        "resume_stage": _unfinished_resume_stage(work),
     }
 
 
@@ -7946,6 +8257,7 @@ async def _generate_long_draft(
     on_output_delta: Callable[[int], Awaitable[None]] | None = None,
     on_planning_output_delta: Callable[[], Awaitable[None]] | None = None,
     authorized_recovery_section: int | None = None,
+    authorized_recovery_sections: tuple[int, ...] | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     writing_methodology = publication_reference_compiler.guidance(
@@ -8939,11 +9251,14 @@ or document markup."""
         and is_unwritten_placeholder(LongSectionDraft.model_validate(saved_sections[str(number)]))
     ]
     if uncertain or placeholders:
+        replay = authorized_recovery_sections
+        if replay is None and authorized_recovery_section is not None:
+            replay = (authorized_recovery_section,)
         permitted = (
-            type(authorized_recovery_section) is int
-            and not placeholders
-            and len(uncertain) == 1
-            and _recoverable_dispatched_sections(state) == [authorized_recovery_section]
+            not placeholders
+            and replay is not None
+            and list(replay) == _recoverable_dispatched_sections(state)
+            and len(replay) == len(uncertain)
         )
         if not permitted:
             detail = ", ".join([*uncertain, *placeholders])
@@ -8955,15 +9270,15 @@ or document markup."""
                 "remain intact. Explicitly review the incomplete work before paid recovery."
             )
         logging.getLogger("sigma.lifecycle").info(
-            "paper.section_recovery_authorized project_id=%s section=%d "
-            "saved_sections=%d prior_dispatches=%d",
+            "paper.section_recovery_authorized project_id=%s sections=%s saved_sections=%d",
             project_id or "unknown",
-            authorized_recovery_section,
+            list(replay or ()),
             len(saved_sections),
-            len(dispatches[str(authorized_recovery_section)]),
         )
     elif authorized_recovery_section is not None:
         raise ProjectError("Paper section recovery authorization is stale; no AI call was made")
+    elif authorized_recovery_sections is not None:
+        raise ProjectError("Paper section recovery checkpoint changed; no AI call was made")
 
     if fast_path:
         pending = [
@@ -10148,6 +10463,7 @@ async def _generate_impl(
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
     authorized_provider_change: bool = False,
+    authorized_recovery_sections: list[int] | None = None,
 ) -> dict[str, Any]:
     async with _paper_operation(path, generating=True), _paper_model_selection_scope():
         project_key = _paper_state_key(path)
@@ -10627,24 +10943,22 @@ async def _generate_impl(
             # here can be retried without losing prior attempted-call totals.
             if reset_ledger is not None:
                 _clear_reset_ledger(path)
-        # A recovery authorization is single-request and section-specific.
-        # Validate against durable dispatch history before any new paid work
-        # (including optional publication reference compilation) can begin.
-        if authorized_recovery_section is not None:
-            eligible = _recoverable_dispatched_sections(work)
-            if (
-                type(authorized_recovery_section) is not int
-                or not long_form
-                or checkpoint is None
-                or not compatible
-                or eligible != [authorized_recovery_section]
-                or not work.get("plan")
-                or len(work.get("section_drafts", {})) == 0
-            ):
-                raise ProjectError(
-                    "Paper section recovery authorization does not match the saved "
-                    "checkpoint; no additional AI request was made."
-                )
+        # Play is the user's explicit authorization to resume the exact set
+        # of interrupted sections. Validate the durable dispatch records
+        # before any provider call; changed or injected sets fail closed.
+        replay = (
+            tuple(authorized_recovery_sections)
+            if authorized_recovery_sections is not None
+            else (authorized_recovery_section,)
+            if authorized_recovery_section is not None
+            else None
+        )
+        replay = _verify_section_recovery(
+            work,
+            replay,
+            long_form=long_form,
+            resumed_checkpoint=checkpoint is not None and compatible,
+        )
 
         async def finalize_published(saved_record: dict[str, Any]) -> dict[str, Any]:
             """Resume scoring/finalization from the immutable published PDF.
@@ -10664,11 +10978,9 @@ async def _generate_impl(
                     path, "paper", run_id_for_publication, operator=True
                 )
                 if reservation is not None:
-                    if (
-                        saved_record.get("paper_version") != reservation["number"]
-                        or saved_record.get("created_by") != reservation["creator_email"]
-                    ):
-                        raise ProjectError("Published Paper does not match its creator reservation")
+                    saved_record = _align_published_creator(
+                        path, saved_record, reservation, run_id_for_publication
+                    )
                     project_collaboration.note_execution_artifact_author(
                         path, "paper", run_id_for_publication, paper_id
                     )
@@ -11102,6 +11414,7 @@ async def _generate_impl(
                 on_output_delta=lambda number: report_activity("sections", number),
                 on_planning_output_delta=lambda: report_activity("planning"),
                 authorized_recovery_section=authorized_recovery_section,
+                authorized_recovery_sections=replay,
             )
             model = config["model"]
             long_form = True
@@ -11223,7 +11536,7 @@ async def _generate_impl(
             "paper_id": identifier,
             "paper_version": _paper_run_number.get(),
             "project_id": view.project.id,
-            "created_by": project_collaboration.collaborator_identity(path),
+            "created_by": _paper_original_creator(path),
             "created_at": timestamp,
             "snapshot_sha256": snapshot_hash,
             "snapshot": package,
@@ -11876,6 +12189,8 @@ async def _generate_impl(
         work["published_pdf_sha256"] = hashlib.sha256(pdf).hexdigest()
         _save_work(path, work)
         _save(path, record, pdf)
+        # _save_work already published the tiny paper identity into the
+        # progress sidecar, independently of later scoring/finalization.
         record.pop("tex_source", None)
         record.pop("snapshot", None)
         del tex, pdf
@@ -11935,6 +12250,7 @@ async def generate(
     browser_presence_required: bool = False,
     authorized_recovery_section: int | None = None,
     authorized_provider_change: bool = False,
+    authorized_recovery_sections: list[int] | None = None,
 ) -> dict[str, Any]:
     """Run independently of a browser stream, with explicit cancellation only."""
     from sigma.memory_guard import require_capacity
@@ -11962,6 +12278,7 @@ async def generate(
             browser_presence_required,
             authorized_recovery_section,
             authorized_provider_change,
+            authorized_recovery_sections,
         )
     )
     _generation_tasks[key] = task

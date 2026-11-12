@@ -712,6 +712,9 @@ class PaperGenerateRequest(OpenRequest):
     # Only an affirmative, section-specific user action may replay a paid
     # request that was dispatched but not saved. This is never a default.
     authorized_recovery_section: int | None = Field(default=None, ge=1, le=48)
+    # Explicit Play authorizes redoing the exact unsaved section set checked
+    # against persisted dispatch receipts; no additional dialog is needed.
+    authorized_recovery_sections: list[int] | None = Field(default=None, max_length=48)
     # This may change the model or billing account of unfinished paid work.
     # Only an explicit, informed user authorization may set it to True.
     authorized_provider_change: bool = False
@@ -991,7 +994,7 @@ def papers_preflight_view(
     run_id: str | None = None,
 ):
     if run_id is not None:
-        project_collaboration.execution_run(path, "paper", run_id, operator=True, missing_ok=True)
+        project_collaboration.execution_run(path, "paper", run_id, missing_ok=True)
     with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
         return papers.preflight(
             path,
@@ -1093,7 +1096,9 @@ async def papers_discard_view(body: PaperDiscardRequest):
                 and progress.get("status") in {"cancelled", "failed", "interrupted", "stopped"}
                 and await run_in_threadpool(project_collaboration.is_project_owner, body.path)
             )
-            if not owner_terminal:
+            # Terminal work may be removed by its original author or owner;
+            # while running, only the current executor may control it.
+            if progress is not None and progress.get("status") in {"active", "queued"}:
                 await run_in_threadpool(
                     project_collaboration.execution_run,
                     body.path,
@@ -1118,7 +1123,9 @@ async def papers_restart_view(body: PaperRestartRequest):
     if body.run_id is None:
         project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     else:
-        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+        # Restart is permitted for any member when the run is stopped.
+        # restart_work itself verifies a stopped checkpoint.
+        project_collaboration.execution_run(body.path, "paper", body.run_id)
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
         return await papers.restart_work(
             body.path,
@@ -1131,18 +1138,17 @@ async def papers_restart_view(body: PaperRestartRequest):
 
 
 @app.get("/api/projects/papers/unfinished-checkpoints")
-def paper_unfinished_checkpoints(path: str, run_id: str):
-    project_collaboration.execution_run(path, "paper", run_id, operator=True)
+def paper_unfinished_checkpoints(path: str, run_id: str, allow_active: bool = False):
+    project_collaboration.execution_run(path, "paper", run_id, operator=allow_active)
     with papers.paper_run_scope(run_id):
-        return papers.unfinished_restart_options(path)
+        return papers.unfinished_restart_options(path, allow_active=allow_active)
 
 
 @app.post("/api/projects/papers/unfinished-checkpoints")
 async def paper_unfinished_rewind(body: PaperUnfinishedRewindRequest):
-    # An interrupted draft belongs to its creator, not every collaborator.
-    # This is provider-free; actual dispatch still requires a fresh Play
-    # preflight and an authorized connected provider.
-    project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+    # Restarting a stopped checkpoint is provider-free and available to
+    # collaborators. The actual Play still claims the execution controller.
+    project_collaboration.execution_run(body.path, "paper", body.run_id)
     with papers.paper_run_scope(body.run_id):
         return await papers.restart_unfinished_step(
             body.path,
@@ -1157,7 +1163,8 @@ async def paper_unfinished_rewind(body: PaperUnfinishedRewindRequest):
 def paper_rewind_options(paper_id: str, path: str):
     from sigma import paper_rewind
 
-    project_collaboration.require_artifact_manager(path, "paper", paper_id)
+    # The source publication is immutable; creating a new run does not
+    # require permission to remove another collaborator's saved Paper.
     return paper_rewind.describe(path, paper_id, inspect_project(path).project.id)
 
 
@@ -1168,7 +1175,8 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    project_collaboration.require_artifact_manager(body.path, "paper", paper_id)
+    # An authorized member may start a NEW run from a published Paper,
+    # without changing the original publication.
     # Validate the immutable source before allocating a new collaborator run.
     source = paper_rewind.describe(body.path, paper_id, body.expected_project_id)
     if (
@@ -1403,6 +1411,13 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             )
             - 1
         )
+        # Determine restart eligibility from the durable run's own sidecar.
+        # It is never inferred from a different paper's global busy state.
+        with papers.paper_run_scope(run_id):
+            previous = await run_in_threadpool(papers.progress_status, body.path)
+        resume_stopped = bool(
+            previous and previous.get("status") in {"cancelled", "failed", "interrupted", "stopped"}
+        )
         reservation = await run_in_threadpool(
             project_collaboration.reserve_execution_run,
             body.path,
@@ -1411,6 +1426,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             saved_max,
             model=config["model"],
             thinking=config["reasoning_effort"],
+            resume_stopped_paper=resume_stopped,
         )
         if reservation is None:
             raise ProjectError("Paper reservation is unavailable.")
@@ -1446,6 +1462,11 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 include_sigma_issues=body.include_sigma_issues,
                 include_diagrams=body.include_diagrams,
                 authorized_recovery_section=body.authorized_recovery_section,
+                **(
+                    {"authorized_recovery_sections": body.authorized_recovery_sections}
+                    if body.authorized_recovery_sections is not None
+                    else {}
+                ),
                 **({"authorized_provider_change": True} if body.authorized_provider_change else {}),
                 **presence_kwargs,
             )
@@ -3027,6 +3048,40 @@ async def delete_project_view(body: DeleteProjectRequest):
             return await _delete_project_unleased(body)
     finally:
         project_collaboration.release_lease(str(authorized), lease)
+
+
+@app.post("/api/projects/description")
+def update_project_description_view(body: UpdateProjectRequest):
+    """Edit authored project text independently of long-running frozen research.
+
+    The supplied prior project settings are checked atomically against the
+    document under its short file mutex. Operational revision changes alone
+    cannot cancel or reject a human's text edit.
+    """
+    from sigma import project_collaboration
+
+    current_view = inspect_project(body.path)
+    project_collaboration.register_owner(current_view)
+    current = current_view.project
+    if (
+        body.investigation_type != current.investigation_type
+        or body.difficulty != current.difficulty
+    ):
+        raise ProjectError("This editor changes only project title and research text.")
+    view = update_project(
+        body.path,
+        body.title,
+        body.problem,
+        body.investigation_type,
+        body.ai_model,
+        body.reasoning_effort,
+        body.expected.model_dump(exclude_none=True),
+        difficulty=body.difficulty,
+        desired_outcomes=body.desired_outcomes,
+        paper_requirements=body.paper_requirements,
+        semantic_update=True,
+    )
+    return asdict(view)
 
 
 @app.post("/api/projects/update")

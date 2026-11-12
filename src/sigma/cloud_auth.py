@@ -1279,6 +1279,7 @@ async def middleware(request: Request, call_next):
             "/api/projects/close",
             "/api/projects/create",
             "/api/projects/update",
+            "/api/projects/description",  # Authored text only; no AI/provider calls.
             "/api/projects/research-limits",
             "/api/projects/strategies",
             "/api/projects/strategies/remove",
@@ -1291,6 +1292,7 @@ async def middleware(request: Request, call_next):
             "/api/projects/collaboration/leave",
             "/api/projects/samples/open",
             "/api/projects/research-sessions/mock",
+            "/api/projects/papers/discard",  # Provider-free removal; ACL and run fencing apply.
             "/api/projects/guest-copy",
         }
         project_write = (

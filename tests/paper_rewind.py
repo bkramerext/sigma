@@ -7,6 +7,7 @@ import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase, main
+from unittest.mock import patch
 from uuid import uuid4
 
 from sigma import api, paper_rewind, papers
@@ -356,6 +357,106 @@ class SavedPaperRewindTests(TestCase):
             persisted = papers._load_work(self.path)
             assert persisted is not None
             self.assertEqual(persisted["provider_calls"], 4)
+
+    def test_resume_target_comes_from_durable_work_not_last_streamed_stage(self) -> None:
+        run_id = uuid4().hex
+        with papers.paper_run_scope(run_id):
+            _package, work = self._stopped_long_form(run_id)
+            # A cancelled queued resume can leave its last streamed frame
+            # pointing at an earlier step, while the plan is already saved.
+            work.pop("validated_draft")
+            work["progress"]["stage"] = "publication_compilation"
+            work["progress"]["status"] = "paused"
+            papers._save_work(self.path, work)
+            self.assertEqual(
+                papers.unfinished_restart_options(self.path)["resume_stage"], "writing"
+            )
+            visible = papers.progress_status(self.path)
+            assert visible is not None
+            self.assertEqual(visible["stage"], "publication_compilation")
+            self.assertEqual(visible["resume_stage"], "writing")
+            # Polling must never hydrate the potentially 100 MB manuscript.
+            with patch.object(papers, "_load_work", side_effect=AssertionError("large read")):
+                polled = papers.progress_status(self.path)
+            assert polled is not None
+            self.assertEqual(polled["resume_stage"], "writing")
+
+    def test_review_restarts_from_frozen_package_without_prior_compilation(self) -> None:
+        run_id = uuid4().hex
+        with papers.paper_run_scope(run_id):
+            _package, work = self._stopped_long_form(run_id)
+            for key in ("writing_sources", "evidence_indexed", "plan", "validated_draft"):
+                work.pop(key, None)
+            work["progress"]["stage"] = "publication_compilation"
+            papers._save_work(self.path, work)
+            options = papers.unfinished_restart_options(self.path)
+            self.assertEqual(options["stages"], ["started", "review"])
+            result = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path, self.view.project.id, work["snapshot_sha256"], "review"
+                )
+            )
+            self.assertEqual(result["progress"]["resume_stage"], "publication_compilation")
+            self.assertEqual(result["progress"]["status"], "interrupted")
+
+    def test_one_shot_incomplete_writing_can_restart_writing(self) -> None:
+        run_id = uuid4().hex
+        with papers.paper_run_scope(run_id):
+            package, digest = papers._snapshot(self.path)
+            work = papers._new_work(
+                digest,
+                self.view.project.id,
+                "f" * 64,
+                self.config["model"],
+                self.config["reasoning_effort"],
+                kind="one_shot",
+            )
+            work.update(
+                {
+                    "frozen_package": package,
+                    "writing_sources": [],
+                    "progress": {
+                        "run_id": run_id,
+                        "status": "paused",
+                        "stage": "writing",
+                        "current": None,
+                        "total": None,
+                        "started_at": papers._now(),
+                        "updated_at": papers._now(),
+                        "elapsed_seconds": 12,
+                    },
+                }
+            )
+            papers._save_work(self.path, work)
+            self.assertIn("writing", papers.unfinished_restart_options(self.path)["stages"])
+            result = asyncio.run(
+                papers.restart_unfinished_step(
+                    self.path, self.view.project.id, work["snapshot_sha256"], "writing"
+                )
+            )
+            self.assertEqual(result["progress"]["resume_stage"], "writing")
+
+    def test_active_checkpoint_inspection_is_read_only(self) -> None:
+        run_id = uuid4().hex
+        with papers.paper_run_scope(run_id):
+            _package, work = self._stopped_long_form(run_id)
+            before = papers._load_work(self.path)
+            with patch.object(
+                papers,
+                "progress_status",
+                return_value={"status": "active", "stage": "proofreading"},
+            ):
+                with self.assertRaisesRegex(ProjectError, "Stop this Paper"):
+                    papers.unfinished_restart_options(self.path)
+                available = papers.unfinished_restart_options(self.path, allow_active=True)
+                self.assertIn("validation", available["stages"])
+                with self.assertRaisesRegex(ProjectError, "Stop this Paper"):
+                    asyncio.run(
+                        papers.restart_unfinished_step(
+                            self.path, self.view.project.id, work["snapshot_sha256"], "validation"
+                        )
+                    )
+            self.assertEqual(papers._load_work(self.path), before)
 
     def test_unfinished_writing_restart_preserves_plan_and_paid_call_history(self) -> None:
         run_id = uuid4().hex
