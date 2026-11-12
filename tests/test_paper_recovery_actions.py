@@ -32,12 +32,15 @@ class PaperRecoveryActionsTests(TestCase):
                 return_value=SimpleNamespace(project=SimpleNamespace(id="project-1")),
             ),
             patch.object(
-                api, "require_cloud_inference_binding",
+                api,
+                "require_cloud_inference_binding",
                 side_effect=AssertionError("Remove must not require AI connection"),
             ),
             patch.object(api.project_collaboration, "require_paper_draft_operator") as acl,
             patch.object(
-                api.papers, "discard_work", new_callable=AsyncMock,
+                api.papers,
+                "discard_work",
+                new_callable=AsyncMock,
                 return_value={"discarded": True},
             ) as discard,
         ):
