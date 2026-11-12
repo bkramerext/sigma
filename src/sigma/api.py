@@ -1002,6 +1002,7 @@ def papers_progress_view(path: str, run_id: str | None = None):
 
 @app.post("/api/projects/papers/cancel")
 async def paper_cancel_view(body: PaperCancelRequest):
+    control_started = perf_counter()
     # Stop is a safety/control operation, not a new inference admission.
     # Do not wait for (or require) the current AI connection: a provider outage,
     # account switch, or memory-pressure preflight must never prevent Stop.
@@ -1019,8 +1020,18 @@ async def paper_cancel_view(body: PaperCancelRequest):
         if body.request_only:
             # Stop is accepted and cancellation scheduled; cleanup may still
             # be running. Never return "cancelled" before it is durable.
-            return {"stop_requested": papers.request_cancel_generation(body.path)}
-        return {"cancelled": await papers.cancel_generation(body.path)}
+            requested = papers.request_cancel_generation(body.path)
+            logging.getLogger("sigma.responsiveness").info(
+                "paper.stop_ack duration_ms=%.1f request_only=true",
+                (perf_counter() - control_started) * 1000,
+            )
+            return {"stop_requested": requested}
+        cancelled = await papers.cancel_generation(body.path)
+        logging.getLogger("sigma.responsiveness").info(
+            "paper.stop_ack duration_ms=%.1f request_only=false",
+            (perf_counter() - control_started) * 1000,
+        )
+        return {"cancelled": cancelled}
 
 
 @app.post("/api/projects/papers/discard")
@@ -1258,6 +1269,7 @@ def paper_delete_view(paper_id: str, path: str):
 
 @app.post("/api/projects/papers")
 async def paper_generate_view(body: PaperGenerateRequest, request: Request):
+    admission_started = perf_counter()
     verified_view = await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
@@ -1463,6 +1475,9 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             # generation task retains its own checkpoints and lifecycle.
             viewer_connected = False
 
+    logging.getLogger("sigma.responsiveness").info(
+        "paper.start_ack duration_ms=%.1f", (perf_counter() - admission_started) * 1000
+    )
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
@@ -1886,6 +1901,7 @@ def mock_research_start_view(
 @app.post("/api/projects/research-sessions/start")
 async def research_start_view(body: ResearchStartRequest):
     """Independent Session admission; per-session state already has durable IDs."""
+    admission_started = perf_counter()
     try:
         result = await research_sessions.start_session(
             body.path,
@@ -1923,14 +1939,22 @@ async def research_start_view(body: ResearchStartRequest):
             status_code=400,
         )
     if isinstance(result.get("id"), str):
-        project_collaboration.note_artifact_author(
-            body.path, "session", result["id"], created_only=True
+        await run_in_threadpool(
+            project_collaboration.note_artifact_author,
+            body.path,
+            "session",
+            result["id"],
+            created_only=True,
         )
+    logging.getLogger("sigma.responsiveness").info(
+        "session.start_ack duration_ms=%.1f", (perf_counter() - admission_started) * 1000
+    )
     return result
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest, request: Request):
+    control_started = perf_counter()
     await run_in_threadpool(
         project_collaboration.require_execution_operator,
         body.path,
@@ -1971,6 +1995,12 @@ async def research_control_view(session_id: str, body: ResearchControlRequest, r
         "session",
         session_id,
         created_only=True,
+    )
+    logging.getLogger("sigma.responsiveness").info(
+        "session.control_ack action=%s duration_ms=%.1f request_only=%s",
+        body.action,
+        (perf_counter() - control_started) * 1000,
+        body.request_only,
     )
     return result
 
