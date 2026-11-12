@@ -1418,7 +1418,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
         # discarded state and published artifacts. Avoid a separate SQLite ACL
         # read before it; a published run still cannot be dispatched twice.
         if reservation.get("artifact_id"):
-            raise ProjectError("This Paper run is already published; open the saved PDF.")
+            raise ProjectError("This Paper run is already published; open the PDF.")
     else:
         project_collaboration.reserve_paper_draft(
             body.path,
@@ -1516,7 +1516,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             reason = (
                 memory_guard.MESSAGE
                 if memory_guard.is_critical()
-                else "Paper generation cancelled; saved work remains available."
+                else "Paper generation cancelled; completed work remains available."
             )
             yield "data: " + json.dumps({"type": "error", "error": reason}) + "\n\n"
         except ProjectError as exc:
@@ -1544,7 +1544,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                         "error": (
                             "An unexpected paper-generation error occurred. "
                             "No version was published. Check server logs; "
-                            "saved work may be resumable."
+                            "work may be resumable."
                         ),
                     }
                 )
@@ -2776,7 +2776,7 @@ async def proposal_view(body: ProposalRequest, request: Request):
         done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
         if connection in done:
             return JSONResponse(
-                {"error": "Proposal request cancelled; nothing saved"}, status_code=499
+                {"error": "Proposal request cancelled; no proposal was added"}, status_code=499
             )
         try:
             return await task
@@ -2784,7 +2784,7 @@ async def proposal_view(body: ProposalRequest, request: Request):
             if memory_guard.is_critical():
                 return JSONResponse({"error": memory_guard.MESSAGE}, status_code=503)
             return JSONResponse(
-                {"error": "Proposal request cancelled; nothing saved"}, status_code=499
+                {"error": "Proposal request cancelled; no proposal was added"}, status_code=499
             )
     finally:
         for pending in (task, connection):

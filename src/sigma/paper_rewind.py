@@ -79,7 +79,7 @@ def describe(path: str, paper_id: str, project_id: str) -> dict[str, Any]:
             {
                 "id": "typesetting",
                 "label": "Proofread",
-                "description": "Keep the saved validated manuscript and redo proofreading, PDF generation and scoring.",
+                "description": "Keep the validated manuscript and redo proofreading, PDF generation and scoring.",
             },
         ],
         "include_diagrams": source["generation"].get("include_diagrams", True),
@@ -133,7 +133,7 @@ async def create(
         if papers._read_queue_status(path) is not None:
             raise ProjectError("A Paper is queued or interrupted; resolve it before restarting.")
         if len(papers.list_papers(path)) >= papers.MAX_PAPERS:
-            raise ProjectError("This project has reached the saved Paper version limit.")
+            raise ProjectError("This project has reached the Paper version limit.")
         fingerprint = hashlib.sha256((auth["mode"] + "\0" + auth["identity"]).encode()).hexdigest()
         long_form = source["generation"].get("long_form") is True
         work = papers._new_work(
@@ -203,7 +203,7 @@ async def create(
         # a truncated or non-resumable manuscript.
         checked = papers._load_work(path)
         if checked is None or checked.get("rewind_origin") != origin:
-            raise ProjectError("Restart checkpoint was not durably saved.")
+            raise ProjectError("Restart checkpoint is unavailable.")
         return {
             "created": True,
             "snapshot_sha256": work["snapshot_sha256"],

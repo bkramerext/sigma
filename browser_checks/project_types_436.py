@@ -127,6 +127,39 @@ with sync_playwright() as playwright:
     assert google_rect["x"] >= model_rect["x"] + model_rect["width"]
     assert chatgpt_rect["x"] >= model_rect["x"] + model_rect["width"]
     assert abs(model_rect["y"] - chatgpt_rect["y"]) < 3
+    # Match Project's 12px row spacing in both Home pill columns.
+    home_model_gap = model_rect["y"] - (about_rect["y"] + about_rect["height"])
+    home_identity_gap = chatgpt_rect["y"] - (
+        google_rect["y"] + google_rect["height"]
+    )
+    assert abs(home_model_gap - 12) <= 1, home_model_gap
+    assert abs(home_identity_gap - 12) <= 1, home_identity_gap
+    # Home's full control group must sit the same distance from the right
+    # viewport edge as from the top, without moving any pill separately.
+    home_insets = page.evaluate(
+        """() => {
+          const google = document.querySelector('.home-account-grid .project-google-signin');
+          const bounds = google?.getBoundingClientRect();
+          if (!bounds) return null;
+          return { top: bounds.top, right: innerWidth - bounds.right };
+        }"""
+    )
+    assert home_insets is not None
+    assert abs(home_insets["top"] - home_insets["right"]) <= 3, home_insets
+    # The Home and Project headers share the same pill dimensions, with
+    # Admin (when present) extending only the left side of Home's first row.
+    home_pill_geometry = {
+        "about_height": about_rect["height"],
+        "settings_height": settings_rect["height"],
+        "google_height": google_rect["height"],
+        "chatgpt_height": chatgpt_rect["height"],
+        "model_height": model_rect["height"],
+        "google_width": google_rect["width"],
+        "chatgpt_width": chatgpt_rect["width"],
+        "model_width": model_rect["width"],
+        "model_gap": home_model_gap,
+        "identity_gap": home_identity_gap,
+    }
 
     # The restored pill cycles user-wide defaults (not project settings),
     # prompting before a cost-tier increase and preserving unrelated limits.
@@ -172,6 +205,22 @@ with sync_playwright() as playwright:
     expect(new_dialog).to_be_visible()
     assert new_dialog.get_by_role("combobox", name="Model", exact=True).count() == 0
     assert new_dialog.locator(".settings-model-row").count() == 0
+    # Create requires a title, a non-blank Research Subject, and a selected
+    # project type; Desired Outcomes and Paper Requirements stay optional.
+    create = new_dialog.get_by_role("button", name="Create", exact=True)
+    expect(new_dialog.get_by_text("Project title, Research Subject, and project type are required", exact=False)).to_be_visible()
+    expect(create).to_be_disabled()
+    new_dialog.locator("#project-name").fill("New project validation")
+    expect(create).to_be_disabled()
+    new_dialog.locator("#project-problem").fill("Check creation requirements")
+    expect(create).to_be_disabled()
+    new_dialog.locator("#project-mode").click()
+    page.get_by_role("listbox", name="Research category").get_by_role("option").first.click()
+    expect(create).to_be_enabled()
+    new_dialog.locator("#project-problem").fill("  ")
+    expect(create).to_be_disabled()
+    new_dialog.locator("#project-problem").fill("Check creation requirements")
+    expect(create).to_be_enabled()
     new_dialog.get_by_role("button", name="Cancel project settings").click()
     expect(new_dialog).not_to_be_visible()
 
@@ -442,6 +491,60 @@ with sync_playwright() as playwright:
     expect(page.get_by_text("TITLE", exact=True)).to_be_visible()
     expect(page.get_by_text("Project type unavailable", exact=True).first).to_be_visible()
     expect(page.get_by_role("button", name="Export project")).to_be_visible()
+    # The full header control group (including optional Admin) must be
+    # centered vertically in the original header without moving its pills.
+    page.set_viewport_size({"width": 1440, "height": 900})
+    header_gaps = page.evaluate(
+        """() => {
+          const header = document.querySelector('.project-art-header');
+          const group = header?.querySelector('.header-controls');
+          if (!header || !group) return null;
+          const h = header.getBoundingClientRect();
+          const g = group.getBoundingClientRect();
+          const style = getComputedStyle(header);
+          return {
+            top: g.top - h.top,
+            bottom: h.bottom - g.bottom,
+            verticalPadding: parseFloat(style.paddingTop) + parseFloat(style.paddingBottom),
+            artSize: getComputedStyle(header, '::before').backgroundSize,
+          };
+        }"""
+    )
+    assert header_gaps is not None, "project header control group unavailable"
+    assert abs(header_gaps["top"] - header_gaps["bottom"]) <= 2, header_gaps
+    # Original 20px header top + 6px group inset: total 26px.
+    assert abs(header_gaps["verticalPadding"] - 26) < 1, header_gaps
+    assert header_gaps["artSize"] == "auto 155%", header_gaps
+    controls = page.locator(".project-art-header .header-controls")
+    project_rects = {
+        "about": controls.locator(".about-action").bounding_box(),
+        "settings": controls.locator(".project-global-settings-pill").bounding_box(),
+        "google": controls.locator(".project-identity-pill-stack > .project-google-signin").bounding_box(),
+        "chatgpt": controls.locator(".project-identity-pill-stack > .api-connection > summary").bounding_box(),
+        "model": controls.locator(".global-model-pill").bounding_box(),
+    }
+    assert all(project_rects.values()), project_rects
+    about, settings, google, chatgpt, model = (
+        project_rects[key] for key in ("about", "settings", "google", "chatgpt", "model")
+    )
+    project_pill_geometry = {
+        "about_height": about["height"],
+        "settings_height": settings["height"],
+        "google_height": google["height"],
+        "chatgpt_height": chatgpt["height"],
+        "model_height": model["height"],
+        "google_width": google["width"],
+        "chatgpt_width": chatgpt["width"],
+        "model_width": model["width"],
+        "model_gap": model["y"] - about["y"] - about["height"],
+        "identity_gap": chatgpt["y"] - google["y"] - google["height"],
+    }
+    for key, home_value in home_pill_geometry.items():
+        assert abs(project_pill_geometry[key] - home_value) <= 2, {
+            "metric": key,
+            "home": home_value,
+            "project": project_pill_geometry[key],
+        }
     with page.expect_download() as download_info:
         page.get_by_role("button", name="Export project").click()
         page.get_by_role("dialog", name="Export Project").get_by_role(
@@ -471,7 +574,7 @@ with sync_playwright() as playwright:
     play.click()
     warning = page.get_by_role("alertdialog", name="Project type unavailable")
     expect(warning).to_be_visible()
-    expect(warning.get_by_role("button", name="Continue with saved settings")).to_be_visible()
+    expect(warning.get_by_role("button", name="Continue with existing settings")).to_be_visible()
     expect(warning.get_by_role("button", name="Choose a replacement")).to_be_visible()
     page.keyboard.press("Escape")
     expect(warning).not_to_be_visible()
@@ -494,7 +597,7 @@ with sync_playwright() as playwright:
     )
     page.screenshot(path=str(EVIDENCE / "missing-type-start-warning.png"), full_page=True)
 
-    warning.get_by_role("button", name="Continue with saved settings").click()
+    warning.get_by_role("button", name="Continue with existing settings").click()
     expect(warning).not_to_be_visible()
     start_button = page.locator(".sessions-pane-heading").get_by_role(
         "button", name="Start Session"
@@ -628,10 +731,8 @@ with sync_playwright() as playwright:
     play.click()
     unsafe_warning = page.get_by_role("alertdialog", name="Project type unavailable")
     expect(unsafe_warning).to_be_visible()
-    expect(
-        unsafe_warning.get_by_text("does not have a complete saved type snapshot")
-    ).to_be_visible()
-    expect(unsafe_warning.get_by_role("button", name="Continue with saved settings")).to_have_count(
+    expect(unsafe_warning.get_by_text("does not have a complete type snapshot")).to_be_visible()
+    expect(unsafe_warning.get_by_role("button", name="Continue with existing settings")).to_have_count(
         0
     )
     unsafe_warning.get_by_role("button", name="Choose a replacement").click()
@@ -1236,7 +1337,7 @@ with sync_playwright() as playwright:
     expect(
         page.locator(".papers-pane")
         .get_by_role("alert")
-        .filter(has_text="A saved PDF is required before this paper can be scored.")
+        .filter(has_text="A PDF is required before this paper can be scored.")
     ).to_be_visible()
 
     paper_fixture["pdf"] = True

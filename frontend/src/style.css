@@ -313,6 +313,19 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   justify-content: flex-end;
   gap: 12px;
 }
+/* Anchor the entire Home account group to the viewport, not to the
+   content column's separate right gutter. This keeps the visible top and
+   right insets equal even when the window is resized or Admin is present.
+   The grid itself (and every gap/size within it) remains untouched. */
+@media (min-width: 701px) {
+  .home-page .home-right-actions {
+    position: fixed;
+    z-index: 3;
+    top: calc(var(--home-corner-gap) + 2px);
+    right: var(--home-corner-gap);
+    transform: none;
+  }
+}
 /* Model is the first top-right pill; About follows directly beneath it, right aligned. */
 .home-page .home-account-grid {
   display: grid;
