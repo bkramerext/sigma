@@ -1000,7 +1000,9 @@ def check_completed_paper_count_does_not_slow_activity(root: Path) -> None:
             papers, "needs_preflight_on_open", side_effect=AssertionError("Scanned completed run")
         ),
         patch.object(
-            papers, "_published_artifact_for_run", side_effect=AssertionError("Probed completed PDF")
+            papers,
+            "_published_artifact_for_run",
+            side_effect=AssertionError("Probed completed PDF"),
         ),
     ):
         runs = papers.run_progress_list(view.path)
