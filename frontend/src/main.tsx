@@ -1943,7 +1943,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           // failure or dispatching a replacement while that lock is held.
           if (action === 'resume' && message.includes('Session execution is still releasing resources')
             && releaseRetries++ < 12) {
-            await new Promise(resolve => window.setTimeout(resolve, 250));
+            await new Promise<void>(resolve => window.setTimeout(resolve, 250));
             continue;
           }
           const attemptShortfall = message.match(/Resume with exactly (\d+) explicitly authorized additional attempts/);
