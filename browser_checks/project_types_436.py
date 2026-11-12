@@ -159,6 +159,35 @@ with sync_playwright() as playwright:
         "identity_gap": home_identity_gap,
     }
 
+    # Settings is a HEADER pill, not a square copper project-list icon.
+    # Its hover appearance must match About without changing either pill's box.
+    def hover_style(selector):
+        pill = grid.locator(selector)
+        pill.hover()
+        page.wait_for_timeout(200)  # Allow SIGMA's 120–150ms hover transition.
+        return pill.evaluate(
+            """node => {
+              const css = getComputedStyle(node);
+              return {
+                color: css.color,
+                background: css.backgroundColor,
+                backgroundImage: css.backgroundImage,
+                borderColor: css.borderTopColor,
+                radius: css.borderTopLeftRadius,
+                shadow: css.boxShadow,
+              };
+            }"""
+        )
+
+    about_hover = hover_style(".home-about-button")
+    settings_hover = hover_style(".home-settings-pill")
+    assert settings_hover == about_hover, {
+        "about": about_hover,
+        "settings": settings_hover,
+    }
+    assert settings_hover["backgroundImage"] == "none", settings_hover
+    assert settings_hover["radius"] != "4px", settings_hover
+
     # The restored pill cycles user-wide defaults (not project settings),
     # prompting before a cost-tier increase and preserving unrelated limits.
     original_model_settings = page.request.get(
