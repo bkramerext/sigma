@@ -31,6 +31,22 @@ _real_has_active_session = research_sessions.has_active_session
 _real_advance_mock = research_sessions._advance_mock
 
 
+@app.post("/api/__fixture/collaboration-arm-freeze-sessions")
+def arm_mock_session_freeze(body: dict[str, str]):
+    """Hold stage-1 running mocks without suppressing the first queued->running transition."""
+    path = body.get("path", "")
+    if not isinstance(path, str) or not path:
+        raise HTTPException(400, "Missing project path")
+
+    def hold_running(record):
+        if record.get("project_path") == path and int(record.get("mock_stage", 0)) >= 1:
+            return record
+        return _real_advance_mock(record)
+
+    research_sessions._advance_mock = hold_running
+    return {"armed": True}
+
+
 @app.post("/api/__fixture/collaboration-freeze-sessions")
 def freeze_mock_sessions(body: dict[str, str]):
     path = body.get("path", "")
