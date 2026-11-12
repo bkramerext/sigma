@@ -2813,6 +2813,9 @@ function paperProgressOperation(progress: PaperProgress): string {
 function paperErrorSummary(message: string): string {
   const value = message.trim();
   if (friendlyProviderError(value) !== value) return friendlyProviderError(value);
+  if (/Published Paper does not match its creator reservation/i.test(value)) {
+    return 'The PDF was saved. Resume this paper to finish publication and scoring.';
+  }
   if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
     return 'PDF compilation failed. The paper draft is preserved; use Resume to retry without rewriting it.';
   }
@@ -3152,7 +3155,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [restartReady, setRestartReady] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [confirmDiscardDraft, setConfirmDiscardDraft] = useState(false);
-  const [confirmDiscardRunId, setConfirmDiscardRunId] = useState<string | null>(null);
+  const [confirmDiscardRun, setConfirmDiscardRun] = useState<{ runId: string; left: number; top: number } | null>(null);
+  const discardRunPopup = useRef<HTMLDivElement>(null);
   const [confirmRestartDraft, setConfirmRestartDraft] = useState(false);
   const [confirmPlayRestartDraft, setConfirmPlayRestartDraft] = useState(false);
   const [confirmRecoverDraft, setConfirmRecoverDraft] = useState(false);
@@ -3287,6 +3291,37 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const explainingRef = useRef(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   const [paperPopupPlacement, setPaperPopupPlacement] = useState({ left: 0, above: false });
+  // One viewport-anchored confirmation for the target run. It cannot end up
+  // underneath another paper card when the library reorders during a run.
+  function showDiscardRunConfirmation(runId: string, button: HTMLElement) {
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(280, window.innerWidth - 24);
+    const height = 170;
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const top = Math.max(12, Math.min(
+      window.innerHeight - rect.bottom >= height + 12 ? rect.bottom + 6 : rect.top - height - 6,
+      window.innerHeight - height - 12,
+    ));
+    setConfirmDiscardRun({ runId, left, top });
+  }
+  useEffect(() => {
+    if (!confirmDiscardRun) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setConfirmDiscardRun(null); }
+    };
+    const onOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !discardRunPopup.current?.contains(event.target) &&
+        !(event.target instanceof Element && event.target.closest('[data-paper-discard-trigger]'))) {
+        setConfirmDiscardRun(null);
+      }
+    };
+    document.addEventListener('keydown', onEscape);
+    document.addEventListener('pointerdown', onOutside);
+    return () => {
+      document.removeEventListener('keydown', onEscape);
+      document.removeEventListener('pointerdown', onOutside);
+    };
+  }, [confirmDiscardRun]);
   function positionPaperPopup(button: HTMLElement, width: number, height: number) {
     const bounds = button.getBoundingClientRect();
     const popupWidth = Math.min(width, window.innerWidth - 24);
@@ -3666,8 +3701,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         setNewPaperRequested(true);
         setDraftPaperExpanded(true);
         setUnfinishedRestartBusy(false);
-        if ((inFlight || busy) && proposed.runId) setResumeAfterActiveRewind(proposed.runId);
-        else void generatePaper(false, null, true, proposed.runId ?? undefined);
+        if (proposed.runId) setResumeAfterActiveRewind(proposed.runId);
+        else void generatePaper(false, null, true);
         return;
       }
       // This flag starts only AFTER Stop: it must not intercept the initial
@@ -3729,8 +3764,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // active run, let its previous streaming request finish before the new
       // render dispatches Play; the current closure still has busy=true.
       setUnfinishedRestartBusy(false);
-      if ((inFlight || busy) && proposed.runId) setResumeAfterActiveRewind(proposed.runId);
-      else void generatePaper(false, null, true, proposed.runId ?? undefined);
+      if (proposed.runId) setResumeAfterActiveRewind(proposed.runId);
+      else void generatePaper(false, null, true);
     } catch (cause) {
       paperRewindAdmissionPending.current = false;
       paperRewindStopAfterAdmission.current = false;
@@ -3872,7 +3907,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperStepRestartBusy(false);
       // React state is not synchronously updated by the setter above. Use
       // the archived rendering preference for this dispatch explicitly.
-      void generatePaper(false, null, true, restored.run_id ?? runId, proposed.options.include_diagrams);
+      setResumeAfterActiveRewind(restored.run_id ?? runId);
     } catch (cause) {
       paperRewindAdmissionPending.current = false;
       paperRewindStopAfterAdmission.current = false;
@@ -4183,7 +4218,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         setContinuationAvailable(false);
         setResumeDetails(null);
       }
-      setConfirmDiscardRunId(null);
+      setConfirmDiscardRun(null);
       setConfirmDiscardDraft(false);
       await refresh(undefined, true);
     } catch (cause) {
@@ -4239,7 +4274,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     finally { setRestartingCheckpoint(false); setBusy(false); }
   }
   async function generatePaper(restartBeforePlay = false, recoverSection: number | null = null, resumeSelectedRun = false, explicitRunId?: string, includeDiagramsOverride?: boolean) {
-    if (busy || !binding) return;
+    if (busy || !binding) {
+      setUnfinishedStepCheckError({
+        key: paperUnfinishedOptionsKey(explicitRunId ?? selectedRunIdRef.current),
+        message: !binding
+          ? 'Connect ChatGPT before starting this paper.'
+          : 'Another paper action is finishing. Resume this paper when it becomes available.',
+      });
+      return;
+    }
     deliberatePaperStop.current = false;
     paperSubmissionDispatched.current = false;
     // Always resume the newly restored run, never a stale selected row.
@@ -4423,7 +4466,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     ? (resumeDetails.recovery_sections[0] ?? null) : null;
   const paperPlayBlocked = !generationRunning &&
     ['active', 'queued'].includes(paperProgress?.status ?? '');
-  const paperPlayDisabled = generating || loading || !binding || paperPlayBlocked;
+  const paperRestartPending = !!resumeAfterActiveRewind && resumeAfterActiveRewind === selectedRunId;
+  const paperPlayDisabled = generating || paperRestartPending || loading || !binding || paperPlayBlocked;
   const paperPlayTooltip = paperPlayBlocked
     ? 'This paper is already generating'
     : busy
@@ -4461,7 +4505,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const paperProgressFailure = paperStepRestartBusy ? ''
     : paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? ''
     : paperProgress?.status === 'interrupted' && !paperProgress.detail?.startsWith('Restored from Paper ') ? paperProgress.detail ?? '' : '';
-  const paperNoticeMessage = error || paperProgressFailure;
+  // A durable published paper supersedes the failed authoring receipt. Errors
+  // for that run cannot remain in the project-wide contextual notice.
+  const paperNoticeMessage = selectedRun?.paper_id ? '' : error || paperProgressFailure;
   const paperNoticeKey = [
     paperProgress?.started_at ?? '',
     paperProgress?.status ?? '',
@@ -4555,12 +4601,21 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     setUnfinishedStepRestart(null);
     setConfirmDiscardDraft(false); setConfirmRestartDraft(true);
   };
+  // A single dispatcher performs every confirmed restart after React has
+  // committed the restored run and current model settings. No silent busy exit.
   useEffect(() => {
-    if (!resumeAfterActiveRewind || busy) return;
+    if (!resumeAfterActiveRewind || busy || unfinishedRestartBusy || paperStepRestartBusy) return;
     const runId = resumeAfterActiveRewind;
     setResumeAfterActiveRewind(null);
+    if (!binding) {
+      setUnfinishedStepCheckError({
+        key: paperUnfinishedOptionsKey(runId),
+        message: 'Connect ChatGPT to resume this paper.',
+      });
+      return;
+    }
     void generatePaper(false, null, true, runId);
-  }, [resumeAfterActiveRewind, busy]);
+  }, [resumeAfterActiveRewind, busy, unfinishedRestartBusy, paperStepRestartBusy, binding]);
 
   const resumeOtherPaperRun = (run: PaperRun, anchor?: HTMLButtonElement) => {
     if (anchor) providerChangeAnchor.current = anchor;
@@ -4663,8 +4718,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={draftDisplayTitle} data-paper-version={assignedPaperNumber ?? undefined}>
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={draftDisplayTitle} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
-              badge={!stoppingSelectedPaper && (paperStepRestartBusy || paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued') ? <span className={`research-running-indicator paper-title-activity${!paperStartOptimistic && paperProgress?.status === 'queued' ? ' paper-queued-indicator' : ''}`} aria-label={paperStepRestartBusy ? 'Preparing paper restart' : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Paper resuming' : 'Paper starting') : paperProgress?.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperStepRestartBusy ? 'Preparing paper restart' : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming paper' : 'Starting paper') : formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
-              beforeCopy={stoppingSelectedPaper ? <span className="paper-real-title paper-draft-title">Stopping paper…</span> : paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperStepRestartBusy ? 'Preparing restart…' : paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
+              badge={!stoppingSelectedPaper && (paperRestartPending || paperStepRestartBusy || paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued') ? <span className={`research-running-indicator paper-title-activity${paperRestartPending || (!paperStartOptimistic && paperProgress?.status === 'queued') ? ' paper-queued-indicator' : ''}`} aria-label={paperStepRestartBusy ? 'Preparing paper restart' : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Paper resuming' : 'Paper starting') : paperProgress?.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperStepRestartBusy ? 'Preparing paper restart' : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming paper' : 'Starting paper') : formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
+              beforeCopy={stoppingSelectedPaper ? <span className="paper-real-title paper-draft-title">Stopping paper…</span> : paperRestartPending ? <span className="paper-real-title paper-draft-title">Restarting paper…</span> : paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperStepRestartBusy ? 'Preparing restart…' : paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && canResumeDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? (assignedPaperNumber !== null ? `Resume Paper ${assignedPaperNumber}` : 'Resume paper') : 'Generate paper'} disabled={paperPlayDisabled} onClick={event => beginPaperFromControl(event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
                   {confirmRecoverDraft && recoverySection !== null && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Authorize unfinished paper section recovery">
@@ -4707,7 +4762,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 model: paperProgress?.model || selectedRun?.model || model,
                 thinking: paperProgress?.reasoning_effort || selectedRun?.thinking || effort,
               }) || 'Paper metadata unavailable'}
-              {' · '}{stoppingSelectedPaper ? 'Stopping · saving checkpoint'
+              {!stoppingSelectedPaper && ' · '}{stoppingSelectedPaper ? ''
+                : paperRestartPending ? 'Restarting'
                 : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming' : 'Starting')
                 : paperProgress?.status === 'active' ? 'Generating'
                 : paperProgress?.status === 'queued' ? 'Queued'
@@ -4742,7 +4798,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       {busy && !stoppingSelectedPaper && (restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming paper…' : 'Starting paper…') : phase}</span></p>}
       {paperProgress && !restartingCheckpoint && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
         {paperStartOptimistic ? <strong>{paperPlayIntent === 'resuming' ? 'Resuming paper…' : 'Starting paper…'}</strong> : stoppingSelectedPaper
-          ? <strong>Stopping paper · {paperStopReconciliation ? 'saving checkpoint' : 'awaiting server acknowledgment'}</strong>
+          ? null
           : (paperProgress.status === 'active' || paperProgress.status === 'queued') &&
             <strong>{paperProgress.status === 'queued' ? 'Queued' : 'Generating'} · {paperTimingLabel(paperProgress, paperClock)}</strong>}
         {!stoppingSelectedPaper && paperProgress.detail?.startsWith('Retrying') && <span className="paper-progress-substep">{paperProgress.detail}</span>}
@@ -4778,20 +4834,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               </button>}
               {!guest && run.can_remove && (run.can_control || !['active', 'queued'].includes(run.status)) && <span className="paper-remove-anchor">
                 <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
-                  aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" disabled={!!discardingRunId || loading}
-                  onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardRunId(run.run_id); }}>
+                  aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" data-paper-discard-trigger="true" disabled={!!discardingRunId || loading}
+                  onClick={event => showDiscardRunConfirmation(run.run_id, event.currentTarget)}>
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
                 </button>
-                {confirmDiscardRunId === run.run_id && <div className="paper-remove-actions" style={paperPopupStyle}>
-                  <div className="research-stop-confirm" role="group" aria-label={`Confirm removing unfinished Paper ${run.number}`}>
-                    <p>{['active', 'queued'].includes(run.status) ? 'Stop and remove' : 'Remove'} Paper {run.number} and its checkpoint? Saved Papers remain.</p>
-                    {paperRemovalErrors[run.run_id] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[run.run_id]}</p>}
-                    <div className="session-remove-confirm-actions">
-                      <button type="button" className="text-view-link" disabled={!!discardingRunId} onClick={() => void discardOtherRun(run.run_id)}>Confirm</button>
-                      <button type="button" className="text-view-link" onClick={() => setConfirmDiscardRunId(null)}>Cancel</button>
-                    </div>
-                  </div>
-                </div>}
+
               </span>}
               {run.can_control && (run.status === 'active' || run.status === 'queued') && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
@@ -4811,7 +4858,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
                 {' · '}{optimisticPaperStop?.runId === run.run_id
-                  ? paperStopReconciliation ? 'Stopping · saving checkpoint' : 'Stopping · awaiting server acknowledgment'
+                  ? 'Stopping'
                   : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
@@ -4971,6 +5018,23 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           </div>
         </div>, document.body
       )}
+      {confirmDiscardRun && (() => {
+        const run = paperRuns.find(item => item.run_id === confirmDiscardRun.runId);
+        return run ? createPortal(
+          <div ref={discardRunPopup} className="paper-step-restart-popup" role="dialog"
+            aria-label={`Confirm removing unfinished paper ${run.number}`}
+            aria-modal="false" style={{ left: confirmDiscardRun.left, top: confirmDiscardRun.top, maxHeight: '55dvh', overflowY: 'auto' }}>
+            <p>{['active', 'queued'].includes(run.status) ? 'Stop and remove' : 'Remove'} paper {run.number} and its checkpoint? Saved papers remain.</p>
+            {paperRemovalErrors[run.run_id] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[run.run_id]}</p>}
+            <div className="session-remove-confirm-actions">
+              <button type="button" className="text-view-link" disabled={!!discardingRunId}
+                onClick={() => void discardOtherRun(run.run_id)}>Confirm</button>
+              <button type="button" className="text-view-link" disabled={!!discardingRunId}
+                onClick={() => setConfirmDiscardRun(null)}>Cancel</button>
+            </div>
+          </div>, document.body,
+        ) : null;
+      })()}
       {unfinishedStepRestart && createPortal(
         <div ref={paperStepRestartPopup} className="paper-step-restart-popup" role="dialog"
           aria-label="Confirm unfinished Paper checkpoint restart" aria-modal="false"
