@@ -368,11 +368,20 @@ class SavedPaperRewindTests(TestCase):
             work["progress"]["stage"] = "publication_compilation"
             work["progress"]["status"] = "paused"
             papers._save_work(self.path, work)
-            self.assertEqual(papers.unfinished_restart_options(self.path)["resume_stage"], "writing")
+            self.assertEqual(
+                papers.unfinished_restart_options(self.path)["resume_stage"], "writing"
+            )
             visible = papers.progress_status(self.path)
             assert visible is not None
             self.assertEqual(visible["stage"], "publication_compilation")
             self.assertEqual(visible["resume_stage"], "writing")
+            # Polling must never hydrate the potentially 100 MB manuscript.
+            with patch.object(
+                papers, "_load_work", side_effect=AssertionError("large read")
+            ):
+                self.assertEqual(
+                    papers.progress_status(self.path)["resume_stage"], "writing"
+                )
 
     def test_review_restarts_from_frozen_package_without_prior_compilation(self) -> None:
         run_id = uuid4().hex
@@ -397,19 +406,29 @@ class SavedPaperRewindTests(TestCase):
         with papers.paper_run_scope(run_id):
             package, digest = papers._snapshot(self.path)
             work = papers._new_work(
-                digest, self.view.project.id, "f" * 64,
-                self.config["model"], self.config["reasoning_effort"], kind="one_shot",
+                digest,
+                self.view.project.id,
+                "f" * 64,
+                self.config["model"],
+                self.config["reasoning_effort"],
+                kind="one_shot",
             )
-            work.update({
-                "frozen_package": package,
-                "writing_sources": [],
-                "progress": {
-                    "run_id": run_id, "status": "paused", "stage": "writing",
-                    "current": None, "total": None,
-                    "started_at": papers._now(), "updated_at": papers._now(),
-                    "elapsed_seconds": 12,
-                },
-            })
+            work.update(
+                {
+                    "frozen_package": package,
+                    "writing_sources": [],
+                    "progress": {
+                        "run_id": run_id,
+                        "status": "paused",
+                        "stage": "writing",
+                        "current": None,
+                        "total": None,
+                        "started_at": papers._now(),
+                        "updated_at": papers._now(),
+                        "elapsed_seconds": 12,
+                    },
+                }
+            )
             papers._save_work(self.path, work)
             self.assertIn("writing", papers.unfinished_restart_options(self.path)["stages"])
             result = asyncio.run(

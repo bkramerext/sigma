@@ -1279,6 +1279,7 @@ async def middleware(request: Request, call_next):
             "/api/projects/close",
             "/api/projects/create",
             "/api/projects/update",
+            "/api/projects/description",  # Authored text only; no AI/provider calls.
             "/api/projects/research-limits",
             "/api/projects/strategies",
             "/api/projects/strategies/remove",

@@ -4102,6 +4102,10 @@ def _save_work(path: str, state: dict[str, Any]) -> None:
                 **state["progress"],
                 "model": state.get("model"),
                 "reasoning_effort": state.get("reasoning_effort"),
+                # Checkpoint authoring already has the work in memory. Store
+                # its resume plan in the tiny receipt, never load a 100 MB
+                # manuscript on a status or heartbeat request.
+                "resume_stage": _unfinished_resume_stage(state),
             },
         )
 
@@ -4209,7 +4213,21 @@ def _write_progress_status(path: str, state: dict[str, Any]) -> None:
         "substep_started_at",
         "model",
         "reasoning_effort",
+        "resume_stage",
     )
+    # Progress frames can arrive after the last durable checkpoint. Keep the
+    # last committed resume plan unless this write provides a newer one.
+    if "resume_stage" not in state:
+        try:
+            earlier = _read_progress_status(path)
+        except (OSError, ProjectError):
+            earlier = None
+        if (
+            earlier is not None
+            and earlier.get("resume_stage")
+            and earlier.get("run_id") == state.get("run_id")
+        ):
+            state = {**state, "resume_stage": earlier["resume_stage"]}
     record = {"schema_version": 1, "progress": {k: state[k] for k in fields if k in state}}
     encoded = _json(record)
     if len(encoded) > 4096:
@@ -4245,6 +4263,14 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
             or not isinstance(state.get("started_at"), str)
             or not isinstance(state.get("updated_at"), str)
             or type(state.get("elapsed_seconds")) is not int
+            or (
+                "resume_stage" in state
+                and state["resume_stage"] is not None
+                and state["resume_stage"] not in {
+                    "queued", "publication_compilation", "evidence", "planning",
+                    "writing", "validation", "proofreading", "compile",
+                }
+            )
             or (
                 "last_progress_at" in state
                 and state["last_progress_at"] is not None
@@ -4513,6 +4539,17 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
             progress = progress_status(path)
             preflight_needed = needs_preflight_on_open(path)
             published_id = row.get("artifact_id")
+            # Older checkpoints predate the compact resume receipt. Recover
+            # their one-time view on listing, never on the hot polling path.
+            if (
+                progress is not None
+                and progress.get("status") in {"interrupted", "cancelled", "failed"}
+                and not progress.get("resume_stage")
+                and not published_id
+            ):
+                resume_stage = _unfinished_resume_stage(_load_work(path))
+                if resume_stage:
+                    progress = {**progress, "resume_stage": resume_stage}
             if progress is None and published_id:
                 progress = {"status": "complete", "stage": "complete"}
             elif progress is None:
@@ -4690,11 +4727,9 @@ def progress_status(path: str) -> dict[str, Any] | None:
             "Paper generation stopped. Completed sections and provider-call accounting remain "
             "available; Resume uses a labeled gap for any interrupted section."
         )
-    resume_stage = None
-    if status in {"interrupted", "cancelled", "failed"}:
-        # Reconcile the stopped UI with the same frozen work read by Play.
-        # Active updates stay sidecar-only and never hydrate a large bundle.
-        resume_stage = _unfinished_resume_stage(_load_work(path))
+    # Status polling is sidecar-only, even for cancelled or interrupted runs.
+    # The resume plan is persisted whenever a checkpoint changes.
+    resume_stage = state.get("resume_stage") if status in {"interrupted", "cancelled", "failed"} else None
     return {
         "status": status,
         "stage": state["stage"],
@@ -5116,9 +5151,18 @@ def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
         # the interrupted call never produced a draft checkpoint.
         previous_stage = str((work.get("progress") or {}).get("stage", ""))
         if (
-            previous_stage in {
-                "writing", "sections", "validation", "proofreading", "compile",
-                "pdf_check", "scoring", "finishing", "complete", "retry",
+            previous_stage
+            in {
+                "writing",
+                "sections",
+                "validation",
+                "proofreading",
+                "compile",
+                "pdf_check",
+                "scoring",
+                "finishing",
+                "complete",
+                "retry",
             }
             or work.get("one_shot_draft") is not None
             or work.get("validated_draft") is not None
@@ -5155,15 +5199,11 @@ def _unfinished_resume_stage(work: Mapping[str, Any] | None) -> str | None:
         return "writing"
     if work.get("evidence_indexed"):
         return "planning"
-    if work.get("writing_sources"):
-        previous = str(progress.get("stage", ""))
-        if work.get("kind") == "one_shot" and previous in {
-            "writing", "sections", "validation", "proofreading", "compile",
-            "pdf_check", "scoring", "finishing", "complete", "retry",
-        }:
-            return "writing"
-        return "publication_compilation"
-    return "queued"
+    if isinstance(work.get("publication_compilation"), dict):
+        return "writing" if work.get("kind") == "one_shot" else "evidence"
+    # Source selection without a compiled checklist is still Review, not
+    # Wait or Writing. The presence of an empty selection is meaningful.
+    return "publication_compilation"
 
 
 def unfinished_restart_options(path: str, *, allow_active: bool = False) -> dict[str, Any]:

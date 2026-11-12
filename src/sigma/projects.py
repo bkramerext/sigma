@@ -332,7 +332,9 @@ def project_write_lock(
             token = _PROJECT_FILE_LOCK.set(state)
             try:
                 with project_collaboration.write_guard(
-                    str(path), advance_revision=advance_revision, allow_project_edit=allow_project_edit
+                    str(path),
+                    advance_revision=advance_revision,
+                    allow_project_edit=allow_project_edit,
                 ):
                     yield path
             finally:

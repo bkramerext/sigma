@@ -578,9 +578,11 @@ class CollaborationTests(TestCase):
         token = shared.acquire_lease(self.path, "Paper generation")
         assert token is not None
         try:
-            with self.assertRaisesRegex(ProjectError, "being used"):
-                with shared.write_guard(self.path):
-                    pass
+            with (
+                self.assertRaisesRegex(ProjectError, "being used"),
+                shared.write_guard(self.path),
+            ):
+                pass
             # The document-edit path is deliberately separate from execution
             # checkpoints. It still checks project membership and deletion.
             with shared.write_guard(self.path, allow_project_edit=True):
@@ -590,9 +592,11 @@ class CollaborationTests(TestCase):
                     "UPDATE shared_leases SET activity='Project deletion' WHERE path=?",
                     (self.path,),
                 )
-            with self.assertRaisesRegex(ProjectError, "deletion is in progress"):
-                with shared.write_guard(self.path, allow_project_edit=True):
-                    pass
+            with (
+                self.assertRaisesRegex(ProjectError, "deletion is in progress"),
+                shared.write_guard(self.path, allow_project_edit=True),
+            ):
+                pass
         finally:
             shared.release_lease(self.path, token)
 

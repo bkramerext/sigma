@@ -8349,8 +8349,15 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
           lastLoadedSharedRevision.current = revision;
           return;
         }
-        // Classification and collaborator controls can refresh in place.
-        // Other editors still abandon stale drafts rather than overwriting remote work.
+        // Research fields are edited transactionally. An incoming change
+        // must never discard keystrokes or close the editor; Save checks the
+        // actual authored baseline and reports a genuine conflict instead.
+        if (descriptionEditing) {
+          lastLoadedSharedRevision.current = revision;
+          setAnnouncement('The project changed while you were editing. Your draft is preserved; Save checks for conflicts.');
+          return;
+        }
+        // Classification controls can refresh in place.
         if (!projectEditing) {
           modeOwner.current = null;
           setActiveMode(null);

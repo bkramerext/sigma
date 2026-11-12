@@ -1582,7 +1582,7 @@ with sync_playwright() as playwright:
     # Clicking non-checkpoint Extract evidence rewinds to Started on a saved
     # Paper (the fixture offers Started, Writing, and Proofread boundaries).
     paper_row.get_by_role("button", name="Restart paper at step Extract evidence").click()
-    evidence_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
+    evidence_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
     expect(evidence_group).to_contain_text("at Started")
     evidence_group.get_by_role("button", name="Cancel").click()
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
