@@ -679,7 +679,9 @@ def _lease(db: sqlite3.Connection, path: str) -> dict[str, Any] | None:
     return dict(current)
 
 
-def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
+def summary(
+    path: str, *, verify_revision: bool = False, include_authors: bool = True
+) -> dict[str, Any]:
     from sigma.projects import inspect_project
 
     view = inspect_project(path)
@@ -728,17 +730,23 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             "thinking": row["thinking"],
             "lease": _lease(db, view.path),
             "shared": bool(members),
-            "artifact_authors": {
-                kind: {
-                    record["artifact_id"]: record["email"]
-                    for record in db.execute(
-                        "SELECT artifact_id, email FROM shared_artifact_authors "
-                        "WHERE path=? AND kind=?",
-                        (view.path, kind),
-                    )
+            **(
+                {
+                    "artifact_authors": {
+                        kind: {
+                            record["artifact_id"]: record["email"]
+                            for record in db.execute(
+                                "SELECT artifact_id, email FROM shared_artifact_authors "
+                                "WHERE path=? AND kind=?",
+                                (view.path, kind),
+                            )
+                        }
+                        for kind in ("strategy", "session", "paper", "paper_draft", "answer")
+                    }
                 }
-                for kind in ("strategy", "session", "paper", "paper_draft", "answer")
-            },
+                if include_authors
+                else {}
+            ),
             "failed_notifications": db.execute(
                 """SELECT COUNT(*) FROM shared_email_outbox
                    WHERE project_path=? AND failed_at IS NOT NULL""",
