@@ -11731,8 +11731,9 @@ def request_cancel_generation(path: str) -> bool:
     task = _cancellable_generation_task(path)
     if task is None:
         return False
-    logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
-    task.cancel()
+    if task.cancelling() == 0:
+        logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
+        task.cancel()
     return True
 
 
