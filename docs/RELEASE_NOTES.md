@@ -266,7 +266,7 @@ SIGMA remains experimental. Supplied source material can be incomplete or wrong;
 ---
 
 ## Version 0.4.0 — Open Exploration and Collaborative Research
-*Release notes draft · November 11, 2026 · Deployment not yet confirmed*
+*Released November 12, 2026 · Production deployment verified*
 
 **SIGMA is easier to explore without an account and more capable when researchers work together.** Version 0.4.0 introduces an anonymous hands-on playground, completes major collaborative execution and recovery work, and makes research limitations and progress easier to understand.
 
@@ -306,4 +306,8 @@ Guest Mode does not grant AI execution or durable account storage. Members must 
 
 SIGMA remains experimental. Source Materials can contain incorrect premises, Investigator/Skeptic agreement is not independent verification, and a high Paper Score does not establish scientific correctness. Review generated research, citations, and papers critically.
 
-**Release source cutoff:** `dae6de2690fa47e79bd53fb98ace565ad5789210`. The v0.4.0 release commit and production deployment record will be added after exact-SHA verification and deployment acceptance. Live two-real-account collaboration smoke testing remains pending.
+**Approved source cutoff:** `dae6de2690fa47e79bd53fb98ace565ad5789210`.
+**Release SHA:** `02cd31299deb9581bf31de60aafcfe057012733a`.
+**Production deployment:** November 12, 2026; exact-SHA CI and production
+acceptance passed. Live two-real-account collaboration smoke testing remains
+pending.
