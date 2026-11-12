@@ -3707,7 +3707,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // A deliberate Stop is still reconciling its saved checkpoint. The
       // progress poll will refresh at the terminal transition; an immediate
       // full preflight here can undo the fast acknowledgment.
-      if (!deliberatePaperStop.current) await refresh(selected?.paper_id);
+      // A rejected preflight must restore Play without waiting for a full
+      // Paper list/evidence refresh. Keep reconciliation best-effort.
+      if (!deliberatePaperStop.current) void refresh(selected?.paper_id, true);
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
         const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
