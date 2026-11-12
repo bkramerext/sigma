@@ -3823,7 +3823,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) {
       paperRewindAdmissionPending.current = false;
       paperRewindStopAfterAdmission.current = false;
-      setOptimisticPaperStop(null);
+      clearPaperStopIntent(proposed.runId);
       selectPaperRun(oldId);
       setPaperProgress(oldProgress);
       setNewPaperRequested(oldRequested);
@@ -3969,7 +3969,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) {
       paperRewindAdmissionPending.current = false;
       paperRewindStopAfterAdmission.current = false;
-      setOptimisticPaperStop(null);
+      clearPaperStopIntent(runId);
       selectPaperRun(priorRunId);
       setPaperProgress(priorProgress);
       setNewPaperRequested(priorNewPaperRequested);
@@ -4517,7 +4517,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // full preflight here can undo the fast acknowledgment.
       // A rejected preflight must restore Play without waiting for a full
       // Paper list/evidence refresh. Keep reconciliation best-effort.
-      if (!deliberatePaperStop.current) void refresh(selected?.paper_id, true);
+      if (!deliberatePaperStop.current && actionEpoch === paperActionEpoch.current && !hasPaperStopIntent(runId))
+        void refresh(selected?.paper_id, true);
       if (!controller.signal.aborted && actionEpoch === paperActionEpoch.current) {
         generationErrorRunId.current = runId;
         const message = errorMessage(cause);
@@ -4538,10 +4539,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         void refresh(undefined, true);
       }
       finishProvider();
-      request.current = null;
-      paperSubmissionDispatched.current = false;
-      deliberatePaperStop.current = false;
-      setBusy(false);
+      // An older response must not clear the control state of a newer run.
+      if (request.current === controller) {
+        request.current = null;
+        paperSubmissionDispatched.current = false;
+        deliberatePaperStop.current = false;
+        setBusy(false);
+      }
     }
   }
   const planningFallback = continuationAvailable && Boolean(resumeDetails?.planning_fallback_available);
