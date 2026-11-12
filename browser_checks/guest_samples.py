@@ -279,11 +279,8 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         rows = page.evaluate(
             "async () => (await (await fetch('/api/projects/samples')).json()).projects"
         )
-        sample_id = next(
-            row["id"]
-            for row in rows
-            if row["title"] == "Warp Drive Design v9 (acceptance fixture)"
-        )
+        fixture_title = "Warp Drive Design v9 (acceptance fixture)"
+        sample_id = next(row["id"] for row in rows if row["title"] == fixture_title)
         pdf_response = httpx.get(
             f"{ui_url}/api/projects/samples/{sample_id}/top-paper/pdf", timeout=10
         )
