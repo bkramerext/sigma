@@ -573,6 +573,29 @@ class CollaborationTests(TestCase):
         finally:
             shared.release_lease(self.path, token)
 
+    def test_authored_project_edit_is_independent_of_active_paper_lease(self) -> None:
+        """Human description edits serialize briefly but need not stop research."""
+        token = shared.acquire_lease(self.path, "Paper generation")
+        assert token is not None
+        try:
+            with self.assertRaisesRegex(ProjectError, "being used"):
+                with shared.write_guard(self.path):
+                    pass
+            # The document-edit path is deliberately separate from execution
+            # checkpoints. It still checks project membership and deletion.
+            with shared.write_guard(self.path, allow_project_edit=True):
+                pass
+            with shared._db() as db:
+                db.execute(
+                    "UPDATE shared_leases SET activity='Project deletion' WHERE path=?",
+                    (self.path,),
+                )
+            with self.assertRaisesRegex(ProjectError, "deletion is in progress"):
+                with shared.write_guard(self.path, allow_project_edit=True):
+                    pass
+        finally:
+            shared.release_lease(self.path, token)
+
     def test_stopped_paper_can_be_resumed_by_collaborator_without_transferring_authorship(
         self,
     ) -> None:

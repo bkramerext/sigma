@@ -2751,7 +2751,7 @@ function paperModelThinkingLabel(generation: PaperSummary['generation']): string
   return modelThinkingLabel(latest.model, latest.thinking);
 }
 
-type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; substep_started_at?: string | null; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete'; model?: string; reasoning_effort?: string };
+type PaperProgress = { status: 'queued' | 'active' | 'interrupted' | 'failed' | 'cancelled' | 'complete'; resume_stage?: PaperProgress['stage'] | null; stage: 'queued' | 'snapshot' | 'source_material' | 'publication_compilation' | 'writing' | 'evidence' | 'consolidation' | 'planning' | 'sections' | 'retry' | 'validation' | 'proofreading' | 'compile' | 'pdf_check' | 'scoring' | 'score_failed' | 'finishing' | 'complete'; current: number | null; total: number | null; started_at: string; elapsed_seconds: number; sections_total?: number; last_progress_at?: string | null; output_delta_count?: number; substep_started_at?: string | null; detail?: string; failure_reason?: string; activity_state?: 'active' | 'milestone' | 'complete'; model?: string; reasoning_effort?: string };
 type PaperRun = { run_id: string; number: number; creator_email: string; model: string; thinking: string; created_at: number; status: PaperProgress['status']; progress: Partial<PaperProgress> | null; paper_id?: string | null; can_control: boolean; can_resume?: boolean; can_remove?: boolean; preflight_needed?: boolean };
 
 type PaperRecord = PaperSummary & { eli5?: { version?: number; source_sha256: string; markdown: string }; pdf_sha256?: string; draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; publication_requirement_reconciliation?: { text: string; status: 'missing' | 'needs_review'; note: string }[]; editorial_overlap_warnings?: string[]; snapshot: { sources: { id: string; kind: string }[] } };
@@ -2940,26 +2940,29 @@ function PaperStageSteps({ progress, onSelectStep }: {
   </ol>;
 }
 
-/** Every Paper has the same visible metadata and step bar. Only details collapse. */
-function PaperTimeline({ metadata, progress, onSelectStep }: {
+/** All papers use one view model: immutable attribution, authoritative resume
+    target, and a single action bar. Disclosure hides the bar and all details. */
+function PaperTimeline({ metadata, progress, expanded, onSelectStep }: {
   metadata: ReactNode;
   progress: Partial<PaperProgress> | null;
+  expanded: boolean;
   onSelectStep?: (step: number, anchor: HTMLButtonElement) => void;
 }) {
-  // No work was observed: show Wait with no checked milestones, never invent
-  // completed steps. The backend supplies the persisted last-known stage.
+  const stopped = ['interrupted', 'failed', 'cancelled'].includes(progress?.status ?? '');
   const visible: PaperProgress = {
     status: progress?.status ?? 'interrupted',
-    stage: progress?.stage ?? 'queued',
+    stage: stopped && progress?.resume_stage ? progress.resume_stage : progress?.stage ?? 'queued',
     current: progress?.current ?? null,
     total: progress?.total ?? null,
     started_at: progress?.started_at ?? '',
     elapsed_seconds: progress?.elapsed_seconds ?? 0,
     ...progress,
+    // The execution stage and the last streamed activity are distinct.
+    ...(stopped && progress?.resume_stage ? { stage: progress.resume_stage } : {}),
   };
   return <div className="paper-unified-timeline">
     <p className="saved-paper-meta">{metadata}</p>
-    <div className="ai-paper-status ai-paper-progress" role="status">
+    <div className="ai-paper-status ai-paper-progress" role="status" hidden={!expanded}>
       <PaperStageSteps progress={visible} onSelectStep={onSelectStep}/>
     </div>
   </div>;
@@ -3174,6 +3177,47 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const paperStepRestartAnchor = useRef<HTMLButtonElement | null>(null);
   const paperStepRestartPopup = useRef<HTMLDivElement | null>(null);
   const [paperStepRestartPlacement, setPaperStepRestartPlacement] = useState<{ left: number; top: number } | null>(null);
+  const [providerChangePrompt, setProviderChangePrompt] = useState<{ savedModel: string; nextModel: string } | null>(null);
+  const providerChangeResolver = useRef<((allowed: boolean) => void) | null>(null);
+  const providerChangeAnchor = useRef<HTMLElement | null>(null);
+  const providerChangePopup = useRef<HTMLDivElement>(null);
+  const [providerChangePlacement, setProviderChangePlacement] = useState<{ left: number; top: number } | null>(null);
+  const answerProviderChange = (allowed: boolean) => {
+    const resolve = providerChangeResolver.current;
+    providerChangeResolver.current = null;
+    setProviderChangePrompt(null);
+    resolve?.(allowed);
+  };
+  useEffect(() => () => { providerChangeResolver.current?.(false); providerChangeResolver.current = null; }, []);
+  useLayoutEffect(() => {
+    if (!providerChangePrompt) { setProviderChangePlacement(null); return; }
+    const place = () => {
+      const anchor = providerChangeAnchor.current?.isConnected
+        ? providerChangeAnchor.current : document.querySelector<HTMLElement>('.papers-pane-heading');
+      const popup = providerChangePopup.current;
+      if (!anchor || !popup) return;
+      const rect = anchor.getBoundingClientRect();
+      const width = popup.offsetWidth, height = popup.offsetHeight;
+      const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+      const top = Math.max(12, Math.min(
+        window.innerHeight - rect.bottom >= height + 18 ? rect.bottom + 6 : rect.top - height - 6,
+        window.innerHeight - height - 12,
+      ));
+      setProviderChangePlacement({ left, top });
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); answerProviderChange(false); }
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [providerChangePrompt]);
   useLayoutEffect(() => {
     if (!paperStepRestart && !unfinishedStepRestart && !confirmRestartDraft) { setPaperStepRestartPlacement(null); return; }
     const place = () => {
@@ -4214,11 +4258,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       let authorizedProviderChange = false;
       if (preflight.provider_change_requires_confirmation) {
         const savedModel = preflight.saved_provider_model ?? 'previous model';
-        authorizedProviderChange = window.confirm(
-          'This paper started using ' + savedModel + '. Your AI account or billing connection changed. ' +
-          'Continuing will explicitly switch future paper calls to ' + model +
-          ' using the current connection. Previously completed writing will stay unchanged. Continue?'
-        );
+        authorizedProviderChange = await new Promise<boolean>(resolve => {
+          providerChangeResolver.current = resolve;
+          setProviderChangePrompt({ savedModel, nextModel: model });
+        });
         if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Work remains unchanged.');
       }
       if (preflight.resume_uses_saved_model && !authorizedProviderChange) {
@@ -4425,6 +4468,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // The step-bar and icon controls share these actions, including every
   // confirmation and creator authorization check. Do not duplicate dispatch.
   const beginPaperFromControl = (anchor: HTMLButtonElement) => {
+    providerChangeAnchor.current = anchor;
     setDraftPaperExpanded(true);
     if (checkpointMismatch) {
       positionPaperPopup(anchor, 280, 180);
@@ -4447,7 +4491,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     void generatePaper(false, null, true, runId);
   }, [resumeAfterActiveRewind, busy]);
 
-  const resumeOtherPaperRun = (run: PaperRun) => {
+  const resumeOtherPaperRun = (run: PaperRun, anchor?: HTMLButtonElement) => {
+    if (anchor) providerChangeAnchor.current = anchor;
     selectPaperRun(run.run_id);
     setPaperProgress(run.progress as PaperProgress | null);
     setNewPaperRequested(true);
@@ -4458,6 +4503,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   useEffect(() => { onRunningChange(allPapersRunning); return () => onRunningChange(false); }, [allPapersRunning, onRunningChange]);
   useEffect(() => { onQueuedChange(allPapersQueued); return () => onQueuedChange(false); }, [allPapersQueued, onQueuedChange]);
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
+    {providerChangePrompt && createPortal(
+      <div ref={providerChangePopup} className="paper-step-restart-popup" role="dialog"
+        aria-label="Confirm AI connection change" aria-modal="false"
+        style={providerChangePlacement
+          ? { left: providerChangePlacement.left, top: providerChangePlacement.top }
+          : { left: 12, top: 12, visibility: 'hidden' }}>
+        <p>Continue this Paper using {providerChangePrompt.nextModel} with the current AI connection? It started with {providerChangePrompt.savedModel}. Earlier writing stays unchanged.</p>
+        <div className="session-remove-confirm-actions">
+          <button type="button" className="text-view-link" onClick={() => answerProviderChange(true)}>Confirm</button>
+          <button type="button" className="text-view-link" onClick={() => answerProviderChange(false)}>Cancel</button>
+        </div>
+      </div>, document.body
+    )}
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
       <div className="papers-heading-actions strategy-heading-actions">
@@ -4565,7 +4623,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 </span>}
               </>}/>
           </div></div>
-          <PaperTimeline
+          <PaperTimeline expanded={draftPaperExpanded}
             metadata={<>
               {formatRunAttribution({
                 kind: 'paper', creator: activeDraftCreator || viewerEmail,
@@ -4582,7 +4640,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 : 'Ready'}
               {' · Elapsed '}{savedPaperElapsed(Math.max(0, paperProgress?.elapsed_seconds ?? 0))}
             </>}
-            progress={paperProgress}
+            progress={paperProgress && (paperProgress.status === 'active' || paperProgress.status === 'queued')
+              ? paperProgress
+              : { ...(paperProgress ?? selectedRun?.progress ?? {}),
+                  resume_stage: paperProgress?.resume_stage ??
+                    selectedUnfinishedOptions?.resume_stage ?? selectedRun?.progress?.resume_stage }}
             onSelectStep={!guest && (canResumeDraft || canControlDraft)
               ? (step, anchor) => {
                 if (!paperProgress && !selectedRunId) beginPaperFromControl(anchor);
@@ -4634,7 +4696,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               {run.can_resume && !['active', 'queued', 'complete'].includes(run.status) && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
                 aria-label={`Resume Paper ${run.number}`} data-tooltip="Resume paper generation" disabled={busy || loading || !binding}
-                onClick={() => resumeOtherPaperRun(run)}>
+                onClick={event => resumeOtherPaperRun(run, event.currentTarget)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
               </button>}
               {!guest && run.can_remove && (run.can_control || !['active', 'queued'].includes(run.status)) && <span className="paper-remove-anchor">
@@ -4664,7 +4726,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 </div>
               </div>
             </div>
-            <PaperTimeline
+            <PaperTimeline expanded={expandedOtherPaperRunIds.has(run.run_id)}
               metadata={<>
                 {formatRunAttribution({
                   kind: 'paper', creator: run.creator_email,
@@ -4721,7 +4783,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </div></div>}
                 </span>}
               </>}/>
-            <PaperTimeline metadata={<>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · {(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : paperModelThinkingLabel(paper.generation)} · <button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
+            <PaperTimeline expanded={expandedPaperId === paper.paper_id} metadata={<>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · {(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : paperModelThinkingLabel(paper.generation)} · <button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
               progress={{
                 status: scoringId === paper.paper_id ? 'active' : 'complete',
                 stage: scoringId === paper.paper_id ? 'scoring' : 'complete',
@@ -8269,7 +8331,6 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     // The project may have changed before this window's first poll completed.
     // Load the authoritative title and settings even on the first response.
     if (revision === lastLoadedSharedRevision.current) return;
-    const initialRevision = lastLoadedSharedRevision.current === null;
     // Committed changes supersede unsaved drafts in other windows.
     // Avoid interrupting an in-flight write; the backend revision fence protects it.
     if (closing || descriptionBusy || ordering) return;
@@ -8280,7 +8341,11 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
         // The first collaboration response establishes the revision baseline.
         // Only interrupt an already-open editor when the persisted project
         // actually differs from what this window loaded.
-        if (initialRevision && JSON.stringify({ ...view.project, events: [] }) === JSON.stringify(next.project)) {
+        // Execution receipts and history events are not edits to the Project
+        // description. Ignore them entirely rather than cancelling a draft.
+        const { events: _oldEvents, backend_build_commit: _oldBuild, ...before } = view.project;
+        const { events: _newEvents, backend_build_commit: _newBuild, ...after } = next.project;
+        if (JSON.stringify(before) === JSON.stringify(after)) {
           lastLoadedSharedRevision.current = revision;
           return;
         }
@@ -8740,13 +8805,12 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
         }}
         onSave={async (draft: ProjectDescriptionDraft) => {
           const current = settingsOf(view);
-          // Project field edits share the same revision fence as classification
-          // and collaborator Settings. Without it, shared-project title saves
-          // are rejected as legacy unversioned writes.
-          const collaboration = sharedActivity?.shared
-            ? { expected_revision: sharedActivity.revision, collaborators: sharedActivity.collaborators }
-            : {};
-          const next = await post<ProjectView>('update', { path: view.path, ...current, ...draft, expected: current, ...collaboration });
+          // Authored fields have a short document transaction, independent of
+          // the current Paper/Session lease. The backend checks the prior
+          // field values, so genuine simultaneous edits are still rejected.
+          const next = await post<ProjectView>('description', {
+            path: view.path, ...current, ...draft, expected: current,
+          });
           markLocalSharedSave();
           setView(next);
           // The parent owns the toolbar mode: a successful save must return

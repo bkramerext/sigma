@@ -4690,9 +4690,15 @@ def progress_status(path: str) -> dict[str, Any] | None:
             "Paper generation stopped. Completed sections and provider-call accounting remain "
             "available; Resume uses a labeled gap for any interrupted section."
         )
+    resume_stage = None
+    if status in {"interrupted", "cancelled", "failed"}:
+        # Reconcile the stopped UI with the same frozen work read by Play.
+        # Active updates stay sidecar-only and never hydrate a large bundle.
+        resume_stage = _unfinished_resume_stage(_load_work(path))
     return {
         "status": status,
         "stage": state["stage"],
+        **({"resume_stage": resume_stage} if resume_stage is not None else {}),
         "current": state["current"],
         "total": state["total"],
         "started_at": state["started_at"],
@@ -5094,9 +5100,9 @@ def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
     if not isinstance(work.get("frozen_package"), dict):
         return []
     kind = work.get("kind")
-    stages = ["started"]
-    if isinstance(work.get("writing_sources"), list):
-        stages.append("review")
+    # The frozen package is a real review input. A review click must rerun
+    # publication standards, not silently degrade into a generic Start Over.
+    stages = ["started", "review"]
     if kind == "long_form":
         if work.get("evidence_indexed") or work.get("evidence_notes"):
             stages.append("evidence")
@@ -5104,15 +5110,60 @@ def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
             stages.append("planning")
         if isinstance(work.get("plan"), dict):
             stages.append("writing")
-    elif kind == "one_shot" and (
-        work.get("one_shot_draft") is not None or work.get("validated_draft") is not None
-    ):
-        stages.append("writing")
+    elif kind == "one_shot":
+        # A one-shot has no separate outline artifact. Once writing was
+        # reached, frozen evidence can replay that authoring call, even if
+        # the interrupted call never produced a draft checkpoint.
+        previous_stage = str((work.get("progress") or {}).get("stage", ""))
+        if (
+            previous_stage in {
+                "writing", "sections", "validation", "proofreading", "compile",
+                "pdf_check", "scoring", "finishing", "complete", "retry",
+            }
+            or work.get("one_shot_draft") is not None
+            or work.get("validated_draft") is not None
+        ):
+            stages.append("writing")
     if isinstance(work.get("validated_draft"), dict):
         stages.extend(("validation", "typesetting"))
     if isinstance(work.get("proofread_ready"), dict):
         stages.append("pdf")
     return stages
+
+
+def _unfinished_resume_stage(work: Mapping[str, Any] | None) -> str | None:
+    """The one durable prediction of what Play will execute next.
+
+    Progress sidecars describe the last observed activity; they are not a
+    restart plan. Checkpoints, not the last streamed event, decide Resume.
+    """
+    if not work or work.get("published_paper_id"):
+        return None
+    if not isinstance(work.get("frozen_package"), dict):
+        return None
+    progress = work.get("progress") or {}
+    pending = work.get("unfinished_restart_stage")
+    if progress.get("status") == "paused" and pending in _PAPER_RESTART_PROGRESS:
+        return _PAPER_RESTART_PROGRESS[pending]
+    if work.get("proofread_ready"):
+        return "compile"
+    if work.get("checkpoint_revalidate_pending") is True:
+        return "validation"
+    if work.get("validated_draft"):
+        return "proofreading"
+    if work.get("plan"):
+        return "writing"
+    if work.get("evidence_indexed"):
+        return "planning"
+    if work.get("writing_sources"):
+        previous = str(progress.get("stage", ""))
+        if work.get("kind") == "one_shot" and previous in {
+            "writing", "sections", "validation", "proofreading", "compile",
+            "pdf_check", "scoring", "finishing", "complete", "retry",
+        }:
+            return "writing"
+        return "publication_compilation"
+    return "queued"
 
 
 def unfinished_restart_options(path: str, *, allow_active: bool = False) -> dict[str, Any]:
@@ -5132,21 +5183,7 @@ def unfinished_restart_options(path: str, *, allow_active: bool = False) -> dict
     return {
         "snapshot_sha256": work["snapshot_sha256"],
         "stages": stages,
-        "resume_stage": (
-            "compile"
-            if work.get("proofread_ready")
-            else "validation"
-            if work.get("checkpoint_revalidate_pending") is True
-            else "proofreading"
-            if work.get("validated_draft")
-            else "writing"
-            if work.get("plan")
-            else "planning"
-            if work.get("evidence_indexed")
-            else "publication_compilation"
-            if work.get("writing_sources")
-            else "queued"
-        ),
+        "resume_stage": _unfinished_resume_stage(work),
     }
 
 

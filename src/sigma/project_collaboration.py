@@ -190,6 +190,7 @@ def write_guard(
     *,
     advance_revision: bool = True,
     allow_acl_mutation: bool = False,
+    allow_project_edit: bool = False,
 ) -> Iterator[sqlite3.Connection | None]:
     """Fence a persisted mutation and revision under one SQLite writer transaction.
 
@@ -245,11 +246,13 @@ def write_guard(
                 raise ProjectError(
                     f"Project was saved by {row['last_writer']}. Reopen it and redo your changes."
                 )
-            if allow_acl_mutation:
-                # Only an ACL mutation may bypass an active research lease.
-                # Workers cannot use this path, nor may settings race deletion.
+            if allow_acl_mutation or allow_project_edit:
+                # Project text is a short, serialized edit of project.json.
+                # Running sessions/papers use frozen inputs and must not hold
+                # the human editor hostage for the duration of generation.
+                # This bypass is unavailable to a worker or a project delete.
                 if binding is not None:
-                    raise ProjectError("Workers cannot bypass execution fencing for ACL changes.")
+                    raise ProjectError("Workers cannot bypass execution fencing for project edits.")
                 lease = db.execute(
                     "SELECT activity,expires_at FROM shared_leases WHERE path=?", (path,)
                 ).fetchone()

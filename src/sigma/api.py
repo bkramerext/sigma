@@ -3042,6 +3042,40 @@ async def delete_project_view(body: DeleteProjectRequest):
         project_collaboration.release_lease(str(authorized), lease)
 
 
+@app.post("/api/projects/description")
+def update_project_description_view(body: UpdateProjectRequest):
+    """Edit authored project text independently of long-running frozen research.
+
+    The supplied prior project settings are checked atomically against the
+    document under its short file mutex. Operational revision changes alone
+    cannot cancel or reject a human's text edit.
+    """
+    from sigma import project_collaboration
+
+    current_view = inspect_project(body.path)
+    project_collaboration.register_owner(current_view)
+    current = current_view.project
+    if (
+        body.investigation_type != current.investigation_type
+        or body.difficulty != current.difficulty
+    ):
+        raise ProjectError("This editor changes only project title and research text.")
+    view = update_project(
+        body.path,
+        body.title,
+        body.problem,
+        body.investigation_type,
+        body.ai_model,
+        body.reasoning_effort,
+        body.expected.model_dump(exclude_none=True),
+        difficulty=body.difficulty,
+        desired_outcomes=body.desired_outcomes,
+        paper_requirements=body.paper_requirements,
+        semantic_update=True,
+    )
+    return asdict(view)
+
+
 @app.post("/api/projects/update")
 def update_project_view(body: UpdateProjectRequest):
     from sigma import project_collaboration

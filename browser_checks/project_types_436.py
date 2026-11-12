@@ -1240,16 +1240,26 @@ with sync_playwright() as playwright:
     page.reload()
     play = page.get_by_role("button", name="Resume paper", exact=True)
     expect(play).to_be_enabled(timeout=10000)
-    # Paper metadata and steps remain visible when the details are collapsed.
-    expect(
-        page.locator(".paper-draft-card .paper-unified-timeline .saved-paper-meta").first
-    ).to_be_visible()
-    expect(
-        page.locator(".paper-draft-card .paper-unified-timeline .paper-stage-list").first
-    ).to_be_visible()
-    expect(
-        page.locator('[data-paper-id="fixture-paper-1"] .paper-unified-timeline .paper-stage-list')
-    ).to_be_visible()
+    # Metadata is always visible; the progress bar and all details share one
+    # disclosure boundary for unfinished AND published papers.
+    draft = page.locator(".paper-draft-card").first
+    draft_steps = draft.locator(".paper-unified-timeline .paper-stage-list")
+    expect(draft.locator(".paper-unified-timeline .saved-paper-meta")).to_be_visible()
+    draft_disclosure = draft.locator(".saved-paper-title-toggle")
+    if draft_disclosure.get_attribute("aria-expanded") == "true":
+        draft_disclosure.click()
+    expect(draft_steps).to_be_hidden()
+    draft_disclosure.click()
+    expect(draft_steps).to_be_visible()
+    published = page.locator('[data-paper-id="fixture-paper-1"]')
+    published_steps = published.locator(".paper-unified-timeline .paper-stage-list")
+    published_disclosure = published.locator(".saved-paper-title-toggle")
+    if published_disclosure.get_attribute("aria-expanded") == "true":
+        published_disclosure.click()
+    expect(published.locator(".paper-unified-timeline .saved-paper-meta")).to_be_visible()
+    expect(published_steps).to_be_hidden()
+    published_disclosure.click()
+    expect(published_steps).to_be_visible()
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
     restart = page.get_by_role("button", name="Start over on paper generation")
     expect(restart).to_be_enabled()
@@ -1537,7 +1547,7 @@ with sync_playwright() as playwright:
     assert paper_row.locator(".paper-stage-list li.is-past").count() == 10
     heading.click(modifiers=["Shift"])
     assert heading.get_attribute("aria-expanded") != changed
-    expect(paper_row.locator(".paper-unified-timeline .paper-stage-list")).to_be_visible()
+    expect(paper_row.locator(".paper-unified-timeline .paper-stage-list")).to_be_hidden()
     assert page.get_by_role("dialog", name="Restart from checkpoint · Paper 1").count() == 0
     heading.click()
     expect(paper_row.locator(".paper-unified-timeline .paper-stage-list")).to_be_visible()

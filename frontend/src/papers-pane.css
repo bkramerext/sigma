@@ -611,7 +611,7 @@
   display: grid;
   gap: 5px;
   min-width: 0;
-  margin: 7px 0 4px 28px;
+  margin: 4px 0 3px 28px;
 }
 .workspace-page .papers-pane .saved-paper-card .paper-unified-timeline .saved-paper-meta {
   margin: 0;
@@ -621,6 +621,9 @@
 }
 .workspace-page .papers-pane .saved-paper-card .paper-unified-timeline .paper-stage-list {
   margin: 4px 0 0;
+}
+.workspace-page .papers-pane .paper-unified-timeline > .ai-paper-status[hidden] {
+  display: none;
 }
 @media (max-width: 700px) {
   .workspace-page .papers-pane .saved-paper-card .paper-unified-timeline {
