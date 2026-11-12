@@ -4531,7 +4531,13 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
                 "progress": progress,
                 "preflight_needed": preflight_needed,
                 "paper_id": published_id,
-                "can_control": viewer is None or viewer == row["creator_email"],
+                # Only the current executor may Stop an active Paper.
+                "can_control": viewer is None
+                or viewer == (row.get("runner_email") or row["creator_email"]),
+                # Any authorized collaborator may Resume or rewind stopped work.
+                "can_resume": viewer is not None
+                and not published_id
+                and progress["status"] in {"cancelled", "failed", "interrupted", "stopped"},
                 "can_remove": (
                     viewer is None
                     or viewer == row["creator_email"]
@@ -4608,43 +4614,52 @@ def progress_status(path: str) -> dict[str, Any] | None:
     else:
         receipt = _read_queue_status(path)
         if receipt is not None:
-            elapsed = max(
-                0,
-                int(
-                    (
-                        datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"])
-                    ).total_seconds()
-                ),
-            )
-            if receipt["status"] == "queued":
+            # A queue receipt describes the LATEST admission attempt, not the
+            # amount of earlier work saved for this numbered Paper. Cancelling
+            # a queued resume must not reset its progress bar to Wait.
+            prior = _read_progress_status(path)
+            if prior is not None and prior.get("stage") not in {None, "queued"}:
+                state = {
+                    **prior,
+                    "status": ("paused" if receipt["status"] == "queued" else receipt["status"]),
+                    "detail": receipt.get("detail") or prior.get("detail"),
+                }
+            else:
+                elapsed = max(
+                    0,
+                    int(
+                        (
+                            datetime.now(UTC) - datetime.fromisoformat(receipt["started_at"])
+                        ).total_seconds()
+                    ),
+                )
+                detail = receipt.get("detail")
+                if not detail:
+                    detail = (
+                        "The backend restarted while this paper was queued. No AI call was "
+                        "started for this queued request. Use Continue or Generate to queue it "
+                        "again; any earlier paper checkpoint remains intact."
+                        if receipt["status"] == "queued"
+                        else "Generation was interrupted before any new provider call began."
+                    )
                 return {
-                    "status": "interrupted",
+                    "status": (
+                        "interrupted" if receipt["status"] == "queued" else receipt["status"]
+                    ),
                     "stage": "queued",
                     "current": None,
                     "total": None,
                     "started_at": receipt["started_at"],
                     "elapsed_seconds": elapsed,
-                    "detail": (
-                        "The backend restarted while this paper was queued. No AI call was "
-                        "started for this queued request. Use Continue or Generate to queue it "
-                        "again; any earlier paper checkpoint remains intact."
+                    **(
+                        {"failure_reason": receipt["detail"]}
+                        if receipt["status"] == "failed" and receipt.get("detail")
+                        else {}
                     ),
+                    "detail": detail,
                 }
-            return {
-                "status": receipt["status"],
-                "stage": "queued",
-                "current": None,
-                "total": None,
-                "started_at": receipt["started_at"],
-                "elapsed_seconds": elapsed,
-                **(
-                    {"failure_reason": receipt["detail"]}
-                    if receipt["status"] == "failed" and receipt.get("detail")
-                    else {}
-                ),
-                **({"detail": receipt["detail"]} if receipt.get("detail") else {}),
-            }
-        state = _read_progress_status(path)
+        else:
+            state = _read_progress_status(path)
         if state is None:
             work = _load_work(path)
             state = work.get("progress") if work is not None else None
@@ -5029,19 +5044,23 @@ async def _restart_work_locked(
 
 
 async def discard_work(path: str, expected_project_id: str) -> dict[str, bool]:
-    """Remove unpublished work without affecting saved paper versions."""
-    async with _paper_operation(path, generating=False):
-        key = _paper_state_key(path)
-        submission = _submission_tasks.get(key)
-        if submission is not None and not submission.done():
-            raise ProjectError("A paper generation submission is still active")
-        view = inspect_project(path)
-        if view.project.id != expected_project_id:
-            raise ProjectError("Paper project identity changed")
-        _clear_work(path)
-        _clear_queue_status(path)
-        _clear_reset_ledger(path)
-        return {"discarded": True}
+    """Delete exactly one idle run, independent of other running Papers."""
+    with project_collaboration.terminal_paper_cleanup(path, _paper_run_id.get()):
+        async with _paper_operation(path, generating=False):
+            key = _paper_state_key(path)
+            submission = _submission_tasks.get(key)
+            if submission is not None and not submission.done():
+                raise ProjectError("A paper generation submission is still active")
+            progress = progress_status(path)
+            if progress is not None and progress.get("status") in {"active", "queued"}:
+                raise ProjectError("Stop this Paper before removing it.")
+            view = inspect_project(path)
+            if view.project.id != expected_project_id:
+                raise ProjectError("Paper project identity changed")
+            _clear_work(path)
+            _clear_queue_status(path)
+            _clear_reset_ledger(path)
+            return {"discarded": True}
 
 
 # Restart boundaries for an UNFINISHED Paper. A step is clickable only
@@ -5096,14 +5115,16 @@ def _unfinished_restart_stages(work: Mapping[str, Any] | None) -> list[str]:
     return stages
 
 
-def unfinished_restart_options(path: str) -> dict[str, Any]:
+def unfinished_restart_options(path: str, *, allow_active: bool = False) -> dict[str, Any]:
     work = _load_work(path)
     if work is None:
         raise ProjectError("This unfinished Paper has no restart checkpoint.")
     if work.get("published_paper_id"):
         raise ProjectError("This Paper is already published; use its published step bar.")
     progress = progress_status(path)
-    if progress is None or progress.get("status") in {"queued", "active"}:
+    # Reading completed checkpoints during active execution is safe; only
+    # the separate restart mutation requires a stopped Paper.
+    if progress is None or (progress.get("status") in {"active", "queued"} and not allow_active):
         raise ProjectError("Stop this Paper before restarting a previous step.")
     stages = _unfinished_restart_stages(work)
     if not stages:

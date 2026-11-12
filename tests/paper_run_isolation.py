@@ -63,6 +63,35 @@ class PaperRunIsolationTests(TestCase):
         self.assertEqual(papers._work_file(self.path, create=False), legacy_file)
         self.assertTrue(legacy_file.is_file())
 
+    def test_cancelled_queue_does_not_erase_earlier_progress(self) -> None:
+        """The next queued attempt is not the progress history of the Paper."""
+        with papers.paper_run_scope(self.first):
+            started = papers._now()
+            papers._write_progress_status(
+                self.path,
+                {
+                    "run_id": self.first,
+                    "status": "paused",
+                    "stage": "proofreading",
+                    "current": None,
+                    "total": None,
+                    "started_at": started,
+                    "updated_at": started,
+                    "elapsed_seconds": 72,
+                },
+            )
+            papers._write_queue_status(self.path, "cancelled", started)
+            progress = present(papers.progress_status(self.path))
+            self.assertEqual(progress["stage"], "proofreading")
+            self.assertEqual(progress["status"], "cancelled")
+            self.assertEqual(progress["elapsed_seconds"], 72)
+        with papers.paper_run_scope(self.second):
+            started = papers._now()
+            papers._write_queue_status(self.path, "cancelled", started)
+            progress = present(papers.progress_status(self.path))
+            self.assertEqual(progress["stage"], "queued")
+            self.assertEqual(progress["status"], "cancelled")
+
     def test_stopping_one_submitted_paper_does_not_cancel_the_other(self) -> None:
         """Two admitted Papers retain distinct tasks across a creator Stop."""
 

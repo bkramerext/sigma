@@ -1240,6 +1240,16 @@ with sync_playwright() as playwright:
     page.reload()
     play = page.get_by_role("button", name="Resume paper", exact=True)
     expect(play).to_be_enabled(timeout=10000)
+    # Paper metadata and steps remain visible when the details are collapsed.
+    expect(
+        page.locator(".paper-draft-card .paper-unified-timeline .saved-paper-meta").first
+    ).to_be_visible()
+    expect(
+        page.locator(".paper-draft-card .paper-unified-timeline .paper-stage-list").first
+    ).to_be_visible()
+    expect(
+        page.locator('[data-paper-id="fixture-paper-1"] .paper-unified-timeline .paper-stage-list')
+    ).to_be_visible()
     assert play.locator("xpath=..").get_attribute("data-tooltip") == "Resume paper generation"
     restart = page.get_by_role("button", name="Start over on paper generation")
     expect(restart).to_be_enabled()
@@ -1256,7 +1266,7 @@ with sync_playwright() as playwright:
           const text = node.querySelector('p');
           const button = node.querySelector('button');
           const style = getComputedStyle(button);
-          return {inline: button.parentElement === text,
+          return {inline: button.parentElement === node || button.parentElement === text,
             underlined: style.textDecorationLine.includes('underline'),
             label: button.textContent.trim()};
         }"""
@@ -1311,7 +1321,9 @@ with sync_playwright() as playwright:
     assert reset_calls == [], reset_calls
     restart.click()
     expect(confirm_restart).to_be_visible()
-    page.locator("#paper-draft-content").click(position={"x": 5, "y": 5})
+    # The timeline remains visible when details are collapsed; dismiss the
+    # popup from a guaranteed outside point, not the collapsed details.
+    meta.click(position={"x": 5, "y": 5})
     expect(confirm_restart).to_have_count(0)
     assert reset_calls == [], reset_calls
     restart.click()
@@ -1452,7 +1464,8 @@ with sync_playwright() as playwright:
     scored_inline = scored.evaluate(
         """node => {
           const button = node.querySelector('button');
-          return button.parentElement === node.querySelector('p') &&
+          return (button.parentElement === node ||
+            button.parentElement === node.querySelector('p')) &&
             getComputedStyle(button).textDecorationLine.includes('underline');
         }"""
     )
@@ -1466,9 +1479,9 @@ with sync_playwright() as playwright:
     expect(score_dialog.get_by_role("button", name="Rescore", exact=True)).to_have_count(0)
     score_dialog.get_by_role("button", name="Close paper score").click()
 
-    # The outer Paper chevron controls BOTH the checked step bar and the
-    # existing summary. Restarts are explicit, on checked steps only;
-    # Shift-click is no longer a hidden alternative UI.
+    # The outer Paper chevron controls both the progress bar and summary.
+    # Every step preceding Finished is interactive, with a verified rewind
+    # boundary chosen at or before the clicked display step.
     rewind_calls: list[dict] = []
 
     def rewind_fixture(route):
@@ -1519,30 +1532,49 @@ with sync_playwright() as playwright:
     heading.click()
     changed = heading.get_attribute("aria-expanded")
     assert previous != changed, "Ordinary click must toggle the Paper"
-    expect(paper_row.locator(".paper-completed-progress .paper-stage-list")).to_be_visible()
+    expect(paper_row.locator(".paper-unified-timeline .paper-stage-list")).to_be_visible()
     expect(paper_row.locator(".ai-paper-preview")).to_be_visible()
     assert paper_row.locator(".paper-stage-list li.is-past").count() == 10
     heading.click(modifiers=["Shift"])
     assert heading.get_attribute("aria-expanded") != changed
+    expect(paper_row.locator(".paper-unified-timeline .paper-stage-list")).to_be_visible()
     assert page.get_by_role("dialog", name="Restart from checkpoint · Paper 1").count() == 0
     heading.click()
-    expect(paper_row.locator(".paper-completed-progress .paper-stage-list")).to_be_visible()
+    expect(paper_row.locator(".paper-unified-timeline .paper-stage-list")).to_be_visible()
     start_button = paper_row.get_by_role("button", name="Restart paper at step Started")
     expect(start_button).to_be_visible()
-    assert start_button.get_attribute("data-tooltip") == "Restart paper from this step"
     expect(paper_row.get_by_role("button", name="Rescore paper")).to_be_visible()
-    assert paper_row.get_by_role("button", name="Restart paper at step Planning").count() == 0
+    for step in (
+        "Review publication standards",
+        "Extract evidence",
+        "Planning",
+        "Write sections",
+        "Validate",
+        "Proofread",
+        "Generate PDF",
+    ):
+        expect(
+            paper_row.get_by_role("button", name=f"Restart paper at step {step}")
+        ).to_be_visible()
     assert paper_row.get_by_role("button", name="Restart paper at step Finish").count() == 0
-    assert (
-        paper_row.get_by_role(
-            "button", name="Restart paper at step Review publication standards"
-        ).count()
-        == 0
-    )
+    # The old shaded buttons are now transparent with underline only on hover.
+    hover_style = start_button.evaluate("""button => {
+      const base = getComputedStyle(button);
+      const background = base.backgroundColor;
+      button.dispatchEvent(new MouseEvent('mousemove', {bubbles: true}));
+      return {background, decoration: base.textDecorationLine};
+    }""")
+    assert hover_style["background"] in ("rgba(0, 0, 0, 0)", "transparent"), hover_style
     start_button.click()
     start_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
     expect(start_group).to_contain_text("at Started")
     start_group.get_by_role("button", name="Cancel").click()
+    # Clicking non-checkpoint Extract evidence rewinds to Started on a saved
+    # Paper (the fixture offers Started, Writing, and Proofread boundaries).
+    paper_row.get_by_role("button", name="Restart paper at step Extract evidence").click()
+    evidence_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
+    expect(evidence_group).to_contain_text("at Started")
+    evidence_group.get_by_role("button", name="Cancel").click()
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
     restart_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
     expect(restart_group).to_be_visible()

@@ -991,7 +991,7 @@ def papers_preflight_view(
     run_id: str | None = None,
 ):
     if run_id is not None:
-        project_collaboration.execution_run(path, "paper", run_id, operator=True, missing_ok=True)
+        project_collaboration.execution_run(path, "paper", run_id, missing_ok=True)
     with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
         return papers.preflight(
             path,
@@ -1093,7 +1093,9 @@ async def papers_discard_view(body: PaperDiscardRequest):
                 and progress.get("status") in {"cancelled", "failed", "interrupted", "stopped"}
                 and await run_in_threadpool(project_collaboration.is_project_owner, body.path)
             )
-            if not owner_terminal:
+            # Terminal work may be removed by its original author or owner;
+            # while running, only the current executor may control it.
+            if progress is not None and progress.get("status") in {"active", "queued"}:
                 await run_in_threadpool(
                     project_collaboration.execution_run,
                     body.path,
@@ -1118,7 +1120,9 @@ async def papers_restart_view(body: PaperRestartRequest):
     if body.run_id is None:
         project_collaboration.require_paper_draft_operator(body.path, body.expected_project_id)
     else:
-        project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+        # Restart is permitted for any member when the run is stopped.
+        # restart_work itself verifies a stopped checkpoint.
+        project_collaboration.execution_run(body.path, "paper", body.run_id)
     with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
         return await papers.restart_work(
             body.path,
@@ -1131,18 +1135,17 @@ async def papers_restart_view(body: PaperRestartRequest):
 
 
 @app.get("/api/projects/papers/unfinished-checkpoints")
-def paper_unfinished_checkpoints(path: str, run_id: str):
-    project_collaboration.execution_run(path, "paper", run_id, operator=True)
+def paper_unfinished_checkpoints(path: str, run_id: str, allow_active: bool = False):
+    project_collaboration.execution_run(path, "paper", run_id, operator=allow_active)
     with papers.paper_run_scope(run_id):
-        return papers.unfinished_restart_options(path)
+        return papers.unfinished_restart_options(path, allow_active=allow_active)
 
 
 @app.post("/api/projects/papers/unfinished-checkpoints")
 async def paper_unfinished_rewind(body: PaperUnfinishedRewindRequest):
-    # An interrupted draft belongs to its creator, not every collaborator.
-    # This is provider-free; actual dispatch still requires a fresh Play
-    # preflight and an authorized connected provider.
-    project_collaboration.execution_run(body.path, "paper", body.run_id, operator=True)
+    # Restarting a stopped checkpoint is provider-free and available to
+    # collaborators. The actual Play still claims the execution controller.
+    project_collaboration.execution_run(body.path, "paper", body.run_id)
     with papers.paper_run_scope(body.run_id):
         return await papers.restart_unfinished_step(
             body.path,
@@ -1157,7 +1160,8 @@ async def paper_unfinished_rewind(body: PaperUnfinishedRewindRequest):
 def paper_rewind_options(paper_id: str, path: str):
     from sigma import paper_rewind
 
-    project_collaboration.require_artifact_manager(path, "paper", paper_id)
+    # The source publication is immutable; creating a new run does not
+    # require permission to remove another collaborator's saved Paper.
     return paper_rewind.describe(path, paper_id, inspect_project(path).project.id)
 
 
@@ -1168,7 +1172,8 @@ async def paper_rewind_view(paper_id: str, body: PaperRewindRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    project_collaboration.require_artifact_manager(body.path, "paper", paper_id)
+    # An authorized member may start a NEW run from a published Paper,
+    # without changing the original publication.
     # Validate the immutable source before allocating a new collaborator run.
     source = paper_rewind.describe(body.path, paper_id, body.expected_project_id)
     if (
@@ -1403,6 +1408,13 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             )
             - 1
         )
+        # Determine restart eligibility from the durable run's own sidecar.
+        # It is never inferred from a different paper's global busy state.
+        with papers.paper_run_scope(run_id):
+            previous = await run_in_threadpool(papers.progress_status, body.path)
+        resume_stopped = bool(
+            previous and previous.get("status") in {"cancelled", "failed", "interrupted", "stopped"}
+        )
         reservation = await run_in_threadpool(
             project_collaboration.reserve_execution_run,
             body.path,
@@ -1411,6 +1423,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
             saved_max,
             model=config["model"],
             thinking=config["reasoning_effort"],
+            resume_stopped_paper=resume_stopped,
         )
         if reservation is None:
             raise ProjectError("Paper reservation is unavailable.")

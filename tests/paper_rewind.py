@@ -7,6 +7,7 @@ import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase, main
+from unittest.mock import patch
 from uuid import uuid4
 
 from sigma import api, paper_rewind, papers
@@ -356,6 +357,28 @@ class SavedPaperRewindTests(TestCase):
             persisted = papers._load_work(self.path)
             assert persisted is not None
             self.assertEqual(persisted["provider_calls"], 4)
+
+    def test_active_checkpoint_inspection_is_read_only(self) -> None:
+        run_id = uuid4().hex
+        with papers.paper_run_scope(run_id):
+            _package, work = self._stopped_long_form(run_id)
+            before = papers._load_work(self.path)
+            with patch.object(
+                papers,
+                "progress_status",
+                return_value={"status": "active", "stage": "proofreading"},
+            ):
+                with self.assertRaisesRegex(ProjectError, "Stop this Paper"):
+                    papers.unfinished_restart_options(self.path)
+                available = papers.unfinished_restart_options(self.path, allow_active=True)
+                self.assertIn("validation", available["stages"])
+                with self.assertRaisesRegex(ProjectError, "Stop this Paper"):
+                    asyncio.run(
+                        papers.restart_unfinished_step(
+                            self.path, self.view.project.id, work["snapshot_sha256"], "validation"
+                        )
+                    )
+            self.assertEqual(papers._load_work(self.path), before)
 
     def test_unfinished_writing_restart_preserves_plan_and_paid_call_history(self) -> None:
         run_id = uuid4().hex

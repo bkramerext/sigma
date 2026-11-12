@@ -43,6 +43,9 @@ _LEASE_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
 _WRITE_CONTEXT: ContextVar[tuple[str, sqlite3.Connection, tuple[int, int | None]] | None] = (
     ContextVar("sigma_project_write_transaction", default=None)
 )
+_PAPER_CLEANUP_CONTEXT: ContextVar[tuple[str, str] | None] = ContextVar(
+    "sigma_terminal_paper_cleanup", default=None
+)
 _T = TypeVar("_T")
 
 
@@ -73,6 +76,25 @@ def bind_lease(path: str, token: str | None) -> Iterator[None]:
         yield
     finally:
         _LEASE_CONTEXT.reset(binding)
+
+
+@contextmanager
+def terminal_paper_cleanup(path: str, run_id: str | None) -> Iterator[None]:
+    """Permit deletion of an idle Paper's sidecars while ANOTHER run holds a lease.
+
+    Only discard_work enters this scope after acquiring the target run's own
+    operation gate. Membership, creator/owner authorization and Project
+    deletion fencing still apply. It does not authorize starting or stopping
+    an execution, or mutations outside the targeted Paper directory.
+    """
+    if run_id is None:
+        yield
+        return
+    binding = _PAPER_CLEANUP_CONTEXT.set((str(path), run_id))
+    try:
+        yield
+    finally:
+        _PAPER_CLEANUP_CONTEXT.reset(binding)
 
 
 def _document_digest(contents: bytes) -> str:
@@ -238,7 +260,22 @@ def write_guard(
                 ):
                     raise ProjectError("Project deletion is in progress.")
             else:
-                _verify_fence(db, path, actor)
+                cleanup = _PAPER_CLEANUP_CONTEXT.get()
+                if cleanup is not None and cleanup[0] == path:
+                    from sigma import papers
+
+                    if papers._paper_run_id.get() != cleanup[1]:
+                        raise ProjectError("Paper cleanup targets a different execution.")
+                    current_lease = _lease(db, path)
+                    if (
+                        current_lease is not None
+                        and current_lease["activity"] == "Project deletion"
+                    ):
+                        raise ProjectError("Project deletion is in progress.")
+                    # A different Paper may execute concurrently. Its lease
+                    # cannot fence deletion of this verified idle run.
+                else:
+                    _verify_fence(db, path, actor)
             # A project-wide file mutex protects the short shared write, while
             # the reservation proves which collaborator owns the Paper's
             # checkpoint. Never allow a valid collaborator to impersonate
@@ -248,17 +285,29 @@ def write_guard(
             run_id = papers._paper_run_id.get()
             if run_id is not None:
                 reserved = db.execute(
-                    """SELECT creator_hash,status FROM shared_run_reservations
+                    """SELECT creator_hash,runner_hash,status FROM shared_run_reservations
                        WHERE path=? AND kind='paper' AND run_id=?""",
                     (path, run_id),
                 ).fetchone()
-                if (
-                    reserved is None
-                    or reserved["creator_hash"] != _identity()[0].subject_hash
-                    or reserved["status"] == "discarded"
-                ):
+                workspace, _email = _identity()
+                cleanup = _PAPER_CLEANUP_CONTEXT.get() == (path, run_id)
+                allowed = reserved is not None and (
+                    (
+                        cleanup
+                        and (
+                            reserved["creator_hash"] == workspace.subject_hash
+                            or row["owner_hash"] == workspace.subject_hash
+                        )
+                    )
+                    or (
+                        not cleanup
+                        and (reserved["runner_hash"] or reserved["creator_hash"])
+                        == workspace.subject_hash
+                    )
+                )
+                if not allowed or reserved is None or reserved["status"] == "discarded":
                     raise ProjectError(
-                        "Paper checkpoint belongs to another creator or was discarded."
+                        "Paper checkpoint belongs to another executor or was discarded."
                     )
             binding = _WRITE_CONTEXT.set((path, db, _write_context_owner()))
             try:
@@ -478,6 +527,20 @@ def _db() -> Iterator[sqlite3.Connection]:
                     if "artifact_id" not in run_columns:
                         db.execute(
                             "ALTER TABLE shared_run_reservations ADD COLUMN artifact_id TEXT"
+                        )
+                    # Paper authorship is immutable; the collaborator currently
+                    # executing a resumed run may differ from its first author.
+                    if "runner_hash" not in run_columns:
+                        db.execute(
+                            "ALTER TABLE shared_run_reservations ADD COLUMN runner_hash TEXT"
+                        )
+                    if "runner_email" not in run_columns:
+                        db.execute(
+                            "ALTER TABLE shared_run_reservations ADD COLUMN runner_email TEXT"
+                        )
+                    if "runner_claimed_at" not in run_columns:
+                        db.execute(
+                            "ALTER TABLE shared_run_reservations ADD COLUMN runner_claimed_at REAL"
                         )
                     # Existing hosted databases have the earlier outbox schema.
                     fields = {
@@ -784,13 +847,14 @@ def reserve_execution_run(
     *,
     model: str,
     thinking: str,
+    resume_stopped_paper: bool = False,
 ) -> dict[str, Any] | None:
     """Reserve a stable run identity and display number before provider dispatch.
 
     This is the admission primitive for per-run Paper/Session persistence.
     Callers must supply the maximum number in existing saved artifacts, not a
-    client-provided guess. Reservation is idempotent, never reassigns creator
-    or model settings, and never reuses a number from an abandoned run.
+    client-provided guess. Reservation retains original authorship and never
+    reuses a number; an explicitly stopped Paper may acquire a new executor.
 
     The legacy project-scoped execution guard must remain in place until
     checkpoints, task registries, controls and API admissions use this ledger.
@@ -819,19 +883,36 @@ def reserve_execution_run(
         _row_value, email = _membership(db, path)
         creator_hash = _identity()[0].subject_hash
         existing = db.execute(
-            """SELECT run_id, number, creator_hash, creator_email, model, thinking,
-                      status, artifact_id
+            """SELECT run_id, number, creator_hash, creator_email, runner_hash,
+                      runner_email, runner_claimed_at, model, thinking, status, artifact_id
                FROM shared_run_reservations
                WHERE path=? AND kind=? AND run_id=?""",
             (path, kind, run_id),
         ).fetchone()
         if existing is not None:
-            if existing["creator_hash"] != creator_hash:
-                raise ProjectError("Only the original execution creator can resume this run.")
             if existing["status"] == "discarded":
                 raise ProjectError("Discarded work cannot be resumed. Start a new run.")
+            runner = existing["runner_hash"] or existing["creator_hash"]
+            if runner != creator_hash:
+                if kind != "paper" or not resume_stopped_paper or existing["artifact_id"]:
+                    raise ProjectError("Only the original execution creator can resume this run.")
+                claimed = existing["runner_claimed_at"]
+                if claimed is not None and time.time() - claimed < 8:
+                    raise ProjectError("Another collaborator is preparing to resume this Paper.")
+                # Serialize claims in the same reservation transaction. The
+                # creator columns remain unchanged for attribution and removal.
+                db.execute(
+                    """UPDATE shared_run_reservations
+                       SET runner_hash=?, runner_email=?, runner_claimed_at=?
+                       WHERE path=? AND kind=? AND run_id=?""",
+                    (creator_hash, email, time.time(), path, kind, run_id),
+                )
             db.commit()
-            return dict(existing)
+            result = dict(existing)
+            # Preserve the established reservation response shape for replay.
+            for internal in ("runner_hash", "runner_email", "runner_claimed_at"):
+                result.pop(internal, None)
+            return result
         latest = db.execute(
             "SELECT MAX(number) FROM shared_run_reservations WHERE path=? AND kind=?",
             (path, kind),
@@ -873,7 +954,8 @@ def list_execution_runs(path: str, kind: str) -> list[dict[str, Any]]:
             return []
         _membership(db, path)
         rows = db.execute(
-            """SELECT run_id, number, creator_email, model, thinking, created_at, status, artifact_id
+            """SELECT run_id, number, creator_email, runner_email, model, thinking,
+                      created_at, status, artifact_id
                FROM shared_run_reservations WHERE path=? AND kind=?
                ORDER BY number""",
             (path, kind),
@@ -884,7 +966,7 @@ def list_execution_runs(path: str, kind: str) -> list[dict[str, Any]]:
 def execution_run(
     path: str, kind: str, run_id: str, *, operator: bool = False, missing_ok: bool = False
 ) -> dict[str, Any] | None:
-    """A reserved run has one permanent owner, including before invitations."""
+    """Original authorship stays fixed; a Paper's execution controller can change on Resume."""
     from sigma.projects import ProjectError, project_path
 
     if kind not in {"paper", "session"}:
@@ -898,8 +980,8 @@ def execution_run(
     with _db() as db:
         _membership(db, path)
         row = db.execute(
-            """SELECT run_id, number, creator_hash, creator_email, model, thinking, created_at,
-                      status, artifact_id
+            """SELECT run_id, number, creator_hash, creator_email, runner_hash, model,
+                      thinking, created_at, status, artifact_id
                FROM shared_run_reservations WHERE path=? AND kind=? AND run_id=?""",
             (path, kind, run_id),
         ).fetchone()
@@ -907,8 +989,10 @@ def execution_run(
             if missing_ok:
                 return None
             raise ProjectError("Execution not found or access denied.")
-        if operator and row["creator_hash"] != _identity()[0].subject_hash:
-            raise ProjectError("Only the original execution creator may control this run.")
+        if operator and (row["runner_hash"] or row["creator_hash"]) != _identity()[0].subject_hash:
+            raise ProjectError(
+                "Only the collaborator running this execution may stop or control it."
+            )
         return dict(row)
 
 

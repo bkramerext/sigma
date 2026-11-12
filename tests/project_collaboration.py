@@ -533,6 +533,104 @@ class CollaborationTests(TestCase):
                 self.assertEqual(retry["number"], receipt["number"])
                 self.assertEqual(retry["model"], "paper-model")
 
+    def test_idle_paper_cleanup_ignores_other_paper_lease_only(self) -> None:
+        """Confirm removal can commit while a different paper is executing."""
+        from sigma import papers
+
+        run_id = uuid4().hex
+        receipt = shared.reserve_execution_run(
+            self.path, "paper", run_id, 0, model="paper-model", thinking="medium"
+        )
+        assert receipt is not None
+        token = shared.acquire_lease(self.path, "Paper generation")
+        assert token is not None
+        try:
+            with (
+                papers.paper_run_scope(run_id),
+                self.assertRaisesRegex(ProjectError, "being used"),
+                shared.write_guard(self.path),
+            ):
+                pass
+            with (
+                papers.paper_run_scope(run_id),
+                shared.terminal_paper_cleanup(self.path, run_id),
+                shared.write_guard(self.path),
+            ):
+                pass
+            with (
+                papers.paper_run_scope(run_id),
+                self.assertRaisesRegex(ProjectError, "being used"),
+                shared.write_guard(self.path),
+            ):
+                pass
+            with (
+                papers.paper_run_scope(run_id),
+                shared.terminal_paper_cleanup(self.path, uuid4().hex),
+                self.assertRaisesRegex(ProjectError, "different execution"),
+                shared.write_guard(self.path),
+            ):
+                pass
+        finally:
+            shared.release_lease(self.path, token)
+
+    def test_stopped_paper_can_be_resumed_by_collaborator_without_transferring_authorship(
+        self,
+    ) -> None:
+        """Resume changes the executor, not the creator; session rules stay unchanged."""
+        run_id = uuid4().hex
+        original = shared.reserve_execution_run(
+            self.path, "paper", run_id, 0, model="original-model", thinking="high"
+        )
+        assert original is not None
+        with shared._db() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO shared_collaborators(path, email) VALUES (?, ?)",
+                (self.path, self.other.email),
+            )
+        colleague = Workspace(
+            workspace_id="collaborator-workspace",
+            subject_hash="collaborator-hash",
+            path=self.root,
+            email=self.other.email,
+            verified_subject=self.other.subject,
+        )
+        with (
+            patch("sigma.project_collaboration.cloud_workspaces.current", return_value=colleague),
+            patch(
+                "sigma.project_collaboration.cloud_auth.current_principal", return_value=self.other
+            ),
+        ):
+            # Reading work does not grant control over another executor.
+            member_view = shared.execution_run(self.path, "paper", run_id)
+            assert member_view is not None
+            self.assertEqual(member_view["creator_email"], self.owner.email)
+            with self.assertRaisesRegex(ProjectError, "original execution creator"):
+                shared.reserve_execution_run(
+                    self.path, "paper", run_id, 0, model="new-model", thinking="low"
+                )
+            claimed = shared.reserve_execution_run(
+                self.path,
+                "paper",
+                run_id,
+                0,
+                model="new-model",
+                thinking="low",
+                resume_stopped_paper=True,
+            )
+            assert claimed is not None
+            self.assertEqual(claimed["creator_email"], original["creator_email"])
+            self.assertEqual(claimed["number"], original["number"])
+            self.assertEqual(claimed["model"], original["model"])
+            self.assertIsNotNone(shared.execution_run(self.path, "paper", run_id, operator=True))
+            self.assertEqual(
+                shared.list_execution_runs(self.path, "paper")[0]["runner_email"], self.other.email
+            )
+        with self.assertRaisesRegex(ProjectError, "running this execution"):
+            shared.execution_run(self.path, "paper", run_id, operator=True)
+        original_view = shared.execution_run(self.path, "paper", run_id)
+        assert original_view is not None
+        self.assertEqual(original_view["creator_email"], self.owner.email)
+
     def test_run_reservations_keep_owner_before_and_after_sharing(self) -> None:
         """The creator, not the project owner or current lease, owns a run."""
         with shared._db() as db:
@@ -1571,7 +1669,7 @@ class CollaborationTests(TestCase):
                 papers._write_queue_status(self.path, "queued", papers._now())
             with (
                 papers.paper_run_scope(run_owner),
-                self.assertRaisesRegex(ProjectError, "another creator"),
+                self.assertRaisesRegex(ProjectError, "another executor"),
             ):
                 papers._write_queue_status(self.path, "queued", papers._now())
             seen = papers.run_progress_list(self.path)

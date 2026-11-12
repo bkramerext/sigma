@@ -366,8 +366,12 @@ async def exercise(app, api, papers, cloud_auth, cloud_workspaces, project_colla
                     "run_id": runs["n@example.test"],
                 },
             )
-            for denial in (foreign_discard, foreign_restart, foreign_preflight):
+            for denial in (foreign_discard, foreign_restart):
                 assert denial.status_code in (400, 403, 404, 409), denial.text
+            # Preflight only reads the shared frozen checkpoint. Every
+            # collaborator may inspect it before deciding to resume.
+            assert foreign_preflight.status_code == 200, foreign_preflight.text
+            assert foreign_preflight.json()["checkpoint_exists"] is True
             assert provider_creators == ["n@example.test"]
 
             # Z stops only its own queued receipt, then independently resumes
