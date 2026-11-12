@@ -4642,6 +4642,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     paperStepRestartAnchor.current = anchor;
     setPaperStepRestart(null);
     setConfirmDiscardDraft(false);
+    // Local, single-user projects do not have a reserved run ID. Their
+    // established checkpoint reset remains valid; collaboration-backed
+    // papers use the unified truthful step restart controller.
+    if (!selectedRunIdRef.current) {
+      setConfirmRestartDraft(true);
+      return;
+    }
     void proposeUnfinishedPaperStepRestart(
       selectedRunIdRef.current, assignedPaperNumber, 'started', anchor,
     );

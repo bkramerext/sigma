@@ -1462,7 +1462,11 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
                 include_sigma_issues=body.include_sigma_issues,
                 include_diagrams=body.include_diagrams,
                 authorized_recovery_section=body.authorized_recovery_section,
-                authorized_recovery_sections=body.authorized_recovery_sections,
+                **(
+                    {"authorized_recovery_sections": body.authorized_recovery_sections}
+                    if body.authorized_recovery_sections is not None
+                    else {}
+                ),
                 **({"authorized_provider_change": True} if body.authorized_provider_change else {}),
                 **presence_kwargs,
             )

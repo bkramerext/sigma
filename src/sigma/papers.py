@@ -9272,10 +9272,12 @@ or document markup."""
         logging.getLogger("sigma.lifecycle").info(
             "paper.section_recovery_authorized project_id=%s sections=%s saved_sections=%d",
             project_id or "unknown",
-            list(replay),
+            list(replay or ()),
             len(saved_sections),
         )
-    elif authorized_recovery_section is not None or authorized_recovery_sections is not None:
+    elif authorized_recovery_section is not None:
+        raise ProjectError("Paper section recovery authorization is stale; no AI call was made")
+    elif authorized_recovery_sections is not None:
         raise ProjectError("Paper section recovery checkpoint changed; no AI call was made")
 
     if fast_path:

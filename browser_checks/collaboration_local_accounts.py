@@ -896,22 +896,15 @@ def exercise(ui: str, workspaces: Path) -> None:
               const response = await fetch('/api/projects/papers?' +
                 new URLSearchParams({path: removed.path}), {cache:'no-store'});
               const data = await response.json();
-              return removed.ids.every(id => !data.runs.some(run => run.run_id === id));
+              return removed.ids.every(id => !data.runs.some(run => run.run_id === id)) &&
+                data.runs.some(run => run.run_id === removed.active && run.status === 'active');
             }""",
-            arg={"path": path, "ids": [stopped_run["run_id"], next_stopped_run["run_id"]]},
+            arg={"path": path, "ids": [stopped_run["run_id"], next_stopped_run["run_id"]],
+                 "active": active_run["run_id"]},
             timeout=12000,
         )
-        run_listing = get_json(
-            owner_context.request.get(ui + "/api/projects/papers", params={"path": path})
-        )["runs"]
-        assert all(
-            row["run_id"] not in {stopped_run["run_id"], next_stopped_run["run_id"]}
-            for row in run_listing
-        )
-        assert any(
-            row["run_id"] == active_run["run_id"] and row["status"] == "active"
-            for row in run_listing
-        ), "Deleting the stopped paper disturbed the active paper"
+        # Both deletion and preservation of the active run were verified
+        # together in the same browser identity above.
         released_active = owner_context.request.post(
             ui + "/api/__fixture/collaboration-paper-release",
             headers={"Origin": ui},

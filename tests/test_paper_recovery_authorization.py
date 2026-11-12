@@ -37,11 +37,13 @@ class VerifiedPaperRecoveryTests(TestCase):
 
     def test_changed_dispatches_or_invalid_replay_are_rejected_before_provider(self) -> None:
         for requested in ((), (1,), (2,), (2, 1), (1, 1), (1, 4), (True, 2)):
-            with self.subTest(requested=requested):
-                with self.assertRaisesRegex(ProjectError, "checkpoint"):
-                    papers._verify_section_recovery(
-                        self.work, requested, long_form=True, resumed_checkpoint=True
-                    )
+            with (
+                self.subTest(requested=requested),
+                self.assertRaisesRegex(ProjectError, "checkpoint"),
+            ):
+                papers._verify_section_recovery(
+                    self.work, requested, long_form=True, resumed_checkpoint=True
+                )
         with self.assertRaisesRegex(ProjectError, "checkpoint"):
             papers._verify_section_recovery(
                 self.work, (1, 2), long_form=True, resumed_checkpoint=False
