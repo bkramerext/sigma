@@ -957,6 +957,30 @@ def check(root: Path, base: Path) -> None:
     )
 
 
+def check_completed_paper_count_does_not_slow_activity(root: Path) -> None:
+    """Completed papers must never be individually checked for live activity."""
+    from sigma import papers, project_collaboration
+
+    view = initialize_project(
+        root / "many-completed-papers.sigma",
+        "Completed paper activity",
+        "Activity checks must not scale with published paper count.",
+    )
+    historical = [
+        {"run_id": f"{number:032x}", "status": "complete"}
+        for number in range(1, 201)
+    ]
+    with (
+        patch.object(project_collaboration, "list_execution_runs", return_value=historical),
+        patch.object(
+            papers,
+            "paper_run_scope",
+            side_effect=AssertionError("Completed paper sidecar was probed"),
+        ),
+    ):
+        assert papers.activity_status(view.path) is None
+
+
 def check_run_activity_aggregation_and_lightweight_poll() -> None:
     """Mixed runs retain queued entries, immutable authors and low-cost reads."""
     from sigma import papers, project_collaboration, recents, research_qa, research_sessions
@@ -1067,6 +1091,7 @@ def main() -> None:
             os.environ, {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(base / "state")}
         ):
             check(root, base)
+            check_completed_paper_count_does_not_slow_activity(root)
             check_run_activity_aggregation_and_lightweight_poll()
 
 
