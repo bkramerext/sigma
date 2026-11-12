@@ -840,6 +840,30 @@ def exercise(ui: str, workspaces: Path) -> None:
         )
         assert stopped_delete_fixture.status == 200, stopped_delete_fixture.text()
         stopped_run = get_json(stopped_delete_fixture)
+        second_delete_fixture = owner_context.request.post(
+            ui + "/api/__fixture/collaboration-paper-stopped",
+            headers={"Origin": ui},
+            data={"path": path},
+        )
+        assert second_delete_fixture.status == 200, second_delete_fixture.text()
+        next_stopped_run = get_json(second_delete_fixture)
+        # Delay only the first browser request, not the backend, to verify
+        # optimistic dismissal and a second removal before the first finishes.
+        owner.evaluate(
+            """firstId => {
+              const original = window.fetch.bind(window);
+              window.fetch = (input, init) => {
+                const target = typeof input === 'string' ? input : input.url;
+                if (target.includes('/api/projects/papers/discard')
+                    && init?.body?.includes(firstId)) {
+                  return new Promise((resolve, reject) =>
+                    setTimeout(() => original(input, init).then(resolve, reject), 2500));
+                }
+                return original(input, init);
+              };
+            }""",
+            stopped_run["run_id"],
+        )
         remove = owner.get_by_role(
             "button", name=f"Remove unfinished Paper {stopped_run['number']}"
         )
@@ -852,12 +876,38 @@ def exercise(ui: str, workspaces: Path) -> None:
         confirm = confirmation.get_by_role("button", name="Confirm", exact=True)
         expect(confirm).to_be_enabled()
         confirm.click()
-        expect(confirmation).not_to_be_visible(timeout=15000)
-        expect(remove).to_have_count(0)
+        expect(confirmation).not_to_be_visible(timeout=500)
+        expect(remove).to_have_count(0, timeout=500)
+        # The second confirmation must open and complete without waiting for
+        # the previous delayed request; no project-wide removal-busy flag.
+        remove_second = owner.get_by_role(
+            "button", name=f"Remove unfinished Paper {next_stopped_run['number']}"
+        )
+        expect(remove_second).to_be_visible(timeout=2000)
+        remove_second.click()
+        confirm_second = owner.get_by_role(
+            "dialog", name=f"Confirm removing unfinished paper {next_stopped_run['number']}"
+        )
+        confirm_second.get_by_role("button", name="Confirm", exact=True).click()
+        expect(confirm_second).not_to_be_visible(timeout=500)
+        expect(remove_second).to_have_count(0, timeout=500)
+        owner.wait_for_function(
+            """async removed => {
+              const response = await fetch('/api/projects/papers?' +
+                new URLSearchParams({path: removed.path}), {cache:'no-store'});
+              const data = await response.json();
+              return removed.ids.every(id => !data.runs.some(run => run.run_id === id));
+            }""",
+            arg={"path": path, "ids": [stopped_run["run_id"], next_stopped_run["run_id"]]},
+            timeout=12000,
+        )
         run_listing = get_json(
             owner_context.request.get(ui + "/api/projects/papers", params={"path": path})
         )["runs"]
-        assert all(row["run_id"] != stopped_run["run_id"] for row in run_listing)
+        assert all(
+            row["run_id"] not in {stopped_run["run_id"], next_stopped_run["run_id"]}
+            for row in run_listing
+        )
         assert any(
             row["run_id"] == active_run["run_id"] and row["status"] == "active"
             for row in run_listing

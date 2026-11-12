@@ -3133,6 +3133,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // Per-paper optimistic tombstones prevent unrelated actions and polling
   // from blocking or resurrecting a paper awaiting deletion.
   const [hiddenRemovalIds, setHiddenRemovalIds] = useState<Set<string>>(() => new Set());
+  const [removingLegacyDraft, setRemovingLegacyDraft] = useState(false);
   const pendingRemovals = useRef<Set<string>>(new Set());
   function beginPaperRemoval(id: string): boolean {
     if (pendingRemovals.current.has(id)) return false;
@@ -4212,6 +4213,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setNewPaperRequested(false); setConfirmDiscardDraft(false); setResetConfirm(false);
       return;
     }
+    setRemovingLegacyDraft(true);
     setBusy(true); setError('');
     try {
       const response = await fetch('/api/projects/papers/discard', {
@@ -4226,7 +4228,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setResetConfirm(false); setConfirmDiscardDraft(false); setSuccess('');
       await refresh(selected?.paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setRemovingLegacyDraft(false); }
   }
 
   async function discardOtherRun(runId: string) {
@@ -4559,7 +4561,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   ].join('|');
   const paperNoticeCopy = providerInterruptionCopy(paperNoticeMessage);
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
-  const showDraftPaper = !guest && !selectedRun?.paper_id && !hiddenRemovalIds.has(selectedRunId ?? '') && (
+  const showDraftPaper = !guest && !removingLegacyDraft && !selectedRun?.paper_id &&
+    !hiddenRemovalIds.has(selectedRunId ?? '') && (
     newPaperRequested || generating || restartReady || continuationAvailable ||
     (paperProgress != null && paperProgress.status !== 'complete') ||
     (selectedRun != null && selectedRun.status !== 'complete')
