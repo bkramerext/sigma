@@ -1856,7 +1856,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       // The admission response is already a complete session snapshot. Display it
       // without blocking the controls on reloading every saved session and
       // rebuilding Current Understanding; reconcile the history asynchronously.
-      setSessions(current => [sessionForDisplay(next), ...current.filter(item => item.id !== next.id)]);
+      const initialSnapshot = sessionForDisplay(next);
+      if (initialSnapshot) setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
       void load(next.id).catch(reportReadFailure);
       if (next.research_method_sources?.advisory) {
         setAnnouncement(next.research_method_sources.advisory);
@@ -1898,7 +1899,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           const accepted = await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: recoveryAction, additional_calls: authorizedCalls, browser_presence_required: action === "resume" }, undefined, true);
           // A successful control response contains the authoritative new status.
           // Do not keep the button busy for an unrelated whole-project reload.
-          setSessions(current => current.map(item => item.id === target.id ? sessionForDisplay(accepted) : item));
+          const acknowledged = sessionForDisplay(accepted);
+          if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
           void load(target.id).catch(reportReadFailure);
           break;
         } catch (cause) {
