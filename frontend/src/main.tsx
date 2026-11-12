@@ -1609,6 +1609,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [busy, setBusy] = useState(false);
   // Presentation only: never manufacture a persisted running Session or run number.
   const [admittingSession, setAdmittingSession] = useState(false);
+  const stopAfterStart = useRef(false);
+  const [stoppingStartingSession, setStoppingStartingSession] = useState(false);
   const [pendingSessionAction, setPendingSessionAction] = useState<{ id: string; action: 'pause' | 'resume' | 'stop' } | null>(null);
   const stopAfterResume = useRef<Set<string>>(new Set());
   const [error, setError] = useState('');
@@ -1879,6 +1881,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     if (guest) { setConfirmStart(false); setGuestSessionCard(true); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
+    stopAfterStart.current = false;
+    setStoppingStartingSession(false);
     // On click, replace Start with the green pulse before any backend work.
     setAdmittingSession(true);
     setExpanded(true);
@@ -1892,18 +1896,23 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, browser_presence_required: true, continue_using_saved_type_settings: continueWithSavedType.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
-      lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
+      // Start can be stopped before the first server response. Its identifier
+      // exists now, so honor that intent before displaying the saved row.
+      const accepted = stopAfterStart.current
+        ? await post<ResearchSession>(`research-sessions/${next.id}/control`, { path, action: 'stop', request_only: true }, undefined, true)
+        : next;
+      lastAnnouncement.current = `${accepted.id}:${accepted.status}:${accepted.current_action}`;
       // The admission response is already a complete session snapshot. Display it
       // without blocking the controls on reloading every saved session and
       // rebuilding Current Understanding; reconcile the history asynchronously.
-      const initialSnapshot = sessionForDisplay(next);
+      const initialSnapshot = sessionForDisplay(accepted);
       if (initialSnapshot) setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
       void load(next.id).catch(reportReadFailure);
       if (next.research_method_sources?.advisory) {
         setAnnouncement(next.research_method_sources.advisory);
       }
-      if (next.status === 'running' || next.status === 'queued') onRevealNewSession();
-      revealSession(next.id, next.status === 'running' || next.status === 'queued');
+      if (accepted.status === 'running' || accepted.status === 'queued') onRevealNewSession();
+      revealSession(next.id, accepted.status === 'running' || accepted.status === 'queued');
     } catch (cause) {
       // Revert the speculative pulse and unlock Play immediately. A full
       // history reconciliation is not part of the failed admission's UI path.
@@ -1919,7 +1928,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         void recordClientError(message, 'admission');
       }
     }
-    finally { submittingStart.current = false; setAdmittingSession(false); setBusy(false); }
+    finally { submittingStart.current = false; stopAfterStart.current = false; setStoppingStartingSession(false); setAdmittingSession(false); setBusy(false); }
   }
 
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
@@ -2190,7 +2199,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     ? pendingSessionAction.id : null;
   const runningCount = activeSessionCount -
     (sessions.some(item => item.id === stoppingSessionId && ['queued', 'running'].includes(item.status)) ? 1 : 0);
-  const pendingSessionName = admittingSession ? 'Starting session' : '';
+  const pendingSessionName = 'Session';
   const pendingSessionMetadata = formatRunAttribution({
     kind: 'session', creator: viewerEmail, model: config?.model, thinking: config?.reasoning_effort,
   });
@@ -2216,7 +2225,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
         </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={sessionControls.play}><CirclePlusIcon/></button>}
       </div>
-      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running{stoppingSessionId ? ' · 1 stopping' : ''}{admittingSession ? ' · 1 starting' : ''}</p>
+      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running{stoppingSessionId ? ' · 1 stopping' : ''}{admittingSession ? stoppingStartingSession ? ' · 1 stopping' : ' · 1 starting' : ''}</p>
     </header>
 
     {guest && guestSessionCard && <GuestFeatureCard title="Research sessions"
@@ -2227,21 +2236,21 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
       {(sessions.length || admittingSession) ? <ol className="session-list" aria-label="Research sessions">
-        {admittingSession && <li className="session-row session-admission-pending" aria-label="Session admission pending" role="status" aria-live="polite">
+        {admittingSession && <li className="session-row session-admission-pending" aria-label="Session starting" role="status" aria-live="polite">
           <div className="session-row-heading">
             <div className="session-summary">
               <div className="session-title-line">
-                <span className="session-row-title">{pendingSessionName}</span>
-                <div className="session-heading-actions">
-                  <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session (available after server acceptance)" data-tooltip="Stop available after session starts" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>
+                <span className="session-row-disclosure"><DisclosureChevron expanded={false}/><span className="session-row-title">{pendingSessionName}</span></span>
+                <div className="session-heading-actions" aria-label="Session actions">
+                  <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session" data-tooltip="Stop session" disabled={stoppingStartingSession} onClick={() => { stopAfterStart.current = true; setStoppingStartingSession(true); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>
                 </div>
-                <span className="session-status session-running" aria-label="Session starting · awaiting server acceptance" data-tooltip="Starting session · awaiting server acceptance">starting<i aria-hidden="true"/></span>
               </div>
-              <small className="session-run-metadata">{pendingSessionMetadata || 'Research session'} · awaiting server acceptance</small>
-              <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · preparing research references and admission</small>
+              <span className={`session-status session-${stoppingStartingSession ? 'stopped' : 'running'}`} aria-label={stoppingStartingSession ? 'Session stopping' : 'Session starting'}>{stoppingStartingSession ? 'stopping' : <>starting<i aria-hidden="true"/></>}</span>
+              <small className="session-run-metadata">{pendingSessionMetadata || 'Research session'} · {stoppingStartingSession ? 'Stopping' : 'Starting'}</small>
+              <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · 0 findings saved</small>
             </div>
           </div>
-        </li>}
+        </li>
         {orderedSessions.map(item => {
           const pendingAction = pendingSessionAction?.id === item.id ? pendingSessionAction.action : null;
           const statusLabel = pendingAction === 'resume' ? 'resuming'
