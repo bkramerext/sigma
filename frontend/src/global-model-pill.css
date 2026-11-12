@@ -191,9 +191,11 @@
   font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
   color: var(--sigma-copper-foreground);
 }
+/* The ordinary connection label must fill the Google-sized identity column,
+   just like sponsored connection labels and the Home page. */
 .workspace-page .project-art-header .project-identity-pill-stack > .api-connection > summary:not(.has-sponsored-allowance) {
-  width: max-content;
-  justify-content: center;
+  width: 100%;
+  justify-content: flex-start;
 }
 .workspace-page .project-art-header .sigma-header-first-row > .project-global-settings-pill {
   margin-left: 0;
@@ -842,8 +844,8 @@
 /* Project header: same two-column order as Home, with tighter vertical rhythm.
    Top-row About/Settings and Google share a 34px height; equal row gaps
    place Model and ChatGPT at precisely the same second-row top. */
-.workspace-page .project-art-header {
-  --sigma-project-pill-row-gap: 10px;
+:is(.home-page, .workspace-page .project-art-header) {
+  --sigma-project-pill-row-gap: calc(var(--identity-pill-gap) - 1px);
 }
 .workspace-page .project-art-header .sigma-header-about-model-anchor {
   gap: var(--sigma-project-pill-row-gap);
@@ -967,7 +969,7 @@
   width: 100%;
 }
 .workspace-page .project-art-header .project-identity-pill-stack {
-  row-gap: var(--identity-pill-gap);
+  row-gap: var(--sigma-project-pill-row-gap);
 }
 .home-page .home-topline {
   padding-right: var(--home-corner-gap);
@@ -979,7 +981,194 @@
   margin-right: -12px;
 }
 
-/* Project's earlier 10px override must not defeat the shared 13px rhythm. */
+/* Home and Project use the same 12px vertical two-row rhythm.
+   Keep horizontal gaps, pill sizes, and Admin's top-row position unchanged. */
+.home-page .home-account-grid,
+.workspace-page .project-art-header .header-controls {
+  row-gap: var(--sigma-project-pill-row-gap);
+}
+.home-page .sigma-header-about-model-anchor,
 .workspace-page .project-art-header .sigma-header-about-model-anchor {
-  gap: var(--identity-pill-gap);
+  gap: var(--sigma-project-pill-row-gap);
+}
+.workspace-page .project-art-header .project-identity-pill-stack {
+  row-gap: var(--sigma-project-pill-row-gap);
+}
+
+/* Admin is the optional sixth header pill on BOTH pages. Keep its
+   styling and its position before About identical, and include it in
+   the same two-row group instead of treating it as a separate control. */
+.workspace-page .project-art-header .sigma-header-model-column:has(.administrator-settings-link) {
+  max-width: none;
+}
+.workspace-page .project-art-header .sigma-header-secondary-row > .administrator-settings-link {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 34px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid #a9654875;
+  border-radius: 999px;
+  background: #07111ef2;
+  color: var(--sigma-copper-foreground);
+  font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.workspace-page .project-art-header .sigma-header-secondary-row > .administrator-settings-link:hover {
+  border-color: #cd9270;
+  background: #172536fa;
+  color: #fff2e9;
+}
+.workspace-page .project-art-header .sigma-header-secondary-row > .administrator-settings-link:focus-visible {
+  outline: 2px solid #e5a785;
+  outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .workspace-page .project-art-header .sigma-header-secondary-row > .administrator-settings-link {
+    min-height: 28px;
+    padding: 4px 9px;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+}
+
+/* Home and Project must have identical measured two-row pill geometry.
+   Home previously reserved an obsolete 53px second grid track even after
+   both visible second-row pills became 40px tall. */
+.home-page .home-account-grid {
+  grid-template-rows: var(--sigma-header-row-one) minmax(0, auto);
+}
+.home-page .home-account-grid .sigma-header-first-row {
+  min-height: var(--sigma-header-row-one);
+  height: var(--sigma-header-row-one);
+  align-items: center;
+}
+.home-page .home-account-grid > .api-connection > summary {
+  box-sizing: border-box;
+  min-height: 40px;
+  height: 40px;
+  padding-block: 3px;
+  align-items: center;
+}
+@media (max-width: 700px) {
+  .home-page .home-account-grid .sigma-header-first-row > .home-settings-pill {
+    min-height: var(--sigma-header-row-one);
+    height: var(--sigma-header-row-one);
+  }
+  .home-page .home-account-grid .sigma-header-secondary-row > .administrator-settings-link {
+    min-height: var(--sigma-header-row-one);
+    padding-block: 4px;
+  }
+  .home-page .home-account-grid > .api-connection > summary {
+    min-height: 36px;
+    height: 36px;
+    padding-block: 2px;
+  }
+}
+
+/* Both pages now render identical account-column markup. Set the Home grid
+   to the same two actual columns as Project, rather than leaving an empty
+   implicit track for direct-child Google/ChatGPT elements. */
+.home-page .home-account-grid {
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  grid-template-rows: auto;
+  row-gap: 0;
+}
+:is(.home-page .home-account-grid, .workspace-page .project-art-header)
+.sigma-header-account-column.project-identity-pill-stack {
+  grid-area: identity;
+  display: grid;
+  box-sizing: border-box;
+  grid-template-columns: max-content;
+  grid-template-rows: 34px 40px;
+  row-gap: var(--sigma-project-pill-row-gap);
+  column-gap: 0;
+  align-items: start;
+  align-content: start;
+  justify-items: start;
+  justify-self: start;
+  align-self: start;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+}
+:is(.home-page .home-account-grid, .workspace-page .project-art-header)
+.sigma-header-account-column.project-identity-pill-stack > .project-google-signin {
+  box-sizing: border-box;
+  display: flex;
+  justify-self: stretch;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 7px 12px;
+  font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-align: left;
+}
+:is(.home-page .home-account-grid, .workspace-page .project-art-header)
+.sigma-header-account-column.project-identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  contain: inline-size;
+  justify-self: stretch;
+  align-self: start;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  position: relative;
+}
+:is(.home-page .home-account-grid, .workspace-page .project-art-header)
+.sigma-header-account-column.project-identity-pill-stack > .api-connection > summary {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 3px 12px;
+  text-align: left;
+  font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+@media (max-width: 700px) {
+  :is(.home-page .home-account-grid, .workspace-page .project-art-header)
+  .sigma-header-account-column.project-identity-pill-stack {
+    grid-template-rows: 28px 36px;
+  }
+  :is(.home-page .home-account-grid, .workspace-page .project-art-header)
+  .sigma-header-account-column.project-identity-pill-stack > .project-google-signin {
+    height: 28px;
+    min-height: 28px;
+    padding: 4px 9px;
+    font-size: 9px;
+  }
+  :is(.home-page .home-account-grid, .workspace-page .project-art-header)
+  .sigma-header-account-column.project-identity-pill-stack > .api-connection > summary {
+    height: 36px;
+    min-height: 36px;
+    padding: 2px 9px;
+    font-size: 9px;
+  }
+}
+
+/* The outer inset is adjusted from measured visible pill bounds in
+   useEqualHeaderPillInsets; no extra Project-only margin corrections. */
+@media (min-width: 901px) {
+  .home-page .home-right-actions { top: 13px; right: 13px; }
+  .home-page .home-account-grid { top: 0; }
 }

@@ -827,6 +827,39 @@
 .sigma-project-classification-dialog .project-collaborator-mail-failed button { margin-left: 10px; border: 0; background: transparent; color: var(--sigma-copper-foreground); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
 
+/* Bottom spacing belongs to the scrollable body, not the form container.
+   Padding on form previously stole height and clipped the last textarea. */
+.home-page .new-project-dialog > form { padding-bottom: 0; }
+.home-page .new-project-dialog .settings-body {
+  padding-bottom: 24px;
+}
+/* New Project form: each caption/help/control is one unit.
+   Use a single inter-field gap rather than accumulated label and hint margins;
+   this keeps Project name, the paired classification controls, and all text
+   areas evenly spaced without changing their sizes or horizontal layout. */
+.home-page .new-project-dialog .settings-body > fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.home-page .new-project-dialog .new-project-field,
+.home-page .new-project-dialog .settings-classification-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.home-page .new-project-dialog .new-project-field > label,
+.home-page .new-project-dialog .settings-classification-row > div > label {
+  margin: 0;
+}
+.home-page .new-project-dialog .new-project-field > .settings-hint {
+  margin: 0;
+}
+@media (max-height: 820px) and (min-width: 701px) {
+  .home-page .new-project-dialog .settings-body > fieldset { gap: 10px; }
+  .home-page .new-project-dialog textarea { height: 80px; }
+}
+
 /* New Project fields are fixed-height; only the dialog body scrolls if needed. */
 .project-settings-dialog.new-project-dialog textarea { resize: none; }
 .project-settings-dialog.new-project-dialog .new-project-edit-note {

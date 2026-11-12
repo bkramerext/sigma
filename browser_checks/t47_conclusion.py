@@ -394,9 +394,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "Resume when you are ready for new provider work."
                 )
                 expect(row.get_by_role("button", name="Resume")).to_be_visible()
-                expect(prelude).to_contain_text(
-                    "0 reported completed of 0 identified saved executions"
-                )
+                expect(prelude).to_contain_text("0 reported completed of 0 identified executions")
                 expect(prelude).to_contain_text(
                     "No local Python or Sage computation is recorded for this session."
                 )
@@ -619,7 +617,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 row.get_by_role("button", name="Format all research sections as Markdown")
             ).to_have_attribute("aria-pressed", "false")
             prelude = row.locator(".outcome-evidence-prelude")
-            expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
+            expect(prelude).to_contain_text("0 reported completed of 0 identified executions")
             expect(prelude).to_contain_text(
                 "No local Python or Sage computation is recorded for this session."
             )
@@ -686,9 +684,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             if disclosure.get_attribute("aria-expanded") != "true":
                 disclosure.click()
             prelude = saved_row.locator(".outcome-evidence-prelude")
-            expect(prelude).to_contain_text("1 reported completed of 2 identified saved executions")
+            expect(prelude).to_contain_text("1 reported completed of 2 identified executions")
             expect(prelude).to_contain_text(
-                "1 completed-status record(s) do not include saved source and output"
+                "1 completed-status record(s) do not include recorded source and output"
             )
             prelude.locator("summary").click()
             expect(prelude).to_contain_text("offline-timeout")

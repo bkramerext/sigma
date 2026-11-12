@@ -176,8 +176,20 @@
 .connection-details .connection-usage-actions a { display: inline-block; }
 .connection-details :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 
-/* Keep every project-header pill on the same hover and keyboard-focus treatment. */
-.workspace-page .project-art-header .header-controls :is(.project-control-pill, .about-action, .project-google-signin, .project-chatgpt-signin > summary):is(:hover, :focus-visible) {
+/* One shared hover/focus fill for ALL six header pills on Home and Project.
+   Match Project About SIGMA's approved copper-brown fill. Limit this to
+   color/paint so no width, border radius, gap, or positioning can change. */
+:is(.home-page .home-account-grid, .workspace-page .project-art-header .header-controls)
+  :is(
+    .administrator-settings-link,
+    .home-about-button,
+    .about-action,
+    .home-settings-pill,
+    .project-global-settings-pill,
+    .global-model-pill,
+    .project-google-signin,
+    .api-connection > summary
+  ):is(:hover, :focus-visible):not(:disabled) {
   border-color: #c08a57;
   background: #3a291c;
   box-shadow: none;

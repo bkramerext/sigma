@@ -632,8 +632,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   .home-recents button.recent-save-as,
   .home-recents button.recent-forget,
   .home-samples a.recent-title-star,
-  .home-projects-heading button.home-icon-action,
-  .sigma-header-first-row > button.home-settings-pill
+  .home-projects-heading button.home-icon-action
 ):is(:hover, :focus-visible):not(:disabled) {
   color: #fff2e9 !important;
   background: var(--copper-gradient) !important;
@@ -650,8 +649,7 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
   .home-recents button.recent-title-shared,
   .home-recents button.recent-save-as,
   .home-recents button.recent-forget,
-  .home-projects-heading button.home-icon-action,
-  .sigma-header-first-row > button.home-settings-pill
+  .home-projects-heading button.home-icon-action
 ):is(:hover, :focus-visible):not(:disabled) svg {
   color: #fff2e9 !important;
 }

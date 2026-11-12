@@ -576,7 +576,7 @@ with sync_playwright() as playwright:
     assert mobile_copied.startswith("# Research Q/A") and question in mobile_copied
     mobile_title.screenshot(path=str(OUT / "research-qa-title-mobile-copied.png"))
     remove = mobile_dialog.locator(".saved-paper-card").first.get_by_role(
-        "button", name="Remove saved answer", exact=True
+        "button", name="Remove answer", exact=True
     )
     remove.click()
     mobile_dialog.get_by_role("button", name="Confirm", exact=True).click()

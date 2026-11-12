@@ -581,7 +581,7 @@ def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
             assert "Temporary paper-provider failure" in str(exc)
             assert isinstance(exc.__cause__, ProjectError)
             assert "before a valid response.completed" in str(exc.__cause__)
-            assert "Completed work is saved" in str(exc.__cause__)
+            assert "Completed work is preserved" in str(exc.__cause__)
         else:
             raise AssertionError("Partial provider streams must not produce a paper draft")
 

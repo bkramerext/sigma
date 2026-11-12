@@ -53,7 +53,7 @@ class ResearchDisplayBoundary extends Component<
     if (!this.state.message) return this.props.children;
     return <div className="workspace-state" role="alert">
       <strong>{this.props.label} could not be displayed.</strong>
-      <p>The research is still saved. This is a display error, not a session failure.</p>
+      <p>The research is still available. This is a display error, not a session failure.</p>
       <p className="error">{this.state.message}</p>
       <button type="button" className="text-view-link" onClick={() => window.location.reload()}>Reload display</button>
       <a className="text-view-link" href="/">Return Home</a>
@@ -199,10 +199,10 @@ function sessionForDisplay(value: unknown): ResearchSession | null {
     ...raw,
     session_number: typeof raw.session_number === 'number' && Number.isFinite(raw.session_number) ? raw.session_number : 0,
     strategy_id: typeof raw.strategy_id === 'string' ? raw.strategy_id : '',
-    strategy_title: typeof raw.strategy_title === 'string' ? raw.strategy_title : 'Saved session',
+    strategy_title: typeof raw.strategy_title === 'string' ? raw.strategy_title : 'Research session',
     status: statuses.includes(raw.status as typeof statuses[number]) ? raw.status as ResearchSession['status'] : 'failed',
     current_question: typeof raw.current_question === 'string' ? raw.current_question : '',
-    current_action: typeof raw.current_action === 'string' ? raw.current_action : 'Saved activity unavailable',
+    current_action: typeof raw.current_action === 'string' ? raw.current_action : 'Activity unavailable',
     message: typeof raw.message === 'string' ? raw.message : '',
     calls_used: typeof raw.calls_used === 'number' && Number.isFinite(raw.calls_used) ? raw.calls_used : 0,
     call_limit: typeof raw.call_limit === 'number' && Number.isFinite(raw.call_limit) ? raw.call_limit : 0,
@@ -377,13 +377,13 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
       ? `Required ${Number(match[1]).toLocaleString('en-US')} bytes; SIGMA limit ${Number(match[2]).toLocaleString('en-US')} bytes.`
       : 'SIGMA enforces an internal UTF-8 dispatch limit after non-destructive compaction.';
     return {
-      cause: `SIGMA blocked the next research call because mandatory context exceeds its internal byte limit. ${sizes} Selected model: ${modelSelection}. This is not a model-specific context-window limit. Saved research is preserved.`,
+      cause: `SIGMA blocked the next research call because mandatory context exceeds its internal byte limit. ${sizes} Selected model: ${modelSelection}. This is not a model-specific context-window limit. Research is preserved.`,
       next: 'Review the context-size diagnostics. If this error was saved under an older SIGMA guard, updating and clicking Resume may permit the preserved context to proceed; a successful dispatch can consume allowance. If it still exceeds the current bound, narrow mandatory source material for a new session. Switching models alone does not change SIGMA’s guard.',
     };
   }
   if (/SIGMA context manifest requires|research context manifest exceeds its storage bound/i.test(contextDiagnosis)) {
     return {
-      cause: `SIGMA blocked the next research call because the source-evidence manifest exceeded its separate storage bound. Selected model: ${modelSelection}. Saved research is preserved.`,
+      cause: `SIGMA blocked the next research call because the source-evidence manifest exceeded its separate storage bound. Selected model: ${modelSelection}. Research is preserved.`,
       next: 'Review the selected source material and start a narrower session. Changing models does not increase SIGMA’s manifest storage limit.',
     };
   }
@@ -398,24 +398,24 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
     );
   }
   if (/context|token limit/.test(evidence))
-    return { cause: `Research stopped because a context limit was reached. Selected model: ${modelSelection}. Saved research is preserved; the exact limit source has not been established.`, next: session.next_step_guidance?.trim() || 'Inspect session diagnostics, including saved strategy reasons and failed-attempt metadata, to identify whether SIGMA or the provider enforced the limit before choosing a recovery action.' };
+    return { cause: `Research stopped because a context limit was reached. Selected model: ${modelSelection}. Research is preserved; the exact limit source has not been established.`, next: session.next_step_guidance?.trim() || 'Inspect session diagnostics, including recorded strategy reasons and failed-attempt metadata, to identify whether SIGMA or the provider enforced the limit before choosing a recovery action.' };
   if (/duration|wall.clock/.test(evidence))
-    return { cause: 'This session stopped after reaching its configured elapsed-time limit. Saved research is preserved.', next: 'Adjust the project time limit if appropriate, then resume the session.' };
+    return { cause: 'This session stopped after reaching its configured elapsed-time limit. Research is preserved.', next: 'Adjust the project time limit if appropriate, then resume the session.' };
   if (/stopped by user|stopped by you/i.test(recordedReason))
     return { cause: recordedReason, next: 'Resume when you are ready. A previously dispatched provider request may still consume allowance.' };
   if (/cost|budget|allowance|funding|spend ceiling/i.test(evidence))
-    return { cause: recordedReason || 'A provider-call funding reservation was denied. Saved research is preserved.', next: 'Check the specific funding denial above before resuming. Retrying cannot bypass a depleted allowance.' };
+    return { cause: recordedReason || 'A provider-call funding reservation was denied. Research is preserved.', next: 'Check the specific funding denial above before resuming. Retrying cannot bypass a depleted allowance.' };
   if (/model|connection|billing identity/.test(evidence))
-    return { cause: 'The selected model or AI connection changed while this session was stopped. Saved research is preserved.', next: 'Check the AI connection and selected model before resuming.' };
+    return { cause: 'The selected model or AI connection changed while this session was stopped. Research is preserved.', next: 'Check the AI connection and selected model before resuming.' };
   if (/project|strategy/.test(evidence))
-    return { cause: 'The project or one of its strategies changed while this session was stopped. Saved research is preserved.', next: 'Review the current project and strategy before resuming.' };
+    return { cause: 'The project or one of its strategies changed while this session was stopped. Research is preserved.', next: 'Review the current project and strategy before resuming.' };
   if (/restart|interrupted/.test(evidence))
-    return { cause: 'The session was interrupted when its backend work stopped. Saved research is preserved.', next: 'Resume when you are ready; a previously dispatched provider request may already have used allowance.' };
+    return { cause: 'The session was interrupted when its backend work stopped. Research is preserved.', next: 'Resume when you are ready; a previously dispatched provider request may already have used allowance.' };
   if (/stopped by user|stopped by you/i.test(recordedReason))
     return { cause: recordedReason, next: 'Resume when you are ready. A previously dispatched provider request may still consume allowance.' };
   if (recordedReason) return { cause: recordedReason, next: 'Review the stop details above, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
-  if (!hasCompleteFinding) return { cause: 'The session was stopped before it saved a complete finding.', next: 'Resume when you are ready; backend safeguards still apply.' };
-  return { cause: 'The session is stopped. Saved research is preserved.', next: 'Review the saved findings, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
+  if (!hasCompleteFinding) return { cause: 'The session was stopped before completing a finding.', next: 'Resume when you are ready; backend safeguards still apply.' };
+  return { cause: 'The session is stopped. Research is preserved.', next: 'Review the findings, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
 }
 
 function StoppedSessionNotice({ session, dismissed, onDismiss }: {
@@ -452,7 +452,7 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
   const title = session.status === 'failed' ? 'Session failed' : 'Stopped';
   return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
     <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {nextGuidance}</p>
-    {!hasCompleteFinding && <p>The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
+    {!hasCompleteFinding && <p>The session is stopped and has not completed an Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
   </SessionNotice>;
 }
 type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
@@ -483,7 +483,7 @@ function outcomeVerificationLabel(outcome: ResearchOutcome): string {
   return outcome.verification_label || 'Not recorded';
 }
 function outcomeArgumentLabel(outcome: ResearchOutcome): string {
-  return outcome.argument_availability?.label || 'Argument availability was not recorded; inspect the saved research artifacts.';
+  return outcome.argument_availability?.label || 'Argument availability was not recorded; inspect the research artifacts.';
 }
 
 function labeledStep(number: number, title: string): string {
@@ -534,7 +534,7 @@ function simpleOutcomeLead(session: ResearchSession): string {
 
 function researchReasoningMarkdown(session: ResearchSession): string {
   const review = session.outcome.solution_review;
-  if (!review) return 'No structured reasoning or proof review was saved for this session.';
+  if (!review) return 'No structured reasoning or proof review is available for this session.';
   const lines = [
     '# Reasoning / proof', '',
     '## Investigated problem', '',
@@ -750,7 +750,7 @@ class SessionRenderBoundary extends Component<SessionRenderBoundaryProps, Sessio
 
   render() {
     if (this.state.error) return this.props.fallback ?? <li className="session-row session-render-error" data-session-id={this.props.sessionId}>
-      <p role="alert"><strong>Session {this.props.sessionNumber} could not be displayed.</strong> Its saved record remains available in the project export.</p>
+      <p role="alert"><strong>Session {this.props.sessionNumber} could not be displayed.</strong> Its record remains available in the project export.</p>
     </li>;
     return this.props.children;
   }
@@ -858,7 +858,7 @@ function formattedOutcomeSession(
   };
 }
 
-// Local presentation preference only; the saved session and research evidence are immutable.
+// Local presentation preference only; the session and research evidence are immutable.
 // Include the current lifecycle and reason so a materially different stop reappears.
 function sessionNoticeKey(session: ResearchSession): string {
   const source = [
@@ -911,7 +911,7 @@ function ProviderInputAuditDisclosure({ audit }: { audit: NonNullable<ResearchSt
   return <details className="context-used-disclosure" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>Exact provider input · {audit.status}</summary>
     {open && <>
-      <p>Saved request body before dispatch; authorization headers and credentials are excluded.</p>
+      <p>Request body recorded before dispatch; authorization headers and credentials are excluded.</p>
       <h5>Role instructions</h5>
       <pre>{String(audit.request_body.instructions ?? '')}</pre>
       <h5>Submitted input</h5>
@@ -979,7 +979,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const hasEvidence = session.artifacts.length > 0 || primaryEvidenceIds.length > 0;
   const historicalSummary = !session.outcome.conclusion && !['queued', 'running', 'paused'].includes(session.status);
   const resultLabel = session.provider_usage_limited && ['paused', 'stopped', 'ended', 'failed'].includes(session.status)
-    ? 'Saved research so far · incomplete'
+    ? 'Research so far · incomplete'
     : session.outcome.conclusion ? 'Conclusion' : historicalSummary ? 'Historical session summary' : 'Session summary';
   const resultText = renderSession.outcome.conclusion || renderSession.outcome.summary || 'No outcome summary was recorded.';
   const simpleResult = simpleOutcomeLead(renderSession);
@@ -999,8 +999,8 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
     ? session.calls_used === 0
       ? compilerAttempted
         ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research Standards for its status.'
-        : 'No Investigator or Skeptic call was dispatched. Check the saved funding denial below.'
-      : 'Research stopped because another provider call could not be funded. Saved findings are preserved.'
+        : 'No Investigator or Skeptic call was dispatched. Check the funding denial below.'
+      : 'Research stopped because another provider call could not be funded. Findings are preserved.'
     : '';
   const independentFailure = session.steps.some(step => step.status === 'failed'
     && !!step.failure_kind && !['provider_limited', 'provider_rate_limited'].includes(step.failure_kind));
@@ -1010,7 +1010,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   // This also corrects historical sessions whose saved message used legacy v1
   // cycle terminology despite running under the v2 scheduler.
   const usageLimitStopMessage = usageCopy.description;
-  const usageLimitImpact = `${session.protocol_completed_calls ?? 0} of ${session.protocol_target_calls ?? session.call_limit} research calls completed; ${session.artifacts.length} findings saved.`;
+  const usageLimitImpact = `${session.protocol_completed_calls ?? 0} of ${session.protocol_target_calls ?? session.call_limit} research calls completed; ${session.artifacts.length} findings recorded.`;
   const separateFailureNote = independentFailure
     ? 'Other earlier research failures are recorded separately in the Session Log.'
     : '';
@@ -1022,9 +1022,9 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const statusNextStep = accountUsageLimited
     ? (usageSponsored ? 'Try Resume again in a few hours.' : usageCopy.next)
     : session.next_step_guidance
-    || (session.termination_reason_code === 'research_completed_early' ? 'Review the saved findings and rationale; the configured turn count was an upper limit, not a target.'
+    || (session.termination_reason_code === 'research_completed_early' ? 'Review the findings and rationale; the configured turn count was an upper limit, not a target.'
       : budgetDenied ? 'Review the available research allowance before starting another session.'
-        : 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
+        : 'Review activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
   const zeroPythonRuns = runMetrics.some(item => item.label === 'Python runs by status' && item.value === '0 executions');
   const zeroSageRuns = runMetrics.some(item => item.label === 'SageMath runs by status' && item.value === '0 executions');
   const noSavedLocalComputations = (provenance && provenance.records.length === 0 && provenance.unidentified_count === 0)
@@ -1033,11 +1033,11 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
     || !!provenance?.records.length || !!provenance?.unidentified_count;
   const provenancePrelude = <div className="outcome-evidence-prelude" aria-label="Recorded computation provenance">
     <strong>Recorded computations:</strong> {provenance
-      ? `${provenance.completed_count} reported completed of ${provenance.records.length} identified saved execution${provenance.records.length === 1 ? '' : 's'}${provenance.unidentified_count ? ` · ${provenance.unidentified_count} missing IDs` : ''}`
+      ? `${provenance.completed_count} reported completed of ${provenance.records.length} identified execution${provenance.records.length === 1 ? '' : 's'}${provenance.unidentified_count ? ` · ${provenance.unidentified_count} missing IDs` : ''}`
       : 'Provenance projection unavailable for this historical Outcome.'}
-    {noSavedLocalComputations && <p role="status"><strong>Evidence limitation:</strong> No local Python or Sage computation is recorded for this session. Computational claims in the agent-authored conclusion are not supported by saved local execution evidence.</p>}
-    {provenance && <p>{provenance.note}</p>}{!!provenance?.completed_without_recorded_io_count && <p>Warning: {provenance.completed_without_recorded_io_count} completed-status record(s) do not include saved source and output.</p>}
-    {!!provenance?.records.length && <details><summary>Execution IDs and saved statuses</summary><ul>{provenance.records.map(row => <li key={`${row.runtime}:${row.id}`}><strong>{row.runtime} · {row.id}</strong> · {row.statuses.join(' / ')} · {row.artifact_ids.length ? `artifacts ${row.artifact_ids.join(', ')}` : row.step_ids.length ? `steps ${row.step_ids.join(', ')}` : 'owner not recorded'} · source {row.source_recorded ? 'saved' : 'unavailable'}, output {row.output_recorded ? 'saved' : 'unavailable'}</li>)}</ul></details>}
+    {noSavedLocalComputations && <p role="status"><strong>Evidence limitation:</strong> No local Python or Sage computation is recorded for this session. Computational claims in the agent-authored conclusion are not supported by recorded local execution evidence.</p>}
+    {provenance && <p>{provenance.note}</p>}{!!provenance?.completed_without_recorded_io_count && <p>Warning: {provenance.completed_without_recorded_io_count} completed-status record(s) do not include recorded source and output.</p>}
+    {!!provenance?.records.length && <details><summary>Execution IDs and statuses</summary><ul>{provenance.records.map(row => <li key={`${row.runtime}:${row.id}`}><strong>{row.runtime} · {row.id}</strong> · {row.statuses.join(' / ')} · {row.artifact_ids.length ? `artifacts ${row.artifact_ids.join(', ')}` : row.step_ids.length ? `steps ${row.step_ids.join(', ')}` : 'owner not recorded'} · source {row.source_recorded ? 'recorded' : 'unavailable'}, output {row.output_recorded ? 'recorded' : 'unavailable'}</li>)}</ul></details>}
   </div>;
   const metricSources = session.outcome.metrics?.sources;
   const artifactNumber = (id: string) => session.artifacts.find(artifact => artifact.id === id)?.sequence;
@@ -1104,13 +1104,13 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
             controller.signal, true,
           );
           if (converted.source_digest !== expectedDigest)
-            throw new Error('Research text changed while formatting. The saved source is unchanged.');
+            throw new Error('Research text changed while formatting. The original source is unchanged.');
           const next = { ...convertedBlocksRef.current, [block.field]: { source: block.source, body: converted.body } };
           convertedBlocksRef.current = next;
           setConvertedBlocks(next);
         } catch (cause) {
           if (!controller.signal.aborted) {
-            setConversionError(`Markdown formatting paused: ${friendlyProviderError(errorMessage(cause))}. Saved research remains unchanged; Markdown rendering stays available.`);
+            setConversionError(`Markdown formatting paused: ${friendlyProviderError(errorMessage(cause))}. Research remains unchanged; Markdown rendering stays available.`);
             conversionQueue.current = [];
           }
         } finally {
@@ -1149,9 +1149,9 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   }
   const markdownSymbol = <MarkdownGlyph/>;
   const markdownButton = (label: string, active: boolean, onClick: () => void) =>
-    <button type="button" className="sigma-render-toggle" aria-label={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
+    <button type="button" className="sigma-render-toggle" aria-label={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
       aria-pressed={active}
-      data-tooltip={active ? `Show saved ${label} text` : `Format ${label} as Markdown`}
+      data-tooltip={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
       onClick={onClick}>{markdownSymbol}</button>;
   const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
@@ -1303,7 +1303,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
               const label: Record<StrategyAssessment['assessment'], string> = { contributed_to_solution: 'Contributed to solution', productive: 'Productive', unproductive: 'Unproductive', not_used: 'Not used', disabled: 'Disabled', unknown: 'Unknown' };
               return <article className="outcome-assessment" key={item.strategy_id ?? index}><h4>{item.strategy_title}</h4><div className="outcome-label-value"><dt>Disposition</dt><dd>{label[item.assessment] ?? 'Unknown'}</dd></div><div className="outcome-label-value"><dt>Rationale</dt><dd>{activeSections.has('assessments') ? <Suspense fallback={item.rationale}><RenderedMarkdown body={renderSession.strategy_assessments?.[index]?.rationale || item.rationale || 'No rationale recorded'}/></Suspense> : item.rationale || 'No rationale recorded'}</dd></div><div className="outcome-label-value"><dt>Cited evidence</dt><dd>{idList(item.basis_artifact_ids)}</dd></div></article>;
             })}</div> : <p className="outcome-unavailable">No strategy assessments were recorded for this session.</p>}
-            {session.portfolio_decision?.strategy_actions?.length ? <section className="coordinator-portfolio-review" aria-label="Coordinator portfolio recommendations"><h4>Coordinator recommendations</h4><p>Evidence-linked recommendations are model-reported and unverified. Saved strategies are never changed automatically.</p><ul>{session.portfolio_decision.strategy_actions.map(item => <li key={item.strategy_id}><p><strong>{item.strategy_title}:</strong> {item.action.replaceAll('_', ' ')}</p><p>{item.rationale}{item.basis_artifact_ids.length > 0 && <> · Evidence: {idList(item.basis_artifact_ids)}</>}</p>{!!item.next_question && <p><strong>Next question:</strong> {item.next_question}</p>}</li>)}</ul>
+            {session.portfolio_decision?.strategy_actions?.length ? <section className="coordinator-portfolio-review" aria-label="Coordinator portfolio recommendations"><h4>Coordinator recommendations</h4><p>Evidence-linked recommendations are model-reported and unverified. Existing strategies are never changed automatically.</p><ul>{session.portfolio_decision.strategy_actions.map(item => <li key={item.strategy_id}><p><strong>{item.strategy_title}:</strong> {item.action.replaceAll('_', ' ')}</p><p>{item.rationale}{item.basis_artifact_ids.length > 0 && <> · Evidence: {idList(item.basis_artifact_ids)}</>}</p>{!!item.next_question && <p><strong>Next question:</strong> {item.next_question}</p>}</li>)}</ul>
               {!!session.portfolio_decision.combination_candidates?.length && <div className="coordinator-combinations"><strong>Combination candidates for human review</strong><ul>{session.portfolio_decision.combination_candidates.map((item, index) => { const titles = item.strategy_ids.map(id => session.strategy_runs?.find(branch => branch.strategy_id === id)?.strategy_title ?? 'Strategy'); return <li key={`${item.strategy_ids.join(':')}-${index}`}><p>{titles.join(' + ')} · {idList(item.basis_artifact_ids)}</p>{item.rationales.map((rationale, rationaleIndex) => <p key={rationaleIndex}>{rationale}</p>)}</li>; })}</ul></div>}
               {!!session.portfolio_decision.conflict_candidates?.length && <div className="coordinator-conflicts"><strong>Cross-strategy contradictions to resolve</strong><ul>{session.portfolio_decision.conflict_candidates.map((item, index) => <li key={`${item.source_artifact_id}-${item.target_artifact_id}-${index}`}><p>{item.relation.replaceAll('_', ' ')} · {idList([item.source_artifact_id, item.target_artifact_id])}</p><p>{item.rationale}</p></li>)}</ul></div>}
               {!!session.portfolio_decision.overlap_warnings?.length && <div className="coordinator-overlaps"><strong>Potentially overlapping approaches</strong><ul>{session.portfolio_decision.overlap_warnings.map((item, index) => <li key={`${item.source_artifact_id}-${item.target_artifact_id}-${index}`}><p>{idList([item.source_artifact_id, item.target_artifact_id])} · {item.rationale}</p></li>)}</ul></div>}
@@ -1317,7 +1317,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
             <div className="outcome-provenance-group"><h4>Session and configuration</h4><div className="outcome-label-value"><dt>Session ID</dt><dd>{session.id}</dd></div>{session.project_id && <div className="outcome-label-value"><dt>Project ID</dt><dd>{session.project_id}</dd></div>}<div className="outcome-label-value"><dt>Selected strategy</dt><dd>{session.strategy_title || 'Strategy'} · {session.strategy_ids?.length ? session.strategy_ids.join(', ') : session.strategy_id || 'ID unavailable'}</dd></div>{session.strategy_snapshot && <div className="outcome-label-value"><dt>Strategy snapshot</dt><dd>{String(session.strategy_snapshot.title ?? session.strategy_title)}{typeof session.strategy_snapshot.approach === 'string' ? ` · ${session.strategy_snapshot.approach}` : ''}</dd></div>}<div className="outcome-label-value"><dt>Model and thinking</dt><dd>{session.model || 'Unavailable'} · {thinkingLabels[session.reasoning_effort] ?? session.reasoning_effort ?? 'Unavailable'} · configured at session level, not an independent provider receipt</dd></div><div className="outcome-label-value"><dt>Billing mode</dt><dd>{session.mode === 'api_key' ? 'API key billing' : session.mode === 'chatgpt' ? 'ChatGPT plan allowance; actual allowance consumption unavailable' : session.mode || 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Started / updated</dt><dd>{session.started_at ? dateLabel(session.started_at) : 'Start time unavailable'} · {session.updated_at ? dateLabel(session.updated_at) : 'Update time unavailable'}</dd></div></div>
             {metricSources && <div className="outcome-provenance-group"><h4>Metric source inventory</h4><p className="outcome-subsection-intro">These session-scoped IDs identify records used by the metrics projection; they are not a per-measurement source map.</p>{([['Steps', metricSources.step_ids], ['Artifacts', metricSources.artifact_ids], ['Computation executions', metricSources.execution_ids], ['Strategies', metricSources.strategy_ids]] as [string, string[]][]).map(([label, ids]) => <div className="outcome-label-value" key={label}><dt>{label}</dt><dd>{ids.length ? ids.join(', ') : 'None recorded'}</dd></div>)}</div>}
             {session.steps.length > 0 && <div className="outcome-provenance-group"><h4>Agent call attempts</h4><ol className="outcome-provenance-list">{session.steps.map(step => <li key={step.id}><div className="outcome-label-value"><dt>{step.role} · {step.status}</dt><dd>Step {step.id} · Cycle {step.cycle} · Call {step.call_number}{step.strategy_id ? ` · Strategy ${step.strategy_id}` : ''}</dd></div><p>{step.started_at ? dateLabel(step.started_at) : 'Start time unavailable'}{step.finished_at ? ` · ${dateLabel(step.finished_at)}` : ' · no finish time recorded'}{step.provider_http_status ? (step.provider_response_channel === 'stream' ? ` · HTTP ${step.provider_http_status} transport, ${step.provider_stream_event ?? 'stream'} rejected` : ` · HTTP ${step.provider_http_status}`) : ''}{step.provider_error_code ? ` · Provider code: ${step.provider_error_code}` : ''}{step.failure_kind ? ` · ${step.failure_kind}` : ''}{step.interruption_reason ? ` · ${step.interruption_reason}` : ''}</p>{!!(step.context_artifact_ids?.length || step.prior_session_artifact_ids?.length || step.peer_strategy_artifact_ids?.length || step.peer_handoff_artifact_ids?.length) && <p><strong>Context artifacts:</strong> {idList([...(step.context_artifact_ids ?? []), ...(step.prior_session_artifact_ids ?? []), ...(step.peer_strategy_artifact_ids ?? []), ...(step.peer_handoff_artifact_ids ?? [])])}</p>}{!!step.peer_handoff_ids?.length && <p><strong>Peer handoffs:</strong> {step.peer_handoff_ids.join(', ')}</p>}{step.context_manifest && <details className="context-used-disclosure"><summary>Context used · {step.context_manifest.selected_count ?? step.context_manifest.sources?.filter(source => source.status === 'selected').length ?? 0} current artifacts selected · {step.context_manifest.omitted_count ?? 0} omitted</summary><p>{step.context_manifest.note ?? 'Deterministic extracts from saved records; originals remain in session history.'}</p>{typeof step.context_manifest.assembled_context_bytes === 'number' && <p>Serialized context: {step.context_manifest.assembled_context_bytes.toLocaleString()} bytes of {step.context_manifest.byte_limit?.toLocaleString() ?? 'bounded'} UTF-8 input</p>}{step.context_manifest.sources?.length ? <ul>{step.context_manifest.sources.slice(0, 32).map((source, index) => <li key={`${source.source_ids?.[0] ?? 'source'}-${index}`}><strong>{source.category?.replaceAll('_', ' ') ?? 'Source'} · {source.status ?? 'recorded'}:</strong> {source.source_ids?.join(', ') ?? 'ID unavailable'} — {source.reason ?? source.representation ?? 'See saved source'}</li>)}</ul> : <p>No source-level manifest was recorded for this historical step.</p>}{(step.context_manifest.sources?.length ?? 0) > 32 && <p>{(step.context_manifest.sources?.length ?? 0) - 32} additional manifest entries omitted from this view.</p>}{step.context_manifest.omitted_prior_session_findings?.count ? <p>{step.context_manifest.omitted_prior_session_findings.count} older session findings omitted; source IDs: {step.context_manifest.omitted_prior_session_findings.source_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}{step.context_manifest.omitted_prior_failures?.count ? <p>{step.context_manifest.omitted_prior_failures.count} older operational failures omitted; attempt IDs: {step.context_manifest.omitted_prior_failures.attempt_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}<ContextManifestNotes manifest={step.context_manifest}/></details>}{step.potential_truncation_fields?.length ? <p className="research-output-warning" role="status"><strong>Potentially truncated output:</strong> {step.potential_truncation_fields.join(', ')} reached a structured output field limit. Review the saved source text before relying on it.</p> : null}{step.provider_input_audit && <ProviderInputAuditDisclosure audit={step.provider_input_audit}/>} </li>)}</ol></div>}
-            {session.artifacts.length > 0 && <div className="outcome-provenance-group"><h4>Saved artifact origins</h4><ul className="outcome-provenance-list">{session.artifacts.map(artifact => <li key={artifact.id}><div className="outcome-label-value"><dt>Artifact {artifact.sequence}</dt><dd>{artifact.id}</dd></div><p>{artifact.session_id ? `Session ${artifact.session_id}` : 'Source session unavailable'} · {artifact.strategy_id ? `Strategy ${artifact.strategy_id}` : 'Strategy unavailable'} · {researchArtifactPositionLabel(session, artifact)}</p></li>)}</ul></div>}
+            {session.artifacts.length > 0 && <div className="outcome-provenance-group"><h4>Artifact origins</h4><ul className="outcome-provenance-list">{session.artifacts.map(artifact => <li key={artifact.id}><div className="outcome-label-value"><dt>Artifact {artifact.sequence}</dt><dd>{artifact.id}</dd></div><p>{artifact.session_id ? `Session ${artifact.session_id}` : 'Source session unavailable'} · {artifact.strategy_id ? `Strategy ${artifact.strategy_id}` : 'Strategy unavailable'} · {researchArtifactPositionLabel(session, artifact)}</p></li>)}</ul></div>}
             {otherPriorFindings.length > 0 && <div className="outcome-provenance-group"><h4>Other prior session sources</h4><p>Available history; these sources are not implied to be researcher-approved transfers.</p><ul className="outcome-provenance-list">{otherPriorFindings.map(finding => <li key={`${finding.session_id}:${finding.id}`}><p><button type="button" className="text-view-link" onClick={() => onViewPriorSession(finding.session_id)}>Session {finding.session_number} · {finding.strategy_title} · Artifact {finding.sequence}</button></p><p>{finding.id} · {finding.claim_or_question}</p><p><strong>Method:</strong> {finding.method}</p>{!!finding.assumptions?.length && <p><strong>Assumption/domain scope:</strong> {finding.assumptions.join(' · ')}</p>}<p><strong>Evidence status:</strong> {finding.evidence_status} · <strong>Coordinator:</strong> {finding.coordinator_decision}</p>{!!finding.objections.length && <p><strong>Objections:</strong> {finding.objections.join(' · ')}</p>}{!!finding.open_obligations.length && <p><strong>Open obligations:</strong> {finding.open_obligations.join(' · ')}</p>}{!!finding.obligation_reviews?.length && <ul>{finding.obligation_reviews.map(review => <li key={review.obligation_id}><strong>Prior obligation disposition ({review.status}, {review.epistemic_status}):</strong> {review.rationale} · Basis artifacts: {review.basis_artifact_ids.join(', ') || 'none recorded'}</li>)}</ul>}{!!finding.next_question && <p><strong>Next question:</strong> {finding.next_question}</p>}</li>)}</ul></div>}
             {!!session.peer_handoffs_prompted?.length && <div className="outcome-provenance-group"><h4>Peer handoffs prompted</h4><ul className="outcome-provenance-list">{session.peer_handoffs_prompted.map((handoff, index) => <li key={index}><pre>{JSON.stringify(handoff, null, 2)}</pre></li>)}</ul></div>}
             <div className="outcome-provenance-group"><h4>Session facts</h4><div className="outcome-label-value"><dt>Build at session start</dt><dd><code data-tooltip={session.backend_build_commit || 'Older session without build provenance'}>{session.backend_build_commit || 'Not recorded'}</code></dd></div><div className="outcome-label-value"><dt>Elapsed wall time</dt><dd>{typeof session.elapsed_seconds === 'number' ? formatDuration(session.elapsed_seconds) : 'Unavailable'}</dd></div>{(session.duration_limit_minutes === null || typeof session.duration_limit_minutes === 'number') && <div className="outcome-label-value"><dt>Effective time ceiling</dt><dd>{session.duration_limit_minutes === null ? 'Unlimited' : `${session.duration_limit_minutes} minutes`}{typeof session.configured_duration_limit_minutes === 'number' && session.configured_duration_limit_minutes !== session.duration_limit_minutes ? ` (project setting: ${session.configured_duration_limit_minutes} minutes)` : ''}</dd></div>}<div className="outcome-label-value"><dt>Current action</dt><dd>{session.current_action || 'Unavailable'}</dd></div>{lastActivity && <div className="outcome-label-value"><dt>Last activity</dt><dd><time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time> · {lastActivity.message}</dd></div>}</div>
@@ -1419,7 +1419,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       }
     } catch (cause) {
       if (!controller.signal.aborted) {
-        setFormatError(`Markdown formatting stopped: ${friendlyProviderError(errorMessage(cause))}. Saved research was not changed.`);
+        setFormatError(`Markdown formatting stopped: ${friendlyProviderError(errorMessage(cause))}. Research was not changed.`);
       }
     } finally {
       finishProviderRequest();
@@ -1441,17 +1441,17 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     if (result.status === 'completed' && result.strategy && result.project) {
       if (!inferenceResolved.current) onInferred(result.project, result.strategy.id);
       inferenceResolved.current = true;
-      setSuggestionStatus(`Saved strategy: ${result.strategy.title}. You can review or remove it in Strategies.`);
+      setSuggestionStatus(`Strategy added: ${result.strategy.title}. You can review or remove it in Strategies.`);
     } else if (result.status === 'no_strategy' || result.status === 'completed' && !result.strategy) {
       inferenceResolved.current = true;
       setSuggestionStatus('No additional strategy was identified from the current research.');
     } else if (result.status === 'cancelled') {
       inferenceResolved.current = true;
-      setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was saved.');
+      setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was added.');
     } else if (result.status === 'uncertain' || result.status === 'dispatched') {
-      setSuggestionStatus('Cancellation was requested, but the provider outcome is uncertain. This request will not be repeated; refresh Strategies to check for a saved result.');
+      setSuggestionStatus('Cancellation was requested, but the provider outcome is uncertain. This request will not be repeated; refresh Strategies to check for a result.');
     } else if (result.status === 'provider_completed') {
-      setSuggestionStatus('The provider completed, but SIGMA cannot confirm that the strategy was saved. Refresh Strategies to inspect the current project; this request will not be repeated.');
+      setSuggestionStatus('The provider completed, but SIGMA cannot confirm that the strategy was added. Refresh Strategies to inspect the current project; this request will not be repeated.');
     } else if (result.status === 'failed') {
       setSuggestionError('Inference did not complete. This request will not be repeated; start a new inference to try again.');
     } else if (result.status === 'not_found') {
@@ -1493,7 +1493,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       inferenceBinding.current = config.binding;
       if (inferenceCancelRequested.current) {
         inferenceResolved.current = true;
-        setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was saved.');
+        setSuggestionStatus('Inference cancelled before provider dispatch. No strategy was added.');
         return;
       }
       finishProviderRequest = beginProviderRequest('strategy-inference');
@@ -1515,7 +1515,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     if (!requestId || inferenceCancelRequested.current) return;
     inferenceCancelRequested.current = true;
     inferenceCancelled.current = true;
-    setSuggestionStatus('Cancellation requested. Checking whether a strategy was saved…');
+    setSuggestionStatus('Cancellation requested. Checking whether a strategy was added…');
     try {
       if (!inferenceBinding.current) return;
       const result = await post<{ status: string; strategy?: Strategy | null; project?: ProjectView }>('proposals/cancel', {
@@ -1529,7 +1529,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     }
   }
   const sourceButton = (source: EvidencePointer, context: string) => <button type="button" className="text-view-link" disabled={!source.available} aria-label={`${context}: Session ${source.session_number}, Artifact ${source.artifact_sequence || 'unnumbered'}`} onClick={() => onEvidence(source)}>Session {source.session_number} · {source.artifact_sequence ? `Artifact ${source.artifact_sequence}` : 'Saved evidence'}</button>;
-  const excerpt = (text: string) => text.length > 360 ? `${text.slice(0, 360)}… (saved text continues)` : text;
+  const excerpt = (text: string) => text.length > 360 ? `${text.slice(0, 360)}… (text continues)` : text;
   const findings = state.current_finding_ids.map(id => state.findings.find(row => row.id === id)).filter((row): row is CurrentFinding => !!row);
   const questions = [...state.obligations].sort((a, b) => (Number(b.actionable) * 4 + Number(b.status === 'historical_unreconciled') * 2) - (Number(a.actionable) * 4 + Number(a.status === 'historical_unreconciled') * 2));
   const suggested = state.next_investigations[0];
@@ -1543,9 +1543,9 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     setExpanded(isOpen);
     window.localStorage.setItem(`sigma.currentUnderstanding:${projectId}`, String(isOpen));
   }}>
-    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><button type="button" className="sigma-render-toggle current-understanding-markdown" aria-label={markdownView ? "Show saved Current Understanding text" : "Format Current Understanding as Markdown"} aria-pressed={markdownView} data-tooltip={markdownView ? "Show saved Current Understanding text" : "Format Current Understanding as Markdown"} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleUnderstandingMarkdown(); }}><MarkdownGlyph/></button>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was saved." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><button type="button" className="sigma-render-toggle current-understanding-markdown" aria-label={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} aria-pressed={markdownView} data-tooltip={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleUnderstandingMarkdown(); }}><MarkdownGlyph/></button>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was added." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
     {guestMarkdownPreview && createPortal(<GuestFeatureDialog title="Markdown for Current Understanding"
-      message="With member access and ChatGPT, SIGMA can reformat the saved findings, questions and limitations as Markdown. This is a presentation change, not a scientific result. No text was sent or changed."
+      message="With member access and ChatGPT, SIGMA can reformat the findings, questions and limitations as Markdown. This is a presentation change, not a scientific result. No text was sent or changed."
       onClose={() => setGuestMarkdownPreview(false)}/>, document.body)}
     <div className="hint current-understanding-scope">{markdownView ? narrative(state.scope_note, 'scope_note') : state.scope_note}</div>{formatProgress && <p className="outcome-markdown-progress" role="status">{formatProgress}</p>}{formatError && <p className="outcome-conclusion-format-error" role="alert">{formatError}</p>}
     <div className="current-understanding-columns">
@@ -1557,7 +1557,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
         {remainingQuestions.length > 0 && <details><summary>{remainingQuestions.length} more recorded questions / dispositions</summary><ol>{remainingQuestions.map(questionRow)}</ol></details>}
       </section>
     </div>
-    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map((note, index) => <li key={index}>{markdownView ? <div className="current-understanding-rendered"><Suspense fallback={note}><RenderedMarkdown body={formattedBlocks[`limitations.${index}`]?.source === note ? formattedBlocks[`limitations.${index}`].body : note}/></Suspense></div> : note}</li>)}</ul><p>All {state.findings.length} saved findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
+    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map((note, index) => <li key={index}>{markdownView ? <div className="current-understanding-rendered"><Suspense fallback={note}><RenderedMarkdown body={formattedBlocks[`limitations.${index}`]?.source === note ? formattedBlocks[`limitations.${index}`].body : note}/></Suspense></div> : note}</li>)}</ul><p>All {state.findings.length} findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
     <div className="strategy-suggestion-feedback">{suggestionError && <p className="error" role="alert">{suggestionError}</p>}{suggestionStatus && <p role="status">{suggestionStatus}</p>}</div>
   </details>;
 }
@@ -1866,7 +1866,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       const validation = validateLimitDraft(draftLimits(currentLimits));
       if (!validation.value) {
         throw new Error(validation.errors.maximum_estimated_cost_usd
-          ?? 'Saved research limits need attention. Update them in Home Settings → Limits before starting a session.');
+          ?? 'Research limits need attention. Update them in Home Settings → Limits before starting a session.');
       }
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
       if (chosenIds.length > 12) {
@@ -1909,7 +1909,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         : next;
       lastAnnouncement.current = `${accepted.id}:${accepted.status}:${accepted.current_action}`;
       // The admission response is already a complete session snapshot. Display it
-      // without blocking the controls on reloading every saved session and
+      // without blocking the controls on reloading every session and
       // rebuilding Current Understanding; reconcile the history asynchronously.
       const initialSnapshot = sessionForDisplay(accepted);
       if (initialSnapshot) setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
@@ -1995,7 +1995,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
               authorizedCalls = count;
               continue;
             }
-            setAnnouncement('Resume cancelled. Saved research and spending limits were preserved.');
+            setAnnouncement('Resume cancelled. Research and spending limits were preserved.');
             return;
           }
           const durationShortfall = message.match(/Resume requires explicit approval to extend the session duration for up to (\d+) additional minutes/);
@@ -2006,7 +2006,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
               recoveryAction = 'repair';
               continue;
             }
-            setAnnouncement('Resume cancelled. Saved research and duration limits were preserved.');
+            setAnnouncement('Resume cancelled. Research and duration limits were preserved.');
             return;
           }
           throw cause;
@@ -2108,10 +2108,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         artifact.tabIndex = -1;
         artifact.focus({ preventScroll: true });
         artifact.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        setAnnouncement(`Opened saved evidence from Session ${source.session_number}.`);
+        setAnnouncement(`Opened evidence from Session ${source.session_number}.`);
       } else if (row) {
         row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        setAnnouncement('The owning session is open; inspect its saved evidence.');
+        setAnnouncement('The owning session is open; inspect its evidence.');
       }
     }));
   }
@@ -2129,7 +2129,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     const artifactId = params.get('reveal_artifact');
     if (!sessionId || !artifactId || !expandedSessionIds.has(sessionId)) return;
     if (!advancedOutcomeDetails) {
-      void onEnableAdvancedOutcome().catch(() => setAnnouncement('The owning session is open. Enable Advanced Outcome to inspect this saved artifact.'));
+      void onEnableAdvancedOutcome().catch(() => setAnnouncement('The owning session is open. Enable Advanced Outcome to inspect this artifact.'));
       return;
     }
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -2219,10 +2219,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
       <div className="sigma-dialog-heading"><h2 id="missing-type-heading">Project type unavailable</h2><DialogDismissButton label="Cancel project type selection" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}/></div>
       {safeSavedTypeSettings
-        ? <p>This project refers to “{savedTypeName}”, which is no longer available. You can continue with its complete saved settings or choose a replacement.</p>
-        : <p>This project refers to “{savedTypeName}”, which is no longer available, and it does not have a complete saved type snapshot. Choose a replacement before starting a new research session.</p>}
+        ? <p>This project refers to “{savedTypeName}”, which is no longer available. You can continue with its complete existing settings or choose a replacement.</p>
+        : <p>This project refers to “{savedTypeName}”, which is no longer available, and it does not have a complete type snapshot. Choose a replacement before starting a new research session.</p>}
       <div className="project-type-warning-actions">
-        {safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); setConfirmStart(false); void begin(undefined, true); }}>Continue with saved settings</button>}
+        {safeSavedTypeSettings && <button type="button" autoFocus disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); setConfirmStart(false); void begin(undefined, true); }}>Continue with existing settings</button>}
         <button type="button" autoFocus={!safeSavedTypeSettings} disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); onChooseReplacement(); }}>Choose a replacement</button>
         </div>
     </dialog>
@@ -2243,7 +2243,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       message="SIGMA coordinates Investigator and Skeptic agents to investigate strategies, challenge findings, and record evidence."
       onClose={() => setGuestSessionCard(false)}/>}
     <div id="sessions-pane-content" hidden={!expanded}>
-    {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} saved session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The saved data remains in the project export.</p>}
+    {invalidSessionCount > 0 && <p className="error" role="alert">{invalidSessionCount} session {invalidSessionCount === 1 ? 'record has' : 'records have'} an invalid or missing identifier and cannot be displayed. The data remains in the project export.</p>}
     {currentUnderstanding && <ResearchDisplayBoundary key={projectId} label="Current Understanding"><CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} nextOrdinal={nextStrategyOrdinal} guest={guest} onInferred={onInferredStrategy} onEvidence={revealEvidence} onSession={revealSession}/></ResearchDisplayBoundary>}
     <div className="session-table">
       {(sessions.length || admittingSession) ? <ol className="session-list" aria-label="Research sessions">
@@ -2258,7 +2258,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
               </div>
               <span className={`session-status session-${stoppingStartingSession ? 'stopped' : 'running'}`} aria-label={stoppingStartingSession ? 'Session stopping' : 'Session starting'}>{stoppingStartingSession ? 'stopping' : <>starting<i aria-hidden="true"/></>}</span>
               <small className="session-run-metadata">{pendingSessionMetadata || 'Research session'} · {stoppingStartingSession ? 'Stopping' : 'Starting'}</small>
-              <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · 0 findings saved</small>
+              <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · 0 findings recorded</small>
             </div>
           </div>
         </li>}
@@ -2304,8 +2304,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                     && <SessionRenderBoundary key={`${item.id}:notice:${sessionNoticeKey(item)}`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} status notice could not be displayed; its saved record remains in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
                 <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel}` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
                 <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
-                  ? 'Stopping · saved findings remain available'
-                  : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings saved · {sessionEstimatedCostLabel(item)}</>}</small>
+                  ? 'Stopping · findings remain available'
+                  : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings recorded · {sessionEstimatedCostLabel(item)}</>}</small>
                 {!pendingAction && strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
                 {!pendingAction && strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
@@ -2660,7 +2660,7 @@ function ProjectEmailDialog({ path, projectId, title, onCancel, onSent }: {
           <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf'} disabled={!loaded || papersByDate.length === 0} onChange={() => { payloadChanged(); setMode('pdf'); }}/>Also attach paper as PDF</label>
           <label><input type="radio" name="email-project-mode" checked={effectiveMode === 'pdf_tex'} disabled={!loaded || papersByDate.length === 0} onChange={() => { payloadChanged(); setMode('pdf_tex'); }}/>Also attach paper as PDF and its source LaTeX</label>
         </fieldset>
-        {paperLoad === 'error' ? <p className="settings-hint" role="status">Paper list unavailable. Your saved attachment choice is unchanged. <button type="button" className="text-view-link" disabled={busy} onClick={() => setPaperRetry(value => value + 1)}>Retry</button></p> : loaded && !papersByDate.length ? <p className="email-no-papers">No papers generated.</p> : loaded && papersByDate.length > 0 ? <>
+        {paperLoad === 'error' ? <p className="settings-hint" role="status">Paper list unavailable. Your attachment choice is unchanged. <button type="button" className="text-view-link" disabled={busy} onClick={() => setPaperRetry(value => value + 1)}>Retry</button></p> : loaded && !papersByDate.length ? <p className="email-no-papers">No papers generated.</p> : loaded && papersByDate.length > 0 ? <>
           <label htmlFor="email-project-paper">Generated paper</label>
           <select id="email-project-paper" value={selectedPaperId} disabled={busy || effectiveMode === 'project'} onChange={event => { payloadChanged(); setPaperId(event.target.value); }}>
             {papersByDate.map(paper => <option key={paper.paper_id} value={paper.paper_id}>{paper.title} (v{paper.paper_version}){(paper.score?.total ?? 0) >= 50 ? ' ★' : ''}</option>)}
@@ -2814,7 +2814,7 @@ function paperErrorSummary(message: string): string {
   const value = message.trim();
   if (friendlyProviderError(value) !== value) return friendlyProviderError(value);
   if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
-    return 'PDF compilation failed. The paper draft is saved; use Resume to retry without rewriting it.';
+    return 'PDF compilation failed. The paper draft is preserved; use Resume to retry without rewriting it.';
   }
   const line = value.split(/\r?\n/, 1)[0];
   return line.length > 250 ? line.slice(0, 247) + '…' : line;
@@ -2829,8 +2829,8 @@ function paperActivityLabel(progress: PaperProgress, now: number): string {
       ? ((progress.output_delta_count ?? 0) > 0 ? 'Receiving' : 'Waiting')
       : detail === 'Requesting paper plan' ? 'Requesting'
       : detail === 'Validating outline' ? 'Checking'
-      : detail === 'Saving plan' ? 'Saving'
-      : detail === 'Recovering outline from saved evidence' ? 'Recovering'
+      : detail === 'Saving plan' ? 'Preparing'
+      : detail === 'Recovering outline from research evidence' ? 'Recovering'
       : 'Preparing';
     // Minutes are sufficient for long waits; omit noisy per-token timestamps.
     const duration = elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m`;
@@ -2976,6 +2976,7 @@ function paperTimingLabel(progress: PaperProgress, now: number): string {
 
 function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, projectOwnerEmail, draftCreatorEmail, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; viewerEmail?: string; projectOwnerEmail?: string | null; draftCreatorEmail?: string; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
   const ai = useAI();
+  const initialPaperListing = useRef<InitialPaperListing | null>(takeInitialPaperListing(path, projectId));
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
   const [paperMenu, setPaperMenu] = useState<{ paperId: string; kind: 'download' | 'actions' } | null>(null);
   const [includeOptionsOpen, setIncludeOptionsOpen] = useState(false);
@@ -3055,8 +3056,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [optimisticPaperStop, setOptimisticPaperStop] = useState<{ runId: string | null } | null>(null);
   const [paperPlayIntent, setPaperPlayIntent] = useState<'starting' | 'resuming'>('starting');
   const [paperStopReconciliation, setPaperStopReconciliation] = useState(false);
-  const [papers, setPapers] = useState<PaperSummary[]>([]);
-  const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
+  const [papers, setPapers] = useState<PaperSummary[]>(() => initialPaperListing.current?.papers ?? []);
+  const [paperRuns, setPaperRuns] = useState<PaperRun[]>(() => initialPaperListing.current?.runs ?? []);
   const selectedRunIdRef = useRef<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   useEffect(() => {
@@ -3084,7 +3085,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     selectedRunIdRef.current = runId;
     setSelectedRunId(runId);
   }
-  const [nextPaperNumber, setNextPaperNumber] = useState<number | null>(null);
+  const [nextPaperNumber, setNextPaperNumber] = useState<number | null>(() => initialPaperListing.current?.nextPaperNumber ?? null);
   const [scoringId, setScoringId] = useState('');
   const [scoreDialog, setScoreDialog] = useState<{ paperId: string; score: PaperScore } | null>(null);
   const [scoreError, setScoreError] = useState('');
@@ -3123,7 +3124,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [paperClock, setPaperClock] = useState(() => Date.now());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => initialPaperListing.current === null);
   const [expandedPaperId, setExpandedPaperId] = useState('');
   const [paperStepRestart, setPaperStepRestart] = useState<{
     paper: PaperSummary; stage: SavedPaperRestartStage;
@@ -3253,13 +3254,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
       }).then(async response => {
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? 'Could not load saved papers.');
+        if (!response.ok) throw new Error(data.error ?? 'Could not load papers.');
         if (!controller.signal.aborted) setPapers(Array.isArray(data.papers) ? data.papers : []);
       }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); })
         .finally(() => { if (!controller.signal.aborted) setLoading(false); });
       return () => controller.abort();
     }
-    void refresh();
+    void refresh(undefined, initialPaperListing.current !== null);
     return () => request.current?.abort();
   }, [guest, path]);
   const lastPaperRevision = useRef<number | undefined>(undefined);
@@ -3303,7 +3304,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
-      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
+      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load papers.');
       const runs = (Array.isArray(list.runs) ? list.runs : []) as PaperRun[];
       setPaperRuns(runs);
       let currentId = selectedRunIdRef.current;
@@ -3408,7 +3409,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               setPaperStopReconciliation(false);
               setPhase('');
               if (next?.status === 'cancelled')
-                setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+                setSuccess('Paper generation cancelled. Checkpoints remain available.');
             }
             if (next === null && isSelected) setNewPaperRequested(false);
             void refresh(undefined, true);
@@ -3603,7 +3604,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/rewind?${new URLSearchParams({ path })}`,
         { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
-      const options = await readPaperResponse(response, 'Checking saved Paper checkpoints');
+      const options = await readPaperResponse(response, 'Checking Paper checkpoints');
       if (options.source_pdf_sha256 !== paper.pdf_sha256 || options.snapshot_sha256 !== paper.snapshot_sha256)
         throw new Error('The Paper has changed. Reopen it before restarting.');
       if (!Array.isArray(options.stages) || !options.stages.some((item: { id: string }) => item.id === stage))
@@ -3771,7 +3772,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       let markdown = saved?.version === 2 && saved?.source_sha256 === record.pdf_sha256 && typeof saved.markdown === 'string' ? saved.markdown.trim() : '';
       if (!markdown) {
         if (!binding) throw new Error('Connect an eligible AI provider to explain this paper.');
-        // Fetching a saved paper is not generation. Show Explaining only while
+        // Fetching a paper is not generation. Show Explaining only while
         // the provider is actually asked to produce a missing explanation.
         setExplainingId(paper.paper_id);
         const result = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/eli5`, {
@@ -3815,7 +3816,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     // Reading an existing score never depends on ongoing generation/scoring.
     if (paper.score && !force) { setScoreDialog({ paperId: paper.paper_id, score: paper.score }); return; }
     if (scoringRef.current) return;
-    if (!paper.pdf_available) { setScoreError('A saved PDF is required before this paper can be scored.'); return; }
+    if (!paper.pdf_available) { setScoreError('A PDF is required before this paper can be scored.'); return; }
     scoringRef.current = true;
     setScoringId(paper.paper_id);
     try {
@@ -3863,10 +3864,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     setCopyError('');
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}/txt?${new URLSearchParams({ path })}`, { cache: 'no-store' });
-      if (!response.ok) throw new Error('Saved paper text could not be loaded.');
+      if (!response.ok) throw new Error('Paper text could not be loaded.');
       await navigator.clipboard.writeText(await response.text());
       setCopiedPaperId(id); window.setTimeout(() => setCopiedPaperId(current => current === id ? '' : current), 1600);
-    } catch { setCopyError('Could not copy the saved paper. Check browser clipboard permissions and try again.'); }
+    } catch { setCopyError('Could not copy the paper. Check browser clipboard permissions and try again.'); }
   }
   async function copyExplanation(id: string, markdown: string) {
     if (!markdown) return;
@@ -3932,7 +3933,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       } else if (result.cancelled) {
         setOptimisticPaperStop(null);
         setPhase('');
-        setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
+        setSuccess('Paper generation cancelled. Checkpoints remain available.');
         void refresh(selected?.paper_id, true);
       } else {
         // Nothing was running: restore the real control state.
@@ -4100,21 +4101,21 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // already-started paper work. Model/Thinking can change at the next call.
       let authorizedProviderChange = false;
       if (preflight.provider_change_requires_confirmation) {
-        const savedModel = preflight.saved_provider_model ?? 'saved model';
+        const savedModel = preflight.saved_provider_model ?? 'previous model';
         authorizedProviderChange = window.confirm(
           'This paper started using ' + savedModel + '. Your AI account or billing connection changed. ' +
           'Continuing will explicitly switch future paper calls to ' + model +
           ' using the current connection. Previously completed writing will stay unchanged. Continue?'
         );
-        if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Saved work remains unchanged.');
+        if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Work remains unchanged.');
       }
       if (preflight.resume_uses_saved_model && !authorizedProviderChange) {
-        setPhase('Resuming saved work; the current Model/Thinking selection applies to the next AI call.');
+        setPhase('Resuming work; the current Model/Thinking selection applies to the next AI call.');
       }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
       if (recoverSection !== null) {
         if (pendingRecovery.length !== 1 || pendingRecovery[0] !== recoverSection)
-          throw new Error('The saved section recovery changed. Refresh before authorizing another AI call.');
+          throw new Error('The section recovery changed. Refresh before authorizing another AI call.');
       } else if (pendingRecovery.length) {
         throw new Error('An unfinished section needs explicit recovery authorization. Use Play and review the recovery confirmation.');
       }
@@ -4175,9 +4176,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         // An abort may also mean the dialog was unmounted. The server task
         // survives losing the stream; only the explicit Cancel action stops it.
         if (!deliberatePaperStop.current)
-          setError('Paper stream disconnected. Check current progress and saved versions.');
+          setError('Paper stream disconnected. Check current progress and paper versions.');
       }
-      // A deliberate Stop is still reconciling its saved checkpoint. The
+      // A deliberate Stop is still reconciling its checkpoint. The
       // progress poll will refresh at the terminal transition; an immediate
       // full preflight here can undo the fast acknowledgment.
       // A rejected preflight must restore Play without waiting for a full
@@ -4187,9 +4188,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         const message = errorMessage(cause);
         const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
         setError(disconnected && requestDispatched
-          ? 'Connection interrupted. Paper generation may still be running; its progress and saved checkpoints remain on the server. Check the current status before trying again.'
+          ? 'Connection interrupted. Paper generation may still be running; its progress and checkpoints remain on the server. Check the current status before trying again.'
           : requestDispatched && providerCallsAttempted === 0
-            ? `${message} No provider request was made for this attempt. Saved versions and research evidence are unchanged; refresh the snapshot before retrying.`
+            ? `${message} No provider request was made for this attempt. Paper versions and research evidence are unchanged; refresh the snapshot before retrying.`
             : requestDispatched
               ? `${message} Check My Work versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
               : message);
@@ -4213,7 +4214,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
   const stoppingSelectedPaper = optimisticPaperStop !== null && optimisticPaperStop.runId === selectedRunId;
-  // A pending Resume may still carry the saved checkpoint's interrupted or
+  // A pending Resume may still carry the checkpoint's interrupted or
   // cancelled status. The user's new Play intent takes precedence: show Stop
   // in the same position immediately, not the old disabled Play control.
   const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
@@ -4379,13 +4380,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     </header>
 
     {guestPaperPreview && <GuestFeatureCard title="Generate a research paper"
-      message="SIGMA uses saved research to gather evidence, draft and validate sections, proofread, produce a PDF, and score the result. Research findings still need human verification."
+      message="SIGMA uses project research to gather evidence, draft and validate sections, proofread, produce a PDF, and score the result. Research findings still need human verification."
       onClose={() => setGuestPaperPreview(false)}/>}
     {guestExplainPreview && <GuestFeatureDialog title="Explain this paper"
-      message="With member access and ChatGPT, SIGMA can summarize a saved paper in simpler language, explain its claims and limitations, and keep that explanation alongside the paper. An AI explanation is not an independent validation."
+      message="With member access and ChatGPT, SIGMA can summarize a paper in simpler language, explain its claims and limitations, and keep that explanation alongside the paper. An AI explanation is not an independent validation."
       onClose={() => setGuestExplainPreview(false)}/>}
     {guestScorePreview && <GuestFeatureDialog title="Score a research paper"
-      message="With authorized SIGMA access and ChatGPT, SIGMA evaluates a saved PDF against its research, correctness, readability, evidence and visual-quality rubric. Scores are provisional and are not proof of scientific correctness."
+      message="With authorized SIGMA access and ChatGPT, SIGMA evaluates a PDF against its research, correctness, readability, evidence and visual-quality rubric. Scores are provisional and are not proof of scientific correctness."
       onClose={() => setGuestScorePreview(false)}/>}
     {showPaperNotice && <SessionNotice key={paperNoticeKey} number={draftVersion}
       title={paperNoticeCopy?.title ?? 'Paper generation stopped'}
@@ -4401,7 +4402,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <>
 
       {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <button type="button" className="paper-score-error-dismiss" aria-label="Dismiss paper score error" data-tooltip="Dismiss paper score error" onClick={() => setScoreError('')}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button></p>}
-      {loading && <p>Loading saved versions…</p>}
+      {loading && <p>Loading papers…</p>}
 
       {(showDraftPaper || otherPaperRuns.length > 0 || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={draftDisplayTitle} data-paper-version={assignedPaperNumber ?? undefined}>
@@ -4419,7 +4420,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     </div>
                   </div></div>}
                   {confirmPlayRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm new paper generation attempt">
-                    <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Saved research and papers remain.</p>
+                    <p>The previous attempt cannot resume. Start a new attempt? This may use additional AI calls. Research and papers remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => { setConfirmPlayRestartDraft(false); void generatePaper(true); }}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmPlayRestartDraft(false)}>Cancel</button>
@@ -4434,7 +4435,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 {!generationRunning && canRemoveDraft && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={busy || loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
-                    <p>Remove this unfinished paper and its checkpoint? Saved papers and research history will remain.</p>
+                    <p>Remove this unfinished paper and its checkpoint? Papers and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => void discardDraft()}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDiscardDraft(false)}>Cancel</button>
@@ -4452,7 +4453,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           <div id="paper-draft-content" className="paper-draft-content" hidden={!draftPaperExpanded}>
       {checkpointMismatch && !generating && <p className="ai-paper-restart-notice" role="status">{checkpointMismatch.incomplete_one_shot
         ? 'The previous writing attempt stopped before saving a draft and cannot resume.'
-        : 'Research or AI settings changed; this checkpoint cannot resume.'} Saved research and papers remain. Use Play to confirm a new attempt, or Start over to reset without playing.</p>}
+        : 'Research or AI settings changed; this checkpoint cannot resume.'} Research and papers remain. Use Play to confirm a new attempt, or Start over to reset without playing.</p>}
       {busy && !stoppingSelectedPaper && (restartingCheckpoint || !paperProgress) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming paper…' : 'Starting paper…') : phase}</span></p>}
       {paperProgress && !restartingCheckpoint && <div className="ai-paper-status ai-paper-progress" role="status" aria-live="polite">
         {paperStartOptimistic ? <strong>{paperPlayIntent === 'resuming' ? 'Resuming paper…' : 'Starting paper…'}</strong> : stoppingSelectedPaper
@@ -4477,7 +4478,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           onStartOver={canStartOver && canControlDraft && !busy && !loading && !!binding ? startOverPaperFromControl : undefined}
           onContinue={!generationRunning && canControlDraft && !paperPlayDisabled ? beginPaperFromControl : undefined}/> 
         {unfinishedStepChecking?.key === paperUnfinishedOptionsKey(selectedRunId) &&
-          <p role="status" className="paper-checkpoint-check">Checking saved checkpoints…</p>}
+          <p role="status" className="paper-checkpoint-check">Checking checkpoints…</p>}
         {unfinishedStepCheckError?.key === paperUnfinishedOptionsKey(selectedRunId) &&
           <p role="alert" className="ai-paper-warning">{unfinishedStepCheckError.message}</p>}
         {!stoppingSelectedPaper && paperProgress.detail?.startsWith('Retrying') && <span className="paper-progress-substep">{paperProgress.detail}</span>}
@@ -4538,7 +4539,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 </button>
                 {confirmDiscardRunId === run.run_id && <div className="paper-remove-actions" style={paperPopupStyle}>
                   <div className="research-stop-confirm" role="group" aria-label={`Confirm removing unfinished Paper ${run.number}`}>
-                    <p>Remove unfinished Paper {run.number} and its checkpoint? Saved papers remain.</p>
+                    <p>Remove unfinished Paper {run.number} and its checkpoint? Papers remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => void discardOtherRun(run.run_id)}>Confirm</button>
                       <button type="button" className="text-view-link" onClick={() => setConfirmDiscardRunId(null)}>Cancel</button>
@@ -4559,7 +4560,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             <p className="saved-paper-meta">{formatRunAttribution({ kind: 'paper', creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking })}
               {' · '}{optimisticPaperStop?.runId === run.run_id
                 ? paperStopReconciliation ? 'Stopping · saving checkpoint' : 'Stopping · awaiting server acknowledgment'
-                : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued' : run.status === 'interrupted' ? 'Interrupted' : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
+                : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued' : run.status === 'interrupted' ? 'Interrupted' : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Complete'}
               {!run.can_control && !['active', 'queued', 'complete'].includes(run.status) && ' · Only the original creator can Resume'}
             </p>
             <div id={`paper-run-steps-${run.run_id}`} hidden={!expandedOtherPaperRunIds.has(run.run_id)}>
@@ -4589,7 +4590,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="saved paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
@@ -4605,7 +4606,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 {!guest && (!viewerEmail || viewerEmail === projectOwnerEmail || artifactAuthors?.[paper.paper_id] === viewerEmail) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={`Remove Paper ${paper.paper_version}`} data-tooltip={`Remove Paper ${paper.paper_version}`} disabled={busy} onClick={event => confirmPaperRemoval(paper.paper_id, event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDeleteId === paper.paper_id && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}>
-                    <p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p>
+                    <p>Remove this paper version and its PDF? Other versions and research history will remain.</p>
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link" data-tooltip={`Confirm removal of Paper ${paper.paper_version}`} disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm</button>
                       <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button>
@@ -4632,16 +4633,16 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               ? (stage, anchor) => void proposePaperStepRestart(paper, stage, anchor) : undefined}
               onRescore={!guest && paper.pdf_available && !scoringId ? anchor => void proposePaperStepRescore(paper, anchor) : undefined}/>
           </div>
-          {paperStepChecking?.id === paper.paper_id && <p role="status" className="paper-checkpoint-check">Checking saved checkpoints…</p>}
+          {paperStepChecking?.id === paper.paper_id && <p role="status" className="paper-checkpoint-check">Checking checkpoints…</p>}
           {paperStepCheckError?.id === paper.paper_id && <p role="alert" className="ai-paper-warning">{paperStepCheckError.message}</p>}
           {paperStepRestart?.paper.paper_id === paper.paper_id && createPortal(
             <div ref={paperStepRestartPopup} className="paper-step-restart-popup" role="dialog"
-              aria-label="Confirm Paper restart from saved checkpoint" aria-modal="false"
+              aria-label="Confirm Paper restart from checkpoint" aria-modal="false"
               style={paperStepRestartPlacement
                 ? { left: paperStepRestartPlacement.left, top: paperStepRestartPlacement.top }
                 : { left: 12, top: 12, visibility: 'hidden' }}>
               <p>{paperStepRestart.stage === 'scoring'
-                ? `Rescore Paper ${paper.paper_version} using its saved PDF? The published Paper remains unchanged.`
+                ? `Rescore Paper ${paper.paper_version} using its PDF? The published Paper remains unchanged.`
                 : `Restart Paper ${paper.paper_version} at ${paperRestartStepName(paperStepRestart.stage)}? The published Paper stays unchanged; a new Paper attempt will be prepared.`}</p>
               <div className="session-remove-confirm-actions">
                 <button type="button" className="text-view-link" disabled={!paperStepRestart.options || paperStepRestartBusy || (!binding && paperStepRestart.stage !== 'scoring')} onClick={() => void confirmPaperStepRestart()}>Confirm</button>
@@ -4675,7 +4676,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         <h4>Claim register</h4>{selected.draft.claims.map(claim => <section key={claim.id}><p><strong>{claim.id} · {claim.status}:</strong> {claim.statement}</p><p>{claim.reasoning}</p><p className="settings-hint">Evidence: {claim.evidence_refs.join(', ') || 'No source reference'}</p></section>)}
         <h4>Limitations</h4><ul>{selected.draft.limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
         {selected.draft.open_obligations.length > 0 && <><h4>Open obligations</h4><ul>{selected.draft.open_obligations.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
-        {!!selected.obligation_reconciliation?.length && <><h4>Frozen obligation reconciliation</h4><p className="settings-hint">Unlisted evidence obligations are not presumed resolved. References point to the saved evidence source and field.</p><ul>{selected.obligation_reconciliation.map((item, index) => <li key={index}><strong>{item.status}.</strong> {item.text}<br/><span className="settings-hint">{item.source_refs.join(', ') || 'No exact frozen-record match'}</span></li>)}</ul></>}
+        {!!selected.obligation_reconciliation?.length && <><h4>Frozen obligation reconciliation</h4><p className="settings-hint">Unlisted evidence obligations are not presumed resolved. References point to the research evidence source and field.</p><ul>{selected.obligation_reconciliation.map((item, index) => <li key={index}><strong>{item.status}.</strong> {item.text}<br/><span className="settings-hint">{item.source_refs.join(', ') || 'No exact frozen-record match'}</span></li>)}</ul></>}
         {!!selected.publication_requirement_reconciliation?.length && <section aria-label="Paper Requirements review">
           <h4>Paper Requirements review</h4>
           <p className="settings-hint">These checks flag missing structures. They do not certify scientific or editorial compliance.</p>
@@ -4689,15 +4690,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         </section>}
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
-        {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
+        {!selected.pdf_available && <p role="status">The paper record exists, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
         </>}
       </article>}      {selected?.paper_id === paper.paper_id && (selected.generation.sigma_issues?.length ?? 0) > 0 && <details className="outcome-subsection paper-diagnostics-disclosure">
         <summary><svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg><span>Diagnostics ({selected.generation.sigma_issues?.length ?? 0})</span></summary>
         <div className="paper-diagnostics-content">
           <label className="ai-paper-details"><input type="checkbox" checked={includeSigmaIssues} disabled={generating} onChange={event => { window.localStorage.setItem('sigma.paper.issues:' + projectId, String(event.target.checked)); setIncludeSigmaIssues(event.target.checked); }}/>Include paper-generation diagnostics in the PDF</label>
-          <p>Authoring, validation, and typesetting problems are kept in the saved paper record even when the optional diagnostic appendix is not included.</p>
+          <p>Authoring, validation, and typesetting problems are kept in the paper record even when the optional diagnostic appendix is not included.</p>
           <ol>{selected.generation.sigma_issues?.map((issue, index) => <li key={index}>{issue}</li>)}</ol>
-          {selected?.generation.sigma_issues_included && <p role="status">The saved PDF includes the optional diagnostics appendix.</p>}
+          {selected?.generation.sigma_issues_included && <p role="status">The PDF includes the optional diagnostics appendix.</p>}
           {paperProgress?.status === 'failed' && paperProgress.failure_reason && <p role="alert">{paperErrorSummary(paperProgress.failure_reason)}</p>}
         </div>
       </details>}</div>
@@ -5390,7 +5391,7 @@ function AboutArchitecture() {
                   </div>}
                 </div>)}
               </div>
-              <p className="about-agent-instantiation-note">These six calls illustrate one round. Other strategies may run concurrently or stop early; saved evidence can inform later turns and rounds.</p>
+              <p className="about-agent-instantiation-note">These six calls illustrate one round. Other strategies may run concurrently or stop early; research evidence can inform later turns and rounds.</p>
             </section>
             <p className="about-shared-budget"><strong>Why more rounds?</strong> Later turns can test objections or revise claims. Progress is the goal, not a scheduler guarantee.</p>
             <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
@@ -5405,13 +5406,13 @@ function AboutArchitecture() {
               <p className="about-session-exploration-example"><strong>3 rounds × 3 turns × 3 strategies × 2 agent calls = 54 maximum calls.</strong> Strategies progress independently, but each Investigator call precedes its Skeptic. Limits or early stopping may reduce the total.</p>
             </div>
             <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
-            <p className="about-multiple-strategies-note">Saved evidence is selected into bounded later contexts; there is no automatic round-end merge.</p>
+            <p className="about-multiple-strategies-note">Research evidence is selected into bounded later contexts; there is no automatic round-end merge.</p>
             <p className="about-multiple-sessions-note">You can run another session later to revisit a strategy with new evidence or compare what changed.</p>
           </div>
         </div>
       </div>
       <div className="about-flow-connector"><span>Keep the ideas, tests, criticisms and unanswered questions</span><i aria-hidden="true"/></div>
-      <div className="about-flow-evidence">{card('savedEvidence', 'Saved Evidence & Outcome', 'Findings, objections, experiments and unresolved questions')}</div>
+      <div className="about-flow-evidence">{card('savedEvidence', 'Evidence & Outcome', 'Findings, objections, experiments and unresolved questions')}</div>
       <div className="about-evidence-report-note">Review what worked, what failed, and what still needs proof. Export the research or write a report.</div>
       <div className="about-history-return"><span aria-hidden="true">↶</span> Findings may inform later sessions or researcher-approved strategy revisions.</div>
     </div>
@@ -5443,7 +5444,7 @@ function FeedbackForm({ signedInEmail }: { signedInEmail: string | null }) {
     } finally { setBusy(false); }
   }
   return <>
-      {sent ? <p role={emailFailed ? 'alert' : 'status'}>{emailFailed ? 'Feedback saved for administrator review, but the email notification failed. Check local mail authorization.' : 'Thanks for your feedback. It has been sent for administrator review.'}</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
+      {sent ? <p role={emailFailed ? 'alert' : 'status'}>{emailFailed ? 'Feedback recorded for administrator review, but the email notification failed. Check local mail authorization.' : 'Thanks for your feedback. It has been sent for administrator review.'}</p> : <form className="about-feedback-form" onSubmit={event => void submit(event)}>
         <label>Feedback<textarea required minLength={10} maxLength={4000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Share a suggestion or describe a problem."/></label>
         <button type="submit" className="admin-text-action about-feedback-send" disabled={busy || message.trim().length < 10}>{busy ? 'Sending…' : 'Send Feedback'}</button>
         {signedInEmail ? <label><span className="about-contact-email-label">Contact email (Google account)</span><input type="email" value={signedInEmail} readOnly/></label> : <label><span className="about-contact-email-label">Contact email <span>(optional)</span></span><input type="email" maxLength={254} autoComplete="email" value={contactEmail} onChange={event => setContactEmail(event.target.value)} placeholder="you@example.org"/></label>}
@@ -5495,7 +5496,7 @@ function AboutWorkflow() {
     { title: 'Explore strategies', notes: ['Develop several approaches to the question.', 'Choose which strategies to investigate.'] },
     { title: 'Run research', notes: ['Investigator and Skeptic examine selected strategies.', 'Sessions save evidence, objections, results, and open questions.'] },
     { title: 'Review and refine', notes: ['Inspect findings, the Outcome, and Current Understanding.', 'Revise strategies or run more sessions when useful.'] },
-    { title: 'Draft a paper (optional)', notes: ['Synthesize saved research into an academic paper draft.', 'A draft is not proof or independent verification.'] },
+    { title: 'Draft a paper (optional)', notes: ['Synthesize research into an academic paper draft.', 'A draft is not proof or independent verification.'] },
     { title: 'Review and export', notes: ['Export research records and reports without a paper.', 'For a draft, review claims, evidence, citations, and limits before PDF or TeX export.'] },
   ];
   return <ol className="about-workflow" aria-label="SIGMA research workflow">{stages.map((stage, index) => <li className="about-workflow-stage" key={stage.title}>
@@ -5531,9 +5532,9 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       <section className="about-feature"><h4>Research History</h4><p>SIGMA keeps a record of strategies, research sessions, experiments, and findings so earlier work isn't lost. Failed approaches remain available for review and further investigation.</p></section>
       <section className="about-feature"><h4>Research That Builds on Earlier Work</h4><p>Researchers can use earlier findings to guide later investigations, including findings that ruled out an approach. SIGMA does not automatically combine discoveries across strategies.</p></section>
       <section className="about-feature"><h4>Human Guidance</h4><p>Researchers can provide feedback, revise strategies, and choose which directions to pursue.</p></section>
-      <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are saved with the research session. SageMath execution has not yet been independently verified.</p></section>
+      <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are recorded with the research session. SageMath execution has not yet been independently verified.</p></section>
       <section className="about-feature"><h4>Evidence and Uncertainty</h4><p>Outcomes distinguish supported findings from unresolved questions and claims that still need verification. SIGMA records evidence and review status; it does not independently verify mathematical proofs.</p></section>
-      <section className="about-feature"><h4>Readable Mathematical Text</h4><p>AI can reformat plain-text project descriptions and saved Conclusions as Markdown with typeset equations. The saved text remains available; formatted mathematics still needs review.</p></section>
+      <section className="about-feature"><h4>Readable Mathematical Text</h4><p>AI can reformat plain-text project descriptions and Conclusions as Markdown with typeset equations. The original text remains available; formatted mathematics still needs review.</p></section>
       <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
           <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
         </div>
@@ -5553,11 +5554,54 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   </dialog></div>;
 }
 
+// Align the VISIBLE pill group rather than a padded wrapper. Home and Project
+// have different containing blocks, so CSS right/margin guesses are unreliable.
+// Translate only the entire group; never adjust gaps or individual pills.
+function useEqualHeaderPillInsets() {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const group = ref.current;
+    if (!group) return;
+    let frame = 0;
+    const measure = () => {
+      group.style.translate = '0px 0px';
+      const controls = group.querySelectorAll<HTMLElement>(
+        '.administrator-settings-link, .home-about-button, .about-action, .home-settings-pill, ' +
+        '.project-global-settings-pill, .project-google-signin, .global-model-pill, .api-connection > summary'
+      );
+      const bounds = Array.from(controls, control => control.getBoundingClientRect())
+        .filter(rect => rect.width > 0 && rect.height > 0);
+      if (!bounds.length) return;
+      const top = Math.min(...bounds.map(rect => rect.top));
+      const right = Math.max(...bounds.map(rect => rect.right));
+      const rightInset = document.documentElement.clientWidth - right;
+      group.style.translate = `${Math.round(rightInset - top)}px 0px`;
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer = new ResizeObserver(schedule);
+    observer.observe(group);
+    window.addEventListener('resize', schedule);
+    void document.fonts.ready.then(() => { if (group.isConnected) schedule(); });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', schedule);
+      group.style.translate = '';
+    };
+  }, []);
+  return ref;
+}
+
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const headerPillsRef = useEqualHeaderPillInsets();
   const idleTitleRef = useRef<HTMLButtonElement>(null);
   const activeTitleRef = useRef<HTMLButtonElement>(null);
   const hasActivity = activityStatus === undefined
@@ -5611,14 +5655,15 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
-    <div className="header-controls">
+    <div ref={headerPillsRef} className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
 
-      <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
+      <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
     {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
+        {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
         <div className="sigma-header-about-model-anchor">
           <div className="sigma-header-first-row">
             <button type="button" className="about-action" aria-label="About SIGMA" data-tooltip-disabled onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About SIGMA</button>
@@ -5774,9 +5819,9 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       const q = new URLSearchParams({ path });
       const response = await fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' });
       const list = await response.json();
-      if (!response.ok) throw new Error(list.error ?? 'Could not load saved Q/A answers.');
+      if (!response.ok) throw new Error(list.error ?? 'Could not load Q/A answers.');
       const saved = (list.answers ?? []) as ResearchQARecord[];
-      if (typeof list.archive_available !== 'boolean') throw new Error('Could not verify the saved Q/A archive.');
+      if (typeof list.archive_available !== 'boolean') throw new Error('Could not verify the Q/A archive.');
       setAnswers(saved);
       return { answers: saved, archiveAvailable: list.archive_available };
     } catch (cause) { setError(errorMessage(cause)); return null; }
@@ -5892,7 +5937,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     try {
       const response = await fetch(`/api/projects/research-qa/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { method: 'DELETE' });
       const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Could not remove answer.');
-      setRemoveId(''); setAnswers(current => current.filter(item => item.qa_id !== id)); setSuccess('Saved answer removed. Research sessions were unchanged.');
+      setRemoveId(''); setAnswers(current => current.filter(item => item.qa_id !== id)); setSuccess('Answer removed. Research sessions were unchanged.');
     } catch (cause) { setError(errorMessage(cause)); }
   }
   async function toggleAnswerMarkdown(record: ResearchQARecord) {
@@ -5936,7 +5981,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   async function copy(record: ResearchQARecord) {
     try {
       const response = await fetch(`/api/projects/research-qa/${encodeURIComponent(record.qa_id)}/markdown?${new URLSearchParams({ path })}`, { cache: 'no-store' });
-      if (!response.ok) throw new Error('Could not load the saved Markdown document.');
+      if (!response.ok) throw new Error('Could not load the Markdown document.');
       const markdown = await response.text();
       try { await navigator.clipboard.writeText(markdown); }
       catch { throw new Error('Clipboard access failed. Check browser clipboard permissions and try again.'); }
@@ -5948,15 +5993,15 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     <header className="settings-header"><h2 id="research-qa-heading">Research Q/A</h2><div className="settings-actions"><DialogDismissButton label="Close research Q/A" disabled={busy} onClick={onCancel}/></div></header>
     <div className="settings-body ai-paper-body">
       {guestAnswerMarkdownPreview && createPortal(<GuestFeatureDialog title="Format an answer as Markdown"
-        message="With an authorized model, SIGMA can format a saved answer as readable Markdown for review. This does not re-evaluate the research or prove its findings."
+        message="With an authorized model, SIGMA can format an answer as readable Markdown for review. This does not re-evaluate the research or prove its findings."
         onClose={() => setGuestAnswerMarkdownPreview(false)}/>, document.body)}
       <>
-        <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using saved research sessions and cite supporting evidence.</p>
+        <p className="settings-hint">Ask a question about the research performed in this project. SIGMA will answer using project research sessions and cite supporting evidence.</p>
         {guest ? <p className="settings-hint ai-paper-model">Guest preview · no ChatGPT connection or model execution</p>
           : <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>}
         {configError && <p role="alert" className="error">{configError}</p>}
         <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={(!guest && !binding) || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
-        {guestAskPreview && <GuestFeatureCard title="Ask about your research" message="SIGMA answers questions using saved project research and cites supporting evidence. Answers require verification." onClose={() => setGuestAskPreview(false)}/>}
+        {guestAskPreview && <GuestFeatureCard title="Ask about your research" message="SIGMA answers questions using project research and cites supporting evidence. Answers require verification." onClose={() => setGuestAskPreview(false)}/>}
         {pendingAnswers.length > 0 && <section aria-label="Q/A in progress">
           {pendingAnswers.map(pending => <p className="ai-paper-status" role="status" key={pending.request_id}>
             <span className="research-running-indicator" aria-label="Answer in progress"
@@ -5964,13 +6009,13 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
             {' Answering · '}{formatRunAttribution({ kind: 'answer', creator: pending.creator, model: pending.model, thinking: pending.thinking })}
           </p>)}
         </section>}
-        {busy && <p role="status" className="ai-paper-status">Preparing saved evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
-        {loading ? <p>Loading saved answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Saved questions and answers"><h3>Saved answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
-          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="saved answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
+        {busy && <p role="status" className="ai-paper-status">Preparing evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
+        {loading ? <p>Loading answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Questions and answers"><h3>Answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
+          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
             <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-view-pdf-icon" aria-label="View answer in a new browser tab" data-tooltip="View answer in a new browser tab" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></button>
-            {!guest && (!viewerEmail || viewerEmail === projectOwnerEmail || answerAuthors?.[record.qa_id] === viewerEmail) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label="Remove saved answer" data-tooltip="Remove saved answer" onClick={() => setRemoveId(record.qa_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
+            {!guest && (!viewerEmail || viewerEmail === projectOwnerEmail || answerAuthors?.[record.qa_id] === viewerEmail) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label="Remove answer" data-tooltip="Remove answer" onClick={() => setRemoveId(record.qa_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
           </>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · Elapsed {savedPaperElapsed(record.generation.generation_elapsed_seconds)} · {(record.author_email || (record.created_by && record.created_by !== 'Local user')) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'answer', creator: record.author_email || record.created_by, model: record.generation.model, thinking: record.generation.reasoning_effort })}</span> : modelThinkingLabel(record.generation.model, record.generation.reasoning_effort)}</p></div></div></div>
-          {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this saved answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><DialogDismissButton label="Cancel answer removal" onClick={() => setRemoveId('')}/></div>}
+          {removeId === record.qa_id && <div className="saved-paper-confirm" role="group" aria-label="Confirm answer removal"><p>Remove this answer? Its research sessions will remain unchanged.</p><button type="button" className="text-view-link" onClick={() => void remove(record.qa_id)}>Confirm</button><DialogDismissButton label="Cancel answer removal" onClick={() => setRemoveId('')}/></div>}
           <div id={`qa-body-${record.qa_id}`} hidden={expanded !== record.qa_id}><article className="ai-paper-preview"><div className="research-qa-answer-heading"><h3>Answer</h3></div>{renderedAnswerIds.has(record.qa_id) && record.markdown_answer ? <div className="outcome-markdown"><Suspense fallback={<p>{record.answer}</p>}><RenderedMarkdown body={record.markdown_answer}/></Suspense></div> : <div className="research-qa-answer-plain">{record.answer}</div>}<h4>Sources</h4><ul>{record.sources.length ? record.sources.map((source, index) => <li key={`${source.source_id}-${index}`}>{source.navigation_available && source.navigation_url ? <a href={source.navigation_url}>{source.label || source.kind}</a> : <>{source.label || source.kind} · navigation unavailable{source.navigation_unavailable_reason ? `: ${source.navigation_unavailable_reason}` : ''}</>}</li>) : <li>No verified source links available.</li>}</ul></article></div>
         </article>)}</section>}
       </>
@@ -6458,7 +6503,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
         const response = await fetch(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`, {
           headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
         });
-        if (!response.ok) throw new Error('Saved project, but could not refresh collaboration state.');
+        if (!response.ok) throw new Error('Project updated, but collaboration status could not be refreshed.');
         setShared(await response.json() as SharedProjectInfo);
       }
       setBaseline(next);
@@ -6678,14 +6723,14 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     return () => { clearTimeout(timer); controller.abort(); };
   }, [values.title]);
   function change<K extends keyof Settings,>(key: K, value: Settings[K]) { setValues(previous => ({ ...previous, [key]: value })); }
-  const canCreate = !!values.title.trim() && !!values.investigation_type.trim();
+  const canCreate = !!values.title.trim() && !!values.problem.trim() && !!values.investigation_type.trim();
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current || (initial && !limitValidation.value) || (!initial && !canCreate)) return;
     submitting.current = true; setBusy(true); setError('');
     try {
       const createValues = {
         title: values.title,
-        problem: values.problem.trim() || values.title.trim(),
+        problem: values.problem.trim(),
         desired_outcomes: values.desired_outcomes,
         paper_requirements: values.paper_requirements,
         investigation_type: values.investigation_type,
@@ -6740,8 +6785,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby={initial ? "project-settings-help" : undefined} onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !canCreate}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
-      {!initial && <p className="settings-hint new-project-edit-note">Project name and type required; you can edit these settings later in Project Settings.</p>}
-      {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their saved research configuration; some limits can be adjusted when resuming.</p>}
+      {!initial && <p className="settings-hint new-project-edit-note">Project name, Research category, and Research Subject are required. These can be edited later.</p>}
+      {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their research configuration; some limits can be adjusted when resuming.</p>}
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => changeSettingsTab('limits')}>Limits</button>
@@ -6749,21 +6794,24 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       </div>}
       <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}>{initial && <p id="project-settings-help">Set this project’s research type and difficulty.</p>}
       <fieldset disabled={busy}>
-      {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
-      <label htmlFor="project-problem">Research Subject</label><p className="settings-hint">What are we investigating?</p><textarea id="project-problem" maxLength={20000} rows={3} value={values.problem} onChange={event => change('problem', event.target.value)}/>
-      <label htmlFor="project-desired-outcomes">Desired Outcomes</label><p className="settings-hint">What insights or advances are we hoping for?</p><textarea id="project-desired-outcomes" maxLength={20000} rows={4} value={values.desired_outcomes} onChange={event => change('desired_outcomes', event.target.value)}/>
-      <label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></>}
-      <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
+      {!initial && <>
+      <div className="new-project-field"><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/></div>
+      <div className="settings-classification-row"><div><label id="project-mode-label">Research category</label><ResearchTypePicker fieldLabel="Research category" value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
       <div><label id="sigma-project-difficulty-label">Difficulty</label><DifficultyPicker value={values.difficulty} onChange={value => change('difficulty', value)}/></div></div>
+      <div className="new-project-field"><label htmlFor="project-problem">Research Subject</label><p className="settings-hint">What are we investigating?</p><textarea id="project-problem" required maxLength={20000} rows={3} value={values.problem} onChange={event => change('problem', event.target.value)}/></div>
+      <div className="new-project-field"><label htmlFor="project-desired-outcomes">Desired Outcomes</label><p className="settings-hint">What insights or advances are we hoping for?</p><textarea id="project-desired-outcomes" maxLength={20000} rows={4} value={values.desired_outcomes} onChange={event => change('desired_outcomes', event.target.value)}/></div>
+      <div className="new-project-field"><label htmlFor="project-paper-requirements">Paper Requirements</label><p className="settings-hint">What should the finished publication contain?</p><textarea id="project-paper-requirements" maxLength={20000} rows={4} value={values.paper_requirements} onChange={event => change('paper_requirements', event.target.value)}/></div></>}
+      {initial && <div className="settings-classification-row"><div><label id="project-mode-label">Research type</label><ResearchTypePicker fieldLabel="Research type" value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
+      <div><label id="sigma-project-difficulty-label">Difficulty</label><DifficultyPicker value={values.difficulty} onChange={value => change('difficulty', value)}/></div></div>}
       {initial && <p className="project-destination"><span>Project location</span><code>{initial.path}</code><small>Editing the display name never renames or moves this directory.</small></p>}
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
-      <p>Research rounds, turns, and duration are set when a session starts. Some limits are rechecked on Resume; saved findings and accepted calls are preserved.</p>
-      {cloud?.target === 'hosted' && <p className="settings-hint">Hosted sponsorship is governed by account allowance; the saved project duration applies.</p>}
-      {cloud?.target === 'local' && <p className="settings-hint">Sponsored research uses the saved project duration and is governed by the account allowance.</p>}
+      <p>Research rounds, turns, and duration are set when a session starts. Some limits are rechecked on Resume; findings and accepted calls are preserved.</p>
+      {cloud?.target === 'hosted' && <p className="settings-hint">Hosted sponsorship is governed by account allowance; the project duration applies.</p>}
+      {cloud?.target === 'local' && <p className="settings-hint">Sponsored research uses the project duration and is governed by the account allowance.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
         <label htmlFor="research-concurrent-sessions">Maximum concurrent sessions</label><input id="research-concurrent-sessions" type="number" min={1} max={4} step={1} value={limitDraft.max_concurrent_sessions} aria-invalid={!!limitValidation.errors.max_concurrent_sessions} aria-describedby="research-concurrent-sessions-help research-concurrent-sessions-error" onChange={event => setLimitDraft(value => ({ ...value, max_concurrent_sessions: event.target.value }))}/><p id="research-concurrent-sessions-help" className="settings-hint">Up to 4 simultaneously active research sessions in this project (1–4). Default is 1.</p>{limitValidation.errors.max_concurrent_sessions && <p id="research-concurrent-sessions-error" className="limit-error" role="alert">{limitValidation.errors.max_concurrent_sessions}</p>}
         <label htmlFor="research-rounds">Research rounds</label><input id="research-rounds" type="number" min={1} max={60} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Number of rounds per strategy.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
@@ -6783,13 +6831,13 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
           {limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
         </>
       </fieldset>
-      {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
+      {!limitsLoaded && <p role="status">Loading research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}
     {initial && <section id="settings-panel-preferences" className="settings-body project-preferences-panel" role="tabpanel" aria-labelledby="settings-tab-preferences" hidden={activeTab !== 'preferences'}>
       <p>Project presentation and user-wide research execution preferences.</p>
       <fieldset disabled={busy}>
         <label className="project-preference-checkbox" htmlFor="show-advanced-outcome-details"><input id="show-advanced-outcome-details" type="checkbox" checked={values.show_advanced_outcome_details} onChange={event => change('show_advanced_outcome_details', event.target.checked)}/>Show advanced Outcome details</label>
-        <p className="settings-hint">When enabled, each saved outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
+        <p className="settings-hint">When enabled, each recorded outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
         <label className="project-preference-checkbox" htmlFor="expand-one-project-section"><input id="expand-one-project-section" type="checkbox" checked={exclusiveSections} disabled={!exclusiveSectionsLoaded} onChange={event => setExclusiveSections(event.target.checked)}/>Expand one project section at a time</label>
         <p className="settings-hint">User-wide display preference for the Project, Strategies, Sessions and Papers sections. Opening one collapses the others.</p>
         {sectionLayoutWarning && <p className="settings-hint" role="status">{sectionLayoutWarning}</p>}
@@ -6903,6 +6951,63 @@ function projectViewCacheKey(scope: string, path: string): string {
   return `${scope}\u0000${path}`;
 }
 
+// One-use metadata handoff lets Home keep its Opening indicator until the
+// Papers list is ready, without retrieving a PDF, TeX, or full paper body.
+type InitialPaperListing = {
+  projectId: string;
+  papers: PaperSummary[];
+  runs: PaperRun[];
+  nextPaperNumber: number | null;
+};
+const initialPaperListings = new Map<string, InitialPaperListing>();
+async function preloadPaperListing(path: string, projectId: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, {
+      signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+    });
+    if (!response.ok) return; // The Project pane will show its own retry/error.
+    const data = await response.json();
+    initialPaperListings.set(path, {
+      projectId,
+      papers: Array.isArray(data.papers) ? data.papers : [],
+      runs: Array.isArray(data.runs) ? data.runs : [],
+      nextPaperNumber: typeof data.next_paper_number === 'number' ? data.next_paper_number : null,
+    });
+  } catch { /* Navigation can proceed; the Project pane retries normally. */ }
+  finally { window.clearTimeout(timeout); }
+}
+function takeInitialPaperListing(path: string, projectId: string): InitialPaperListing | null {
+  const listing = initialPaperListings.get(path);
+  initialPaperListings.delete(path);
+  return listing?.projectId === projectId ? listing : null;
+}
+
+// The Project header renders this same PNG as an image and as a CSS
+// background. Decode it before switching Home → Project so there is never a
+// transient empty patch where the SIGMA waves belong.
+let projectArtworkReady = false;
+let projectArtworkPromise: Promise<void> | null = null;
+function preloadProjectArtwork(): Promise<void> {
+  if (projectArtworkReady) return Promise.resolve();
+  if (!projectArtworkPromise) {
+    projectArtworkPromise = new Promise<void>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const decoded = typeof image.decode === 'function' ? image.decode() : Promise.resolve();
+        void decoded.then(() => { projectArtworkReady = true; resolve(); }, reject);
+      };
+      image.onerror = () => reject(new Error('SIGMA header artwork could not be loaded.'));
+      image.src = '/sigma-project-header.png';
+    }).catch(error => {
+      projectArtworkPromise = null;
+      throw error;
+    });
+  }
+  return projectArtworkPromise;
+}
+
 function ProjectOpeningHourglass() {
   return <span className="project-opening-hourglass" aria-hidden="true">⌛</span>;
 }
@@ -6920,7 +7025,7 @@ function useDelayedProjectProgress(operation: string): string {
 }
 
 function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = false, active = false, projects, setProjects, loading, setLoading }: {
-  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void;
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   flat?: boolean;
@@ -7027,15 +7132,24 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
   async function open(entry: RecentProject, openSettings = false) {
     if (pending.current) return;
     const cached = getCachedView(entry.path);
+    pending.current = true; setOpening(entry.id); setError('');
     if (cached?.project.id === entry.id) {
-      // Revalidate in the mounted Project screen without delaying navigation.
-      onOpen(cached, openSettings, true);
+      try {
+        // Still hold Home until the header artwork has decoded.
+        await onOpen(cached, openSettings, true);
+      } catch (error) { setError(errorMessage(error)); }
+      finally { pending.current = false; setOpening(''); }
       return;
     }
-    pending.current = true; setOpening(entry.id); setError('');
     // For uncached projects remain on Home with Opening... until a fully
     // renderable project view is available (or show the error here).
-    try { onOpen(await post<ProjectView>('open', { path: entry.path, compact: true }), openSettings); }
+    try {
+      const [view] = await Promise.all([
+        post<ProjectView>('open', { path: entry.path, compact: true }),
+        preloadPaperListing(entry.path, entry.id),
+      ]);
+      await onOpen(view, openSettings);
+    }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
@@ -7171,7 +7285,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
   </div>;
 }
 
-function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (view: ProjectView) => void; guest?: boolean; active?: boolean }) {
+function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (view: ProjectView) => Promise<void> | void; guest?: boolean; active?: boolean }) {
   const [projects, setProjects] = useState<SampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -7201,7 +7315,8 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
       // This visitor's copy remains in their private temporary workspace.
       window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
-      onOpen(copy);
+      await preloadPaperListing(copy.path, copy.project.id);
+      await onOpen(copy);
     }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
@@ -7222,7 +7337,7 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
   </div>;
 }
 
-function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void; getCachedView: (path: string) => ProjectView | undefined; onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
+function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void; getCachedView: (path: string) => ProjectView | undefined; onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
   const savedTooltip = guest
     ? 'Your temporary private work in this browser (expires after inactivity or server restart).'
     : 'Show My Work. Click again to collapse or expand all.';
@@ -7329,12 +7444,13 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
 
 function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheScope }: {
   initialPath: string;
-  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => void;
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   cacheScope: string;
 }) {
   const cloud = useCloudIdentity();
+  const homePillsRef = useEqualHeaderPillInsets();
   const [sharedInvite, setSharedInvite] = useState(getPendingSharedInvite);
   useEffect(() => {
     if (!sharedInvite || !cloud?.enabled || !cloud.authenticated || cloud.user?.role === 'guest'
@@ -7443,7 +7559,7 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheSco
       <div className="home-topline">
         <div className="home-left-actions"/>
         <div className="home-right-actions"><div className="home-auth-pills"><MockAuthSelector/>
-          <div className="home-account-grid">
+          <div ref={homePillsRef} className="home-account-grid">
             <div className="sigma-header-model-column">
               <div className="sigma-header-secondary-row">
                 {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
@@ -7456,8 +7572,10 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheSco
                 </div>
               </div>
             </div>
-            <GoogleIdentityPill inviteInHeader/>
-            {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+            <div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column">
+              <GoogleIdentityPill inviteInHeader/>
+              {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+            </div>
           </div>
           <HomeInvitationAction/>
         </div></div>
@@ -7635,29 +7753,29 @@ type AgenticEvent = { type: string; sequence: number; run_id: string; kind?: 'ex
 const activityLabels = { explore: 'Exploring a candidate', challenge: 'Independent challenge', revise: 'Targeted revision' } as const;
 async function readAgenticStream(response: Response, onEvent: (event: AgenticEvent) => void): Promise<AgenticEvent> {
   if (!response.ok) { let detail = `HTTP ${response.status}`; try { const body = await response.json(); detail = body.error ?? body.detail ?? detail; } catch {} throw new Error(String(detail)); }
-  if (!response.body) throw new Error('The server returned no progress stream. Nothing was saved.');
+  if (!response.body) throw new Error('The server returned no progress stream. No proposal was added.');
   const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let sequence = 0; let runId = ''; let terminal: AgenticEvent | null = null;
   const consume = (chunk: string) => {
     buffer += chunk; const records = buffer.split(/\r?\n\r?\n/); buffer = records.pop() ?? '';
     for (const record of records) {
       const data = record.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
       if (!data) continue;
-      let event: AgenticEvent; try { event = JSON.parse(data) as AgenticEvent; } catch { throw new Error('The server sent malformed progress data. You can retry; nothing was saved.'); }
-      if (!['run.started', 'activity.started', 'activity.completed', 'decision', 'run.completed', 'run.stopped', 'run.failed'].includes(event?.type)) throw new Error('The server sent an unknown progress event. You can retry; nothing was saved.');
-      if (!event || typeof event.type !== 'string' || !Number.isInteger(event.sequence) || event.sequence !== sequence + 1 || typeof event.run_id !== 'string' || !/^[0-9a-f]{32}$/.test(event.run_id)) throw new Error('The progress stream was incomplete or out of order. You can retry; nothing was saved.');
-      if (runId && event.run_id !== runId) throw new Error('The progress stream changed run identity. You can retry; nothing was saved.');
-      if (terminal) throw new Error('The server sent progress after its terminal event. You can retry; nothing was saved.');
+      let event: AgenticEvent; try { event = JSON.parse(data) as AgenticEvent; } catch { throw new Error('The server sent malformed progress data. You can retry; no proposal was added.'); }
+      if (!['run.started', 'activity.started', 'activity.completed', 'decision', 'run.completed', 'run.stopped', 'run.failed'].includes(event?.type)) throw new Error('The server sent an unknown progress event. You can retry; no proposal was added.');
+      if (!event || typeof event.type !== 'string' || !Number.isInteger(event.sequence) || event.sequence !== sequence + 1 || typeof event.run_id !== 'string' || !/^[0-9a-f]{32}$/.test(event.run_id)) throw new Error('The progress stream was incomplete or out of order. You can retry; no proposal was added.');
+      if (runId && event.run_id !== runId) throw new Error('The progress stream changed run identity. You can retry; no proposal was added.');
+      if (terminal) throw new Error('The server sent progress after its terminal event. You can retry; no proposal was added.');
       sequence = event.sequence; runId = event.run_id;
       const activityKind = event.kind === 'explore' || event.kind === 'challenge' || event.kind === 'revise';
-      if (event.type === 'run.started' && (!Number.isInteger(event.max_calls) || (event.max_calls ?? 0) < 2 || (event.max_calls ?? 0) > 120)) throw new Error('The server sent an invalid run limit. You can retry; nothing was saved.');
-      if (event.type.startsWith('activity.') && (!activityKind || !Number.isInteger(event.attempt) || (event.attempt ?? 0) < 1 || (event.attempt ?? 0) > 15)) throw new Error('The server sent an invalid activity event. You can retry; nothing was saved.');
-      if (event.type === 'activity.completed' && typeof event.summary !== 'string') throw new Error('The server sent an incomplete activity result. You can retry; nothing was saved.');
-      if (event.type === 'activity.completed' && event.kind === 'challenge' && (!event.assessment || !Array.isArray(event.objections) || typeof event.missing_obligations !== 'string' || typeof event.mechanism_comparison !== 'string')) throw new Error('The server sent an incomplete reviewer summary. You can retry; nothing was saved.');
-      if (event.type === 'decision' && (!['revise', 'retry', 'present', 'stop'].includes(event.outcome ?? '') || typeof event.summary !== 'string')) throw new Error('The server sent an invalid coordinator decision. You can retry; nothing was saved.');
-      if (['run.stopped', 'run.failed'].includes(event.type) && typeof event.summary !== 'string') throw new Error('The server sent an incomplete terminal result. You can retry; nothing was saved.');
+      if (event.type === 'run.started' && (!Number.isInteger(event.max_calls) || (event.max_calls ?? 0) < 2 || (event.max_calls ?? 0) > 120)) throw new Error('The server sent an invalid run limit. You can retry; no proposal was added.');
+      if (event.type.startsWith('activity.') && (!activityKind || !Number.isInteger(event.attempt) || (event.attempt ?? 0) < 1 || (event.attempt ?? 0) > 15)) throw new Error('The server sent an invalid activity event. You can retry; no proposal was added.');
+      if (event.type === 'activity.completed' && typeof event.summary !== 'string') throw new Error('The server sent an incomplete activity result. You can retry; no proposal was added.');
+      if (event.type === 'activity.completed' && event.kind === 'challenge' && (!event.assessment || !Array.isArray(event.objections) || typeof event.missing_obligations !== 'string' || typeof event.mechanism_comparison !== 'string')) throw new Error('The server sent an incomplete reviewer summary. You can retry; no proposal was added.');
+      if (event.type === 'decision' && (!['revise', 'retry', 'present', 'stop'].includes(event.outcome ?? '') || typeof event.summary !== 'string')) throw new Error('The server sent an invalid coordinator decision. You can retry; no proposal was added.');
+      if (['run.stopped', 'run.failed'].includes(event.type) && typeof event.summary !== 'string') throw new Error('The server sent an incomplete terminal result. You can retry; no proposal was added.');
       if (event.type === 'run.completed') {
         const fields = ['title', 'summary', 'approach', 'first_tests', 'assumptions', 'failure_modes'];
-        if (!event.draft || typeof event.receipt !== 'string' || !event.receipt || !event.provenance || typeof event.provenance.provider !== 'string' || typeof event.provenance.model !== 'string' || fields.some(key => typeof event.draft?.[key as keyof ProposalResult['draft']] !== 'string')) throw new Error('The completed stream did not include a complete draft and receipt. You can retry; nothing was saved.');
+        if (!event.draft || typeof event.receipt !== 'string' || !event.receipt || !event.provenance || typeof event.provenance.provider !== 'string' || typeof event.provenance.model !== 'string' || fields.some(key => typeof event.draft?.[key as keyof ProposalResult['draft']] !== 'string')) throw new Error('The completed stream did not include a complete draft and receipt. You can retry; no proposal was added.');
       }
       if (['run.completed', 'run.stopped', 'run.failed'].includes(event.type)) terminal = event;
       onEvent(event);
@@ -7666,7 +7784,7 @@ async function readAgenticStream(response: Response, onEvent: (event: AgenticEve
   try { while (true) { const { done, value } = await reader.read(); if (done) break; consume(decoder.decode(value, { stream: true })); } consume(decoder.decode()); }
   catch (error) { await reader.cancel().catch(() => {}); throw error; }
   if (buffer.trim()) consume('\n\n');
-  if (!terminal) throw new Error('The progress stream ended without a final result. You can retry; nothing was saved.');
+  if (!terminal) throw new Error('The progress stream ended without a final result. You can retry; no proposal was added.');
   return terminal;
 }
 function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
@@ -7745,10 +7863,10 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
         const next: ProposalResult = { draft: terminal.draft, receipt: terminal.receipt, provenance: terminal.provenance };
         setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary); setApproach(next.draft.approach); setCurrentActivity('Ready for your review');
         requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
-      } else if (terminal.type === 'run.stopped') { setCurrentActivity('Run stopped'); setError(`${terminal.summary ?? 'No viable candidate was found.'} Nothing was saved. You can retry with different guidance.`); }
-      else { setCurrentActivity('Run failed'); throw new Error(terminal.summary ?? 'The run failed. No strategy was saved.'); }
+      } else if (terminal.type === 'run.stopped') { setCurrentActivity('Run stopped'); setError(`${terminal.summary ?? 'No viable candidate was found.'} No proposal was added. You can retry with different guidance.`); }
+      else { setCurrentActivity('Run failed'); throw new Error(terminal.summary ?? 'The run failed. No strategy was added.'); }
     } catch (error) {
-      if (controller.signal.aborted) { setCurrentActivity('Run cancelled'); setError('Run cancelled. Nothing was saved. If generation had started, its evidence will be retained in project export. You can retry.'); }
+      if (controller.signal.aborted) { setCurrentActivity('Run cancelled'); setError('Run cancelled. No proposal was added. If generation had started, its evidence will be retained in project export. You can retry.'); }
       else { const message = errorMessage(error); setCurrentActivity('Run could not be completed'); setError(message); reportRequestFailure(message); }
     }
     finally { finishProviderRequest(); if (request.current === controller) {
@@ -8387,13 +8505,13 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     ].join('\n')).join('\n\n');
     const prefix = [
       `Fork rationale: derived from strategy “${session.strategy_title}” (ID ${session.strategy_id}) after Research Session ${session.session_number}.`,
-      'Use the saved findings below to revise the approach. Preserve unresolved obligations as open work; treat model notes as unverified.',
+      'Use the findings below to revise the approach. Preserve unresolved obligations as open work; treat model notes as unverified.',
       evidence ? `\nSaved findings and criticism:\n${evidence}` : '',
       '\nParent approach follows:',
     ].filter(Boolean).join('\n');
     const available = Math.max(0, MAX_STRATEGY_APPROACH - prefix.length - 120);
     const clippedParent = parentApproach.slice(0, available);
-    const approach = `${prefix}\n${clippedParent}${parentApproach.length > clippedParent.length ? '\n[Parent approach shortened to fit; see the source session for the complete saved strategy.]' : ''}`.slice(0, MAX_STRATEGY_APPROACH);
+    const approach = `${prefix}\n${clippedParent}${parentApproach.length > clippedParent.length ? '\n[Parent approach shortened to fit; see the source session for the complete strategy.]' : ''}`.slice(0, MAX_STRATEGY_APPROACH);
     setManualDraft({
       title: `${session.strategy_title} (Session ${session.session_number} fork)`.slice(0, 200),
       summary: `Fork of ${session.strategy_title} informed by Session ${session.session_number}`.slice(0, 300),
@@ -8436,7 +8554,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     setOrdering(true); setError('');
     try {
       setView(await post<ProjectView>('strategies/reorder', { path: view!.path, order: active.order, expected_order: project.active_order }));
-      setAnnouncement('Strategy order saved.');
+      setAnnouncement('Strategy order updated.');
     } catch (error) { setError(errorMessage(error)); setAnnouncement('Order save failed. Previous order restored.'); }
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
@@ -8471,7 +8589,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
           <path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/>
         </svg>
       </button>}
-      <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about saved research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
+      <button type="button" className="text-view-link text-view-icon project-qa-button" aria-label="Research Q/A" data-tooltip="Ask about project research" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setQaOpen(true)}>Q/A</button>
       {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Lean proof verification" data-tooltip="Lean proof verification" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setLeanOpen(true)}><img src="/lean-logo.svg" alt="" aria-hidden="true"/></button>}
       <button type="button" className="text-view-link text-view-icon project-download-button" aria-label="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setExportOpen(true)}>
         <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -8499,7 +8617,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
         {projectActionBar}
       </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
-      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its saved settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
+      {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its existing settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>TITLE</span></div>
       <ProjectDescriptionEditor view={view} guest={guest} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined}
@@ -8548,11 +8666,11 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
       <p className="sr-only" role="status">{announcement}</p>
       <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {
         const strategy = next.project.strategies[next.project.strategies.length - 1];
-        setView(next); setEditing(false); exitMode('new-strategy'); setAnnouncement(`Strategy saved: ${strategy.title}`);
+        setView(next); setEditing(false); exitMode('new-strategy'); setAnnouncement(`Strategy added: ${strategy.title}`);
         setFocusStrategy(strategy.id);
       }}/>}
       {generating && <GenerateStrategy path={view.path} projectId={view.project.id} sourceGuard={JSON.stringify({ project_id: project.id, problem: project.problem, strategies: project.strategies.map(item => [item.id, item.title, item.approach, item.removed_at]) })} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
-        const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
+        const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted.');
       }}/>}</div>
       {strategies.length ? <div className="strategies-table">
         <div className="strategy-columns" aria-hidden="true"><span>Strategy</span></div>
@@ -8606,7 +8724,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
       message="With member access and ChatGPT, SIGMA proposes candidate hypotheses and research approaches, challenges them for originality and weaknesses, and presents a draft for your review before saving. You can write and edit strategies manually without AI."
       onClose={() => setGuestStrategyPreview(false)}/>}
     {guestPlayOpen && <GuestFeatureDialog title="Research sessions"
-      message="A session needs at least one enabled strategy, which you can write manually. With member access and ChatGPT, Sessions coordinate Investigator and Skeptic turns across selected strategies, recording findings, objections, evidence and unanswered questions. Saved example sessions can be explored without executing a model."
+      message="A session needs at least one enabled strategy, which you can write manually. With member access and ChatGPT, Sessions coordinate Investigator and Skeptic turns across selected strategies, recording findings, objections, evidence and unanswered questions. Example sessions can be explored without executing a model."
       onClose={() => setGuestPlayOpen(false)}/>}
     <ResearchWorkspace collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.session} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
       if (guest) { setGuestAdvancedOutcome(true); return; }
@@ -8638,7 +8756,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
         <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
           {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research Subject', desired_outcomes: 'Desired Outcomes', paper_requirements: 'Paper Requirements', investigation_type: 'Research type', ai_model: 'AI model', reasoning_effort: 'Thinking level', difficulty: 'Difficulty', show_advanced_outcome_details: 'Advanced Outcome details' })[key]}</dt><dd>Before: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.previous[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.previous[key] as ProjectDifficulty | null) : event.project_change!.previous[key]}<br/>After: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.current[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.current[key] as ProjectDifficulty | null) : event.project_change!.current[key]}</dd></div>)}</dl></details>}
           {event.stage_change && <p>Manually tracked: {stageLabels[event.stage_change.previous]} → {stageLabels[event.stage_change.stage]}</p>}
-          {event.order && <details><summary>Saved order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
+          {event.order && <details><summary>Current order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
           {event.change && <details className="edit-history"><summary>View changes</summary>
             <dl><dt>Name before</dt><dd>{event.change.previous_title}</dd>
               <dt>Name after</dt><dd>{event.change.title}</dd>
@@ -8665,15 +8783,15 @@ function ResearchQABrowserPage({ qaId, path }: { qaId: string; path: string }) {
       fetch(`${url}/markdown?${query}`, { cache: 'no-store', signal: controller.signal }),
       fetch(`${url}?${query}`, { cache: 'no-store', signal: controller.signal }),
     ]).then(async ([markdownResponse, recordResponse]) => {
-      if (!markdownResponse.ok || !recordResponse.ok) throw new Error('This saved Q/A answer is unavailable.');
+      if (!markdownResponse.ok || !recordResponse.ok) throw new Error('This Q/A answer is unavailable.');
       const [document, record] = await Promise.all([markdownResponse.text(), recordResponse.json() as Promise<ResearchQARecord>]);
       setCitationUrls(record.sources.filter(source => source.navigation_available && source.navigation_url).map(source => source.navigation_url!));
       setMarkdown(document);
     }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
     return () => controller.abort();
   }, [qaId, path]);
-  return <main className="workspace-page research-qa-browser-page"><article className="research-qa-browser-card" aria-label="Saved Research Q/A answer">
-    {error ? <p role="alert" className="error">{error}</p> : markdown ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted answer…</p>}><RenderedMarkdown body={markdown} citationProjectPath={path} citationUrls={citationUrls}/></Suspense></div> : <p role="status">Loading saved answer…</p>}
+  return <main className="workspace-page research-qa-browser-page"><article className="research-qa-browser-card" aria-label="Research Q/A answer">
+    {error ? <p role="alert" className="error">{error}</p> : markdown ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted answer…</p>}><RenderedMarkdown body={markdown} citationProjectPath={path} citationUrls={citationUrls}/></Suspense></div> : <p role="status">Loading answer…</p>}
   </article></main>;
 }
 
@@ -8681,6 +8799,8 @@ function App() {
   const cloud = useCloudIdentity();
   const [openedView, setOpenedView] = useState<ProjectView | null>(null);
   const [openedFromCache, setOpenedFromCache] = useState(false);
+  const [artworkDecoded, setArtworkDecoded] = useState(projectArtworkReady);
+  const [artworkError, setArtworkError] = useState('');
   const cacheScope = projectCacheScope(cloud);
   const rememberProject = useCallback((view: ProjectView) => {
     const key = projectViewCacheKey(cacheScope, view.path);
@@ -8697,6 +8817,15 @@ function App() {
     recentProjectViewCache.get(projectViewCacheKey(cacheScope, path)), [cacheScope]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const route = new URL(location, window.location.origin);
+  useEffect(() => {
+    if (route.pathname !== '/project') return;
+    let cancelled = false;
+    void preloadProjectArtwork().then(
+      () => { if (!cancelled) { setArtworkDecoded(true); setArtworkError(''); } },
+      error => { if (!cancelled) setArtworkError(errorMessage(error)); },
+    );
+    return () => { cancelled = true; };
+  }, [route.pathname]);
   const [globalActivity, setGlobalActivity] = useState<'active' | 'queued' | null>(null);
   useEffect(() => {
     // CSS animations begin on element insertion by default, leaving newly
@@ -8814,7 +8943,9 @@ function App() {
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={(view, openSettings, fromCache) => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache) => {
+      await preloadProjectArtwork();
+      setArtworkDecoded(true);
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
       setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path);
       navigate(projectUrl(view.path) + (openSettings ? '&settings=collaborators' : ''));
@@ -8828,11 +8959,18 @@ function App() {
         if (run.id) target.searchParams.set('reveal_paper_run', run.id);
         else target.searchParams.set('reveal_paper', 'draft');
       } else if (run?.kind === 'answer') target.searchParams.set('reveal_qa', '1');
-      const cached = getCachedProject(entry.path);
-      setOpenedFromCache(!!cached); setOpenedView(cached ?? null); setLastPath(entry.path);
-      window.localStorage.setItem('sigma.currentProject', entry.path);
-      navigate(target.pathname + target.search);
-    }}/> : url.pathname === '/project' ? <ResearchDisplayBoundary key={location} label="Project workspace"><ProjectScreen
+      // Activity jumps are navigation-only; an already decoded image resolves
+      // immediately. If this is the first visit, retain Home until it is ready.
+      void preloadProjectArtwork().then(() => {
+        setArtworkDecoded(true);
+        const cached = getCachedProject(entry.path);
+        setOpenedFromCache(!!cached); setOpenedView(cached ?? null); setLastPath(entry.path);
+        window.localStorage.setItem('sigma.currentProject', entry.path);
+        navigate(target.pathname + target.search);
+      }).catch(error => reportRequestFailure(errorMessage(error)));
+    }}/> : url.pathname === '/project' && !artworkDecoded
+      ? <div className="project-artwork-loading" role="status">{artworkError ? artworkError : <>Opening project… <ProjectOpeningHourglass/></>}</div>
+      : url.pathname === '/project' ? <ResearchDisplayBoundary key={location} label="Project workspace"><ProjectScreen
       initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined}
       revalidateCached={openedFromCache && openedView?.path === url.searchParams.get('path')}
       onViewChange={rememberProject} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/></ResearchDisplayBoundary>
@@ -8890,15 +9028,15 @@ function CloudDemoExperience({ deniedIdentityAvailable, authenticated, user }: {
   const project = audit?.project;
   return <main className="cloud-demo-page">
     <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedIdentityAvailable ? '/?access=denied' : '/'}>{deniedIdentityAvailable ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Sign in with Google</a>}</nav></header>
-    <section className="cloud-demo-intro"><p className="cloud-auth-kicker">Public read-only preview</p><h1>Explore a SIGMA research project</h1><p>Inspect a curated saved project, its strategies, research sessions, outcomes, computational evidence and report exports. This shared Demo does not create a workspace or run agents.</p></section>
+    <section className="cloud-demo-intro"><p className="cloud-auth-kicker">Public read-only preview</p><h1>Explore a SIGMA research project</h1><p>Inspect a curated project, its strategies, research sessions, outcomes, computational evidence and report exports. This shared Demo does not create a workspace or run agents.</p></section>
     {error && <section className="cloud-demo-state" role="alert"><h2>Demo unavailable</h2><p>{error}</p></section>}
-    {!audit && !error && <p className="cloud-demo-state" role="status">Loading saved Demo data…</p>}
+    {!audit && !error && <p className="cloud-demo-state" role="status">Loading Demo data…</p>}
     {audit && project && <>
       <section className="cloud-demo-project"><div><p className="cloud-auth-kicker">{researchTypeLabel(project.investigation_type)} · {difficultyLabel(project.difficulty)}</p><h2>{project.title}</h2><div className="cloud-demo-markdown"><RenderedMarkdown body={project.problem}/></div></div><button className="cloud-demo-export" onClick={() => setExportOpen(true)}>Export project</button></section>
       <section className="cloud-demo-section"><h2>Strategies <span>{project.strategies.length}</span></h2><div className="cloud-demo-grid">{project.strategies.map(strategy => <details className="cloud-demo-card" key={strategy.id} open><summary><span>{strategy.title}</span><small>{strategy.stage} · {strategy.author_kind}</small></summary><p>{strategy.summary}</p><div className="cloud-demo-markdown"><RenderedMarkdown body={strategy.approach}/></div></details>)}</div></section>
       <section className="cloud-demo-section"><h2>Research sessions <span>{audit.research_sessions.length}</span></h2>{audit.research_sessions.map(session => <details className="cloud-demo-card cloud-demo-session" key={session.id}><summary><span>Session {session.session_number}: {session.strategy_title}</span><small>{session.status} · {session.started_at?.slice(0, 10)}</small></summary><div className="cloud-demo-columns"><div><h3>Outcome</h3><p>{session.outcome?.solution_review?.claim}</p><p>{session.outcome?.solution_review?.argument_summary}</p><h3>Strategy assessment</h3>{session.strategy_assessments?.map((item: any) => <p key={item.strategy_id}>{item.assessment}: {item.rationale}</p>)}</div><div><h3>Saved research artifacts</h3>{session.artifacts?.map((artifact: any) => <article className="cloud-demo-evidence" key={artifact.id}><strong>{artifact.claim}</strong><p>{artifact.method}</p><small>Evidence status: {artifact.evidence_status}</small><p>{artifact.skeptic_response}</p>{artifact.computational_evidence && <details><summary>Inspect saved computation</summary><p>{artifact.computational_evidence.interpretation}</p><pre>{artifact.computational_evidence.source}{'\n'}{artifact.computational_evidence.stdout}</pre>{artifact.computational_evidence.files?.map((file: any) => <details key={file.filename}><summary>Captured artifact: {file.filename}</summary><pre>{file.content}</pre><small>SHA-256: {file.sha256}</small></details>)}</details>}</article>)}</div></div></details>)}</section>
-      <section className="cloud-demo-section"><h2>Saved analysis <span>{audit.agentic_runs.length}</span></h2>{audit.agentic_runs.map(run => <details className="cloud-demo-card" key={run.run_id}><summary><span>Research run · {run.status}</span><small>{run.started_at?.slice(0, 10)}</small></summary><p>{run.timeline?.map((entry: any) => entry.message).join(' ')}</p>{run.steps?.map((step: any, index: number) => <article className="cloud-demo-evidence" key={index}><strong>{step.output?.title}</strong><p>{step.output?.approach}</p><small>{step.output?.evidence_boundary}</small></article>)}</details>)}</section>
-      <footer className="cloud-demo-footer"><p>Read-only curated data · exports are generated from this saved snapshot</p><button className="cloud-demo-export" onClick={() => setExportOpen(true)}>Export Project Audit or Research Report</button></footer>
+      <section className="cloud-demo-section"><h2>Research analysis <span>{audit.agentic_runs.length}</span></h2>{audit.agentic_runs.map(run => <details className="cloud-demo-card" key={run.run_id}><summary><span>Research run · {run.status}</span><small>{run.started_at?.slice(0, 10)}</small></summary><p>{run.timeline?.map((entry: any) => entry.message).join(' ')}</p>{run.steps?.map((step: any, index: number) => <article className="cloud-demo-evidence" key={index}><strong>{step.output?.title}</strong><p>{step.output?.approach}</p><small>{step.output?.evidence_boundary}</small></article>)}</details>)}</section>
+      <footer className="cloud-demo-footer"><p>Read-only curated data · exports are generated from this project snapshot</p><button className="cloud-demo-export" onClick={() => setExportOpen(true)}>Export Project Audit or Research Report</button></footer>
       {exportOpen && <ProjectExportDialog demo path="" title={project.title} onCancel={() => setExportOpen(false)}/>}
     </>}
   </main>;
@@ -9417,7 +9555,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, invitationRe
       const draft = drafts[`${grant.kind}:${grant.value}`];
       return { kind: grant.kind as 'email' | 'domain', value: grant.value, role: draft.role as 'member' | 'admin', allowance_usd: draft.role === 'admin' ? null : draft.allowance.trim() ? Number(draft.allowance) : null };
     });
-    try { await onSave(updates); setMessage(`Saved ${updates.length} authorization ${updates.length === 1 ? 'update' : 'updates'}.`); }
+    try { await onSave(updates); setMessage(`Applied ${updates.length} authorization ${updates.length === 1 ? 'update' : 'updates'}.`); }
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Updates could not be saved.'); }
   }
   async function revoke(grant: CloudGrant) {
@@ -9860,7 +9998,7 @@ function InvitationWelcomeDialog({ audience, allowance, allowanceUsed, allowance
     <h2 id="invitation-welcome-heading">{heading}</h2>
     {allowanceMessage && <p className="invitation-welcome-allowance">{allowanceMessage}</p>}
     {allowanceLoading && <p className="invitation-welcome-allowance" role="status">Checking your sponsored allowance…</p>}
-    {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore samples, create private temporary projects, edit strategies and inspect saved research without signing in. Your drafts last only for this browser session and can be exported. Running AI research requires authorized membership and an available provider.</p>}
+    {audience === 'guest' && <p className="invitation-welcome-intro">Welcome to SIGMA. Explore samples, create private temporary projects, edit strategies and inspect project research without signing in. Your drafts last only for this browser session and can be exported. Running AI research requires authorized membership and an available provider.</p>}
     {audience === 'nonmember' && <p className="invitation-welcome-intro">Your Google account does not yet have SIGMA membership. Request an invitation to join the research workspace, or explore as a guest while an administrator reviews your request.</p>}
     {audience === 'returning' && <p className="invitation-welcome-intro">Your invitation request is in! We're looking forward to welcoming you as a member. In the meantime, feel free to explore as a guest.</p>}
     {audience === 'requested' && <p className="invitation-welcome-intro">We've received your request and will get back to you soon. In the meantime, feel free to explore SIGMA as a guest.</p>}
@@ -9903,7 +10041,7 @@ function PrivacyNoticeContent() {
     <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
     <h2>How SIGMA uses and shares information</h2>
     <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>
-    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are saved in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
+    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are retained in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
     <p>For an invitation request, SIGMA's configured mail service receives the verified email and request time so it can notify the invitation administrator. Product feedback is not included in invitation email. SIGMA does not send feedback messages to AI providers.</p>
     <h2>Where information is stored and how long it remains</h2>
     <p>In hosted SIGMA, authentication, access, invitation, and feedback records are kept in server-side SQLite databases. Each signed-in account has a separate server-side workspace for its projects and research files. Sponsored usage records are kept in a server-side accounting ledger. The service stores these in its configured persistent storage; the exact physical hosting location and backup schedule are set by the operator.</p>
@@ -9950,7 +10088,7 @@ function PrivacyNoticePage() {
     <p>Your account workspace can contain project titles and questions, project settings, strategies, research prompts and results, evidence, uploaded or imported project files, code and execution output, analyses, reports, and generated papers. SIGMA also stores research-session identifiers and sponsored-service accounting records, including reserved and estimated usage, call status, and token counts when the provider returns them. Usage estimates are used to enforce SIGMA spending limits and may differ from a provider's final bill.</p>
     <h2>How SIGMA uses and shares information</h2>
     <p>SIGMA uses your Google account information to sign you in, apply access rules, and keep your projects in your account workspace. SIGMA administrators can review invitation requests and product feedback, including any optional contact email.</p>
-    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are saved in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
+    <p>When you run an AI research feature, SIGMA sends the prompt and the project context required or selected for that action to the configured AI provider. In hosted sponsored mode, requests are sent to OpenAI using SIGMA's server-side service credential. The provider returns a response to SIGMA, and research results are retained in the project. Do not include information in a research request that you do not want sent to the selected provider.</p>
     <p>For an invitation request, SIGMA's configured mail service receives the verified email and request time so it can notify the invitation administrator. Product feedback is not included in invitation email. SIGMA does not send feedback messages to AI providers.</p>
     <h2>Where information is stored and how long it remains</h2>
     <p>In hosted SIGMA, authentication, access, invitation, and feedback records are kept in server-side SQLite databases. Each signed-in account has a separate server-side workspace for its projects and research files. Sponsored usage records are kept in a server-side accounting ledger. The service stores these in its configured persistent storage; the exact physical hosting location and backup schedule are set by the operator.</p>

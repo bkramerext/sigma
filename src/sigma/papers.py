@@ -432,7 +432,7 @@ def _require_browser_presence(path: str, required: bool) -> None:
     ):
         raise PaperBrowserPaused(
             "Paper generation paused because the browser disconnected. "
-            "Saved work can be continued after reopening the project."
+            "Work can be continued after reopening the project."
         )
 
 
@@ -2792,7 +2792,7 @@ def _evidence_based_long_plan(
         sections=sections,
         limitations=[
             (
-                "The saved record may contain unverified interpretations and "
+                "The research record may contain unverified interpretations and "
                 "unresolved evidence conflicts; these require independent assessment."
             )
         ],
@@ -3344,7 +3344,7 @@ def needs_preflight_on_open(path: str) -> bool:
 
 _PAPER_PROGRESS_RECOVERY_ISSUE = (
     "SIGMA recovered inconsistent paper-generation progress counters by clearing only "
-    "the progress display; saved sections and provider-call accounting were preserved."
+    "the progress display; completed sections and provider-call accounting were preserved."
 )
 
 
@@ -3556,7 +3556,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         or len(generation_issues) > 20
         or any(not isinstance(issue, str) or len(issue) > 300 for issue in generation_issues)
     ):
-        raise ProjectError("Saved paper-generation issues are invalid")
+        raise ProjectError("Paper-generation issues are invalid")
     if set(value) - allowed_keys:
         raise ProjectError("Long-paper checkpoint contains unsupported fields")
     if "rewind_validation_done" in value and (
@@ -3572,7 +3572,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         not isinstance(value["validated_warnings"], list)
         or any(not isinstance(item, str) for item in value["validated_warnings"])
     ):
-        raise ProjectError("Saved paper validation warnings are invalid")
+        raise ProjectError("Paper validation warnings are invalid")
     proofread_ready = value.get("proofread_ready")
     if proofread_ready is not None and (
         not isinstance(proofread_ready, dict)
@@ -3630,7 +3630,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         or not isinstance(pdf_checkpoint["layout_repairs"], list)
         or not isinstance(pdf_checkpoint["pdf_check_passes"], list)
     ):
-        raise ProjectError("Saved PDF pass checkpoint is invalid")
+        raise ProjectError("PDF pass checkpoint is invalid")
     if pdf_checkpoint is not None:
         PaperDraft.model_validate(pdf_checkpoint["draft"])
     if "published_paper_id" in value and not re.fullmatch(
@@ -3693,11 +3693,11 @@ def _load_work(path: str) -> dict[str, Any] | None:
                 for item in source_guides
             )
         ):
-            raise ProjectError("Saved paper-writing guidance is invalid")
+            raise ProjectError("Paper-writing guidance is invalid")
     if "writing_source_selection" in value and not isinstance(
         value["writing_source_selection"], str
     ):
-        raise ProjectError("Saved paper-writing selection state is invalid")
+        raise ProjectError("Paper-writing selection state is invalid")
     if "publication_compilation" in value:
         compiled = value["publication_compilation"]
         if (
@@ -4177,10 +4177,10 @@ def _load_pdf_pass(path: str, checkpoint: Mapping[str, Any]) -> bytes:
         or not file.is_file()
         or file.stat().st_size != checkpoint["pdf_size_bytes"]
     ):
-        raise ProjectError("Saved PDF pass is missing or unsafe; authored work was preserved")
+        raise ProjectError("PDF pass is missing or unsafe; authored work was preserved")
     pdf = file.read_bytes()
     if not pdf.startswith(b"%PDF-") or hashlib.sha256(pdf).hexdigest() != checkpoint["pdf_sha256"]:
-        raise ProjectError("Saved PDF pass checksum mismatch; authored work was preserved")
+        raise ProjectError("PDF pass checksum mismatch; authored work was preserved")
     return pdf
 
 
@@ -4672,7 +4672,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
     detail = state.get("detail")
     if status == "cancelled" and isinstance(detail, str) and detail.startswith("Retrying "):
         detail = (
-            "Paper generation stopped. Saved sections and provider-call accounting remain "
+            "Paper generation stopped. Completed sections and provider-call accounting remain "
             "available; Resume uses a labeled gap for any interrupted section."
         )
     return {
@@ -4691,7 +4691,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
         **(
             {
                 "detail": (
-                    "The backend restarted during paper generation. Saved work is intact; "
+                    "The backend restarted during paper generation. Work is intact; "
                     "use Resume to recover from the latest checkpoint. An in-flight provider "
                     "call might have been billed and will not be blindly repeated."
                 )
@@ -4774,7 +4774,7 @@ def finish_progress(
         frozen["detail"] = reason[:160]
     elif status == "cancelled":
         frozen["detail"] = (
-            "Paper generation stopped. Saved sections and provider-call accounting remain "
+            "Paper generation stopped. Completed sections and provider-call accounting remain "
             "available; Resume uses a labeled gap for any interrupted section."
         )
     if work is not None:
@@ -4839,13 +4839,13 @@ def _resume_provider_choice(
     if checkpoint.get("binding_fingerprint") != binding_fingerprint:
         raise ProjectError(
             "Paper Resume requires explicit approval to switch the AI account or "
-            "billing connection. Saved work is intact; confirm the provider change "
+            "billing connection. Work is intact; confirm the provider change "
             "before authorizing further paid calls."
         )
     if not isinstance(checkpoint.get("model"), str) or not isinstance(
         checkpoint.get("reasoning_effort"), str
     ):
-        raise ProjectError("Saved paper model or thinking configuration is invalid")
+        raise ProjectError("Paper model or thinking configuration is invalid")
     return current_model, current_effort
 
 
@@ -5294,7 +5294,7 @@ def _validate(draft: PaperDraft, package: dict[str, Any]) -> list[str]:
     source_map = {item["id"]: item["data"] for item in package["sources"]}
     source_text = json.dumps(package["sources"], ensure_ascii=False).casefold()
     if len(claim_ids) != len(draft.claims):
-        raise ProjectError("Paper draft repeats a claim identifier; nothing was saved")
+        raise ProjectError("Paper draft repeats a claim identifier; no draft was generated")
     for claim in draft.claims:
         if len(set(claim.evidence_refs)) != len(claim.evidence_refs):
             raise ProjectError("Paper draft repeats an evidence reference")
@@ -5499,7 +5499,7 @@ def _research_completion_limitations(package: dict[str, Any]) -> list[str]:
         )
         identifier = str(session.get("id") or source.get("id") or "unknown")
         notes.append(
-            f"Saved research session {identifier} ended with an incomplete review; "
+            f"Research session {identifier} ended with an incomplete review; "
             f"{location} was not successfully completed. Earlier findings remain "
             "available, but this process limitation prevents claiming that the "
             "planned adversarial review was fully performed."
@@ -5525,7 +5525,7 @@ def _annotate_research_completion(draft: PaperDraft, package: dict[str, Any]) ->
                 [
                     *draft.validation_warnings,
                     (
-                        "At least one saved research session ended without its planned final "
+                        "At least one research session ended without its planned final "
                         "review; inspect the complete frozen session record."
                     ),
                 ]
@@ -6003,7 +6003,7 @@ def _source_reference_records(package: Mapping[str, Any]) -> list[dict[str, str]
         elif kind == "agentic_step":
             label = f"Agentic run step {index}"
         else:
-            label = f"Saved research record {index}"
+            label = f"Research record {index}"
         records.append({"source_ref": source["id"], "label": label})
     return records
 
@@ -7330,7 +7330,7 @@ async def _provider(
                     on_output_delta=_paper_output_observer.get(),
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
-                        "Completed work is saved; transient errors may be retried up to three attempts."
+                        "Completed work is preserved; transient errors may be retried up to three attempts."
                     ),
                 )
             else:
@@ -7378,7 +7378,7 @@ async def _provider(
         ) from exc
     except httpx.HTTPError as exc:
         raise PaperTransientFailure(
-            "The paper provider connection was interrupted; saved work is intact."
+            "The paper provider connection was interrupted; work is intact."
         ) from exc
     except (ValueError, KeyError, TypeError, ValidationError) as exc:
         # A malformed structured response is an authoring failure, not a
@@ -7557,7 +7557,7 @@ async def _provider_structured(
                     ),
                     incomplete_message=(
                         "Paper stream ended before a valid response.completed. "
-                        "Completed work is saved; transient errors may be retried up to three attempts."
+                        "Completed work is preserved; transient errors may be retried up to three attempts."
                     ),
                 )
             else:
@@ -7672,7 +7672,7 @@ async def _provider_structured(
                     "check saved answers before explicitly retrying."
                 ) from exc
             raise PaperTransientFailure(
-                "Temporary paper-stage provider failure; completed sections remain saved."
+                "Temporary paper-stage provider failure; completed sections remain available."
             ) from exc
         raise
     except (httpx.ConnectTimeout, httpx.ConnectError) as exc:
@@ -7682,11 +7682,11 @@ async def _provider_structured(
         ) from exc
     except (TimeoutError, httpx.TimeoutException) as exc:
         raise PaperTransientFailure(
-            "Paper stage timed out; completed sections remain saved."
+            "Paper stage timed out; completed sections remain available."
         ) from exc
     except httpx.HTTPError as exc:
         raise PaperTransientFailure(
-            "Paper-stage connection interrupted; completed sections remain saved."
+            "Paper-stage connection interrupted; completed sections remain available."
         ) from exc
     except (ValueError, KeyError, TypeError, ValidationError) as exc:
         raise ProjectError(
@@ -8552,7 +8552,7 @@ Return the complete plan JSON matching the schema."""
             # completed authored sections protected against incompatible plans.
             if state.get("section_drafts"):
                 raise ProjectError(
-                    "Saved paper sections refer to an invalid outline; restart explicitly "
+                    "Paper sections refer to an invalid outline; restart explicitly "
                     "to protect completed paper work."
                 ) from None
             state.pop("plan", None)
@@ -8633,11 +8633,7 @@ Return the complete plan JSON matching the schema."""
                 None,
                 None,
                 "milestone",
-                detail=(
-                    "Saved locally recovered outline"
-                    if used_fallback
-                    else "Saved AI-generated outline"
-                ),
+                detail=("Recovered outline" if used_fallback else "AI-generated outline"),
             )
 
     # The validated outline is durably checkpointed above. The large input
@@ -8747,7 +8743,7 @@ or document markup."""
                 raise ProjectError(
                     f"Paper section {section_number} ({section.heading}) is an unfinished "
                     "editorial placeholder from an older attempt, not authored research. "
-                    "Saved work is intact; explicitly review recovery before making new paid calls."
+                    "Work is intact; explicitly review recovery before making new paid calls."
                 )
             section_draft = sanitize_section_tables(section, section_draft)
             return PaperSection(
@@ -8845,7 +8841,7 @@ or document markup."""
                     state,
                     f"Paper section {section_number} ({section.heading}) entered a JSON "
                     "whitespace-output stall. The incomplete attempt was stopped; "
-                    "completed sections remain saved. No automatic replay is permitted.",
+                    "completed sections remain available. No automatic replay is permitted.",
                 )
                 save_state(state)
                 raise
@@ -8857,7 +8853,7 @@ or document markup."""
             _record_paper_generation_issue(
                 state,
                 f"Paper section {section_number} ({section.heading}) was not authored "
-                f"after {type(exc).__name__}; completed sections remain saved.",
+                f"after {type(exc).__name__}; completed sections remain available.",
             )
             save_state(state)
             raise ProjectError(
@@ -9135,7 +9131,7 @@ def _tex_chunks(tex: str) -> list[tuple[int, int]]:
     """Split at paragraph boundaries while keeping every byte and visual block."""
     if len(tex.encode("utf-8")) > MAX_PROOFREAD_TEX_BYTES:
         raise ProjectError(
-            "The authored TeX exceeds the bounded proofreading size; the draft is saved."
+            "The authored TeX exceeds the bounded proofreading size; the draft is preserved."
         )
     separators = list(re.finditer(r"\n{2,}", tex))
     units: list[tuple[int, int]] = []
@@ -9175,7 +9171,7 @@ def _tex_chunks(tex: str) -> list[tuple[int, int]]:
                         limit = newline + 1
                 if not fits(position, limit) or limit == position:
                     raise ProjectError(
-                        "A single TeX line is too long to proofread safely; the draft is saved."
+                        "A single TeX line is too long to proofread safely; the draft is preserved."
                     )
                 chunks.append((position, limit))
                 position = limit
@@ -9201,7 +9197,7 @@ def _tex_chunks(tex: str) -> list[tuple[int, int]]:
         or any(left[1] != right[0] for left, right in pairwise(chunks))
     ):
         raise ProjectError(
-            "TeX proofreading could not partition the complete draft safely; the draft is saved."
+            "TeX proofreading could not partition the complete draft safely; the draft is preserved."
         )
     return chunks
 
@@ -9815,7 +9811,7 @@ async def _proofread_tex_single_pass(
         _save_work(project_path_value, state)
     elif not isinstance(checkpoint, dict):
         raise ProjectError(
-            "The saved TeX proofreading checkpoint is invalid; authored work is preserved."
+            "The TeX proofreading checkpoint is invalid; authored work is preserved."
         )
     initial = checkpoint.get("initial_tex")
     if (
@@ -9834,16 +9830,14 @@ async def _proofread_tex_single_pass(
         or not isinstance(corrected, list)
         or not isinstance(attempts, list)
     ):
-        raise ProjectError(
-            "The saved TeX proofreading chunks are invalid; authored work is preserved."
-        )
+        raise ProjectError("The TeX proofreading chunks are invalid; authored work is preserved.")
     if (
         len(bounds) != len(corrected)
         or len(bounds) != len(attempts)
         or len(bounds) > MAX_PROOFREAD_CALLS
     ):
         raise ProjectError(
-            "The saved TeX proofreading chunk count is invalid; authored work is preserved."
+            "The TeX proofreading chunk count is invalid; authored work is preserved."
         )
     elapsed_before = int(checkpoint.get("elapsed_seconds", 0))
     elapsed_started = monotonic()
@@ -9865,9 +9859,7 @@ async def _proofread_tex_single_pass(
             None,
             hashlib.sha256(final_tex.encode()).hexdigest(),
         ):
-            raise ProjectError(
-                "The saved corrected TeX checksum is invalid; the draft is preserved."
-            )
+            raise ProjectError("The corrected TeX checksum is invalid; the draft is preserved.")
         return final_tex, checkpoint
     pending_calls = sum(attempt == "pending" for attempt in attempts)
     if (
@@ -9877,7 +9869,7 @@ async def _proofread_tex_single_pass(
         > MAX_PROOFREAD_CALLS
     ):
         raise ProjectError(
-            "The bounded proofreading call limit is exhausted; the authored draft remains saved."
+            "The bounded proofreading call limit is exhausted; the authored draft remains available."
         )
 
     # An interruption after dispatch is ambiguous and must not replay a paid call.
@@ -10699,7 +10691,7 @@ async def _generate_impl(
                         type(exc).__name__,
                     )
                     score_failure_detail = (
-                        "PDF saved; scoring did not finish. Use Score paper to retry."
+                        "PDF generated; scoring did not finish. Use Score paper to retry."
                     )
                     await report("score_failed", None, None, "active", detail=score_failure_detail)
             await report("finishing", None, None, detail=score_failure_detail)
@@ -10960,7 +10952,7 @@ async def _generate_impl(
                 and checkpoint.get("one_shot_draft") is None
             ):
                 raise ProjectError(
-                    "The previous paper-writing request did not produce a saved draft. "
+                    "The previous paper-writing request did not produce a draft. "
                     "Start over explicitly before making another AI request; "
                     "the original research and provider-call history are preserved."
                 )
@@ -11638,7 +11630,7 @@ async def _generate_impl(
                         )
                     else:
                         raise ProjectError(
-                            "PDF compilation failed. The paper draft is saved; "
+                            "PDF compilation failed. The paper draft is preserved; "
                             "use Resume to retry without rewriting it."
                         ) from compile_error
                     pass_diagnostics = []
@@ -11653,7 +11645,7 @@ async def _generate_impl(
                         )
                     except RuntimeError as fallback_error:
                         raise ProjectError(
-                            "The safe visual fallback could not compile; the authored TeX remains saved."
+                            "The safe visual fallback could not compile; the authored TeX remains available."
                         ) from fallback_error
                 compile_diagnostics = list(pass_diagnostics)
                 await report(
@@ -11666,7 +11658,7 @@ async def _generate_impl(
                 )
                 if not pdf.startswith(b"%PDF-"):
                     raise ProjectError(
-                        "The compiled PDF failed its output validity check; the authored paper remains saved."
+                        "The compiled PDF failed its output validity check; the authored paper remains available."
                     )
                 page_count, pdf_warnings = await asyncio.to_thread(
                     _pdf_text_bounds_diagnostics, pdf
@@ -11846,7 +11838,7 @@ async def _generate_impl(
                 # Keep the already compiled paper rather than discard the
                 # research because its optional diagnostic appendix failed.
                 warnings.append(
-                    "SIGMA could not compile the optional Issues and Bugs section; the paper was saved without it."
+                    "SIGMA could not compile the optional Issues and Bugs section; the paper was generated without it."
                 )
                 record["generation"]["sigma_issues"].append(
                     "The optional Issues and Bugs section failed: "
@@ -12501,7 +12493,7 @@ def _paper_tex_source(path: str, paper_id: str, record: dict[str, Any]) -> str:
     digest = record.get("tex_sha256")
     size = record.get("tex_size_bytes")
     if not isinstance(digest, str) or not isinstance(size, int) or not 0 < size <= MAX_PAPER_BYTES:
-        raise ProjectError("The TeX source for this saved paper is unavailable.")
+        raise ProjectError("The TeX source for this paper is unavailable.")
     identifier = _paper_id(paper_id)
     target = project_path(path)
     if target.suffix == ".json":
@@ -12511,14 +12503,14 @@ def _paper_tex_source(path: str, paper_id: str, record: dict[str, Any]) -> str:
     else:
         file = _paper_dir(path, create=False) / f"{identifier}.tex"
         if file.is_symlink() or not file.is_file() or file.stat().st_size != size:
-            raise ProjectError("Saved TeX source is missing or unsafe")
+            raise ProjectError("TeX source is missing or unsafe")
         contents = file.read_bytes()
     if len(contents) != size or hashlib.sha256(contents).hexdigest() != digest:
-        raise ProjectError("Saved TeX source does not match its published checksum")
+        raise ProjectError("TeX source does not match its published checksum")
     try:
         return contents.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise ProjectError("Saved TeX source is not UTF-8") from exc
+        raise ProjectError("TeX source is not UTF-8") from exc
 
 
 def get_paper(path: str, paper_id: str, *, include_tex: bool = True) -> dict[str, Any]:
@@ -12595,7 +12587,7 @@ def paper_tex(path: str, paper_id: str) -> str:
     record = get_paper(path, paper_id)
     source = record.get("tex_source")
     if not isinstance(source, str) or not source:
-        raise ProjectError("The TeX source for this saved paper is unavailable.")
+        raise ProjectError("The TeX source for this paper is unavailable.")
     return source
 
 
