@@ -3608,6 +3608,30 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     finally { setBusy(false); }
   }
 
+  async function discardOtherRun(runId: string) {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/projects/papers/discard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({
+          path, run_id: runId, expected_project_id: projectId,
+          expected_binding: binding || 'stop-only', confirm_discard: true,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not remove unfinished Paper.');
+      if (selectedRunIdRef.current === runId) selectPaperRun(null);
+      setConfirmDiscardRunId(null);
+      await refresh(undefined, true);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function restartCheckpoint() {
     const restartSource = checkpointMismatch ?? restartableCheckpoint;
     // Stopping a queued request can leave a terminal receipt without a
@@ -4045,9 +4069,37 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 data-tooltip={formatRunAttribution({ kind: 'paper', number: run.number, creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking, mode: 'hover' })}/>}
               {run.can_control && <button type="button" className="text-view-link session-start-link" data-tooltip="Open your paper"
                 onClick={() => { selectPaperRun(run.run_id); setNewPaperRequested(false); setDraftPaperExpanded(true); void refresh(undefined, true); }}>Open</button>}
+              {run.can_control && ['interrupted', 'failed', 'cancelled'].includes(run.status) && <button type="button"
+                className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
+                aria-label={`Resume Paper ${run.number}`} data-tooltip="Resume paper generation" disabled={busy || loading || !binding}
+                onClick={() => {
+                  selectPaperRun(run.run_id);
+                  setPaperProgress(run.progress as PaperProgress | null);
+                  setNewPaperRequested(true);
+                  setDraftPaperExpanded(true);
+                  void generatePaper(false, null, true);
+                }}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
+              </button>}
+              {run.can_control && ['interrupted', 'failed', 'cancelled'].includes(run.status) && <span className="paper-remove-anchor">
+                <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
+                  aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" disabled={busy || loading}
+                  onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmDiscardRunId(run.run_id); }}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
+                </button>
+                {confirmDiscardRunId === run.run_id && <div className="paper-remove-actions" style={paperPopupStyle}>
+                  <div className="research-stop-confirm" role="group" aria-label={`Confirm removing unfinished Paper ${run.number}`}>
+                    <p>Remove unfinished Paper {run.number} and its checkpoint? Saved papers remain.</p>
+                    <div className="session-remove-confirm-actions">
+                      <button type="button" className="text-view-link" disabled={busy} onClick={() => void discardOtherRun(run.run_id)}>Confirm</button>
+                      <button type="button" className="text-view-link" onClick={() => setConfirmDiscardRunId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                </div>}
+              </span>}
               {run.can_control && (run.status === 'active' || run.status === 'queued') && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
-                aria-label={`Stop Paper ${run.number}`} data-tooltip={optimisticPaperStop?.runId === run.run_id ? 'Stopping paper · awaiting server confirmation' : 'Stop paper generation'} disabled={optimisticPaperStop?.runId === run.run_id} onClick={() => void cancelGeneration(run.run_id)}>
+                aria-label={`Stop Paper ${run.number}`} data-tooltip={optimisticPaperStop?.runId === run.run_id ? 'Stopping paper' : 'Stop paper generation'} disabled={optimisticPaperStop?.runId === run.run_id} onClick={() => void cancelGeneration(run.run_id)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
               </button>}
             </div>
