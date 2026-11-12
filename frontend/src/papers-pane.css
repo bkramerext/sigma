@@ -613,7 +613,18 @@
 /* Unfinished Papers share the same step actions as their Play/Start over
    controls. The next stopped step remains current (copper), not disabled. */
 .workspace-page .papers-pane .paper-stage-list li.is-next {
-  color: var(--sigma-copper-foreground);
+  color: #7f919f;
+}
+/* A running or resumable step is emphasized by weight, never recolored. */
+.workspace-page .papers-pane .paper-stage-list li:is(.is-active, .is-next) > strong,
+.workspace-page .papers-pane .paper-stage-list li:is(.is-active, .is-next) > .paper-step-restart strong {
+  font-weight: 700;
+}
+/* Started remains an ordinary-looking checked step even though it invokes
+   the same Start over action as the control in the title row. */
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Wait"] .paper-step-restart,
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Wait"] .paper-step-restart:hover {
+  background: transparent;
 }
 .workspace-page .papers-pane .paper-stage-list li,
 .workspace-page .papers-pane .paper-stage-list li > strong,
