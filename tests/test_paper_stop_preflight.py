@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest import TestCase
+from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
@@ -82,3 +82,7 @@ class PaperStopPreflightTests(TestCase):
             with self.assertRaises(ProjectError):
                 asyncio.run(api.paper_cancel_view(self._request()))
             stopped.assert_not_awaited()
+
+
+if __name__ == "__main__":
+    main()
