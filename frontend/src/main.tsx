@@ -2955,6 +2955,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
+  // Visual-only Stop intent: never modify the saved run or claim cancellation
+  // before the server confirms it. Shared runs retain their exact run IDs.
+  const [optimisticPaperStop, setOptimisticPaperStop] = useState<{ runId: string | null } | null>(null);
   const [paperStopReconciliation, setPaperStopReconciliation] = useState(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
@@ -3228,6 +3231,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           if (next?.status !== 'active' && next?.status !== 'queued' && !stopping) {
             if (paperStopAwaitingCheckpoint.current?.runId === runId) {
               paperStopAwaitingCheckpoint.current = null;
+              setOptimisticPaperStop(null);
               setPaperStopReconciliation(false);
               setPhase('');
               if (next?.status === 'cancelled')
@@ -3504,7 +3508,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
       || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
     paperStopPending.current = true;
+    // Immediately remove this run's green pulse and change its status/metadata.
+    // The Stop receipt will decide whether we keep or roll back this display.
+    setOptimisticPaperStop({ runId });
     setPhase('Stopping paper…');
+    setError('');
     try {
       const response = await fetch('/api/projects/papers/cancel', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
@@ -3522,16 +3530,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           request.current?.abort();
         }
       } else if (result.cancelled) {
+        setOptimisticPaperStop(null);
         setPhase('');
         setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
         void refresh(selected?.paper_id, true);
       } else {
+        // Nothing was running: restore the real control state.
+        setOptimisticPaperStop(null);
         setPhase('');
         void refresh(selected?.paper_id, true);
       }
     } catch (cause) {
+      // Rejected Stop must restore the pulsing state and usable controls.
+      setOptimisticPaperStop(null);
       setPhase('');
       setError(errorMessage(cause));
+      void refresh(selected?.paper_id, true);
     } finally {
       paperStopPending.current = false;
     }
@@ -3758,15 +3772,16 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const planningRetry = continuationAvailable && resumeDetails !== null &&
     !resumeDetails.outline_complete && !resumeDetails.draft_recovery_available &&
     !planningFallback;
-  const generationRunning = !deliberatePaperStop.current && (
+  const stoppingSelectedPaper = optimisticPaperStop !== null && optimisticPaperStop.runId === selectedRunId;
+  const generationRunning = stoppingSelectedPaper || (!deliberatePaperStop.current && (
     paperProgress?.status === 'active' || paperProgress?.status === 'queued' ||
     (request.current !== null && !['cancelled', 'interrupted', 'failed', 'complete'].includes(paperProgress?.status ?? ''))
-  );
+  ));
   const generating = busy || generationRunning;
   // Speculative presentation: Play disappears and the familiar green pulse
   // appears before evidence preflight or server reservation finishes. Never
   // treat this as an accepted run or assign an unreserved Paper number.
-  const paperStartOptimistic = busy && request.current !== null && !deliberatePaperStop.current
+  const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
     && !['active', 'queued'].includes(paperProgress?.status ?? '');
   // The brief transition after Stop is not a second-paper conflict. A Play
   // control can only advertise concurrency as its disabled reason when a
