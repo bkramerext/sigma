@@ -1078,8 +1078,15 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers/restart", simulate_restart)
     restart.click()
-    confirm_restart = page.get_by_role("group", name="Confirm start over on paper generation")
+    confirm_restart = page.get_by_role("dialog", name="Confirm start over on paper generation")
     expect(confirm_restart).to_be_visible()
+    # Start over uses an anchored popup, not a card inserted into the Paper.
+    bounds = confirm_restart.bounding_box()
+    assert bounds is not None
+    viewport = page.viewport_size
+    assert viewport is not None
+    assert 0 <= bounds["x"] and bounds["x"] + bounds["width"] <= viewport["width"]
+    assert 0 <= bounds["y"] and bounds["y"] + bounds["height"] <= viewport["height"]
     assert reset_calls == [], reset_calls
     confirm_restart.get_by_role("button", name="Cancel").click()
     expect(confirm_restart).to_have_count(0)
@@ -1137,7 +1144,7 @@ with sync_playwright() as playwright:
 
     page.route("**/api/projects/papers/discard", simulate_discard)
     start_over.click()
-    queued_confirm = page.get_by_role("group", name="Confirm start over on paper generation")
+    queued_confirm = page.get_by_role("dialog", name="Confirm start over on paper generation")
     expect(queued_confirm).to_be_visible()
     assert discard_calls == [], discard_calls
     queued_confirm.get_by_role("button", name="Confirm").click()
@@ -1174,7 +1181,7 @@ with sync_playwright() as playwright:
     expect(play_confirm).to_be_visible()
     page.get_by_role("button", name="Start over on paper generation").click()
     expect(play_confirm).to_have_count(0)
-    original_confirm = page.get_by_role("group", name="Confirm start over on paper generation")
+    original_confirm = page.get_by_role("dialog", name="Confirm start over on paper generation")
     expect(original_confirm).to_be_visible()
     original_confirm.get_by_role("button", name="Cancel").click()
     assert reset_calls == ["POST"], reset_calls
@@ -1220,17 +1227,30 @@ with sync_playwright() as playwright:
     paper_fixture["scored"] = True
     page.reload()
     scored = page.locator('[data-paper-id="fixture-paper-1"] .saved-paper-meta')
-    expect(scored.get_by_role("button", name="See score")).to_be_enabled()
+    score_link = scored.locator("button.paper-inline-score")
+    expect(score_link).to_be_enabled()
+    assert score_link.inner_text().startswith("Score "), score_link.inner_text()
     paper_row = page.locator('[data-paper-id="fixture-paper-1"]')
     star_box = paper_row.locator(".paper-title-star").bounding_box()
     paper_title_box = paper_row.locator(".saved-paper-second-line").bounding_box()
     assert star_box and paper_title_box
     assert abs(star_box["x"] - paper_title_box["x"]) <= 2, (star_box, paper_title_box)
-    scored_position = scored.evaluate(
-        """node => node.querySelector('button').getBoundingClientRect().left -
-          node.querySelector('p').getBoundingClientRect().right"""
+    scored_inline = scored.evaluate(
+        """node => {
+          const button = node.querySelector('button');
+          return button.parentElement === node.querySelector('p') &&
+            getComputedStyle(button).textDecorationLine.includes('underline');
+        }"""
     )
-    assert 0 <= scored_position <= 30, scored_position
+    assert scored_inline, "Score N/100 must be an underlined inline See score action"
+
+    score_link.click()
+    score_dialog = page.get_by_role("dialog", name="Paper Score")
+    expect(score_dialog).to_contain_text(
+        "To rescore, click the Scored step in the paper's progress sequence."
+    )
+    expect(score_dialog.get_by_role("button", name="Rescore", exact=True)).to_have_count(0)
+    score_dialog.get_by_role("button", name="Close paper score").click()
 
     # The outer Paper chevron controls BOTH the checked step bar and the
     # existing summary. Restarts are explicit, on checked steps only;
@@ -1306,12 +1326,12 @@ with sync_playwright() as playwright:
         == 0
     )
     start_button.click()
-    start_group = paper_row.get_by_role("group", name="Confirm Paper restart from saved checkpoint")
+    start_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
     expect(start_group).to_contain_text("at Started")
     start_group.get_by_role("button", name="Cancel").click()
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = paper_row.get_by_role(
-        "group", name="Confirm Paper restart from saved checkpoint"
+    restart_group = page.get_by_role(
+        "dialog", name="Confirm Paper restart from saved checkpoint"
     )
     expect(restart_group).to_be_visible()
     assert rewind_calls == []
@@ -1319,8 +1339,8 @@ with sync_playwright() as playwright:
     expect(restart_group).to_have_count(0)
     assert rewind_calls == []
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = paper_row.get_by_role(
-        "group", name="Confirm Paper restart from saved checkpoint"
+    restart_group = page.get_by_role(
+        "dialog", name="Confirm Paper restart from saved checkpoint"
     )
     confirm = restart_group.get_by_role("button", name="Confirm", exact=True)
     expect(confirm).to_be_enabled(timeout=10000)

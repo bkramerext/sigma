@@ -4696,7 +4696,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           <p>Start over this paper? Unfinished generation progress will be discarded. Research and other Papers remain.</p>
           <div className="session-remove-confirm-actions">
             <button type="button" className="text-view-link" disabled={busy}
-              onClick={() => void restartCheckpoint()}>Confirm</button>
+              onClick={() => { setConfirmRestartDraft(false); void restartCheckpoint(); }}>Confirm</button>
             <button type="button" className="text-view-link" onClick={() => setConfirmRestartDraft(false)}>Cancel</button>
           </div>
         </div>, document.body
