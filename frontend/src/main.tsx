@@ -2901,6 +2901,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
+  const [paperStopReconciliation, setPaperStopReconciliation] = useState(false);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>([]);
   const selectedRunIdRef = useRef<string | null>(null);
@@ -3151,11 +3152,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     }
   }
   useEffect(() => {
-    if (!['active', 'queued'].includes(paperProgress?.status ?? '')) return;
+    // An immediate Stop can precede the first progress frame. Continue
+    // polling its own durable run until cancellation is actually saved.
+    if (!paperStopReconciliation && !['active', 'queued'].includes(paperProgress?.status ?? '')) return;
     let stopped = false;
     const poll = async () => {
       try {
-        const runId = selectedRunIdRef.current;
+        const pending = paperStopAwaitingCheckpoint.current;
+        const runId = pending ? pending.runId : selectedRunIdRef.current;
         const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path, ...(runId ? { run_id: runId } : {}) })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const body = await response.json();
         if (!stopped && response.ok) {
@@ -3163,15 +3167,17 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           setPaperRuns(runs);
           const selected = runId ? runs.find(run => run.run_id === runId) : null;
           const next = (selected?.progress ?? body.progress ?? null) as PaperProgress | null;
-          setPaperProgress(next);
+          const isSelected = selectedRunIdRef.current === runId;
+          if (isSelected) setPaperProgress(next);
           if (next?.status !== 'active' && next?.status !== 'queued') {
             if (paperStopAwaitingCheckpoint.current?.runId === runId) {
               paperStopAwaitingCheckpoint.current = null;
+              setPaperStopReconciliation(false);
               setPhase('');
               if (next?.status === 'cancelled')
                 setSuccess('Paper generation cancelled. Saved checkpoints remain available.');
             }
-            if (next === null) setNewPaperRequested(false);
+            if (next === null && isSelected) setNewPaperRequested(false);
             void refresh(undefined, true);
           }
         }
@@ -3179,7 +3185,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     };
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [path, paperProgress?.status, selectedRunId]);
+  }, [path, paperProgress?.status, selectedRunId, paperStopReconciliation]);
   // Poll even when this collaborator is idle; another creator's Paper may
   // become active without changing the project's content revision.
   useEffect(() => {
@@ -3454,6 +3460,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         // Stop is requested, not yet a completed cancellation. Keep the
         // progress pane polling until the backend saves its terminal status.
         paperStopAwaitingCheckpoint.current = { runId };
+        setPaperStopReconciliation(true);
         if (runId === selectedRunIdRef.current) {
           deliberatePaperStop.current = true;
           request.current?.abort();
