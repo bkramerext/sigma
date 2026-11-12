@@ -966,10 +966,7 @@ def check_completed_paper_count_does_not_slow_activity(root: Path) -> None:
         "Completed paper activity",
         "Activity checks must not scale with published paper count.",
     )
-    historical = [
-        {"run_id": f"{number:032x}", "status": "complete"}
-        for number in range(1, 201)
-    ]
+    historical = [{"run_id": f"{number:032x}", "status": "complete"} for number in range(1, 201)]
     with (
         patch.object(project_collaboration, "list_execution_runs", return_value=historical),
         patch.object(
