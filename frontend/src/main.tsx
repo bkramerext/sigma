@@ -2250,7 +2250,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
               <small className="session-progress-inline">{pendingStrategyIds.length} {pendingStrategyIds.length === 1 ? 'strategy' : 'strategies'} selected · 0 findings saved</small>
             </div>
           </div>
-        </li>
+        </li>}
         {orderedSessions.map(item => {
           const pendingAction = pendingSessionAction?.id === item.id ? pendingSessionAction.action : null;
           const statusLabel = pendingAction === 'resume' ? 'resuming'
