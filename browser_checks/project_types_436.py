@@ -994,6 +994,22 @@ with sync_playwright() as playwright:
                 "rubric_version": 3,
                 "pdf_sha256": "c" * 64,
                 "provisional": True,
+                "categories": {
+                    key: {
+                        "earned": 82,
+                        "max": 100,
+                        "weight": 1 / 6,
+                        "explanation": "Fixture-only category score.",
+                    }
+                    for key in (
+                        "tex_correctness",
+                        "readability",
+                        "sustained_answer",
+                        "research_rigor",
+                        "evidence",
+                        "visuals",
+                    )
+                },
             }
         route.fulfill(json={"papers": [paper], "paper_count": 1})
 
@@ -1330,18 +1346,14 @@ with sync_playwright() as playwright:
     expect(start_group).to_contain_text("at Started")
     start_group.get_by_role("button", name="Cancel").click()
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = page.get_by_role(
-        "dialog", name="Confirm Paper restart from saved checkpoint"
-    )
+    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
     expect(restart_group).to_be_visible()
     assert rewind_calls == []
     restart_group.get_by_role("button", name="Cancel").click()
     expect(restart_group).to_have_count(0)
     assert rewind_calls == []
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = page.get_by_role(
-        "dialog", name="Confirm Paper restart from saved checkpoint"
-    )
+    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from saved checkpoint")
     confirm = restart_group.get_by_role("button", name="Confirm", exact=True)
     expect(confirm).to_be_enabled(timeout=10000)
     confirm.click()
