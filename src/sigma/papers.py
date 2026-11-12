@@ -4266,9 +4266,16 @@ def _read_progress_status(path: str) -> dict[str, Any] | None:
             or (
                 "resume_stage" in state
                 and state["resume_stage"] is not None
-                and state["resume_stage"] not in {
-                    "queued", "publication_compilation", "evidence", "planning",
-                    "writing", "validation", "proofreading", "compile",
+                and state["resume_stage"]
+                not in {
+                    "queued",
+                    "publication_compilation",
+                    "evidence",
+                    "planning",
+                    "writing",
+                    "validation",
+                    "proofreading",
+                    "compile",
                 }
             )
             or (
@@ -4729,7 +4736,9 @@ def progress_status(path: str) -> dict[str, Any] | None:
         )
     # Status polling is sidecar-only, even for cancelled or interrupted runs.
     # The resume plan is persisted whenever a checkpoint changes.
-    resume_stage = state.get("resume_stage") if status in {"interrupted", "cancelled", "failed"} else None
+    resume_stage = (
+        state.get("resume_stage") if status in {"interrupted", "cancelled", "failed"} else None
+    )
     return {
         "status": status,
         "stage": state["stage"],

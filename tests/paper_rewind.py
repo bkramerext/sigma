@@ -376,12 +376,10 @@ class SavedPaperRewindTests(TestCase):
             self.assertEqual(visible["stage"], "publication_compilation")
             self.assertEqual(visible["resume_stage"], "writing")
             # Polling must never hydrate the potentially 100 MB manuscript.
-            with patch.object(
-                papers, "_load_work", side_effect=AssertionError("large read")
-            ):
-                self.assertEqual(
-                    papers.progress_status(self.path)["resume_stage"], "writing"
-                )
+            with patch.object(papers, "_load_work", side_effect=AssertionError("large read")):
+                polled = papers.progress_status(self.path)
+            assert polled is not None
+            self.assertEqual(polled["resume_stage"], "writing")
 
     def test_review_restarts_from_frozen_package_without_prior_compilation(self) -> None:
         run_id = uuid4().hex
