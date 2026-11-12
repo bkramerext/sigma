@@ -6783,8 +6783,13 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   const [baseline, setBaseline] = useState(initial);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
-  const [shared, setShared] = useState<SharedProjectInfo | null>(null);
-  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [initialGroupSettings] = useState<SharedProjectInfo | null>(() => {
+    const snapshot = preloadedGroupSettings.get(initial.path) ?? null;
+    preloadedGroupSettings.delete(initial.path);
+    return snapshot;
+  });
+  const [shared, setShared] = useState<SharedProjectInfo | null>(initialGroupSettings);
+  const [collaborators, setCollaborators] = useState<string[]>(() => initialGroupSettings?.collaborators ?? []);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
@@ -7331,6 +7336,9 @@ type InitialPaperListing = {
   nextPaperNumber: number | null;
 };
 const initialPaperListings = new Map<string, InitialPaperListing>();
+// One-use Group settings snapshot. Avoid refetching the same collaboration
+// summary while mounting Project Settings from Home.
+const preloadedGroupSettings = new Map<string, SharedProjectInfo>();
 async function preloadPaperListing(path: string, projectId: string): Promise<void> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12000);
@@ -7507,6 +7515,15 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       const cached = getCachedView(entry.path);
       // Group does not need paper metadata. The star selects its destination
       // concurrently with opening the project, then reuses the loaded listing.
+      const settingsPromise: Promise<SharedProjectInfo | undefined> = openSettings
+        ? fetch(`/api/projects/collaboration?${new URLSearchParams({ path: entry.path, include_authors: 'false' })}`, {
+            cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+          }).then(async response => {
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.error ?? 'Shared project settings are unavailable.');
+            return body as SharedProjectInfo;
+          })
+        : Promise.resolve(undefined);
       const paperIdPromise: Promise<string | undefined> = revealBestPaper
         ? fetch(`/api/projects/papers?${new URLSearchParams({ path: entry.path })}`, {
             cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
@@ -7525,14 +7542,15 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
             });
             return scored[0].paper_id;
           })
-        : openSettings || cached?.project.id === entry.id ? Promise.resolve(undefined)
-        : preloadPaperListing(entry.path, entry.id).then(() => undefined);
-      const [view, paperId] = await Promise.all([
+        : Promise.resolve(undefined);
+      const [view, paperId, groupSettings] = await Promise.all([
         cached?.project.id === entry.id
           ? Promise.resolve(cached)
           : post<ProjectView>('open', { path: entry.path, compact: true }),
         paperIdPromise,
+        settingsPromise,
       ]);
+      if (groupSettings) preloadedGroupSettings.set(view.path, groupSettings);
       await onOpen(view, openSettings, cached?.project.id === entry.id, paperId);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { pending.current = false; setOpening(''); }
@@ -7679,8 +7697,8 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
       // A sample opens an independent working copy, never mutating the template.
       window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
-      await preloadPaperListing(copy.path, copy.project.id);
-      const papers = initialPaperListings.get(copy.path)?.papers ?? [];
+      if (revealBestPaper) await preloadPaperListing(copy.path, copy.project.id);
+      const papers = revealBestPaper ? initialPaperListings.get(copy.path)?.papers ?? [] : [];
       const top = revealBestPaper ? papers.filter(paper => paper.pdf_available && paper.score != null)
         .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0)
           || right.paper_version - left.paper_version)[0] : undefined;
