@@ -1902,8 +1902,11 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       if (next.status === 'running' || next.status === 'queued') onRevealNewSession();
       revealSession(next.id, next.status === 'running' || next.status === 'queued');
     } catch (cause) {
+      // Revert the speculative pulse and unlock Play immediately. A full
+      // history reconciliation is not part of the failed admission's UI path.
       setConfirmStart(false);
-      await load().catch(() => {});
+      setAdmittingSession(false);
+      void load().catch(reportReadFailure);
       const message = errorMessage(cause);
       setError(message);
       if (cause instanceof Error && (cause as Error & { diagnostic_recorded?: boolean }).diagnostic_recorded === true) {
@@ -1991,7 +1994,9 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }
     }
     catch (cause) {
-      await load(target.id).catch(() => {});
+      // Restore the Resume control without waiting on full history hydration.
+      setPendingSessionAction(null);
+      void load(target.id).catch(reportReadFailure);
       const message = errorMessage(cause);
       setSessionControlFailures(current => ({
         ...current,
