@@ -441,7 +441,9 @@ class _ProjectHeader:
 
 
 @lru_cache(maxsize=512)
-def _cached_project_header(path: str, fingerprint: tuple[int, int, int, int, int]) -> _ProjectHeader:
+def _cached_project_header(
+    path: str, fingerprint: tuple[int, int, int, int, int]
+) -> _ProjectHeader:
     # Preserve the full validation contract on first read. Unchanged files
     # need only a stat for later Home polls, not a re-decoded event history.
     view = inspect_project(path)
@@ -635,9 +637,7 @@ def recent_projects(*, lightweight: bool = False, activity_only: bool = False) -
                     paper_metadata = {"paper_count": 0, "best_paper_score": None}
             paper_status = papers.activity_status(view.path) if not lightweight else None
             session_active = (
-                has_active_session(view.path, project_id=view.id)
-                if not lightweight
-                else False
+                has_active_session(view.path, project_id=view.id) if not lightweight else False
             )
             activity_runs: list[dict] = []
             answer_active = False

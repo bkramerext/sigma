@@ -82,10 +82,17 @@ def check_project_list_reuses_validated_metadata(root: Path) -> None:
             second = {item["id"]: item for item in home_projects(lightweight=True)["projects"]}
             assert second[view.project.id] == first[view.project.id]
             assert decoder.call_count == cold_reads, "Unchanged Home poll decoded project history"
-            create_strategy(view.path, "Additional hypothesis", "Metadata must update after a save.")
+            create_strategy(
+                view.path, "Additional hypothesis", "Metadata must update after a save."
+            )
             third = {item["id"]: item for item in home_projects(lightweight=True)["projects"]}
-            assert decoder.call_count > cold_reads, "Updated project did not invalidate Home metadata"
-            assert third[view.project.id]["strategy_count"] == first[view.project.id]["strategy_count"] + 1
+            assert decoder.call_count > cold_reads, (
+                "Updated project did not invalidate Home metadata"
+            )
+            assert (
+                third[view.project.id]["strategy_count"]
+                == first[view.project.id]["strategy_count"] + 1
+            )
     finally:
         recents._cached_project_header.cache_clear()
 
