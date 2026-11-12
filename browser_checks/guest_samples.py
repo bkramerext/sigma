@@ -257,27 +257,62 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.locator("details.sample-type-group").first).to_be_visible()
         assert not failures, failures
 
-        scored_group = page.locator("details.sample-type-group").filter(
-            has_text="Warp Drive Design v9 (acceptance fixture)"
-        )
-        scored_group.evaluate("element => { element.open = true; }")
-        star = scored_group.get_by_role("link", name="View high scoring paper (75/100)")
-        expect(star).to_have_attribute(
-            "data-tooltip", "Marked as a high scoring paper (70 or higher)"
-        )
-        expect(star).to_have_attribute("target", "_blank")
-        expect(star).to_have_attribute("rel", "noopener noreferrer")
-        pdf_response = httpx.get(ui_url + star.get_attribute("href"), timeout=10)
-        assert pdf_response.status_code == 200
-        assert pdf_response.content == public_pdf
-        scored_group.evaluate("element => { element.open = false; }")
-
-        # My Work is a visitor-private temporary index, not a sign-in invitation.
+        # My Work starts empty and is guest-private, not a sign-in invitation.
+        # Clicking a sample star now creates a working copy, so check the
+        # empty state before using that navigation shortcut.
         page.get_by_role("tab", name="My Work").click()
         expect(page.locator("#recent-panel .guest-recent-message")).to_have_count(0)
         expect(page.get_by_role("tab", name="My Work")).to_have_attribute("aria-selected", "true")
         assert page.locator("#recent-panel .recent-project").count() == 0
         page.get_by_role("tab", name="Samples").click()
+
+        scored_group = page.locator("details.sample-type-group").filter(
+            has_text="Warp Drive Design v9 (acceptance fixture)"
+        )
+        scored_group.evaluate("element => { element.open = true; }")
+        star = scored_group.get_by_role("button", name="Open high scoring paper (75/100)")
+        expect(star).to_have_attribute(
+            "data-tooltip", "Marked as a high scoring paper (70 or higher)"
+        )
+        # Public sample PDFs remain accessible even though the star now
+        # navigates to an editable copy rather than opening a PDF tab.
+        rows = page.evaluate(
+            "async () => (await (await fetch('/api/projects/samples')).json()).projects"
+        )
+        sample_id = next(
+            row["id"] for row in rows
+            if row["title"] == "Warp Drive Design v9 (acceptance fixture)"
+        )
+        pdf_response = httpx.get(
+            f"{ui_url}/api/projects/samples/{sample_id}/top-paper/pdf", timeout=10
+        )
+        assert pdf_response.status_code == 200
+        assert pdf_response.content == public_pdf
+
+        with page.expect_response(
+            lambda response: (
+                response.url.endswith("/api/projects/samples/open")
+                and response.request.method == "POST"
+            )
+        ) as star_open_response:
+            star.click()
+        assert star_open_response.value.ok, star_open_response.value.status
+        starred_copy = star_open_response.value.json()
+        assert not Path(starred_copy["path"]).is_relative_to(root / "saved-projects")
+        paper_id = "f" * 32
+        expect(page.locator(f'[data-paper-id="{paper_id}"]')).to_be_visible(timeout=15000)
+        assert page.evaluate(
+            "new URLSearchParams(window.location.search).get('reveal_paper')"
+        ) == paper_id
+        expect(
+            page.locator(f'[data-paper-id="{paper_id}"] .paper-unified-timeline')
+        ).to_be_visible()
+        page.get_by_role("link", name="Go back to home page").click()
+        expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+        samples_tab = page.get_by_role("tab", name="Samples")
+        if samples_tab.get_attribute("aria-selected") != "true":
+            samples_tab.click()
+        expect(samples_tab).to_have_attribute("aria-selected", "true")
 
         sample_group = page.locator("details.sample-type-group").filter(
             has_text="Did Jesus Use Cannabis?"
