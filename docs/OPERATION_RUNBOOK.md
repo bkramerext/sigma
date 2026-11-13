@@ -24,10 +24,18 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#observed-deployment) 
 | VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
 | Billing account / current spend | Billing was reported enabled and the $300 budget configured in October 2026; regional quota had capacity at the v0.2.2 release | Cloud Billing API is disabled for project `224387813390`, so release identities cannot query current billed spend. The v0.2.2 recovery footprint was bounded and estimated below $25; exact billed amount was not independently queried. |
 | Recovery | `sigma-state-v021-pre-20261108-1546` READY from `sigma-state`, snapshot ID `6224195028464248741` | Created 2026-11-08 15:46:18 UTC before v0.2.2 cutover. Isolated read-only restore passed: 3 SQLite integrity checks, 3 identity/workspace mappings, 17 projects, 42 artifacts, one verified TeX/PDF pair, 10 terminal job rows, and 46 accounting call rows ($5.938237 recorded/reserved; 15 reserved or unknown outcomes). Recovery VM, boot disk, clone disk, and ephemeral keys removed and verified absent. Snapshot retained. Daily backup timer and `/etc/sigma/backup.env` remain absent. |
-| Production release | `03781befac94ef1235fd5630e2f061abcd4fd9c8` (v0.4.1, merged exact SHA) | Deployed 2026-11-13 UTC using the guarded helper. Backend/frontend immutable image IDs and source labels match; all three containers healthy; systemd active; persistent disk mounted; maintenance off. Public HTTPS, hosted auth readiness, anonymous API behavior, guest samples, and served About version/build passed. Authenticated member workflows remain unverified; see the v0.4.1 outcome in [Deployment History](DEPLOYMENT_HISTORY.md). |
+| Production release | `0201c706d0ad63d3909016c9c4cc35e6f9ecb074` (v0.4.2, merged exact SHA) | Deployed 2026-11-13 UTC using the guarded helper. Backend/frontend immutable image IDs and source labels match; all three containers healthy; systemd active; persistent disk mounted; maintenance off. Public HTTPS, hosted Google auth readiness, guest samples, real Chrome About version/build, and OAuth-start redirect passed. Production provider remains `api_key`; designated sponsor OAuth credentials are not provisioned, and OpenAI project hard spend limit remains a research blocker. No paid inference ran. See [Deployment History](DEPLOYMENT_HISTORY.md). |
 | Maintenance page | PR #385 merged at `31ba6c4aba1ed59d2d7e092f589b882d7f134b30` | Installed under `/var/www/sigma-maintenance`; host Caddy 2.6.2 uses the compatible `handle_errors` form; root-owned snippet directory and switch `/usr/local/libexec/sigma/maintenance-switch.py` are installed. Config validation/reload passed. During v0.1.7 cutover the page returned HTTP 503/no-store and the PNG HTTP 200/image/png; maintenance is now off. |
 
 **Change log**
+
+- 2026-11-13: Deployed v0.4.2 from merged `main` SHA
+  `0201c706d0ad63d3909016c9c4cc35e6f9ecb074`. The existing boot-disk state
+  copy, host preflight, image provenance, service health, data/accounting, public
+  HTTPS, guest Chrome, and Google OAuth-start checks passed. Sponsored research
+  still needs the designated operator to complete OAuth; no credentials, billing
+  limits, or paid inference were changed. See the detailed
+  [deployment record](DEPLOYMENT_HISTORY.md#2026-11-13--sigma-v042-production-deployment-complete).
 
 - 2026-11-13: Under the operator's explicit release authorization, deployed
   v0.4.1 from exact merged SHA
