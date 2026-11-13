@@ -1,5 +1,43 @@
 # SIGMA status
 
+## 2026-11-13 — hosted production issue remediation
+
+Started from current `main` at `216d47a9b6507992cd8f66bf23852ad7bdd7efe9`
+(merged PR #833). Deployment inspection found that `deploy/compose.yaml`
+already gates the public edge on healthy frontend and backend containers, and
+the backend health check validates hosted authentication configuration. The
+first sign-in failure was reproducible in the callback's cold OIDC path: it
+consumed the single-use flow and Google authorization code before fetching
+discovery/JWKS metadata. The callback now retries safe metadata GETs, caches
+validated signing keys for one hour, refreshes once for a rotated key, and
+keeps the flow/code available if metadata remains unavailable. Regression
+tests cover a transient first metadata failure and a full outage followed by
+retrying the same callback.
+
+`project_spend_limit_exceeded` identifies an exhausted enforced hard limit on
+the OpenAI API project associated with the hosted service key. SIGMA's local
+user/global spending limits cannot override it, and paid calls/retries remain
+blocked. Existing non-retry handling is regression-tested across provider
+billing/quota error codes; the stopped-session guidance now names the OpenAI
+Project → Limits settings and next actions. An OpenAI project/organization
+owner must review the project's **Monthly spend limit** and **Enforce a hard
+limit**, then raise/disable the hard limit if authorized or wait for monthly
+reset. Organization spend limit and prepaid credit may also apply. No provider
+setting, key, or spending authorization was changed. See
+[`hosted_prod_fixes_r4r.md`](../messages/hosted_prod_fixes_r4r.md).
+
+Verification: canonical-temp `./sigma test` passed all steps, including Ruff,
+formatting, Pyright (0 diagnostics), frontend typecheck/build, cloud auth and
+reference compiler tests. Frontend production build passed independently.
+Real-Chrome checks `browser_checks/t23_1_google_signin.py` and
+`browser_checks/t257_mock_auth.py` were attempted but their stale selectors
+expect `.api-connection > summary`; the current UI exposes a direct Google
+sign-in link and may show a first-visit welcome dialog. The focused callback
+regression runs against the real FastAPI callback with deterministic Google
+transport fixtures; it is not a live Google account or production round trip.
+No provider inference was run. OpenAI project configuration and a live hosted
+Google OAuth round trip remain external/unverified.
+
 ## 2026-11-13 — SIGMA v0.4.1 production deployment complete
 
 Production runs v0.4.1 from merged `main` SHA

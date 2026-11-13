@@ -48,10 +48,13 @@ DENIED_SECONDS = 10 * 60
 FEEDBACK_RATE_SECONDS = 24 * 60 * 60
 GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
+GOOGLE_OIDC_CACHE_SECONDS = 3600
 _EMAIL = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
 _DOMAIN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _SCHEMA_LOCK = Lock()
 _SCHEMA_READY: set[tuple[str, int, int]] = set()
+_GOOGLE_OIDC_CACHE: tuple[float, str, jwt.PyJWKSet] | None = None
+_GOOGLE_OIDC_CACHE_LOCK = Lock()
 
 
 @dataclass(frozen=True)
@@ -251,6 +254,76 @@ def config() -> Config:
         error,
         local,
     )
+
+
+async def _google_oidc_keys(
+    client: httpx.AsyncClient, *, force_refresh: bool = False
+) -> jwt.PyJWKSet:
+    """Fetch validated Google signing keys, retrying safe reads on transient errors.
+
+    Metadata is loaded before exchanging Google's one-time authorization code,
+    so a cold-start network hiccup cannot strand an otherwise valid sign-in.
+    """
+    global _GOOGLE_OIDC_CACHE
+    with _GOOGLE_OIDC_CACHE_LOCK:
+        cached = _GOOGLE_OIDC_CACHE
+    if not force_refresh and cached is not None and cached[0] > time.monotonic():
+        return cached[2]
+
+    async def get_with_retry(url: str) -> httpx.Response:
+        delays = (0.0, 0.2, 0.6)
+        for attempt, delay in enumerate(delays):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                return response
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 429 and exc.response.status_code < 500:
+                    raise
+                if attempt == len(delays) - 1:
+                    raise
+            except httpx.TransportError:
+                if attempt == len(delays) - 1:
+                    raise
+        raise RuntimeError("Google OIDC metadata request failed")
+
+    discovery_response = await get_with_retry(DISCOVERY_URL)
+    discovery = discovery_response.json()
+    if (
+        not isinstance(discovery, dict)
+        or discovery.get("issuer") != "https://accounts.google.com"
+        or not isinstance(discovery.get("jwks_uri"), str)
+        or not discovery["jwks_uri"].startswith("https://www.googleapis.com/")
+    ):
+        raise ValueError("Invalid OIDC discovery")
+    jwks_response = await get_with_retry(discovery["jwks_uri"])
+    if len(jwks_response.content) > 256_000:
+        raise ValueError("Oversized JWKS")
+    jwks_data = jwks_response.json()
+    if not isinstance(jwks_data, dict) or not isinstance(jwks_data.get("keys"), list):
+        raise TypeError("Invalid Google JWKS")
+    jwks = jwt.PyJWKSet.from_dict(jwks_data)
+    with _GOOGLE_OIDC_CACHE_LOCK:
+        _GOOGLE_OIDC_CACHE = (
+            time.monotonic() + GOOGLE_OIDC_CACHE_SECONDS,
+            discovery["jwks_uri"],
+            jwks,
+        )
+    return jwks
+
+
+def _google_signing_key_from_set(jwks: jwt.PyJWKSet, id_token: str) -> Any:
+    key_id = jwt.get_unverified_header(id_token).get("kid")
+    matches = [
+        key
+        for key in jwks.keys
+        if key.key_id == key_id and key.algorithm_name == "RS256" and key.public_key_use == "sig"
+    ]
+    if len(matches) == 1:
+        return matches[0].key
+    raise ValueError("Unknown signing key")
 
 
 def _connect(path: Path) -> sqlite3.Connection:
@@ -1972,12 +2045,21 @@ async def callback(
             "SELECT nonce,verifier,expires_at,return_to,window_id FROM flows WHERE state_hash=?",
             (_hash(state),),
         ).fetchone()
-        db.execute("DELETE FROM flows WHERE state_hash=?", (_hash(state),))
     if not flow or flow["expires_at"] <= _now():
         raise HTTPException(400, "Sign-in has expired. Please try again.")
     session_cookie = request.cookies.get(_session_cookie_name(cfg, flow["window_id"]))
     try:
         async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
+            # Discovery and JWKS are safe to retry. Load them before consuming
+            # Google's one-time authorization code at the token endpoint.
+            jwks = await _google_oidc_keys(client)
+            with _db(cfg) as db:
+                consumed = db.execute(
+                    "DELETE FROM flows WHERE state_hash=? AND expires_at>?",
+                    (_hash(state), _now()),
+                ).rowcount
+            if consumed != 1:
+                raise HTTPException(400, "Sign-in has expired or was already used.")
             token_response = await client.post(
                 "https://oauth2.googleapis.com/token",
                 data={
@@ -1996,32 +2078,13 @@ async def callback(
             id_token = token_data.get("id_token")
             if not isinstance(id_token, str) or len(id_token) > 16384:
                 raise ValueError("Missing ID token")
-            discovery_response = await client.get(DISCOVERY_URL)
-            discovery_response.raise_for_status()
-            discovery = discovery_response.json()
-            if (
-                discovery.get("issuer") != "https://accounts.google.com"
-                or not isinstance(discovery.get("jwks_uri"), str)
-                or not discovery["jwks_uri"].startswith("https://www.googleapis.com/")
-            ):
-                raise ValueError("Invalid OIDC discovery")
-            jwks_response = await client.get(discovery["jwks_uri"])
-            jwks_response.raise_for_status()
-            if len(jwks_response.content) > 256_000:
-                raise ValueError("Oversized JWKS")
-            jwks = jwt.PyJWKSet.from_dict(jwks_response.json())
-            header = jwt.get_unverified_header(id_token)
-            key_id = header.get("kid")
-            signing_keys = [
-                key
-                for key in jwks.keys
-                if key.key_id == key_id
-                and key.algorithm_name == "RS256"
-                and key.public_key_use == "sig"
-            ]
-            if len(signing_keys) != 1:
-                raise ValueError("Unknown signing key")
-            key = signing_keys[0].key
+            try:
+                key = _google_signing_key_from_set(jwks, id_token)
+            except ValueError:
+                # Refresh once if Google rotated keys after our cached fetch.
+                key = _google_signing_key_from_set(
+                    await _google_oidc_keys(client, force_refresh=True), id_token
+                )
         claims = jwt.decode(
             id_token,
             key,

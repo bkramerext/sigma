@@ -3,7 +3,91 @@
 from cloud_auth_fixture import *
 
 
+class FirstMetadataFailureGoogleClient(GoogleClient):
+    discovery_requests = 0
+    token_requests = 0
+    failed_discovery_requests = 1
+
+    async def get(self, url):
+        if url == cloud_auth.DISCOVERY_URL:
+            type(self).discovery_requests += 1
+            if type(self).discovery_requests <= type(self).failed_discovery_requests:
+                return httpx.Response(503, request=httpx.Request("GET", url))
+        return await super().get(url)
+
+    async def post(self, url, data):
+        type(self).token_requests += 1
+        return await super().post(url, data)
+
+
 class CloudAuthTests(CloudAuthFixture):
+    def test_first_signin_retries_cold_oidc_metadata_before_consuming_code(self):
+        FirstMetadataFailureGoogleClient.discovery_requests = 0
+        FirstMetadataFailureGoogleClient.token_requests = 0
+        FirstMetadataFailureGoogleClient.failed_discovery_requests = 1
+        self.client.base_url = "https://127.0.0.1"
+        state, _ = self.start_flow()
+        with cloud_auth._db(cloud_auth.config()) as db:
+            flow = db.execute(
+                "SELECT nonce FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
+            ).fetchone()
+        GoogleClient.token = token(nonce=flow["nonce"])
+        self.client.cookies.set(
+            cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cloud_auth.config()), state
+        )
+
+        with patch.object(cloud_auth.httpx, "AsyncClient", FirstMetadataFailureGoogleClient):
+            response = self.client.get(
+                "/api/cloud-auth/callback",
+                params={"state": state, "code": "fixture"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 303, response.text)
+        self.assertEqual(FirstMetadataFailureGoogleClient.discovery_requests, 2)
+        self.assertEqual(FirstMetadataFailureGoogleClient.token_requests, 1)
+        self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], True)
+
+    def test_first_signin_can_retry_same_callback_after_oidc_startup_outage(self):
+        FirstMetadataFailureGoogleClient.discovery_requests = 0
+        FirstMetadataFailureGoogleClient.token_requests = 0
+        FirstMetadataFailureGoogleClient.failed_discovery_requests = 3
+        self.client.base_url = "https://127.0.0.1"
+        state, _ = self.start_flow()
+        with cloud_auth._db(cloud_auth.config()) as db:
+            flow = db.execute(
+                "SELECT nonce FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
+            ).fetchone()
+        GoogleClient.token = token(nonce=flow["nonce"])
+        self.client.cookies.set(
+            cloud_auth._cookie_name(cloud_auth.FLOW_COOKIE, cloud_auth.config()), state
+        )
+
+        with patch.object(cloud_auth.httpx, "AsyncClient", FirstMetadataFailureGoogleClient):
+            first_attempt = self.client.get(
+                "/api/cloud-auth/callback",
+                params={"state": state, "code": "fixture"},
+                follow_redirects=False,
+            )
+            self.assertEqual(first_attempt.status_code, 401)
+            self.assertEqual(FirstMetadataFailureGoogleClient.token_requests, 0)
+            with cloud_auth._db(cloud_auth.config()) as db:
+                self.assertIsNotNone(
+                    db.execute(
+                        "SELECT 1 FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
+                    ).fetchone()
+                )
+            recovered = self.client.get(
+                "/api/cloud-auth/callback",
+                params={"state": state, "code": "fixture"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(recovered.status_code, 303, recovered.text)
+        self.assertEqual(FirstMetadataFailureGoogleClient.discovery_requests, 4)
+        self.assertEqual(FirstMetadataFailureGoogleClient.token_requests, 1)
+        self.assertTrue(self.client.get("/api/cloud-auth/status").json()["authenticated"])
+
     def test_account_status_reads_while_other_request_holds_database_writer(self):
         """Status polling must never serialize behind unrelated account writes."""
         self.assertEqual(self.finish().status_code, 303)

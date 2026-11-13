@@ -95,6 +95,8 @@ def main() -> None:
     assert "wget -q -O /dev/null http://127.0.0.1:8080/" in frontend
     assert "wget -q -O /dev/null http://127.0.0.1:2019/config/" in compose
     assert "depends_on:" in compose and "condition: service_healthy" in compose
+    assert "backend: {condition: service_healthy}" in compose
+    assert "frontend: {condition: service_healthy}" in compose
     assert "Requires=docker.service sigma-sandbox.service" in systemd
     assert "After=docker.service sigma-sandbox.service" in systemd
     assert "RequiresMountsFor=/srv/sigma-state" in systemd
