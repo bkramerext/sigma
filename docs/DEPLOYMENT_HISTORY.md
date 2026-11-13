@@ -9,6 +9,70 @@ procedure and does not authorize a release.** Use
 procedure and [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md) for live host and
 incident guidance.
 
+## 2026-11-13 — SIGMA v0.4.2 production deployment complete
+
+PR #846 merged the 0.4.2 release notes/handoff. Version-only PR #848 merged
+release SHA `0201c706d0ad63d3909016c9c4cc35e6f9ecb074`; checked PR head
+`454b930a602b52bf659de0eedab466d565833b2c` has the same Git tree. Ruff,
+frontend build, all eight SIGMA test shards, the real two-creator PDF gate,
+Browser verification, and Project Types browser acceptance passed.
+
+Before cutover, the VM was RUNNING, systemd and backend/frontend/edge were
+healthy, all 23 host preflight checks passed, and 69 GB remained free on the
+96 GB boot disk. The persistent state filesystem remained mounted at
+`/srv/sigma-state` from UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. A complete root-only backup was made
+on that existing boot disk at
+`/var/backups/sigma-state-v042-pre-454b930a-20261113T231812Z/state`. It has
+178 files; the `state` root is root-owned mode 0700, and the complete tree
+preserves source ownership and metadata. `rsync -aHAXnci --numeric-ids
+--delete` found no differences.
+
+The full restore verifier reports one unmapped workspace folder:
+`provider-slots`, which contains only three zero-byte lock files. This directory
+was preserved in the complete backup. A separate temporary verification view
+excluded only that lock-only directory and passed all read-only restore checks
+before and after deployment: 3 SQLite integrity checks, 3 identities and
+workspaces, 20 project records, 47 research assets, one TeX/PDF pair, 10
+terminal historical job rows, and 50 accounting rows ($5.938237
+recorded/reserved, including 15 reserved or unknown outcomes).
+
+The guarded helper ran with `--backup-verified --schema-compatible` and
+reported success. Protected release pin and checkout match the merged SHA.
+Backend image ID is
+`sha256:091a91ac98f0048acb1aa404dd14b40ed0d41461c41fd59007f863bd3cf101c9`;
+frontend image ID is
+`sha256:c4be3ee7efc5c60c4b9c395ce5c3775d42a5d8910d55adebe1851390df3dc57e`;
+both image source-revision labels match the full SHA. The existing healthy edge
+image `sha256:cf1bd22f2415bc99b785ece1df2c49d32985ac4ac42d84df335be17350593693`
+was retained. `sigma.service` and all three containers are healthy, state UUID
+is unchanged, and maintenance is off.
+
+Public DNS, private-port, HTTP redirect, HTTPS/TLS, SPA deep-link, and
+same-origin API probes passed. Hosted Google auth returned `enabled=true`,
+`ready=true`, and anonymous status; the sign-in endpoint produced an HTTP 302
+to Google's authorization endpoint. Real Chrome loaded 26 guest samples, About
+reported `Version 0.4.2 · Build 0201c70`, OAuth start returned HTTP 302, and
+there were no page errors. No authenticated OAuth completion or paid inference
+was performed.
+
+Production inference remains `api_key`. The intended sponsor email
+`zetacontinuation@gmail.com` is configured, but the persistent sponsor auth
+home `/var/lib/sigma-auth/chatgpt-sponsor` and its credentials file are absent.
+The hosted API key still encounters OpenAI `project_spend_limit_exceeded`; this
+is an OpenAI project hard spend-limit issue, not SIGMA's accounting allowance.
+An authorized sponsor must complete the app's ChatGPT OAuth flow to provision
+its dedicated persistent credentials before routing production to `chatgpt`.
+An OpenAI project/organization owner must separately review the project's
+**Monthly spend limit** and **Enforce a hard limit**, then raise/disable the
+provider-side cap if authorized or wait for reset. No billing setting,
+credential, IAM policy, or research data was changed, and no paid call ran.
+
+Local `./sigma test` on macOS/Python 3.14 failed in `project_collaboration.py`
+and `research_qa.py` with host filesystem path/symlink behavior; all exact-tree
+Linux CI checks passed. No standalone local frontend build was run after the
+full-suite early failure; the required frontend build workflow passed.
+
 ## 2026-11-13 — SIGMA v0.4.1 production deployment complete
 
 PR [#831](https://github.com/bkramerext/sigma/pull/831) merged the v0.4.1

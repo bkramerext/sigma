@@ -349,7 +349,7 @@ SIGMA remains experimental. AI-generated conclusions, citations, papers, and pap
 ---
 
 ## Version 0.4.2 — Reliable Connections and Research Startup
-*November 13, 2026 · Hotpatch release candidate; not yet deployed*
+*November 13, 2026 · Deployed to production*
 
 **This update focuses on keeping research usable when ChatGPT connections change, optional preparation cannot run, or a browser sign-in encounters a temporary problem.** It also makes project editing and sample browsing more predictable.
 
@@ -377,5 +377,5 @@ SIGMA remains experimental. AI-generated conclusions, citations, papers, and pap
 
 SIGMA remains experimental: research conclusions, citations, generated papers, and Paper Scores require independent review. A provider-side spending hard limit, unavailable authorization, actual funding exhaustion, or invalid frozen evidence can still prevent a paid call; this release does not bypass those safeguards.
 
-**Source cutoff for these notes:** merged `main` SHA `91ca6f391ffafd77aba9e7570b81b390b3f0c6fb` (through PR #845; changes since the deployed v0.4.1 SHA `03781befac94ef1235fd5630e2f061abcd4fd9c8`). **Status:** Prepared for Red's v0.4.2 hotpatch; version metadata and final merged deployment SHA are not yet selected. Do not mark this version deployed until Red completes guarded cutover and production verification under the [merged deployment runbook](DEPLOYMENT_RUNBOOK.md).
+**Source cutoff for these notes:** merged `main` SHA `91ca6f391ffafd77aba9e7570b81b390b3f0c6fb` (through PR #845; changes since the deployed v0.4.1 SHA `03781befac94ef1235fd5630e2f061abcd4fd9c8`). **Final release SHA:** `0201c706d0ad63d3909016c9c4cc35e6f9ecb074` (PR #848; its tree matches the green checked release PR head). The guarded deployment completed on November 13, 2026. Production health, public HTTPS, hosted Google sign-in readiness, guest browsing, and saved-data integrity passed. Sponsored inference still requires the operator to complete the designated sponsor ChatGPT OAuth; production remains on `api_key`, whose OpenAI project hard spending limit blocks research. No provider billing limit was changed and no paid inference ran. See [Deployment History](DEPLOYMENT_HISTORY.md) for backup and verification details.
 

@@ -1,5 +1,49 @@
 # SIGMA status
 
+## 2026-11-13 — SIGMA v0.4.2 production deployment complete
+
+PR #846 merged the release notes/handoff, and version-only PR #848 passed
+Ruff, frontend build, all eight SIGMA test shards, the real two-creator PDF
+gate, Browser verification, and Project Types browser acceptance. Its checked
+head `454b930a602b52bf659de0eedab466d565833b2c` and merged production SHA
+`0201c706d0ad63d3909016c9c4cc35e6f9ecb074` have the same Git tree. The guarded
+helper deployed the merged SHA. The pin, checkout, backend/frontend image
+labels and release record match; systemd and all three containers are healthy.
+
+All 23 host preflight checks passed. A complete root-only, metadata-preserving
+state copy was made on the existing boot disk at
+`/var/backups/sigma-state-v042-pre-454b930a-20261113T231812Z/state` (178 files);
+its rsync checksum/metadata comparison was clean. The full copy includes an
+unmapped `provider-slots` directory containing three zero-byte lock files, so
+the restore verifier reports that directory as unmapped. The full copy was
+preserved; a separate verification view omitting only that lock-only directory
+passed all read-only checks both before and after deployment. The persistent
+state disk UUID remained `28ef67cb-4da8-46e7-9a8b-dce0470153a5`.
+
+After deployment the read-only verifier found 3 identities/workspaces, 20
+projects, 47 research assets, one TeX/PDF pair, 10 terminal historical job
+rows, and 50 accounting rows ($5.938237 recorded/reserved; 15 reserved or
+unknown outcomes). Backend and frontend image IDs are recorded in
+`DEPLOYMENT_HISTORY.md`; edge health passed and maintenance is off. Public DNS,
+HTTPS/TLS, redirect, private-port, SPA, and same-origin API checks passed.
+Hosted Google auth reported `ready=true`; the login endpoint issued an HTTP
+302 to Google. Real Chrome loaded 26 guest samples, About displayed
+`Version 0.4.2 · Build 0201c70`, the OAuth start link redirected correctly,
+and there were no page errors. No authenticated account flow or paid inference
+was run.
+
+Production is deliberately still configured for `api_key`;
+`SIGMA_CLOUD_SPONSOR_EMAIL` is set to `zetacontinuation@gmail.com`, but the
+dedicated persistent sponsor credentials are absent. The OpenAI API project
+hard spending limit remains an external blocker for research. Do not change
+provider routing until the authorized sponsor completes ChatGPT OAuth and the
+connection becomes healthy. No billing limit, credentials, or research records
+were changed.
+
+Local `./sigma test` ran on macOS/Python 3.14 but failed in
+`project_collaboration.py` and `research_qa.py` with filesystem path/symlink
+behavior; the exact release tree's Linux CI passed all required shards.
+
 ## 2026-11-13 — hosted production issue remediation
 
 Started from current `main` at `216d47a9b6507992cd8f66bf23852ad7bdd7efe9`
