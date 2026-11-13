@@ -1852,7 +1852,6 @@ def login(
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = request.cookies.get(_session_cookie_name(cfg, window_id or None))
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))

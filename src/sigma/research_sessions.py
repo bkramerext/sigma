@@ -7761,7 +7761,9 @@ async def control_session(
                 # Settled failures may be retried only after explicit Resume.
                 # Preserve old attempts, frozen references and accounting.
                 compiler["status"] = "pending"
-                compiler["reason"] = "A new research standards compilation attempt was requested on Resume."
+                compiler["reason"] = (
+                    "A new research standards compilation attempt was requested on Resume."
+                )
                 _event(record, "references.compilation.retry_requested", compiler["reason"])
             # The user may have disabled or deleted oversized Source Material
             # after a pre-dispatch block. On explicit Resume, use the *current*
