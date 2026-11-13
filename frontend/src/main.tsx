@@ -3482,15 +3482,29 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (!silent) setLoading(true);
     try {
       const query = new URLSearchParams({ path });
-      const [listResponse, configResponse, progressResponse] = await Promise.all([
-        fetch(`/api/projects/papers?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
+      // The library is independent of provider configuration, progress and
+      // recovery. Show paper metadata immediately when its own request finishes.
+      const listing = fetch(`/api/projects/papers?${query}`, {
+        cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+      }).then(async listResponse => {
+        const list = await listResponse.json();
+        if (!listResponse.ok) throw new Error(list.error ?? 'Could not load papers.');
+        if (!obsolete()) {
+          setPapers(Array.isArray(list.papers) ? list.papers as PaperSummary[] : []);
+          setPaperRuns(Array.isArray(list.runs) ? list.runs as PaperRun[] : []);
+          setNextPaperNumber(typeof list.next_paper_number === 'number' ? list.next_paper_number : null);
+          if (!silent) setLoading(false);
+        }
+        return list;
+      });
+      const [list, configResponse, progressResponse] = await Promise.all([
+        listing,
         fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
         fetch(`/api/projects/papers/progress?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } }),
       ]);
-      const list = await listResponse.json(); const config = await configResponse.json();
+      const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
       if (obsolete()) return;
-      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load papers.');
       const runs = (Array.isArray(list.runs) ? list.runs : []) as PaperRun[];
       setPaperRuns(runs);
       let currentId = selectedRunIdRef.current;
