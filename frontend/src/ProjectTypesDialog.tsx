@@ -547,7 +547,7 @@ export default function ProjectTypesDialog({ onClose, renderIcon, initialOpenTyp
         const usage = await usageResponse.json() as { project_count: number };
         if (!usageResponse.ok) throw new Error('Could not check which projects use a removed type.');
         confirmedRemovals[id] = usage.project_count;
-        if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”? ${usage.project_count} project${usage.project_count === 1 ? '' : 's'} use this type. They will keep their saved type settings and show a missing-type warning.`)) return false;
+        if (usage.project_count && !window.confirm(`Remove “${initialCustomNames.current.get(id) ?? 'this project type'}”, used by ${usage.project_count} project${usage.project_count === 1 ? '' : 's'}?`)) return false;
       }
       const response = await fetch('/api/project-types', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...handledErrorHeaders }, body: JSON.stringify({ project_types: drafts, reference_preferences: referencePreferences, common_custom_references: commonCustomReferences, builtin_custom_references: builtinCustomReferences, expected_revision: revision, confirmed_removals: confirmedRemovals }) });
       const data = await response.json();
