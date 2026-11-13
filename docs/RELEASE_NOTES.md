@@ -109,9 +109,9 @@ This release strengthens recovery from interrupted streams, provider errors, cap
 <details>
 <summary>Maintainer release boundary</summary>
 
-Deployed v0.1.7 SHA: \`802e9b6b7da5829868070f760e17280cd8a927f2\`.
-Deployed v0.2.0 SHA: \`9d938907ffd02fb89c9d10545e8df61484310cbd\`.
-Deployed v0.2.1 SHA: \`5435e14eeea159ab207ad50016577b9a9542ae59\`.
+Deployed v0.1.7 SHA: `802e9b6b7da5829868070f760e17280cd8a927f2`.
+Deployed v0.2.0 SHA: `9d938907ffd02fb89c9d10545e8df61484310cbd`.
+Deployed v0.2.1 SHA: `5435e14eeea159ab207ad50016577b9a9542ae59`.
 Each section describes the changes since the preceding deployed version.
 </details>
 
@@ -344,4 +344,4 @@ pending.
 
 SIGMA remains experimental. AI-generated conclusions, citations, papers, and paper scores require independent review. Checkpoint recovery does not mean that uncertain paid provider requests can safely be replayed.
 
-**Source cutoff for these notes:** merged \`main\` SHA \`9faa3e667766b35d75ae3113ba5db22405c55802\` (through PR #829). **This is not the final release SHA.** The version metadata still needs to be advanced to 0.4.1, the resulting exact-SHA CI must pass, and the production cutover must be verified. No tag or production deployment is claimed by this documentation change.
+**Source cutoff for these notes:** merged `main` SHA `9faa3e667766b35d75ae3113ba5db22405c55802` (through PR #829). **This is not the final release SHA.** The version metadata still needs to be advanced to 0.4.1, the resulting exact-SHA CI must pass, and the production cutover must be verified. No tag or production deployment is claimed by this documentation change.
