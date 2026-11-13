@@ -11763,6 +11763,11 @@ async def _generate_impl(
                     project_path_value=path,
                     report=report,
                 )
+                # Give an accepted Stop priority before transitioning from
+                # proofreading to any PDF work. Never admit the next stage on
+                # a task whose cancellation is already pending.
+                await asyncio.sleep(0)
+                _abort_stopping_generation()
                 # A proofreader pass may introduce a newly escaped math span.
                 # Re-run the bounded, semantic-preserving repair before compilation.
                 tex, postproof_math_restorations = _restore_escaped_math_in_tex(tex)
@@ -11825,6 +11830,7 @@ async def _generate_impl(
                 }
                 work.pop("pdf_checkpoint", None)
                 _save_work(path, work)
+                _abort_stopping_generation()
             record["generation"]["proofreading"] = {
                 "attempted": True,
                 "ai_performed": proofreading.get("ai_performed", False),
@@ -11906,8 +11912,10 @@ async def _generate_impl(
                     diagram_fallback = saved_pdf_pass["diagram_fallback"]
                     next_pdf_pass = 4 if saved_pdf_pass["ready"] else saved_pdf_pass["next_pass"]
             for pass_number in range(next_pdf_pass, 4):
+                _abort_stopping_generation()
                 pass_diagnostics: list[str] = []
                 await report("compile", pass_number, 3)
+                _abort_stopping_generation()
                 try:
                     pdf = await asyncio.to_thread(
                         _compile_pdf,
@@ -12363,6 +12371,18 @@ async def generate(
         _started_paper_attempts.discard(key)
         if _generation_tasks.get(key) is task:
             _generation_tasks.pop(key, None)
+
+
+def _abort_stopping_generation() -> None:
+    """Stop before the next paper stage, even if a helper returned normally.
+
+    Cancellation can be requested while proofreading is unwinding or while
+    saved checkpoint writes are completing. The checkpoint remains durable,
+    but no new PDF compilation is allowed after that request.
+    """
+    task = asyncio.current_task()
+    if task is not None and task.cancelling():
+        raise asyncio.CancelledError()
 
 
 def _cancellable_generation_task(path: str) -> asyncio.Task[dict[str, Any]] | None:

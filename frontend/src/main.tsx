@@ -3096,8 +3096,17 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
-  // Visual-only Stop intent: never modify the saved run or claim cancellation
-  // before the server confirms it. Shared runs retain their exact run IDs.
+  // Newer user actions outrank older responses from refreshes and live streams.
+  const paperActionEpoch = useRef(0);
+  const paperRefreshSerial = useRef(0);
+  const paperStopIntentRef = useRef<Set<string>>(new Set());
+  const hasPaperStopIntent = (runId: string | null) =>
+    paperStopIntentRef.current.has(runId ?? 'legacy');
+  const clearPaperStopIntent = (runId: string | null) => {
+    paperStopIntentRef.current.delete(runId ?? 'legacy');
+    setOptimisticPaperStop(current => current?.runId === runId ? null : current);
+  };
+  // Visual-only Stop intent; the backend still owns durable cancellation.
   const [optimisticPaperStop, setOptimisticPaperStop] = useState<{ runId: string | null } | null>(null);
   const [paperPlayIntent, setPaperPlayIntent] = useState<'starting' | 'resuming'>('starting');
   const [paperStopReconciliation, setPaperStopReconciliation] = useState(false);
@@ -3317,10 +3326,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [paperStepChecking, setPaperStepChecking] = useState<{ id: string; stage: SavedPaperRestartStage } | null>(null);
   const [paperStepCheckError, setPaperStepCheckError] = useState<{ id: string; message: string } | null>(null);
   const [eli5Id, setEli5Id] = useState('');
-  const [explainingId, setExplainingId] = useState('');
+  const [explainingIds, setExplainingIds] = useState<Set<string>>(() => new Set());
   const [eli5Error, setEli5Error] = useState('');
   const [eli5ErrorId, setEli5ErrorId] = useState('');
-  const explainingRef = useRef(false);
+  const explainingRef = useRef<Set<string>>(new Set());
+  const latestExplanationTarget = useRef('');
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
   const [paperPopupPlacement, setPaperPopupPlacement] = useState({ left: 0, above: false });
   // One viewport-anchored confirmation for the target run. It cannot end up
@@ -3444,6 +3454,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     return () => window.clearInterval(timer);
   }, [busy, paperProgress?.status]);
   async function refresh(keepId?: string, silent = false) {
+    const actionEpoch = paperActionEpoch.current;
+    const refreshSerial = ++paperRefreshSerial.current;
+    const obsolete = () => actionEpoch !== paperActionEpoch.current || refreshSerial !== paperRefreshSerial.current;
     // Preserve the open paper cards during a Start over refresh.
     if (!silent) setLoading(true);
     try {
@@ -3455,6 +3468,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       ]);
       const list = await listResponse.json(); const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
+      if (obsolete()) return;
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load papers.');
       const runs = (Array.isArray(list.runs) ? list.runs : []) as PaperRun[];
       setPaperRuns(runs);
@@ -3482,7 +3496,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       }
       // A background collaborator refresh must not undo the newly selected
       // restart step's optimistic checkmark state before admission returns.
-      if (!paperRewindAdmissionPending.current)
+      if (!paperRewindAdmissionPending.current &&
+          !(hasPaperStopIntent(currentId) && ['active', 'queued'].includes(ownedProgress?.status ?? '')))
         setPaperProgress(ownedProgress as PaperProgress | null);
       setPapers(list.papers as PaperSummary[]);
       setNextPaperNumber(typeof list.next_paper_number === 'number' ? list.next_paper_number : null);
@@ -3507,6 +3522,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         });
         const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const preflight = await preflightResponse.json();
+        if (obsolete()) return;
         const resumable = Boolean(preflightResponse.ok && preflight.checkpoint_exists && preflight.resume_available);
         setRestartReady(Boolean(preflightResponse.ok && preflight.restart_ready && !generationRunning));
         setContinuationAvailable(resumable);
@@ -3529,14 +3545,16 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const nextId = keepId ?? (expandedPaperId || undefined);
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
-        const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
+        const record = await response.json();
+        if (obsolete()) return;
+        if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
         setSelected(record as PaperRecord);
       } else setSelected(null);
-      setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
-    } catch (cause) { setError(errorMessage(cause)); }
+      if (!obsolete()) setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
+    } catch (cause) { if (!obsolete()) setError(errorMessage(cause)); }
     finally {
       if (!initialPaperActivityReported.current) { initialPaperActivityReported.current = true; onInitialActivity(null); }
-      if (!silent) setLoading(false);
+      if (!obsolete()) setLoading(false);
     }
   }
   useEffect(() => {
@@ -3545,24 +3563,26 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (!paperStopReconciliation && !['active', 'queued'].includes(paperProgress?.status ?? '')) return;
     let stopped = false;
     const poll = async () => {
+      const actionEpoch = paperActionEpoch.current;
       try {
         const pending = paperStopAwaitingCheckpoint.current;
         const runId = pending ? pending.runId : selectedRunIdRef.current;
         const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path, ...(runId ? { run_id: runId } : {}) })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const body = await response.json();
-        if (!stopped && response.ok) {
+        if (!stopped && response.ok && actionEpoch === paperActionEpoch.current) {
           const runs = (body.runs ?? []) as PaperRun[];
           setPaperRuns(runs);
           const selected = runId ? runs.find(run => run.run_id === runId) : null;
           const next = (selected?.progress ?? body.progress ?? null) as PaperProgress | null;
           const isSelected = selectedRunIdRef.current === runId;
-          if (isSelected) setPaperProgress(next);
+          if (isSelected && !(hasPaperStopIntent(runId) && ['active', 'queued'].includes(next?.status ?? '')))
+            setPaperProgress(next);
           const stopping = paperStopAwaitingCheckpoint.current?.runId === runId
             && body.stop_pending === true;
           if (next?.status !== 'active' && next?.status !== 'queued' && !stopping) {
             if (paperStopAwaitingCheckpoint.current?.runId === runId) {
               paperStopAwaitingCheckpoint.current = null;
-              setOptimisticPaperStop(null);
+              clearPaperStopIntent(runId);
               setPaperStopReconciliation(false);
               setPhase('');
               if (next?.status === 'cancelled')
@@ -3574,6 +3594,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         }
       } catch { /* Preserve persisted state until connectivity returns. */ }
     };
+    void poll();
     const timer = window.setInterval(() => void poll(), 1000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [path, paperProgress?.status, selectedRunId, paperStopReconciliation]);
@@ -3584,20 +3605,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         paperProgress?.status === 'active' || paperProgress?.status === 'queued') return;
     let stopped = false;
     const poll = async () => {
+      const actionEpoch = paperActionEpoch.current;
       try {
         const runId = selectedRunIdRef.current;
         const response = await fetch(`/api/projects/papers/progress?${new URLSearchParams({ path, ...(runId ? { run_id: runId } : {}) })}`,
           { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok || stopped) return;
         const body = await response.json();
-        if (stopped) return;
+        if (stopped || actionEpoch !== paperActionEpoch.current) return;
         const runs = (body.runs ?? []) as PaperRun[];
         setPaperRuns(runs);
         const chosen = runId ? runs.find(run => run.run_id === runId) : null;
         if (chosen) {
           const next = chosen.progress as PaperProgress | null;
-          setPaperProgress(next);
-          if (next?.status === 'active' || next?.status === 'queued') setDraftPaperExpanded(true);
+          if (!(hasPaperStopIntent(runId) && ['active', 'queued'].includes(next?.status ?? '')))
+            setPaperProgress(next);
+          if (!hasPaperStopIntent(runId) && (next?.status === 'active' || next?.status === 'queued')) setDraftPaperExpanded(true);
         } else if (!runId && !newPaperRequested) {
           const own = runs.filter(run => run.can_control && run.status !== 'complete' && !run.paper_id);
           if (own.length) { selectPaperRun(own[own.length - 1].run_id); void refresh(undefined, true); }
@@ -3648,9 +3671,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (allowActive) query.set('allow_active', 'true');
     const response = await fetch(`/api/projects/papers/unfinished-checkpoints?${query}`,
       { cache: 'no-store', signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
-    const result = await readPaperResponse(response, 'Checking saved Paper checkpoints');
+    const result = await readPaperResponse(response, 'Checking paper checkpoints');
     if (!Array.isArray(result.stages) || typeof result.snapshot_sha256 !== 'string')
-      throw new Error('The Paper restart checkpoint is unavailable.');
+      throw new Error('The paper restart checkpoint is unavailable.');
     const options = result as UnfinishedPaperRestartOptions;
     setUnfinishedStepOptions(previous => ({
       ...previous, [paperUnfinishedOptionsKey(runId)]: options,
@@ -3663,7 +3686,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (guest || unfinishedRestartBusy || unfinishedStepChecking || paperStepChecking) return;
     const key = paperUnfinishedOptionsKey(runId);
     if (!binding) {
-      setUnfinishedStepCheckError({ key, message: 'Connect ChatGPT before restarting this Paper.' });
+      setUnfinishedStepCheckError({ key, message: 'Connect ChatGPT before restarting this paper.' });
       return;
     }
     paperStepRestartAnchor.current = anchor;
@@ -3698,7 +3721,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         return;
       }
       const target = paperUnfinishedCheckpointForStep(requestedStep, options.stages);
-      if (!options.stages.includes(target)) throw new Error('This Paper has no verified restart checkpoint.');
+      if (!options.stages.includes(target)) throw new Error('This paper has no verified restart checkpoint.');
       setUnfinishedStepRestart({ runId, number, stage: target, snapshot_sha256: options.snapshot_sha256 });
     } catch (cause) {
       const message = errorMessage(cause);
@@ -3714,6 +3737,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   async function confirmUnfinishedPaperStepRestart() {
     const proposed = unfinishedStepRestart;
     if (!proposed || unfinishedRestartBusy || !binding) return;
+    paperActionEpoch.current++;
     setUnfinishedStepRestart(null);
     setUnfinishedStepCheckError(null);
     setUnfinishedRestartBusy(true);
@@ -3760,7 +3784,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           }),
         });
         try {
-          restored = await readPaperResponse(response, 'Restarting unfinished Paper');
+          restored = await readPaperResponse(response, 'Restarting unfinished paper');
           break;
         } catch (cause) {
           if (!inFlight || attempt === 39 ||
@@ -3769,7 +3793,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         }
       }
       if (restored.snapshot_sha256 !== proposed.snapshot_sha256 || restored.stage !== proposed.stage)
-        throw new Error('The restored checkpoint does not match the selected Paper step.');
+        throw new Error('The restored checkpoint does not match the selected paper step.');
       if (restored.progress) setPaperProgress(restored.progress as PaperProgress);
       setUnfinishedStepOptions(current => {
         const next = { ...current };
@@ -3782,7 +3806,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       paperRewindAdmissionPending.current = false;
       if (paperRewindStopAfterAdmission.current) {
         paperRewindStopAfterAdmission.current = false;
-        setOptimisticPaperStop(null);
+        clearPaperStopIntent(proposed.runId);
         setPaperProgress(current => current ? {
           ...current, status: 'interrupted', stage: nextStage,
           detail: 'Restart checkpoint saved · Ready to resume',
@@ -3799,7 +3823,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) {
       paperRewindAdmissionPending.current = false;
       paperRewindStopAfterAdmission.current = false;
-      setOptimisticPaperStop(null);
+      clearPaperStopIntent(proposed.runId);
       selectPaperRun(oldId);
       setPaperProgress(oldProgress);
       setNewPaperRequested(oldRequested);
@@ -3820,15 +3844,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/rewind?${new URLSearchParams({ path })}`,
         { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
-      const options = await readPaperResponse(response, 'Checking Paper checkpoints');
+      const options = await readPaperResponse(response, 'Checking paper checkpoints');
       if (options.source_pdf_sha256 !== paper.pdf_sha256 || options.snapshot_sha256 !== paper.snapshot_sha256)
-        throw new Error('The Paper has changed. Reopen it before restarting.');
+        throw new Error('The paper has changed. Reopen it before restarting.');
       const order: SavedPaperRestartStage[] = ['started', 'writing', 'validation', 'typesetting'];
       const available: SavedPaperRestartStage[] = Array.isArray(options.stages)
         ? options.stages.map((item: { id: SavedPaperRestartStage }) => item.id) : [];
       const selected = order.slice(0, order.indexOf(stage) + 1).reverse()
         .find(candidate => available.includes(candidate));
-      if (!selected) throw new Error('This Paper does not have an earlier verified checkpoint.');
+      if (!selected) throw new Error('This paper does not have an earlier verified checkpoint.');
       setPaperStepRestart({ paper, stage: selected, options, checking: false, error: '' });
     } catch (cause) {
       setPaperStepCheckError({ id: paper.paper_id, message: errorMessage(cause) });
@@ -3845,12 +3869,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     try {
       const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path })}`,
         { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
-      const result = await readPaperResponse(response, 'Checking saved Paper checkpoint');
+      const result = await readPaperResponse(response, 'Checking paper checkpoint');
       const saved = (Array.isArray(result.papers) ? result.papers : []).find(
         (item: PaperSummary) => item.paper_id === paper.paper_id
       ) as PaperSummary | undefined;
       if (!saved?.pdf_available || !paper.pdf_sha256 || saved.pdf_sha256 !== paper.pdf_sha256)
-        throw new Error('The saved PDF has changed or is unavailable. Reopen the Paper before rescoring.');
+        throw new Error('The PDF has changed or is unavailable. Reopen the paper before rescoring.');
       setPaperStepRestart({
         paper, stage: 'scoring', options: {
           source_pdf_sha256: paper.pdf_sha256,
@@ -3867,6 +3891,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   async function confirmPaperStepRestart() {
     const proposed = paperStepRestart;
     if (!proposed?.options || paperStepRestartBusy) return;
+    paperActionEpoch.current++;
     if (proposed.stage === 'scoring') {
       setPaperStepRestart(null);
       setPaperStepCheckError(null);
@@ -3874,7 +3899,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       return;
     }
     if (!binding) {
-      setPaperStepCheckError({ id: proposed.paper.paper_id, message: 'Connect an AI provider before restarting this Paper.' });
+      setPaperStepCheckError({ id: proposed.paper.paper_id, message: 'Connect an AI provider before restarting this paper.' });
       setPaperStepRestart(null);
       return;
     }
@@ -3898,7 +3923,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     setPaperProgress({
       status: 'interrupted', stage: rewindProgressStage(proposed.stage),
       current: null, total: null, started_at: new Date().toISOString(),
-      elapsed_seconds: 0, detail: 'Preparing Paper restart',
+      elapsed_seconds: 0, detail: 'Preparing paper restart',
     });
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(proposed.paper.paper_id)}/rewind`, {
@@ -3911,16 +3936,16 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           stage: proposed.stage, confirm_restart: true, run_id: runId,
         }),
       });
-      const restored = await readPaperResponse(response, 'Preparing Paper restart');
+      const restored = await readPaperResponse(response, 'Preparing paper restart');
       if (restored.snapshot_sha256 !== proposed.options.snapshot_sha256)
-        throw new Error('Restart evidence changed. Reopen the Paper before trying again.');
+        throw new Error('Restart evidence changed. Reopen the paper before trying again.');
       paperRewindAdmissionPending.current = false;
       selectPaperRun(restored.run_id ?? runId);
       if (paperRewindStopAfterAdmission.current) {
         // Stop was clicked during preparation. Do not make a provider call;
         // the newly persisted checkpoint is safe to Resume or Remove.
         paperRewindStopAfterAdmission.current = false;
-        setOptimisticPaperStop(null);
+        clearPaperStopIntent(runId);
         setPaperProgress(current => current ? {
           ...current, status: 'interrupted',
           detail: `Restored from Paper ${proposed.paper.paper_version} · ready to resume`,
@@ -3944,7 +3969,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     } catch (cause) {
       paperRewindAdmissionPending.current = false;
       paperRewindStopAfterAdmission.current = false;
-      setOptimisticPaperStop(null);
+      clearPaperStopIntent(runId);
       selectPaperRun(priorRunId);
       setPaperProgress(priorProgress);
       setNewPaperRequested(priorNewPaperRequested);
@@ -3975,7 +4000,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     return data;
   }
   async function explainPaper(paper: PaperSummary) {
-    if (explainingRef.current) return;
+    if (explainingRef.current.has(paper.paper_id)) return;
+    latestExplanationTarget.current = paper.paper_id;
     setEli5Error('');
     setEli5ErrorId('');
     // The currently open record already contains its archived explanation.
@@ -3987,7 +4013,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setExpandedPaperId(paper.paper_id);
       return;
     }
-    explainingRef.current = true;
+    // Acknowledge the balloon immediately, independently of other papers.
+    explainingRef.current.add(paper.paper_id);
+    setExplainingIds(current => new Set(current).add(paper.paper_id));
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
       const record = await readPaperResponse(response, "Loading the paper");
@@ -3997,7 +4025,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (!binding) throw new Error('Connect an eligible AI provider to explain this paper.');
         // Fetching a paper is not generation. Show Explaining only while
         // the provider is actually asked to produce a missing explanation.
-        setExplainingId(paper.paper_id);
         const result = await fetch(`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/eli5`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }),
@@ -4006,11 +4033,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (typeof data.markdown !== "string" || !data.markdown.trim()) throw new Error("The explanation was empty.");
         markdown = data.markdown;
       }
-      setSelected({ ...record, eli5: { version: 2, source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
-      setEli5Id(paper.paper_id);
-      setExpandedPaperId(paper.paper_id);
+      // Parallel balloon requests must not move the open card backward when
+      // an older request completes after a newer click.
+      if (latestExplanationTarget.current === paper.paper_id) {
+        setSelected({ ...record, eli5: { version: 2, source_sha256: record.pdf_sha256, markdown } } as PaperRecord);
+        setEli5Id(paper.paper_id);
+        setExpandedPaperId(paper.paper_id);
+      }
     } catch (cause) { setEli5ErrorId(paper.paper_id); setEli5Error(errorMessage(cause)); }
-    finally { explainingRef.current = false; setExplainingId(''); }
+    finally {
+      explainingRef.current.delete(paper.paper_id);
+      setExplainingIds(current => {
+        const next = new Set(current);
+        next.delete(paper.paper_id);
+        return next;
+      });
+    }
   }
   // Paper score access must be checked independently of the initial pane load:
   // reconnecting the AI account does not remount this pane.
@@ -4111,6 +4149,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function cancelGeneration(runId: string | null = selectedRunIdRef.current, throwOnFailure = false) {
     if (paperRewindAdmissionPending.current && runId === selectedRunIdRef.current) {
+      paperActionEpoch.current++;
+      paperStopIntentRef.current.add(runId ?? 'legacy');
       // A user can Stop before a restart receipt exists. Finish only the
       // provider-free checkpoint preparation, never auto-dispatch generation.
       paperRewindStopAfterAdmission.current = true;
@@ -4119,7 +4159,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     }
     const target = paperRuns.find(run => run.run_id === runId);
     if (paperStopPending.current || paperStopAwaitingCheckpoint.current?.runId === runId
+      || hasPaperStopIntent(runId)
       || (!busy && !['active', 'queued'].includes(target?.status ?? paperProgress?.status ?? ''))) return;
+    paperActionEpoch.current++;
+    paperStopIntentRef.current.add(runId ?? 'legacy');
     window.dispatchEvent(new CustomEvent('sigma-run-stop-intent', { detail: { kind: 'paper', id: runId || 'pending' } }));
     if (runId === selectedRunIdRef.current && paperStartOptimistic && !paperSubmissionDispatched.current) {
       // Before dispatch, Stop simply cancels preparation. No run or provider
@@ -4160,19 +4203,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           request.current?.abort();
         }
       } else if (result.cancelled) {
-        setOptimisticPaperStop(null);
+        clearPaperStopIntent(runId);
         setPhase('');
         setSuccess('Paper generation cancelled. Checkpoints remain available.');
         void refresh(selected?.paper_id, true);
       } else {
         // Nothing was running: restore the real control state.
-        setOptimisticPaperStop(null);
+        clearPaperStopIntent(runId);
         setPhase('');
         void refresh(selected?.paper_id, true);
       }
     } catch (cause) {
       // Rejected Stop must restore the pulsing state and usable controls.
-      setOptimisticPaperStop(null);
+      clearPaperStopIntent(runId);
       window.dispatchEvent(new CustomEvent('sigma-run-stop-intent', { detail: { kind: 'paper', id: runId || 'pending', clear: true } }));
       setPhase('');
       setError(errorMessage(cause));
@@ -4280,6 +4323,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const stoppedWithoutCheckpoint = !restartSource?.checkpoint_can_restart &&
       ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? '');
     if (busy || !binding || (!restartSource?.checkpoint_can_restart && !stoppedWithoutCheckpoint)) return;
+    paperActionEpoch.current++;
     setBusy(true); setRestartingCheckpoint(true); setError(''); setSuccess(''); setPhase('Starting over');
     try {
       const restartingSavedWork = Boolean(restartSource?.checkpoint_can_restart);
@@ -4337,6 +4381,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       });
       return;
     }
+    const actionEpoch = ++paperActionEpoch.current;
     deliberatePaperStop.current = false;
     paperSubmissionDispatched.current = false;
     // Always resume the newly restored run, never a stale selected row.
@@ -4439,6 +4484,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               providerCallsAttempted = event.provider_calls_attempted;
             throw new Error(event.error ?? 'Paper generation failed.');
           }
+          if (actionEpoch !== paperActionEpoch.current || hasPaperStopIntent(runId)) continue;
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
             const nextProgress = { ...event, status: event.state === 'complete' ? 'complete' : 'active', activity_state: event.state } as PaperProgress;
@@ -4451,6 +4497,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         }
         if (done) break;
       }
+      if (actionEpoch !== paperActionEpoch.current || hasPaperStopIntent(runId)) return;
       if (!result) throw new Error('Paper generation ended without a completed version. No version was published.');
       await refresh(result.paper_id);
       setNewPaperRequested(false);
@@ -4470,8 +4517,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // full preflight here can undo the fast acknowledgment.
       // A rejected preflight must restore Play without waiting for a full
       // Paper list/evidence refresh. Keep reconciliation best-effort.
-      if (!deliberatePaperStop.current) void refresh(selected?.paper_id, true);
-      if (!controller.signal.aborted) {
+      if (!deliberatePaperStop.current && actionEpoch === paperActionEpoch.current && !hasPaperStopIntent(runId))
+        void refresh(selected?.paper_id, true);
+      if (!controller.signal.aborted && actionEpoch === paperActionEpoch.current) {
         generationErrorRunId.current = runId;
         const message = errorMessage(cause);
         const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
@@ -4485,16 +4533,19 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       }
     } finally {
       if (deliberatePaperStop.current && !requestDispatched) {
-        setOptimisticPaperStop(null);
+        clearPaperStopIntent(runId);
         setPhase('');
         setNewPaperRequested(false);
         void refresh(undefined, true);
       }
       finishProvider();
-      request.current = null;
-      paperSubmissionDispatched.current = false;
-      deliberatePaperStop.current = false;
-      setBusy(false);
+      // An older response must not clear the control state of a newer run.
+      if (request.current === controller) {
+        request.current = null;
+        paperSubmissionDispatched.current = false;
+        deliberatePaperStop.current = false;
+        setBusy(false);
+      }
     }
   }
   const planningFallback = continuationAvailable && Boolean(resumeDetails?.planning_fallback_available);
@@ -4507,19 +4558,20 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // in the same position immediately, not the old disabled Play control.
   const paperStartOptimistic = !stoppingSelectedPaper && busy && request.current !== null && !deliberatePaperStop.current
     && !['active', 'queued'].includes(paperProgress?.status ?? '');
-  const generationRunning = paperStepRestartBusy || stoppingSelectedPaper || paperStartOptimistic || (!deliberatePaperStop.current && (
+  const generationRunning = !stoppingSelectedPaper && (paperStepRestartBusy || paperStartOptimistic || (!deliberatePaperStop.current && (
     paperProgress?.status === 'active' || paperProgress?.status === 'queued' ||
     (request.current !== null && !['cancelled', 'interrupted', 'failed', 'complete'].includes(paperProgress?.status ?? ''))
-  ));
+  )));
   const generating = busy || generationRunning;
   // The brief transition after Stop is not a second-paper conflict. A Play
   // control can only advertise concurrency as its disabled reason when a
   // still-active job really blocks dispatch.
-  const paperPlayBlocked = !generationRunning &&
+  const paperPlayBlocked = !generationRunning && !stoppingSelectedPaper &&
     ['active', 'queued'].includes(paperProgress?.status ?? '');
   const paperRestartPending = !!resumeAfterActiveRewind && resumeAfterActiveRewind === selectedRunId;
-  const paperPlayDisabled = generating || paperRestartPending || loading || !binding || paperPlayBlocked;
-  const paperPlayTooltip = paperPlayBlocked
+  const paperPlayDisabled = stoppingSelectedPaper || generating || paperRestartPending || loading || !binding || paperPlayBlocked;
+  const paperPlayTooltip = stoppingSelectedPaper ? 'Finishing paper stop'
+    : paperPlayBlocked
     ? 'This paper is already generating'
     : busy
       ? paperProgress?.status === 'cancelled' ? 'Finishing paper stop' :
@@ -4528,7 +4580,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       : !binding ? 'Connect an AI provider to generate a paper'
       : checkpointMismatch ? 'Start a new paper attempt (confirmation required)'
       : continuationAvailable ? 'Resume paper generation' : 'Generate paper';
-  const canStartOver = !restartReady && !generationRunning &&
+  const canStartOver = !restartReady && !generationRunning && !stoppingSelectedPaper &&
     (Boolean(checkpointMismatch?.checkpoint_can_restart || restartableCheckpoint?.checkpoint_can_restart) ||
      ['cancelled', 'failed', 'interrupted'].includes(paperProgress?.status ?? ''));
   // A completed paper does not reserve the next draft for its previous author.
@@ -4582,11 +4634,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     (paperProgress != null && paperProgress.status !== 'complete') ||
     (selectedRun != null && selectedRun.status !== 'complete')
   );
-  const allPapersRunning = paperRuns.some(run => run.status === 'active') || generationRunning && paperProgress?.status !== 'queued';
-  const allPapersQueued = !allPapersRunning && paperRuns.some(run => run.status === 'queued');
+  const allPapersRunning = paperRuns.some(run => run.status === 'active' && !hasPaperStopIntent(run.run_id))
+    || generationRunning && paperProgress?.status !== 'queued';
+  const allPapersQueued = !allPapersRunning && paperRuns.some(run => run.status === 'queued' && !hasPaperStopIntent(run.run_id));
   const activePaperRunIds = [
     ...new Set([
-      ...paperRuns.filter(run => run.status === 'active').map(run => run.run_id),
+      ...paperRuns.filter(run => run.status === 'active' && !hasPaperStopIntent(run.run_id)).map(run => run.run_id),
       ...(generationRunning && selectedRunId ? [selectedRunId] : []),
     ]),
   ];
@@ -4786,7 +4839,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           <div className="saved-paper-row"><div className="saved-paper-heading">
             <SavedPaperTitle title={draftDisplayTitle} itemLabel="paper in progress" expanded={draftPaperExpanded} controls="paper-draft-content" onToggle={() => setDraftPaperExpanded(value => !value)} copyName="paper text" copied={false} onCopy={() => {}} copyInTitle={false}
               badge={!stoppingSelectedPaper && (paperRestartPending || paperStepRestartBusy || paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued') ? <span className={`research-running-indicator paper-title-activity${paperRestartPending || (!paperStartOptimistic && paperProgress?.status === 'queued') ? ' paper-queued-indicator' : ''}`} aria-label={paperStepRestartBusy ? 'Preparing paper restart' : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Paper resuming' : 'Paper starting') : paperProgress?.status === 'queued' ? 'Paper queued' : 'Paper generating'} data-tooltip={paperStepRestartBusy ? 'Preparing paper restart' : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming paper' : 'Starting paper') : formatRunAttribution({ kind: 'paper', number: assignedPaperNumber, creator: activeDraftCreator, model: paperProgress?.model || model, thinking: paperProgress?.reasoning_effort || effort, mode: 'hover' })}/> : undefined}
-              beforeCopy={stoppingSelectedPaper ? <span className="paper-real-title paper-draft-title">Stopping paper…</span> : paperRestartPending ? <span className="paper-real-title paper-draft-title">Restarting paper…</span> : paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperStepRestartBusy ? 'Preparing restart…' : paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
+              beforeCopy={unfinishedStepChecking?.key === paperUnfinishedOptionsKey(selectedRunId) ? <span className="paper-real-title paper-draft-title" role="status">Finding checkpoint…</span> : stoppingSelectedPaper ? <span className="paper-real-title paper-draft-title">Generation stopped</span> : paperRestartPending ? <span className="paper-real-title paper-draft-title">Restarting paper…</span> : paperStartOptimistic || paperProgress?.status === 'active' || paperProgress?.status === 'queued' ? null : <span className="paper-real-title paper-draft-title">{paperStepRestartBusy ? 'Preparing restart…' : paperProgress?.status === 'failed' ? 'Generation failed' : paperProgress?.status === 'cancelled' ? 'Generation stopped' : paperProgress?.status === 'interrupted' && paperProgress.detail?.startsWith('Restored from Paper ') ? 'Restored checkpoint · Ready to resume' : paperProgress?.status === 'interrupted' ? 'Generation interrupted' : continuationAvailable ? 'Unfinished paper' : 'New paper'}</span>}
               actions={<>
                 {!generationRunning && canResumeDraft && <span className="paper-remove-anchor paper-play-tooltip" data-tooltip={paperPlayTooltip}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control" aria-label={continuationAvailable ? (assignedPaperNumber !== null ? `Resume Paper ${assignedPaperNumber}` : 'Resume paper') : 'Generate paper'} disabled={paperPlayDisabled} onClick={event => beginPaperFromControl(event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>
                   {confirmPlayRestartDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm new paper generation attempt">
@@ -4805,7 +4858,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 {canRemoveDraft && (!generationRunning || canControlDraft) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
-                    <p>{generationRunning ? 'Stop and remove this Paper and its checkpoint?' : 'Remove this Paper and its checkpoint?'} Saved Papers remain.</p>
+                    <p>{generationRunning ? 'Stop and remove this paper and its checkpoint?' : 'Remove this paper and its checkpoint?'} Other papers remain.</p>
                     {paperRemovalErrors[selectedRunId ?? 'legacy'] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[selectedRunId ?? 'legacy']}</p>}
                     <div className="session-remove-confirm-actions">
                       <button type="button" className="text-view-link"  onClick={() => void discardDraft()}>Confirm</button>
@@ -4822,7 +4875,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 model: paperProgress?.model || selectedRun?.model || model,
                 thinking: paperProgress?.reasoning_effort || selectedRun?.thinking || effort,
               }) || 'Paper metadata unavailable'}
-              {!stoppingSelectedPaper && !paperRestartPending && ' · '}{stoppingSelectedPaper || paperRestartPending ? ''
+              {!paperRestartPending && ' · '}{paperRestartPending ? '' : stoppingSelectedPaper ? 'Stopped'
                 : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming' : 'Starting')
                 : paperProgress?.status === 'active' ? 'Generating'
                 : paperProgress?.status === 'queued' ? 'Queued'
@@ -4832,7 +4885,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 : 'Ready'}
               {' · Elapsed '}{savedPaperElapsed(Math.max(0, paperProgress?.elapsed_seconds ?? 0))}
             </>}
-            progress={paperProgress && (paperProgress.status === 'active' || paperProgress.status === 'queued')
+            progress={stoppingSelectedPaper
+              ? { ...(paperProgress ?? selectedRun?.progress ?? {}),
+                  status: 'cancelled',
+                  resume_stage: paperProgress?.resume_stage ?? paperProgress?.stage ??
+                    selectedUnfinishedOptions?.resume_stage ?? selectedRun?.progress?.resume_stage }
+              : paperProgress && (paperProgress.status === 'active' || paperProgress.status === 'queued')
               ? paperProgress
               : { ...(paperProgress ?? selectedRun?.progress ?? {}),
                   resume_stage: paperProgress?.resume_stage ??
@@ -4846,8 +4904,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               } : undefined}
           />
           {paperRemovalErrors[selectedRunId ?? 'legacy'] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[selectedRunId ?? 'legacy']}</p>}
-        {unfinishedStepChecking?.key === paperUnfinishedOptionsKey(selectedRunId) &&
-          <p role="status" className="paper-checkpoint-check">Checking saved checkpoints…</p>}
         {unfinishedStepCheckError?.key === paperUnfinishedOptionsKey(selectedRunId) &&
           <PaperStepFeedback message={unfinishedStepCheckError.message} onDismiss={() => setUnfinishedStepCheckError(null)}/>}
           <div id="paper-draft-content" className="paper-draft-content" hidden={!draftPaperExpanded}>
@@ -4882,12 +4938,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   <div className="saved-paper-title-first-line">
                     <h4 className="saved-paper-title">Paper {run.number}</h4>
                     <span className="saved-paper-title-tools">
-              {!(optimisticPaperStop && optimisticPaperStop.runId === run.run_id) && (run.status === 'active' || run.status === 'queued') && <span className={`research-running-indicator paper-title-activity${run.status === 'queued' ? ' paper-queued-indicator' : ''}`}
+              {!hasPaperStopIntent(run.run_id) && (run.status === 'active' || run.status === 'queued') && <span className={`research-running-indicator paper-title-activity${run.status === 'queued' ? ' paper-queued-indicator' : ''}`}
                 aria-label={run.status === 'queued' ? 'Paper queued' : 'Paper generating'}
                 data-tooltip={formatRunAttribution({ kind: 'paper', number: run.number, creator: run.creator_email, model: run.progress?.model || run.model, thinking: run.progress?.reasoning_effort || run.thinking, mode: 'hover' })}/>}
-              {run.can_resume && !['active', 'queued', 'complete'].includes(run.status) && <button type="button"
+              {run.can_resume && (!['active', 'queued', 'complete'].includes(run.status) || hasPaperStopIntent(run.run_id)) && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
-                aria-label={`Resume Paper ${run.number}`} data-tooltip="Resume paper generation" disabled={busy || loading || !binding}
+                aria-label={`Resume Paper ${run.number}`} data-tooltip="Resume paper generation" disabled={busy || loading || !binding || hasPaperStopIntent(run.run_id)}
                 onClick={event => resumeOtherPaperRun(run, event.currentTarget)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
               </button>}
@@ -4899,13 +4955,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 </button>
 
               </span>}
-              {run.can_control && (run.status === 'active' || run.status === 'queued') && <button type="button"
+              {run.can_control && !hasPaperStopIntent(run.run_id) && (run.status === 'active' || run.status === 'queued') && <button type="button"
                 className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control paper-draft-process-control"
                 aria-label={`Stop Paper ${run.number}`} data-tooltip={optimisticPaperStop?.runId === run.run_id ? 'Stopping paper' : 'Stop paper generation'} disabled={optimisticPaperStop?.runId === run.run_id} onClick={() => void cancelGeneration(run.run_id)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
               </button>}
                     </span>
                   </div>
+                  {unfinishedStepChecking?.key === run.run_id && <span className="paper-real-title paper-draft-title" role="status">Finding checkpoint…</span>}
                 </div>
               </div>
             </div>
@@ -4916,22 +4973,20 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   model: run.progress?.model || run.model,
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
-                {' · '}{optimisticPaperStop?.runId === run.run_id
-                  ? 'Stopping'
-                  : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
+                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopped' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
                 {' · Elapsed '}{savedPaperElapsed(Math.max(0, run.progress?.elapsed_seconds ?? 0))}
               </>}
-              progress={run.progress}
+              progress={hasPaperStopIntent(run.run_id)
+                ? { ...(run.progress ?? {}), status: 'cancelled', resume_stage: run.progress?.resume_stage ?? run.progress?.stage }
+                : run.progress}
               onSelectStep={!guest && (run.can_resume || run.can_control)
                 ? (step, anchor) => void proposeUnfinishedPaperStepRestart(
                     run.run_id, run.number, unfinishedPaperTarget(step), anchor,
                   ) : undefined}
             />
             {paperRemovalErrors[run.run_id] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[run.run_id]}</p>}
-              {unfinishedStepChecking?.key === run.run_id &&
-                <p role="status" className="paper-checkpoint-check">Checking saved checkpoints…</p>}
               {unfinishedStepCheckError?.key === run.run_id &&
                 <PaperStepFeedback message={unfinishedStepCheckError.message} onDismiss={() => setUnfinishedStepCheckError(null)}/>}
             <div id={`paper-run-steps-${run.run_id}`} hidden={!expandedOtherPaperRunIds.has(run.run_id)}>
@@ -4946,9 +5001,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
-                  : explainingId === paper.paper_id
+                  : explainingIds.has(paper.paper_id)
                   ? <span className="ai-paper-explaining" role="status"><span aria-hidden="true">⌛</span> Explaining...</span>
-                  : <button type="button" className="ai-paper-eli5-balloon" disabled={!!explainingId} data-tooltip="Explain it to me like I'm 5" aria-label="Explain it to me like I'm 5" onClick={() => guest ? setGuestExplainPreview(true) : void explainPaper(paper)}><svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg></button>}
+                  : <button type="button" className="ai-paper-eli5-balloon" data-tooltip="Explain it to me like I'm 5" aria-label="Explain it to me like I'm 5" onClick={() => guest ? setGuestExplainPreview(true) : void explainPaper(paper)}><svg viewBox="0 0 24 30" width="20" height="26" fill="currentColor" aria-hidden="true"><path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6 0-6-3.1-10.1-8.6-10.1Z"/><path d="m9.5 22.3 2.5 3 2.5-3Z"/><path d="M12 25c-2 1.2 3.1 2.5 0 4.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round"/></svg></button>}
                 {paper.pdf_available && <a className="paper-view-pdf-icon text-view-link text-view-icon workspace-icon-button" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label="View paper in a new browser tab" data-tooltip="View paper in a new browser tab"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></a>}
                 <span className="paper-action-menu">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-download-button" aria-label={`Download ${paper.title}`} data-tooltip="Download paper" aria-haspopup="menu" aria-expanded={paperMenu?.paperId === paper.paper_id && paperMenu.kind === 'download'} onClick={event => { positionPaperPopup(event.currentTarget, 145, 100); setPaperMenu(current => current?.paperId === paper.paper_id && current.kind === 'download' ? null : { paperId: paper.paper_id, kind: 'download' }); }}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
@@ -4991,13 +5046,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id}>
           {paperStepRestart?.paper.paper_id === paper.paper_id && createPortal(
             <div ref={paperStepRestartPopup} className="paper-step-restart-popup" role="dialog"
-              aria-label="Confirm Paper restart from checkpoint" aria-modal="false"
+              aria-label="Confirm paper restart from checkpoint" aria-modal="false"
               style={paperStepRestartPlacement
                 ? { left: paperStepRestartPlacement.left, top: paperStepRestartPlacement.top }
                 : { left: 12, top: 12, visibility: 'hidden' }}>
               <p>{paperStepRestart.stage === 'scoring'
-                ? `Rescore Paper ${paper.paper_version}? Original Paper remains unchanged.`
-                : `Restart Paper ${paper.paper_version} at ${paperRestartStepName(paperStepRestart.stage)}? Original Paper remains unchanged.`}</p>
+                ? `Rescore paper ${paper.paper_version}? Original paper remains unchanged.`
+                : paperStepRestart.stage === 'started'
+                ? 'Restart paper from beginning? Original paper remains unchanged.'
+                : `Restart paper at ${paperRestartStepName(paperStepRestart.stage)}? Original paper remains unchanged.`}</p>
               <div className="session-remove-confirm-actions">
                 <button type="button" className="text-view-link" disabled={!paperStepRestart.options || paperStepRestartBusy || (!binding && paperStepRestart.stage !== 'scoring')} onClick={() => void confirmPaperStepRestart()}>Confirm</button>
                 <button type="button" className="text-view-link" onClick={() => setPaperStepRestart(null)}>Cancel</button>
@@ -5067,7 +5124,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           style={paperStepRestartPlacement
             ? { left: paperStepRestartPlacement.left, top: paperStepRestartPlacement.top }
             : { left: 12, top: 12, visibility: 'hidden' }}>
-          <p>Restart this paper from Started? Later work will be discarded.</p>
+          <p>Restart paper from beginning? Later work will be discarded.</p>
           <div className="session-remove-confirm-actions">
             <button type="button" className="text-view-link" disabled={busy}
               onClick={() => { setConfirmRestartDraft(false); void restartCheckpoint(); }}>Confirm</button>
@@ -5081,7 +5138,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           <div ref={discardRunPopup} className="paper-step-restart-popup" role="dialog"
             aria-label={`Confirm removing unfinished paper ${run.number}`}
             aria-modal="false" style={{ left: confirmDiscardRun.left, top: confirmDiscardRun.top, maxHeight: '55dvh', overflowY: 'auto' }}>
-            <p>{['active', 'queued'].includes(run.status) ? 'Stop and remove' : 'Remove'} paper {run.number} and its checkpoint? Saved papers remain.</p>
+            <p>{['active', 'queued'].includes(run.status) ? 'Stop and remove' : 'Remove'} paper {run.number} and its checkpoint? Other papers remain.</p>
             {paperRemovalErrors[run.run_id] && <p role="alert" className="ai-paper-warning">{paperRemovalErrors[run.run_id]}</p>}
             <div className="session-remove-confirm-actions">
               <button type="button" className="text-view-link" 
@@ -5094,13 +5151,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       })()}
       {unfinishedStepRestart && createPortal(
         <div ref={paperStepRestartPopup} className="paper-step-restart-popup" role="dialog"
-          aria-label="Confirm unfinished Paper checkpoint restart" aria-modal="false"
+          aria-label="Confirm unfinished paper checkpoint restart" aria-modal="false"
           style={paperStepRestartPlacement
             ? { left: paperStepRestartPlacement.left, top: paperStepRestartPlacement.top }
             : { left: 12, top: 12, visibility: 'hidden' }}>
           <p>{unfinishedStepRestart.startFresh
-            ? `Start ${unfinishedStepRestart.number != null ? `Paper ${unfinishedStepRestart.number}` : 'this Paper'} from the beginning? No checkpoint was saved.`
-            : `${paperRuns.some(run => run.run_id === unfinishedStepRestart.runId && ['active', 'queued'].includes(run.status)) ? 'Stop and restart' : 'Restart'} ${unfinishedStepRestart.number != null ? `Paper ${unfinishedStepRestart.number}` : 'this Paper'} at ${paperUnfinishedStageLabel(unfinishedStepRestart.stage)}? Later work will be discarded; call accounting stays.`}</p>
+            ? 'Restart paper from beginning? No checkpoint was saved.'
+            : unfinishedStepRestart.stage === 'started'
+            ? 'Restart paper from beginning? Later work will be discarded; call accounting stays.'
+            : `${paperRuns.some(run => run.run_id === unfinishedStepRestart.runId && ['active', 'queued'].includes(run.status)) ? 'Stop and restart' : 'Restart'} paper at ${paperUnfinishedStageLabel(unfinishedStepRestart.stage)}? Later work will be discarded; call accounting stays.`}</p>
           <div className="session-remove-confirm-actions">
             <button type="button" className="text-view-link" disabled={unfinishedRestartBusy || !binding}
               onClick={() => void confirmUnfinishedPaperStepRestart()}>Confirm</button>

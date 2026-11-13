@@ -1606,13 +1606,13 @@ with sync_playwright() as playwright:
     assert hover_style["background"] in ("rgba(0, 0, 0, 0)", "transparent"), hover_style
     start_button.click()
     start_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
-    expect(start_group).to_contain_text("at Started")
+    expect(start_group).to_contain_text("Restart paper from beginning?")
     start_group.get_by_role("button", name="Cancel").click()
     # Clicking non-checkpoint Extract evidence rewinds to Started on a saved
     # Paper (the fixture offers Started, Writing, and Proofread boundaries).
     paper_row.get_by_role("button", name="Restart paper at step Extract evidence").click()
     evidence_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
-    expect(evidence_group).to_contain_text("at Started")
+    expect(evidence_group).to_contain_text("Restart paper from beginning?")
     evidence_group.get_by_role("button", name="Cancel").click()
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
     restart_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
