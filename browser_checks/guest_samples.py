@@ -343,6 +343,11 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         reveal_query = "new URLSearchParams(window.location.search).get('reveal_paper')"
         reveal_id = page.evaluate(reveal_query)
         assert reveal_id == paper_id
+        # A starred sample has reveal_paper, but that is not an email
+        # continuation: signing in must still land on Home.
+        expect(page.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+            "href", "/api/cloud-auth/login"
+        )
         expect(paper_row.locator(".paper-unified-timeline")).to_be_visible()
         page.get_by_role("link", name="Go back to home page").click()
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
@@ -373,7 +378,9 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(page.locator(".project-classification-settings-button")).to_be_enabled()
         expect(page.locator(".project-download-button")).to_be_enabled()
         expect(page.locator(".strategy-title-pencil").first).to_be_enabled()
-        expect(page.get_by_role("link", name="Sign in with Google")).to_be_visible()
+        expect(page.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+            "href", "/api/cloud-auth/login"
+        )
         assert page.locator("[title]").count() == 0, "Native tooltips are forbidden"
 
         # AI actions must explain their behavior, never call a provider.
