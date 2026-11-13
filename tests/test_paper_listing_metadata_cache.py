@@ -15,6 +15,7 @@ from sigma import papers
 class PaperListingPerformanceTests(TestCase):
     def test_one_ten_and_fifty_papers_keep_pdf_opaque_and_reuse_canonical_metadata(self) -> None:
         original_read = Path.read_bytes
+        reads: list[str] = []
         for count in (1, 10, 50):
             with self.subTest(count=count), TemporaryDirectory() as tmp:
                 root = Path(tmp)
@@ -42,7 +43,7 @@ class PaperListingPerformanceTests(TestCase):
                     (root / f"{number + 1:032x}.pdf").write_bytes(b"%PDF-disabled-on-listing")
                     files.append(file)
 
-                reads: list[str] = []
+                reads.clear()
 
                 def observed_read(file: Path) -> bytes:
                     if file.suffix in {".pdf", ".tex"}:
@@ -77,7 +78,9 @@ class PaperListingPerformanceTests(TestCase):
                     third = papers.list_papers(str(root))
                     self.assertEqual(len(reads), count + 1)
                     self.assertIn("Revised paper title", [row["title"] for row in third])
-                    self.assertFalse(any(file.name.endswith(".index.json") for file in root.iterdir()))
+                    self.assertFalse(
+                        any(file.name.endswith(".index.json") for file in root.iterdir())
+                    )
                 papers._cached_paper_listing_summary.cache_clear()
 
 
