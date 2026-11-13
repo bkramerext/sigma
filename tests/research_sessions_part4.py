@@ -924,9 +924,7 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
             str(path), started["id"], "resume"
         )
         assert resumed_personal["status"] == "queued"
-        assert preserved_liabilities == [
-            (started["id"], ["sponsor-interrupted-attempt"])
-        ]
+        assert preserved_liabilities == [(started["id"], ["sponsor-interrupted-attempt"])]
         personal_record = research_sessions._read(str(path), started["id"])
         assert personal_record["mode"] == "chatgpt"
         assert personal_record["cloud_sponsored"] is False
@@ -938,17 +936,12 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
         assert personal_record["steps"][:1] == saved["steps"]
         assert personal_record["steps"][-1]["status"] == "interrupted"
         assert personal_record["steps"][-1]["attempt_status"] == "unknown"
-        assert (
-            personal_record["steps"][-1]["funding_provenance"]
-            == "sponsored_chatgpt_preserved"
-        )
+        assert personal_record["steps"][-1]["funding_provenance"] == "sponsored_chatgpt_preserved"
         assert personal_record["calls_used"] == interrupted["calls_used"]
 
         # Round trip again without erasing either old provider's uncertain
         # requests or recharging the original sponsored liability.
-        stopped_third = await research_sessions.control_session(
-            str(path), started["id"], "stop"
-        )
+        stopped_third = await research_sessions.control_session(str(path), started["id"], "stop")
         assert stopped_third["status"] == "stopped"
         state.update(account=sponsor, sponsored=True)
         resumed_sponsor = await research_sessions.control_session(
