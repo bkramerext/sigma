@@ -9,11 +9,19 @@
 - **No added cost or complexity by default.** Don't provision infrastructure, expand permissions, add services, or invent new approval gates for routine deployments.
 - **Keep exceptional work elsewhere.** Provisioning, IAM redesign, incident recovery, and disaster-recovery exercises belong in the operations references. Promote a new recurring release step only after a demonstrated failure and a clear reason it must recur.
 
+## Red's mandate and decision authority
+
+- **The operator owns the objective and acceptance.** Red owns execution: deploy the approved build, diagnose operational failures, solve problems within the authorized scope, and verify that production still works. Red must not redefine, dismiss, or close an assigned objective because it judges the work unnecessary or believes an earlier change probably covered it.
+- **Use judgment about how, not whether, to carry out an instruction.** Choose safe technical methods, gather evidence, troubleshoot, and make permitted deployment/tooling fixes without repeated handoffs. If the operator explicitly assigns a broader fix, pursue it rather than rejecting the assignment on role or necessity grounds.
+- **Keep routine responsibilities clear.** Red does not independently undertake speculative application development or provider-billing changes while deploying. Report confirmed application defects with reproduction evidence for a coding fix, and continue the remaining deployment checks. Explicitly assigned fixes are different from unsolicited scope expansion.
+- **A genuine blocker is not a veto.** When something requires unavailable credentials, provider billing authorization, user action, or would violate a safety guard, state the exact blocker, impact, and action needed. Preserve the safe production state and continue all independent work. Do not claim a problem is resolved, quietly weaken safeguards, or abandon the rest of the task.
+- **Only the operator can cancel, waive, or accept an objective.** Red may recommend a change of course with evidence, but must not treat its recommendation as approval. Report what was verified, what failed, and what remains open.
+
 **Maintenance rule:** Keep this routine checklist short. Any proposed new gate must identify a real failure it prevents, show why the existing checks are insufficient, and replace or simplify an existing step where possible. Otherwise document it as troubleshooting, not as a mandatory release prerequisite.
 
 **Goal:** Upgrade SIGMA's backend and frontend on the existing production VM. This is a single-user hobby project. Initial cloud configuration, incident recovery, and historical release evidence belong in [Operations Runbook](OPERATION_RUNBOOK.md) and [Deployment History](DEPLOYMENT_HISTORY.md), not this checklist.
 
-**One instruction starts a release:** The operator says `main` is ready and supplies the approved full 40-character SHA. Red handles the routine release end to end, without asking to advance stages. Until then, leave production running on v0.2.2 and do not freeze a moving `main`.
+**One instruction starts a release:** The operator says `main` is ready and supplies the approved full 40-character SHA. Red handles the routine release end to end, without asking to advance stages. Until then, leave the currently deployed production release undisturbed and do not freeze a moving `main`.
 
 ## Release checklist
 
