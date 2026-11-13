@@ -97,6 +97,33 @@ class PaperStopPreflightTests(TestCase):
             self.assertEqual(observed, [None])
             wrong_run.assert_not_called()
 
+    def test_stage_guard_allows_new_generation_without_stop(self) -> None:
+        """A normal paper must reach its first progress callback."""
+        async def scenario() -> None:
+            key = "fresh-paper-fixture"
+            with patch.object(api.papers, "_paper_state_key", return_value=key):
+                api.papers._stop_requested_keys.discard(key)
+                # Both the normal progress callback and earlier internal
+                # phase transitions must accept the same guard.
+                api.papers._abort_stopping_generation("/unused/project.json")
+                api.papers._abort_stopping_generation()
+
+        asyncio.run(scenario())
+
+    def test_stage_guard_blocks_progress_after_accepted_stop(self) -> None:
+        """A swallowed cancellation cannot advance a stopped paper."""
+        async def scenario() -> None:
+            key = "stopped-paper-fixture"
+            with patch.object(api.papers, "_paper_state_key", return_value=key):
+                api.papers._stop_requested_keys.add(key)
+                try:
+                    with self.assertRaises(asyncio.CancelledError):
+                        api.papers._abort_stopping_generation("/unused/project.json")
+                finally:
+                    api.papers._stop_requested_keys.discard(key)
+
+        asyncio.run(scenario())
+
     def test_local_stop_during_proofreading_prevents_later_stages(self) -> None:
         """An accepted Stop cancels the real local worker before PDF and scoring."""
 
