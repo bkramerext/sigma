@@ -345,3 +345,5 @@ pending.
 SIGMA remains experimental. AI-generated conclusions, citations, papers, and paper scores require independent review. Checkpoint recovery does not mean that uncertain paid provider requests can safely be replayed.
 
 **Source cutoff for these notes:** merged `main` SHA `9faa3e667766b35d75ae3113ba5db22405c55802` (through PR #829). **Final release SHA:** `03781befac94ef1235fd5630e2f061abcd4fd9c8`. The exact merged SHA passed all required CI checks and was deployed to production on November 13, 2026. The running build reports `Version 0.4.1 · Build 03781be`. See [Deployment History](DEPLOYMENT_HISTORY.md) for the backup, image identities, and production verification record. No release tag was created.
+
+**Production hotpatch:** merged PR #835 was deployed on November 13, 2026 from `main` SHA `1d51b66d027110c217e7933ef9804c51624ad9e7`; the application version remains 0.4.1. Production health and the first cold Google sign-in redirect passed. The OpenAI project hard spending cap remains an external owner-controlled setting. See [Deployment History](DEPLOYMENT_HISTORY.md) for verification details.

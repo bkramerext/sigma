@@ -34,9 +34,26 @@ Real-Chrome checks `browser_checks/t23_1_google_signin.py` and
 expect `.api-connection > summary`; the current UI exposes a direct Google
 sign-in link and may show a first-visit welcome dialog. The focused callback
 regression runs against the real FastAPI callback with deterministic Google
-transport fixtures; it is not a live Google account or production round trip.
-No provider inference was run. OpenAI project configuration and a live hosted
-Google OAuth round trip remain external/unverified.
+transport fixtures; that regression alone was not a live Google account or
+production round trip.
+No provider inference was run. The OpenAI project's enforced hard spend cap
+remains an external configuration action: an OpenAI project/organization
+owner must review **OpenAI Project → Limits → Monthly spend limit** and
+**Enforce a hard limit**, then raise/disable the hard limit if authorized or
+wait for monthly reset; organization spend limit and prepaid credit may also
+apply.
+
+PR #835 merged and deployed from `main` as
+`1d51b66d027110c217e7933ef9804c51624ad9e7`. The guarded helper passed; the
+release pin, host checkout, release record, and backend/frontend revision
+labels match. All three production containers are healthy, maintenance is
+off, and the persistent disk UUID is unchanged. External DNS/TLS/redirect/
+SPA/API checks passed. Hosted auth status is ready with mock auth disabled.
+A fresh Chrome profile's first post-deployment Google login attempt returned
+HTTP 200 and reached Google's account sign-in page; no account credentials
+were used, so user consent and the OAuth callback were not exercised. See
+[`DEPLOYMENT_HISTORY.md`](DEPLOYMENT_HISTORY.md) for the complete deployment
+record and state-backup verification details.
 
 ## 2026-11-13 — SIGMA v0.4.1 production deployment complete
 

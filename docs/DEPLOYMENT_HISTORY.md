@@ -9,6 +9,60 @@ procedure and does not authorize a release.** Use
 procedure and [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md) for live host and
 incident guidance.
 
+## 2026-11-13 — SIGMA hosted-production hotpatch complete
+
+Merged PR #835 at `1d51b66d027110c217e7933ef9804c51624ad9e7` was deployed
+from `main` using the guarded production helper. The previous running release
+was `03781befac94ef1235fd5630e2f061abcd4fd9c8`. Before cutover, the service
+and backend/frontend/edge containers were healthy, the persistent state UUID
+was `28ef67cb-4da8-46e7-9a8b-dce0470153a5`, and 70 GB was free on the boot
+disk.
+
+The root-only mode-0700 state copy is retained at
+`/var/backups/sigma-state-hotpatch-1d51b66-20261113T174111Z/state` on the
+existing boot disk. It contains 165 files and was byte/checksum and
+metadata-compared against the live state with no differences. The existing
+restore verifier initially reported one unmapped directory. Read-only
+inspection found it contained exactly three zero-byte `.lock` files and no
+project data. Those files remain untouched in the saved copy. Running the
+verifier against a temporary view excluding only that empty lock-only
+directory passed three SQLite integrity checks, all 3 identity/workspace
+mappings, 20 projects, 46 artifacts, one matching TeX/PDF pair, 10 terminal
+history rows, and 49 accounting rows ($5.938237 recorded/reserved; 15
+reserved or unknown outcomes). This preserved live aggregate is the
+pre-deployment data baseline.
+
+The exact guarded command was:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py \
+  1d51b66d027110c217e7933ef9804c51624ad9e7 \
+  --backup-verified --schema-compatible
+```
+
+The helper reported success. Host checkout, protected pin, release record,
+and backend/frontend image revision labels match the full SHA. Immutable
+image IDs:
+
+| Image | Immutable image ID | Source revision |
+| --- | --- | --- |
+| Backend | `sha256:8ded07b135a3d5bb0c5b4aa6f59570d29421d86e33e873c340d0042ca2db8b1d` | `1d51b66d027110c217e7933ef9804c51624ad9e7` |
+| Frontend | `sha256:8d4ad043117fd0a5eaf2566846bc03e6dd6df8156a3ec89dd7b3115989a61692` | `1d51b66d027110c217e7933ef9804c51624ad9e7` |
+| Edge | `sha256:cf1bd22f2415bc99b785ece1df2c49d32985ac4ac42d84df335be17350593693` | Existing image retained |
+
+Post-deployment checks passed: `sigma.service` active; all three containers
+healthy; maintenance off; state disk still mounted read/write at
+`/srv/sigma-state` with the same UUID; release pin and images on the exact
+SHA. The external DNS, TLS, redirect, private-port, SPA, and same-origin API
+probe passed. Hosted auth status returned HTTP 200 with `enabled=true`,
+`ready=true`, `target=hosted`, and mock auth off; unauthenticated
+`/api/health` returned its expected HTTP 401. A fresh real-Chrome browser
+context's first post-deploy `/api/cloud-auth/login` request returned HTTP 200
+and reached `accounts.google.com/v3/signin/identifier`, confirming the cold
+OIDC discovery path now succeeds on its first attempt. A Google account
+credential was not used, so actual account consent and the callback were not
+completed. No paid inference or production data changes were made.
+
 ## 2026-11-13 — SIGMA v0.4.1 production deployment complete
 
 PR [#831](https://github.com/bkramerext/sigma/pull/831) merged the v0.4.1
