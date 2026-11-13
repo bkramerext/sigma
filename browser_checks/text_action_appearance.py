@@ -104,6 +104,7 @@ def main():
             assert_link_appearance(legal, color="rgb(237, 195, 141)")
             legal.hover()
             assert_link_appearance(legal, color="rgb(255, 224, 181)")
+            page.mouse.move(0, 0)
             legal.focus()
             assert_link_appearance(legal, color="rgb(237, 195, 141)")
         about.get_by_role("button", name="Privacy Notice", exact=True).click()
