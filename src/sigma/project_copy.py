@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import zlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -82,6 +83,7 @@ def rebase_copy(
     session_ids_out: dict[str, str] | None = None,
     session_numbers_out: dict[str, int] | None = None,
     preserve_project_identity: bool = False,
+    scrub_record: Callable[[Any], Any] | None = None,
 ) -> dict[str, Any]:
     """Return a portable, independently identified project bundle.
 
@@ -185,6 +187,8 @@ def rebase_copy(
             ):
                 raise ProjectError("Frozen paper evidence belongs to a different project.")
             package = _rewrite(original_package, substitutions)
+            if scrub_record is not None:
+                package = scrub_record(package)
             encoded = _canonical(package)
             new_digest = hashlib.sha256(encoded).hexdigest()
             digest_map[old_digest] = new_digest
@@ -215,6 +219,8 @@ def rebase_copy(
                 continue
             original_data = data
             data = _rewrite(data, substitutions)
+            if scrub_record is not None:
+                data = scrub_record(data)
             session_match = _SESSION_FILE.fullmatch(name)
             if (
                 session_match is not None

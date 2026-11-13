@@ -31,6 +31,8 @@ SAMPLES = ROOT / "samples"
 SAMPLE_EVIDENCE = "sample-evidence.json"
 SAMPLE_LIMITS = "limits.json"
 SAMPLE_PAPERS = "sample-papers"
+SAMPLE_SNAPSHOT = "sample-snapshot.json"
+SAMPLE_CURATION = "sample-curation.json"
 MAX_EXPORT_BYTES = 32 * 1024 * 1024
 MAX_SAMPLE_NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _SAMPLE_PROJECT_ID = "$SIGMA_SAMPLE_PROJECT_ID"
@@ -72,6 +74,9 @@ class SampleProject:
     difficulty: str | None
     strategy_count: int
     best_paper_score: int | None = None
+    curated: bool = False
+    featured_paper_id: str | None = None
+    paper_count: int | None = None
 
 
 def _projects() -> list[tuple[str, Path]]:
@@ -95,6 +100,8 @@ def _load(identifier: str) -> tuple[dict[str, Any], SampleProject]:
         project = _decode(raw)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         raise ProjectError(f"Sample project {identifier} is unavailable: {exc}") from exc
+    curation = _curation_metadata(identifier)
+    best_score, featured_id = _best_sample_paper(identifier)
     return (
         raw,
         SampleProject(
@@ -104,7 +111,10 @@ def _load(identifier: str) -> tuple[dict[str, Any], SampleProject]:
             project.investigation_type,
             project.difficulty.value if project.difficulty is not None else None,
             len(project.active_order),
-            _best_sample_paper(identifier)[0],
+            best_score,
+            curation is not None,
+            featured_id if curation is not None else None,
+            curation["paper_count"] if curation is not None else None,
         ),
     )
 
@@ -236,10 +246,50 @@ def _sample_papers(identifier: str) -> dict[str, tuple[dict[str, Any], bytes]]:
     return papers
 
 
+def _curation_metadata(identifier: str) -> dict[str, Any] | None:
+    """Small, validated catalog marker; listing never reads snapshot binaries."""
+    path = SAMPLES / identifier / SAMPLE_CURATION
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4096:
+        raise ProjectError("Sample curation metadata is unsafe.")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ProjectError("Sample curation metadata is invalid.") from exc
+    if (
+        not isinstance(value, dict)
+        or value.get("schema_version") != 1
+        or value.get("curated") is not True
+        or not isinstance(value.get("featured_paper_id"), str)
+        or not re.fullmatch(r"[0-9a-f]{32}", value["featured_paper_id"])
+        or (value.get("best_paper_score") is not None
+            and (type(value["best_paper_score"]) is not int
+                 or not 0 <= value["best_paper_score"] <= 100))
+        or type(value.get("paper_count")) is not int
+        or value["paper_count"] < 1
+    ):
+        raise ProjectError("Sample curation metadata has an unsupported format.")
+    return value
+
+
+def _curated_bundle(identifier: str) -> dict[str, Any]:
+    path = SAMPLES / identifier / SAMPLE_SNAPSHOT
+    if path.is_symlink() or not path.is_file():
+        raise ProjectError("Curated sample snapshot is missing or unsafe.")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise ProjectError("Curated sample snapshot is unreadable.") from exc
+
+
 def _best_sample_paper(identifier: str) -> tuple[int | None, str | None]:
     """Use sample paper JSON only; verify PDFs when the sample is opened."""
     from sigma.paper_scores import validate_score
 
+    curation = _curation_metadata(identifier)
+    if curation is not None:
+        return curation["best_paper_score"], curation["featured_paper_id"]
     directory = SAMPLES / identifier / SAMPLE_PAPERS
     if not directory.exists():
         return (None, None)
@@ -269,6 +319,15 @@ def _best_sample_paper(identifier: str) -> tuple[int | None, str | None]:
 def top_sample_pdf(identifier: str) -> bytes:
     """Return the top scored sample PDF without creating a mutable project."""
     score, paper_id = _best_sample_paper(identifier)
+    if _curation_metadata(identifier) is not None:
+        from sigma import project_bundle
+
+        members = project_bundle._decode(_curated_bundle(identifier))
+        pdf = members.get(f"artifacts/papers/{paper_id}.pdf")
+        if pdf is None:
+            raise ProjectError("The curated sample paper is missing.")
+        _validate_pdf_bytes(pdf)
+        return pdf
     if score is None or score < 50 or paper_id is None:
         raise ProjectError("This sample has no top-scoring paper.")
     return _sample_papers(identifier)[paper_id][1]
@@ -704,6 +763,9 @@ def _sample_catalog_fingerprint(name: str, path: Path) -> tuple[tuple[str, int, 
     paper_dir = SAMPLES / name / SAMPLE_PAPERS
     if paper_dir.is_dir() and not paper_dir.is_symlink():
         files.extend(sorted(paper_dir.glob("*.json")))
+    curation = SAMPLES / name / SAMPLE_CURATION
+    if curation.exists() or curation.is_symlink():
+        files.append(curation)
     return tuple((str(file), file.stat().st_mtime_ns, file.stat().st_size) for file in files)
 
 
@@ -737,6 +799,8 @@ def _cached_sample_catalog_entry(
             or not all(isinstance(item, str) for item in active_order)
         ):
             raise ValueError("Invalid sample catalog fields")
+        curation = _curation_metadata(name)
+        best_score, featured_id = _best_sample_paper(name)
         return asdict(
             SampleProject(
                 name,
@@ -745,7 +809,10 @@ def _cached_sample_catalog_entry(
                 mode,
                 difficulty,
                 len(active_order),
-                _best_sample_paper(name)[0],
+                best_score,
+                curation is not None,
+                featured_id if curation is not None else None,
+                curation["paper_count"] if curation is not None else None,
             )
         )
     except (OSError, ValueError, TypeError, KeyError) as exc:
@@ -776,6 +843,40 @@ def sample_project_ids() -> set[str]:
     return {_sample_index_metadata(name, path)[0] for name, path in _projects()}
 
 
+def _open_curated_sample(identifier: str, raw: dict[str, Any]) -> ProjectView:
+    """Import all published artifacts and evidence as a fresh, independent JSON project."""
+    from sigma import project_bundle
+    from sigma.recents import record_access
+
+    root = projects_root()
+    bundle = _curated_bundle(identifier)
+    with _title_registry_lock(root):
+        occupied = _occupied_titles(root)
+        for number in range(1, 10001):
+            suffix = f" v{number}"
+            title = raw["title"][: 200 - len(suffix)].rstrip() + suffix
+            if _title_key(title) not in occupied:
+                break
+        else:
+            raise ProjectError("Too many working projects from this sample.")
+
+        for number in range(1, 10001):
+            directory_suffix = "" if number == 1 else f"-{number}"
+            candidate = root / f"{identifier}{directory_suffix}.json"
+            if not os.path.lexists(candidate):
+                break
+        else:
+            raise ProjectError("Too many copies of this sample project.")
+        try:
+            renamed = project_bundle.rename_bundle_project(bundle, title)
+            project_bundle.import_independent_bundle(renamed, candidate)
+            view = inspect_project(candidate)
+        except (project_bundle.BundleError, OSError, ValueError) as exc:
+            raise ProjectError(f"Cannot open curated sample working project: {exc}") from exc
+    record_access(view)
+    return view
+
+
 def open_sample_project(identifier: str) -> ProjectView:
     """Create an independent working project named 'Title v1', etc."""
     raw, _ = _load(identifier)
@@ -785,6 +886,8 @@ def open_sample_project(identifier: str) -> ProjectView:
     root = projects_root()
     if root.is_relative_to(SAMPLES):
         raise ProjectError("Sample projects cannot be installed inside the source catalog.")
+    if _curation_metadata(identifier) is not None:
+        return _open_curated_sample(identifier, raw)
 
     with _title_registry_lock(root):
         occupied = _occupied_titles(root)

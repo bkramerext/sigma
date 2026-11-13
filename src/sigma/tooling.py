@@ -106,6 +106,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/test_sample_copies.py"],
             [*python, "python", "tests/test_migrate_scored_samples.py"],
             [*python, "python", "tests/make_sample.py"],
+            [*python, "python", "tests/test_sample_promotion.py"],
             [*python, "python", "tests/example_math.py"],
             [*python, "python", "tests/research_ladder.py"],
             [*python, "python", "tests/rh_adversarial.py"],
