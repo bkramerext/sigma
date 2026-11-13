@@ -7565,8 +7565,15 @@ async def control_session(
         record["message"] = "Project identity changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
+    # Personal ChatGPT and SIGMA-sponsored ChatGPT both use mode="chatgpt".
+    # A funding/identity change still needs a stopped-session rebind: personal
+    # sessions have no sponsored cost snapshot, and cloud admission must not
+    # reject an otherwise valid Resume as "no reviewed price".
     switch_transport = (
-        credential["mode"] != record["mode"] or record.get("imported_via_bundle") is True
+        credential["mode"] != record["mode"]
+        or record.get("identity_hash") != _digest(credential["identity"])
+        or record.get("cloud_sponsored") is not cloud_research.billing_enabled()
+        or record.get("imported_via_bundle") is True
     )
     config = await configuration(view=view, context=credential)
     if switch_transport:
