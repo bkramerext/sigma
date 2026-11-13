@@ -4942,7 +4942,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
-            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
+            <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" data-tooltip-follow-cursor="true" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
               actions={<>
                 {eli5Id === paper.paper_id
                   ? <button type="button" className="ai-paper-eli5-balloon ai-paper-eli5-thanks" aria-label="Thanks for the explanation" data-tooltip="Thanks for the explanation" onClick={() => setEli5Id('')}><svg className="ai-paper-eli5-hooray" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 21 4.7-12 7.3 7.3L3 21Z" fill="currentColor" fillOpacity=".2"/><path d="m3 21 4.7-12 7.3 7.3L3 21ZM7.7 9l7.3 7.3"/><path d="M12 3h.01M20 4h.01M21 14h.01M15 2v2m5 5 2-1m-6 4 2 2m-8-8 1-2M17 7c-2 1-3 3-3 5M7 4c2 0 3 1 4 3"/></svg></button>
@@ -4968,7 +4968,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </div></div>}
                 </span>}
               </>}/>
-            <PaperTimeline expanded={expandedPaperId === paper.paper_id} metadata={<>{dateLabel(paper.created_at)}{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 ? ` · Elapsed ${savedPaperElapsed(paper.generation.generation_elapsed_seconds)}` : ''} · {(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : paperModelThinkingLabel(paper.generation)} · <button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
+            <PaperTimeline expanded={expandedPaperId === paper.paper_id} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <><span className="paper-meta-dot" aria-hidden="true"> · </span><span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}<span className="paper-meta-dot" aria-hidden="true"> · </span>{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}<span className="paper-meta-dot" aria-hidden="true"> · </span><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
               progress={{
                 status: scoringId === paper.paper_id ? 'active' : paper.score ? 'complete' : 'interrupted',
                 stage: scoringId === paper.paper_id ? 'scoring' : paper.score ? 'complete' : 'score_failed',
@@ -6020,9 +6020,9 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
-        ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={onActivityClick ?? (() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa')))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
+        ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" data-tooltip-follow-cursor="true" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={onActivityClick ?? (() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa')))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
-          ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
+          ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" data-tooltip-follow-cursor="true" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
@@ -6783,12 +6783,19 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   const [baseline, setBaseline] = useState(initial);
   const [projectType, setProjectType] = useState<ResearchMode>(initial.project.investigation_type);
   const [difficulty, setDifficulty] = useState<ProjectDifficulty | null>(initial.project.difficulty);
-  const [shared, setShared] = useState<SharedProjectInfo | null>(null);
-  const [collaborators, setCollaborators] = useState<string[]>([]);
+  // State initializers must be pure: StrictMode may invoke them twice.
+  const [initialGroupSettings] = useState<SharedProjectInfo | null>(
+    () => preloadedGroupSettings.get(initial.path) ?? null,
+  );
+  useEffect(() => {
+    if (initialGroupSettings) preloadedGroupSettings.delete(initial.path);
+  }, [initialGroupSettings, initial.path]);
+  const [shared, setShared] = useState<SharedProjectInfo | null>(initialGroupSettings);
+  const [collaborators, setCollaborators] = useState<string[]>(() => initialGroupSettings?.collaborators ?? []);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialGroupSettings);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { dialog.current?.showModal(); }, []);
@@ -6801,6 +6808,11 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     setError('');
   }, [initial]);
   useEffect(() => {
+    // Home already supplied a valid collaboration snapshot. Do not initiate
+    // another request just because the dialog mounted. A later revision
+    // change still triggers the ordinary refresh path.
+    if (initialGroupSettings && (collaborationRevision === undefined
+      || collaborationRevision === initialGroupSettings.revision)) return;
     const controller = new AbortController();
     const json = async (url: string) => {
       const response = await fetch(url, { signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
@@ -6816,7 +6828,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
       setError('Shared project settings could not be loaded.');
       setLoading(false);
     }, 8000);
-    void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, verify_revision: 'true' })}`)
+    void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, include_authors: 'false' })}`)
       .then((saved: SharedProjectInfo) => {
         if (controller.signal.aborted) return;
         setShared(saved);
@@ -7312,6 +7324,10 @@ function ProjectSaveAsDialog({ entry, onCancel, onSaved }: {
 // last opened project view within this browser tab so returning is immediate.
 // Scope both caches to the authenticated workspace; never reuse another user's data.
 const recentProjectListCache = new Map<string, RecentProject[]>();
+// Paper counts and best scores are slow-changing decorations. Keep their
+// hydration timestamp across Home/Project navigation to avoid rescanning a
+// growing paper library every five seconds.
+const recentPaperMetadataFetchedAt = new Map<string, number>();
 const recentProjectViewCache = new Map<string, ProjectView>();
 function projectCacheScope(cloud: CloudIdentityState | null): string {
   if (!cloud?.enabled) return 'local';
@@ -7331,6 +7347,9 @@ type InitialPaperListing = {
   nextPaperNumber: number | null;
 };
 const initialPaperListings = new Map<string, InitialPaperListing>();
+// One-use Group settings snapshot. Avoid refetching the same collaboration
+// summary while mounting Project Settings from Home.
+const preloadedGroupSettings = new Map<string, SharedProjectInfo>();
 async function preloadPaperListing(path: string, projectId: string): Promise<void> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12000);
@@ -7395,8 +7414,9 @@ function useDelayedProjectProgress(operation: string): string {
   return visible === operation ? visible : '';
 }
 
-function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = false, active = false, projects, setProjects, loading, setLoading }: {
-  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void;
+function RecentProjects({ onOpen, getCachedView, onNavigateActivity, cacheScope, flat = false, active = false, projects, setProjects, loading, setLoading }: {
+  cacheScope: string;
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   flat?: boolean;
@@ -7408,7 +7428,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
 }) {
   const [opening, setOpening] = useState('');
   const [removing, setRemoving] = useState('');
-  const visibleProgress = useDelayedProjectProgress(removing ? `remove:${removing}` : '');
+  const visibleProgress = useDelayedProjectProgress(removing ? `remove:${removing}` : opening ? `open:${opening}` : '');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [saveAsEntry, setSaveAsEntry] = useState<RecentProject | null>(null);
   const [confirmRemovePlacement, setConfirmRemovePlacement] = useState<'above' | 'below'>('below');
@@ -7447,6 +7467,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
           };
         });
       });
+      if (!lightweight) recentPaperMetadataFetchedAt.set(cacheScope, Date.now());
       setError(''); setLoading(false);
     } catch (cause) {
       if (controller.signal.aborted && !signal?.aborted) {
@@ -7457,7 +7478,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       window.clearTimeout(timeout);
       signal?.removeEventListener('abort', abort);
     }
-  }, []);
+  }, [cacheScope]);
   useEffect(() => {
     if (!active) return;
     const controller = new AbortController();
@@ -7469,13 +7490,17 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
       requestPending = true;
       try {
-        const lightweight = firstLoad;
+        const firstPaint = firstLoad;
         firstLoad = false;
-        await load(controller.signal, lightweight);
+        // Always refresh cheap identities so new/copied projects appear
+        // promptly. Only the background hydration fetches paper scores.
+        const paperMetadataDue =
+          Date.now() - (recentPaperMetadataFetchedAt.get(cacheScope) ?? 0) >= 60_000;
+        await load(controller.signal, firstPaint || !paperMetadataDue);
         if (!controller.signal.aborted) {
           setError('');
-          // Render project names now; hydrate paper scores/activity afterward.
-          if (lightweight) window.setTimeout(() => void refresh(), 250);
+          // Render names first, then hydrate paper decorations asynchronously.
+          if (firstPaint && paperMetadataDue) window.setTimeout(() => void refresh(), 250);
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -7499,29 +7524,52 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [load, active]);
-  async function open(entry: RecentProject, openSettings = false) {
+  }, [load, active, cacheScope]);
+  async function open(entry: RecentProject, openSettings = false, revealBestPaper = false) {
     if (pending.current) return;
-    const cached = getCachedView(entry.path);
     pending.current = true; setOpening(entry.id); setError('');
-    if (cached?.project.id === entry.id) {
-      try {
-        // Still hold Home until the header artwork has decoded.
-        await onOpen(cached, openSettings, true);
-      } catch (error) { setError(errorMessage(error)); }
-      finally { pending.current = false; setOpening(''); }
-      return;
-    }
-    // For uncached projects remain on Home with Opening... until a fully
-    // renderable project view is available (or show the error here).
     try {
-      const [view] = await Promise.all([
-        post<ProjectView>('open', { path: entry.path, compact: true }),
-        preloadPaperListing(entry.path, entry.id),
+      const cached = getCachedView(entry.path);
+      // Group does not need paper metadata. The star selects its destination
+      // concurrently with opening the project, then reuses the loaded listing.
+      const settingsPromise: Promise<SharedProjectInfo | undefined> = openSettings
+        ? fetch(`/api/projects/collaboration?${new URLSearchParams({ path: entry.path, include_authors: 'false' })}`, {
+            cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+          }).then(async response => {
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.error ?? 'Shared project settings are unavailable.');
+            return body as SharedProjectInfo;
+          })
+        : Promise.resolve(undefined);
+      const paperIdPromise: Promise<string | undefined> = revealBestPaper
+        ? fetch(`/api/projects/papers?${new URLSearchParams({ path: entry.path })}`, {
+            cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+          }).then(async response => {
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Could not load paper scores.');
+            const papers = Array.isArray(payload.papers) ? payload.papers as PaperSummary[] : [];
+            const scored = papers.filter(paper => paper.pdf_available && paper.score != null)
+              .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0)
+                || right.paper_version - left.paper_version);
+            if (!scored.length) throw new Error('No scored paper with an available PDF was found.');
+            initialPaperListings.set(entry.path, {
+              projectId: entry.id, papers,
+              runs: Array.isArray(payload.runs) ? payload.runs : [],
+              nextPaperNumber: typeof payload.next_paper_number === 'number' ? payload.next_paper_number : null,
+            });
+            return scored[0].paper_id;
+          })
+        : Promise.resolve(undefined);
+      const [view, paperId, groupSettings] = await Promise.all([
+        cached?.project.id === entry.id
+          ? Promise.resolve(cached)
+          : post<ProjectView>('open', { path: entry.path, compact: true }),
+        paperIdPromise,
+        settingsPromise,
       ]);
-      await onOpen(view, openSettings);
-    }
-    catch (error) { setError(errorMessage(error)); }
+      if (groupSettings) preloadedGroupSettings.set(view.path, groupSettings);
+      await onOpen(view, openSettings, cached?.project.id === entry.id, paperId);
+    } catch (cause) { setError(errorMessage(cause)); }
     finally { pending.current = false; setOpening(''); }
   }
   async function forget(entry: RecentProject) {
@@ -7538,27 +7586,6 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       await load();
     } catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setRemoving(''); }
-  }
-  async function openTopPaper(entry: RecentProject) {
-    if (pending.current) return;
-    const tab = window.open('about:blank', '_blank');
-    if (!tab) { setError('Allow pop-ups to open the top-scoring paper.'); return; }
-    tab.opener = null;
-    pending.current = true; setOpening(entry.id); setError('');
-    try {
-      const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path: entry.path })}`, { cache: 'no-store' });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? 'Could not load paper scores.');
-      const scored = (payload.papers as PaperSummary[] | undefined ?? [])
-        .filter(paper => paper.pdf_available && paper.score != null && paper.score.total >= 50)
-        .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0) || right.paper_version - left.paper_version);
-      if (!scored.length) throw new Error('No scored paper with an available PDF meets the 50-point threshold.');
-      const pdf = `/api/projects/papers/${encodeURIComponent(scored[0].paper_id)}/pdf?${new URLSearchParams({ path: entry.path, open_in_browser: 'true' })}`;
-      tab.location.replace(windowAuthUrl(pdf));
-    } catch (cause) {
-      tab.close();
-      setError(errorMessage(cause));
-    } finally { pending.current = false; setOpening(''); }
   }
   const eligibleProjects = projects.filter(project => project.available && !researchTypeLabel(project.investigation_type).startsWith('Unavailable'));
   const visibleProjects = flat ? eligibleProjects : [...eligibleProjects].sort((a, b) =>
@@ -7625,13 +7652,13 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(opening === entry.id || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`}
               data-tooltip={recentRunLabels(entry).join('\n') || activityDescription(entry)} data-tooltip-activity="true"
               disabled={!entry.available} onClick={() => onNavigateActivity(entry, entry.activity_runs?.find(run => run.status === 'active') ?? entry.activity_runs?.[0] ?? null)}>
               <span className={`research-running-indicator${paperActivity(entry) === 'queued' ? ' paper-queued-indicator' : ''}`} aria-hidden="true"/>
             </button>}
-            {entry.best_paper_score != null && entry.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void openTopPaper(entry)}>★</button>}
+            {entry.best_paper_score != null && entry.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label="View high scoring paper" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void open(entry, false, true)}>★</button>}
             {entry.shared && <button type="button" className="recent-title-annotation recent-title-shared" disabled={!entry.available || !!opening} aria-label={`Manage collaborators for ${entry.title}`} data-tooltip="Shared project · Open Project Settings to manage collaborators" data-tooltip-follow-cursor="true" onClick={() => void open(entry, true)}><UsersRoundIcon/></button>}
             <button type="button" className="recent-save-as" disabled={!!opening || !entry.available}
             aria-label="Save project with a new name" data-tooltip="Save project with a new name"
@@ -7656,11 +7683,12 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, flat = fals
   </div>;
 }
 
-function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (view: ProjectView) => Promise<void> | void; guest?: boolean; active?: boolean }) {
+function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void; guest?: boolean; active?: boolean }) {
   const [projects, setProjects] = useState<SampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opening, setOpening] = useState('');
+  const visibleOpening = useDelayedProjectProgress(opening);
   const pending = useRef(false);
   const loaded = useRef(false);
   useEffect(() => {
@@ -7680,14 +7708,19 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     }).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } });
     return () => controller.abort();
   }, [active]);
-  async function open(sample: SampleProject) {
+  async function open(sample: SampleProject, revealBestPaper = false) {
     if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
     try {
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
-      // This visitor's copy remains in their private temporary workspace.
+      // A sample opens an independent working copy, never mutating the template.
       window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
-      await preloadPaperListing(copy.path, copy.project.id);
-      await onOpen(copy);
+      if (revealBestPaper) await preloadPaperListing(copy.path, copy.project.id);
+      const papers = revealBestPaper ? initialPaperListings.get(copy.path)?.papers ?? [] : [];
+      const top = revealBestPaper ? papers.filter(paper => paper.pdf_available && paper.score != null)
+        .sort((left, right) => (right.score?.total ?? 0) - (left.score?.total ?? 0)
+          || right.paper_version - left.paper_version)[0] : undefined;
+      if (revealBestPaper && !top) throw new Error('No scored paper with an available PDF was found.');
+      await onOpen(copy, false, false, top?.paper_id);
     }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
@@ -7702,13 +7735,13 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
     {groups.map(group => <details className="sample-type-group" key={group.type} open={savedHomeGroupOpen('sample', group.type)} onToggle={event => { try { window.localStorage.setItem(`sigma.home.sampleGroup:${group.type}`, String(event.currentTarget.open)); } catch { /* Keep the disclosure usable when storage is unavailable. */ } }}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
-      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <a className="recent-title-annotation recent-title-star" href={`/api/projects/samples/${encodeURIComponent(sample.id)}/top-paper/pdf`} target="_blank" rel="noopener noreferrer" data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" aria-label={`View high scoring paper (${sample.best_paper_score}/100)`}>★</a>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{opening === sample.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+      <ul>{group.samples.map(sample => <li key={sample.id}>{sample.best_paper_score != null && sample.best_paper_score >= HIGH_SCORING_PAPER_THRESHOLD && <button type="button" className="recent-title-annotation recent-title-star" disabled={!!opening} aria-label={`Open high scoring paper (${sample.best_paper_score}/100)`} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true" onClick={() => void open(sample, true)}>★</button>}<button className="sample-open" disabled={!!opening} aria-busy={opening === sample.id} onClick={() => void open(sample)} aria-label={opening === sample.id ? `Opening ${sample.title}` : `Open ${sample.title}`}><strong>{sample.title}{visibleOpening === sample.id && <><ProjectOpeningHourglass/><span className="project-opening-label">Opening...</span></>}</strong><small><span>{strategyCount(sample.strategy_count)} · {sample.best_paper_score != null && <>Best score {sample.best_paper_score}/100 · </>}{difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
 
-function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void; getCachedView: (path: string) => ProjectView | undefined; onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
+function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, guest = false, onTabChange }: { onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void; getCachedView: (path: string) => ProjectView | undefined; onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void; cacheScope: string; guest?: boolean; onTabChange?: (tab: 'recent' | 'samples' | 'most-recent') => void }) {
   const savedTooltip = guest
     ? 'Your temporary private work in this browser (expires after inactivity or server restart).'
     : 'Show My Work. Click again to collapse or expand all.';
@@ -7725,6 +7758,36 @@ function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, gu
   // My Work and Most Recent are two views of one list, not two independent fetches.
   const [savedProjects, setSavedProjects] = useState<RecentProject[]>(() => recentProjectListCache.get(cacheScope) ?? []);
   const [savedLoading, setSavedLoading] = useState(() => !recentProjectListCache.has(cacheScope));
+  useEffect(() => {
+    // The favicon's 5-second activity poll already has these booleans.
+    // Reuse them for Home badges instead of rereading every paper and session.
+    const onActivity = (event: Event) => {
+      const updates = (event as CustomEvent<RecentProject[]>).detail;
+      if (!Array.isArray(updates)) return;
+      const byId = new Map(updates.map(item => [item.id, item]));
+      setSavedProjects(current => current.map(entry => {
+        const next = byId.get(entry.id);
+        if (!next) return entry;
+        const changed = entry.research_running !== next.research_running
+          || entry.paper_activity !== next.paper_activity
+          || entry.paper_generating !== (next.paper_activity === 'active')
+          || entry.answer_active !== next.answer_active;
+        if (!changed) return entry;
+        return {
+          ...entry,
+          research_running: next.research_running,
+          paper_activity: next.paper_activity,
+          paper_generating: next.paper_activity === 'active',
+          answer_active: next.answer_active,
+          activity_author: next.activity_author,
+          // Do not navigate using a run ID from an earlier activity snapshot.
+          activity_runs: [],
+        };
+      }));
+    };
+    window.addEventListener('sigma-saved-activity', onActivity);
+    return () => window.removeEventListener('sigma-saved-activity', onActivity);
+  }, []);
   useEffect(() => {
     if (savedLoading) return;
     recentProjectListCache.delete(cacheScope);
@@ -7768,8 +7831,8 @@ function HomeCatalog({ onOpen, getCachedView, onNavigateActivity, cacheScope, gu
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={savedTooltip} onClick={() => switchTab('recent')}>My Work</button>
     <button ref={mostRecent} id="most-recent-tab" role="tab" aria-controls="most-recent-panel" aria-selected={tab === 'most-recent'} tabIndex={tab === 'most-recent' ? 0 : -1} onClick={() => switchTab('most-recent')}>Most Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
-    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} cacheScope={cacheScope} active={tab === 'recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
+    <div ref={mostRecentPanel} id="most-recent-panel" role="tabpanel" aria-labelledby="most-recent-tab" hidden={tab !== 'most-recent'}><RecentProjects onOpen={onOpen} getCachedView={getCachedView} onNavigateActivity={onNavigateActivity} cacheScope={cacheScope} flat active={tab === 'most-recent'} projects={savedProjects} setProjects={setSavedProjects} loading={savedLoading} setLoading={setSavedLoading}/></div>
     <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest} active={tab === 'samples'}/></div>
   </div>;
 }
@@ -7815,7 +7878,7 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
 
 function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheScope }: {
   initialPath: string;
-  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean) => Promise<void> | void;
+  onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   cacheScope: string;
@@ -9265,6 +9328,9 @@ function App() {
         const body = await response.json() as { projects: RecentProject[] };
         if (controller.signal.aborted) return;
         const all = body.projects ?? [];
+        // Home consumes this already-fetched activity summary. Never force a
+        // paper-score or historical-paper scan just to refresh running icons.
+        window.dispatchEvent(new CustomEvent('sigma-saved-activity', { detail: all }));
         setGlobalActivity(all.some(row => row.research_running || row.answer_active || row.paper_generating || row.paper_activity === 'active')
           ? 'active' : all.some(row => row.paper_activity === 'queued') ? 'queued' : null);
       } catch { /* Keep the last known activity; a transient error must not clear it. */ }
@@ -9334,12 +9400,13 @@ function App() {
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache) => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
       await preloadProjectArtwork();
       setArtworkDecoded(true);
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
       setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path);
-      navigate(projectUrl(view.path) + (openSettings ? '&settings=collaborators' : ''));
+      navigate(projectUrl(view.path)
+        + (openSettings ? '&settings=collaborators' : revealPaperId ? `&reveal_paper=${encodeURIComponent(revealPaperId)}` : ''));
     }} onNavigateActivity={(entry, run) => {
       // Use the run ID already displayed on Home; no activity fetch blocks navigation.
       const target = new URL(projectUrl(entry.path), window.location.origin);

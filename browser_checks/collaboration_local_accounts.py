@@ -171,6 +171,10 @@ def exercise(ui: str, workspaces: Path) -> None:
         # race; the separate layout suite covers pointer positioning.
         shortcut.evaluate("element => element.click()")
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
+        expect(owner_dialog).to_be_visible()
+        # Home Group must arrive with the collaboration snapshot already
+        # loaded, not issue a second Settings request after opening the dialog.
+        expect(owner_dialog.get_by_text("Loading shared settings…", exact=True)).to_have_count(0)
         expect(owner_dialog.get_by_role("region", name="Collaborators")).to_be_visible()
         # Shared-project settings is a one-shot deep link, not persistent on refresh.
         assert owner.evaluate("new URL(location.href).searchParams.get('settings')") is None

@@ -272,9 +272,23 @@ def check_home_list_uses_only_paper_records(root: Path) -> None:
             assert len(rows) == 1 and rows[0]["available"], rows
             assert rows[0]["paper_count"] == 1, rows
             assert rows[0]["best_paper_score"] == 70, rows
-        # Paper details and the Papers list must also remain metadata-only.
+        # Paper details, project opens and list endpoints must use metadata
+        # pointers only. In particular an increasing PDF library must not
+        # introduce PDF reads on ordinary Home → Project navigation.
         assert papers.list_papers(view.path)[0]["score"]["total"] == 70
         assert papers.get_paper(view.path, paper_id, include_tex=False)["score"]["total"] == 70
+        with TestClient(app) as client:
+            response = client.post("/api/projects/open", json={"path": view.path, "compact": True})
+            assert response.status_code == 200, response.text
+            response = client.get("/api/projects/papers", params={"path": view.path})
+            assert response.status_code == 200, response.text
+            assert response.json()["paper_count"] == 1
+            response = client.get(
+                "/api/projects/collaboration",
+                params={"path": view.path, "include_authors": "false"},
+            )
+            assert response.status_code == 200, response.text
+            assert "artifact_authors" not in response.json()
         # Corrupt individual paper records must not hide the saved project.
         paper_dir = Path(view.path) / "artifacts" / "generated_papers"
         paper_dir.mkdir(parents=True, exist_ok=True)
@@ -943,6 +957,59 @@ def check(root: Path, base: Path) -> None:
     )
 
 
+def check_completed_paper_count_does_not_slow_activity(root: Path) -> None:
+    """Completed papers must never be individually checked for live activity."""
+    from sigma import papers, project_collaboration
+
+    view = initialize_project(
+        root / "many-completed-papers.sigma",
+        "Completed paper activity",
+        "Activity checks must not scale with published paper count.",
+    )
+    historical = [{"run_id": f"{number:032x}", "status": "complete"} for number in range(1, 201)]
+    with (
+        patch.object(project_collaboration, "list_execution_runs", return_value=historical),
+        patch.object(
+            papers,
+            "paper_run_scope",
+            side_effect=AssertionError("Completed paper sidecar was probed"),
+        ),
+    ):
+        assert papers.activity_status(view.path) is None
+
+    published = [
+        {
+            **row,
+            "artifact_id": f"{number + 1000:032x}",
+            "creator_email": "owner@example.com",
+            "runner_email": "owner@example.com",
+            "number": number,
+        }
+        for number, row in enumerate(historical, start=1)
+    ]
+    with (
+        patch.object(project_collaboration, "list_execution_runs", return_value=published),
+        patch.object(
+            project_collaboration, "collaborator_identity", return_value="owner@example.com"
+        ),
+        patch.object(project_collaboration, "is_project_owner", return_value=True),
+        patch.object(
+            papers, "progress_status", side_effect=AssertionError("Read completed checkpoint")
+        ),
+        patch.object(
+            papers, "needs_preflight_on_open", side_effect=AssertionError("Scanned completed run")
+        ),
+        patch.object(
+            papers,
+            "_published_artifact_for_run",
+            side_effect=AssertionError("Probed completed PDF"),
+        ),
+    ):
+        runs = papers.run_progress_list(view.path)
+    assert len(runs) == 200
+    assert all(run["status"] == "complete" and run["paper_id"] for run in runs)
+
+
 def check_run_activity_aggregation_and_lightweight_poll() -> None:
     """Mixed runs retain queued entries, immutable authors and low-cost reads."""
     from sigma import papers, project_collaboration, recents, research_qa, research_sessions
@@ -1053,6 +1120,7 @@ def main() -> None:
             os.environ, {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(base / "state")}
         ):
             check(root, base)
+            check_completed_paper_count_does_not_slow_activity(root)
             check_run_activity_aggregation_and_lightweight_poll()
 
 

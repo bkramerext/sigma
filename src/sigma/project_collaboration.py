@@ -679,7 +679,9 @@ def _lease(db: sqlite3.Connection, path: str) -> dict[str, Any] | None:
     return dict(current)
 
 
-def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
+def summary(
+    path: str, *, verify_revision: bool = False, include_authors: bool = True
+) -> dict[str, Any]:
     from sigma.projects import inspect_project
 
     view = inspect_project(path)
@@ -728,17 +730,23 @@ def summary(path: str, *, verify_revision: bool = False) -> dict[str, Any]:
             "thinking": row["thinking"],
             "lease": _lease(db, view.path),
             "shared": bool(members),
-            "artifact_authors": {
-                kind: {
-                    record["artifact_id"]: record["email"]
-                    for record in db.execute(
-                        "SELECT artifact_id, email FROM shared_artifact_authors "
-                        "WHERE path=? AND kind=?",
-                        (view.path, kind),
-                    )
+            **(
+                {
+                    "artifact_authors": {
+                        kind: {
+                            record["artifact_id"]: record["email"]
+                            for record in db.execute(
+                                "SELECT artifact_id, email FROM shared_artifact_authors "
+                                "WHERE path=? AND kind=?",
+                                (view.path, kind),
+                            )
+                        }
+                        for kind in ("strategy", "session", "paper", "paper_draft", "answer")
+                    }
                 }
-                for kind in ("strategy", "session", "paper", "paper_draft", "answer")
-            },
+                if include_authors
+                else {}
+            ),
             "failed_notifications": db.execute(
                 """SELECT COUNT(*) FROM shared_email_outbox
                    WHERE project_path=? AND failed_at IS NOT NULL""",
@@ -941,11 +949,14 @@ def reserve_execution_run(
         }
 
 
-def list_execution_runs(path: str, kind: str) -> list[dict[str, Any]]:
-    """Authorized, bounded Paper/Session reservations for activity and recovery.
+def list_execution_runs(
+    path: str, kind: str, *, unfinished_only: bool = False
+) -> list[dict[str, Any]]:
+    """Authorized Paper/Session reservations for activity and recovery.
 
-    This is a read, not an admission lock. Never poll the session/paper record
-    files while holding the collaboration database transaction.
+    The optional unfinished-only projection lets Home activity checks avoid
+    transferring the entire history of completed papers on every poll.
+    This is a read, not an admission lock; do not read artifact contents here.
     """
     if kind not in {"paper", "session"}:
         raise ValueError("Unknown run kind")
@@ -960,8 +971,9 @@ def list_execution_runs(path: str, kind: str) -> list[dict[str, Any]]:
             """SELECT run_id, number, creator_email, runner_email, model, thinking,
                       created_at, status, artifact_id
                FROM shared_run_reservations WHERE path=? AND kind=?
+                 AND (?=0 OR status NOT IN ('complete', 'discarded'))
                ORDER BY number""",
-            (path, kind),
+            (path, kind, int(unfinished_only)),
         ).fetchall()
         return [dict(row) for row in rows]
 

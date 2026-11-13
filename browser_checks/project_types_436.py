@@ -1010,6 +1010,17 @@ with sync_playwright() as playwright:
     page.reload()
     active_title = page.locator(".project-header-title-action")
     expect(active_title).to_be_visible(timeout=10000)
+    # The project-title hover hint follows its visible text, not the entire header track.
+    active_title.hover(position={"x": 12, "y": 12})
+    title_tooltip = page.locator("#sigma-ui-tooltip")
+    expect(title_tooltip).to_be_visible()
+    anchor_box = active_title.bounding_box()
+    hint_box = title_tooltip.bounding_box()
+    assert anchor_box and hint_box
+    assert abs(hint_box["x"] - (anchor_box["x"] + 26)) <= 12, (
+        anchor_box,
+        hint_box,
+    )
     active_geometry = active_title.evaluate(
         """node => {
           const text = node.querySelector('.project-header-title-text');
@@ -1475,6 +1486,16 @@ with sync_playwright() as playwright:
     expect(score_link).to_be_enabled()
     assert score_link.inner_text().startswith("Score "), score_link.inner_text()
     paper_row = page.locator('[data-paper-id="fixture-paper-1"]')
+    # A paper title link spans the row. Anchor hovertext next to the text
+    # under the pointer, not near the middle of this full-width link.
+    paper_title_link = paper_row.locator(".paper-title-open-link")
+    paper_title_link.hover(position={"x": 8, "y": 8})
+    paper_hint = page.locator("#sigma-ui-tooltip")
+    expect(paper_hint).to_be_visible()
+    link_box = paper_title_link.bounding_box()
+    tip_box = paper_hint.bounding_box()
+    assert link_box and tip_box
+    assert abs(tip_box["x"] - (link_box["x"] + 22)) <= 12, (link_box, tip_box)
     star_box = paper_row.locator(".paper-title-star").bounding_box()
     paper_title_box = paper_row.locator(".saved-paper-second-line").bounding_box()
     assert star_box and paper_title_box

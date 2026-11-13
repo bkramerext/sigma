@@ -35,7 +35,16 @@ with sync_playwright() as playwright:
         headers = dict(route.request.headers)
         headers["origin"] = REQUEST_ORIGIN
         response = route.fetch(url=route.request.url.replace(UI, API), headers=headers)
-        if route.request.url.split("?", 1)[0] == f"{UI}/api/projects/recent":
+        endpoint = route.request.url.split("?", 1)[0]
+        if endpoint == f"{UI}/api/projects/recent/activity":
+            # Running badges now consume the independent cheap activity poll.
+            # Keep the fixture's status source aligned with that API, rather
+            # than assuming the expensive Home metadata request runs every 5s.
+            data = response.json()
+            for entry in data["projects"]:
+                entry["research_running"] = entry["id"] in running
+            route.fulfill(response=response, body=json.dumps(data))
+        elif endpoint == f"{UI}/api/projects/recent":
             data = response.json()
             for entry in data["projects"]:
                 entry["research_running"] = entry["id"] in running

@@ -86,6 +86,12 @@
 .workspace-page .papers-pane .paper-action-popover button.destructive-action { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-action-popover button:disabled { opacity: .55; cursor: default; }
 .workspace-page .papers-pane .saved-paper-meta { margin-top: 2px; }
+/* One shared spacer for date, elapsed, attribution and score. */
+.workspace-page .papers-pane .saved-paper-meta .paper-meta-dot {
+  display: inline;
+  margin-inline: 0;
+  white-space: pre;
+}
 .workspace-page .papers-pane .saved-paper-meta .text-view-link { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link { display: inline; width: auto; min-height: 0; padding: 0; margin-left: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; }
@@ -251,7 +257,17 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.workspace-page .papers-pane .saved-paper-second-line .paper-title-open-link { color: inherit; text-decoration: none; cursor: pointer; }
+/* A paper title is a text-sized link, not an invisible full-row hover target.
+   Constrain the tooltip anchor to the actual title while allowing long titles to wrap. */
+.workspace-page .papers-pane .saved-paper-second-line .paper-title-open-link {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  vertical-align: top;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
 .workspace-page .papers-pane .saved-paper-second-line .paper-title-open-link:is(:hover,:focus-visible) { text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-title-toggle { text-decoration: none; cursor: pointer; }
 .workspace-page .papers-pane .saved-paper-title-toggle:is(:hover,:focus-visible) { text-decoration: none; }
