@@ -7728,16 +7728,41 @@ async def control_session(
                     except cloud_research.CloudResearchUnavailable as exc:
                         raise ProjectError(str(exc)) from exc
                 _record_unknown_compiler_attempt(compiler)
-                compiler["status"] = "fallback"
+                # Required compilation cannot proceed from fallback. An
+                # explicit Resume can authorize a distinct, independently
+                # funded attempt while retaining the uncertain liability.
+                attempts = compiler.get("attempts")
+                can_retry_required = (
+                    compiler.get("required_for_acceptance") is True
+                    and isinstance(attempts, list)
+                    and len(attempts) < research_reference_compiler.MAX_COMPILATION_ATTEMPTS
+                )
+                compiler["status"] = "pending" if can_retry_required else "fallback"
                 if not isinstance(compiler.get("token_usage"), dict):
                     compiler["usage_status"] = "unknown"
                 compiler["finished_at"] = compiler.get("finished_at") or _now()
                 compiler["reason"] = (
                     "Previous compilation delivery or usage was uncertain. "
-                    "It was not retried; research resumes with frozen original notes "
-                    "while its full budget reservation remains held."
+                    "That request was not replayed; its full reservation remains held. "
+                    + (
+                        "Explicit Resume permits a new independently budgeted compilation attempt."
+                        if can_retry_required
+                        else "Original frozen notes remain available."
+                    )
                 )
                 _event(record, "references.compilation.recovered", compiler["reason"])
+            elif (
+                isinstance(compiler, dict)
+                and compiler.get("status") == "fallback"
+                and compiler.get("required_for_acceptance") is True
+                and isinstance(compiler.get("attempts"), list)
+                and len(compiler["attempts"]) < research_reference_compiler.MAX_COMPILATION_ATTEMPTS
+            ):
+                # Settled failures may be retried only after explicit Resume.
+                # Preserve old attempts, frozen references and accounting.
+                compiler["status"] = "pending"
+                compiler["reason"] = "A new research standards compilation attempt was requested on Resume."
+                _event(record, "references.compilation.retry_requested", compiler["reason"])
             # The user may have disabled or deleted oversized Source Material
             # after a pre-dispatch block. On explicit Resume, use the *current*
             # enabled set without replaying reference-compiler or role attempts.
@@ -15625,6 +15650,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                     validation_failure=validation_failure,
                     usage_status=usage_status,
                     billing_settled=billing_settled,
+                    provider_error_code=provider_error_code,
                     retry_after_seconds=retry_after_seconds,
                 )
                 if latest["status"] in {"stopped", "paused", "failed", "ended", "completed"}:

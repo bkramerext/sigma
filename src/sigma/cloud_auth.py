@@ -1856,8 +1856,8 @@ def login(
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
-        if session_cookie:
-            db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
+        # A transient OAuth failure must not revoke an already verified session.
+        # Revoke the old cookie only on a completed replacement sign-in.
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
             "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to,window_id) VALUES(?,?,?,?,?,?)",
@@ -2165,6 +2165,8 @@ async def callback(
                 return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
+        if session_cookie:
+            db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
         if role == "member" and _materialize_domain_member(db, subject, email):
             auto_domain_member = True
         existing_account = db.execute(

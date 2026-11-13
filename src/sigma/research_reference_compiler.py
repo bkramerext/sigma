@@ -31,6 +31,7 @@ def retry_plan(
     validation_failure: str | None,
     usage_status: str,
     billing_settled: bool,
+    provider_error_code: str | None = None,
     retry_after_seconds: float | None = None,
 ) -> tuple[str, float]:
     """Permit another independently funded call only after a settled response.
@@ -45,6 +46,15 @@ def retry_plan(
     if attempt_number >= MAX_COMPILATION_ATTEMPTS:
         return "retry_exhausted", 0.0
     if http_status == 429 and usage_status == "rejected":
+        # Short rate limits can clear after a wait. Project billing ceilings
+        # cannot, and retrying them just burns compilation attempts.
+        if provider_error_code in {
+            "project_spend_limit_exceeded",
+            "insufficient_quota",
+            "billing_hard_limit_reached",
+            "billing_not_active",
+        }:
+            return "provider_spend_limit_exceeded", 0.0
         backoff = float(0.5 * 2 ** (attempt_number - 1))
         if retry_after_seconds is not None:
             if retry_after_seconds > MAX_RETRY_AFTER_SECONDS:

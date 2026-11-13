@@ -44,10 +44,15 @@ export function adoptLatestWindowSignIn(): Promise<void> {
         credentials: 'same-origin',
         headers: { 'X-Sigma-Window': windowId, 'X-Sigma-Error-Handled': 'true' },
       });
-      if (!response.ok) return;
+      if (!response.ok) { adoption = null; return; }
       const result = await response.json() as { scoped?: boolean };
       if (result.scoped) activateWindowSession();
-    } catch { /* An unavailable auth service keeps its normal sign-in UI. */ }
+      else adoption = null;
+    } catch {
+      // The first request after deployment may race a restarting auth service.
+      // Retry on the next status refresh rather than permanently caching failure.
+      adoption = null;
+    }
   })();
   return adoption;
 }
