@@ -879,7 +879,9 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
         assert saved["identity_hash"] == research_sessions._digest(sponsor["identity"])
         assert saved["cost_status"] == "available"
         assert saved["cloud_sponsored"] is True
-        assert saved["steps"] == prior["steps"]
+        assert saved["steps"] == [
+            {**prior["steps"][0], "funding_provenance": "personal_chatgpt_unmetered"}
+        ]
         assert saved["artifacts"] == prior["artifacts"]
         assert saved["calls_used"] == prior["calls_used"]
         assert saved["transport_change_history"][-1]["from_mode"] == "chatgpt"
@@ -898,7 +900,7 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
         assert personal_record["mode"] == "chatgpt"
         assert personal_record["cloud_sponsored"] is False
         assert personal_record["cost_status"] == "unavailable"
-        assert personal_record["steps"] == prior["steps"]
+        assert personal_record["steps"] == saved["steps"]
         assert personal_record["calls_used"] == prior["calls_used"]
 
 
