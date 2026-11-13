@@ -1444,7 +1444,9 @@ with sync_playwright() as playwright:
     fresh_play = page.get_by_role("button", name="Generate paper")
     expect(fresh_play).to_be_enabled(timeout=10000)
     expect(page.get_by_role("button", name="Start over on paper generation")).to_be_enabled()
-    assert "confirmation required" in fresh_play.locator("xpath=..").get_attribute("data-tooltip")
+    expect(fresh_play.locator("xpath=..")).to_have_attribute(
+        "data-tooltip", "Start a new paper attempt (confirmation required)", timeout=10000
+    )
     fresh_play.click()
     play_confirm = page.get_by_role("group", name="Confirm new paper generation attempt")
     expect(play_confirm).to_be_visible()
