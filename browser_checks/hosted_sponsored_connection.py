@@ -617,27 +617,27 @@ def exercise(origin: str) -> None:
         assert_account_pill_geometry()
         api_pill.get_by_role("status").evaluate("el => el.style.fontSize = ''")
         stable_width = api_pill.bounding_box()["width"]
-        # A long visible validation error must not resize either account pill.
+        # Pending sign-in guidance may still appear below the pill, without
+        # affecting the intrinsic width. Errors themselves use global toasts.
         page.evaluate(
             """() => {
                 const details = document.querySelector('.home-account-grid .api-connection');
                 const messages = document.createElement('div');
                 messages.className = 'connection-pill-messages';
-                const error = document.createElement('p');
-                error.className = 'connection-pill-message';
-                error.setAttribute('role', 'alert');
-                error.textContent =
-                    'ChatGPT sign-in validation failed. Retry; existing accounts were retained.';
-                messages.appendChild(error);
+                const status = document.createElement('p');
+                status.className = 'connection-pill-message';
+                status.setAttribute('role', 'status');
+                status.textContent = 'Complete sign-in in the browser.';
+                messages.appendChild(status);
                 details.appendChild(messages);
                 details.open = true;
             }"""
         )
-        error_message = page.locator(".connection-pill-message")
-        expect(error_message).to_be_visible()
+        status_message = page.locator(".connection-pill-message")
+        expect(status_message).to_be_visible()
         assert_account_pill_geometry()
         assert abs(api_pill.bounding_box()["width"] - stable_width) < 1
-        assert error_message.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+        assert status_message.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
         page.locator(".connection-pill-messages").evaluate(
             "el => { el.parentElement.open = false; el.remove(); }"
         )

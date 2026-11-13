@@ -63,8 +63,8 @@
 .api-connection > summary:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 .api-connection > summary[aria-disabled="true"] { cursor: default; }
 .api-connection > summary::-webkit-details-marker { display: none; }
-/* Status/errors are out of the inline-sizing flow. Only summary contributes to
-   the Google/ChatGPT column width; multiple messages still stack underneath. */
+/* Pending sign-in guidance stays below the pill but never contributes to
+   Google/ChatGPT column sizing. Connection failures use dismissible toasts. */
 .api-connection > .connection-pill-messages {
   position: absolute;
   top: 100%;
@@ -74,7 +74,6 @@
   min-width: 0;
 }
 .connection-pill-message { max-width: min(360px, calc(100vw - 32px)); margin: 6px 0 0; color: #d1c5b9; font: 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
-.connection-pill-message[role="alert"] { color: #f1aaa0; }
 .sponsored-allowance-trigger { position: relative; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: help; }
 :is(.home-page, .workspace-page) .api-connection > summary .sponsored-allowance-trigger { width: auto; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 :is(.home-page, .workspace-page) .api-connection > summary .sponsored-allowance-trigger:hover,
