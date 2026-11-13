@@ -5124,7 +5124,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 : { left: 12, top: 12, visibility: 'hidden' }}>
               <p>{paperStepRestart.stage === 'scoring'
                 ? `Rescore paper ${paper.paper_version}?`
-                : `Restart paper ${paper.paper_version} at ${paperRestartStepName(paperStepRestart.stage)}?`}</p>
+                : paperStepRestart.stage === 'started'
+                  ? 'Restart paper from beginning?'
+                  : `Restart paper ${paper.paper_version} at ${paperRestartStepName(paperStepRestart.stage)}?`}</p>
               {paperStepRestart.error && <p role="alert" className="ai-paper-warning">{paperUserMessage(paperStepRestart.error)}</p>}
               <div className="session-remove-confirm-actions">
                 <button type="button" className="text-view-link" disabled={!paperStepRestart.options || paperStepRestartBusy || (!binding && paperStepRestart.stage !== 'scoring')} onClick={() => void confirmPaperStepRestart()}>Confirm</button>
