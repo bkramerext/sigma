@@ -113,6 +113,13 @@ jobs:
           set -euo pipefail
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/issue525_project_diagnostics.py
+      - name: Hosted sponsored provider and OAuth readiness browser regression
+        if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          SIGMA_HOSTED_CONNECTION_FOCUSED=1 uv run --with playwright python browser_checks/hosted_sponsored_connection.py
       - name: Public Samples guest star and PDF acceptance
         # Independent suites should all run, even after another suite fails.
         if: ${{ matrix.group == '1' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
