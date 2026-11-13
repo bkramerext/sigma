@@ -977,7 +977,9 @@ def papers_view(path: str, include_runs: bool = True):
     available = [paper for paper in saved if paper.get("pdf_available")]
     return {
         "papers": saved,
-        "next_paper_number": papers.next_paper_number_for_activity(path),
+        "next_paper_number": papers.next_paper_number_for_activity(
+            path, include_reserved=include_runs
+        ),
         "paper_count": len(available),
         "best_paper_score": paper_scores.best_score(available),
         "runs": papers.run_progress_list(path) if include_runs else [],
