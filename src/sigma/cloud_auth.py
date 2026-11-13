@@ -1899,7 +1899,8 @@ def login(
     else:
         _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
-    _clear_window_session(response, cfg, window_id or None)
+    # Preserve the current browser session if Google's first redirect or
+    # callback fails. Successful replacement or explicit logout clears it.
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
