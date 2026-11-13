@@ -6158,9 +6158,9 @@ def _rebind_provider_transport(
             float(record.get("interrupted_cost_upper_bound_usd") or 0.0) + prior_hold, 9
         )
         prior_tokens = int(record.get("tokens_reserved") or 0)
-        record["historical_sponsor_tokens_held"] = int(
-            record.get("historical_sponsor_tokens_held") or 0
-        ) + prior_tokens
+        record["historical_sponsor_tokens_held"] = (
+            int(record.get("historical_sponsor_tokens_held") or 0) + prior_tokens
+        )
         record["tokens_reserved"] = 0
         for old_step in record.get("steps", []):
             if not isinstance(old_step, dict):
