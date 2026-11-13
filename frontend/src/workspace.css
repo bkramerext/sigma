@@ -566,6 +566,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   width: 100%;
   max-width: 100%;
   display: block;
+  position: relative;
   overflow: visible;
   -webkit-line-clamp: unset;
   line-clamp: unset;
@@ -576,11 +577,17 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   -webkit-line-clamp: unset;
   line-clamp: unset;
 }
+.workspace-page .project-header-title-action .project-header-title-label {
+  /* Each line starts at the same hanging indent; the flasher is out of flow. */
+  display: block;
+}
 .workspace-page .project-header-title-action .research-running-indicator-frame {
-  display: inline-flex; width: 20px; height: 1em;
-  /* Align the heartbeat to the text line's middle, not the baseline.
-     Inline flow keeps it beside the last line of wrapped titles. */
-  vertical-align: middle; margin-left: 3px;
+  /* Position after the final title glyph without extending the hover width. */
+  position: absolute;
+  display: inline-flex;
+  width: 20px;
+  height: 1em;
+  margin: 0;
 }
 @media (max-width:700px) { .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0,1fr); gap: 5px; } }
 

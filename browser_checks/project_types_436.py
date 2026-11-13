@@ -1023,12 +1023,12 @@ with sync_playwright() as playwright:
     )
     active_geometry = active_title.evaluate(
         """node => {
-          const text = node.querySelector('.project-header-title-text');
+          const text = node.querySelector('.project-header-title-label');
           const range = document.createRange();
-          range.selectNodeContents(text.firstChild);
+          range.selectNodeContents(text);
           const lines = [...range.getClientRects()].filter(rect => rect.width > 25)
             .map(rect => ({x:rect.x, midY:rect.y + rect.height / 2}));
-          const dot = text.querySelector('.research-running-indicator').getBoundingClientRect();
+          const dot = node.querySelector('.research-running-indicator').getBoundingClientRect();
           return {lines, dotMidY: dot.y + dot.height / 2};
         }"""
     )

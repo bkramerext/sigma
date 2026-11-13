@@ -29,6 +29,29 @@ def title_geometry(locator):
     )
 
 
+def active_title_geometry(locator):
+    return locator.evaluate(
+        """button => {
+          const label = button.querySelector('.project-header-title-label');
+          const pulse = button.querySelector('.research-running-indicator-frame');
+          if (!label || !pulse) return null;
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          const fragments = [...range.getClientRects()].filter(rect => rect.width > 0);
+          const box = button.getBoundingClientRect();
+          const row = button.closest('.project-header-title-row').getBoundingClientRect();
+          const flash = pulse.getBoundingClientRect();
+          const last = fragments.at(-1);
+          return {
+            buttonWidth: box.width, rowWidth: row.width,
+            longest: Math.max(0, ...fragments.map(rect => rect.width)),
+            lastRight: last?.right, lastMiddle: last ? last.top + last.height / 2 : null,
+            flasherLeft: flash.left, flasherMiddle: flash.top + flash.height / 2
+          };
+        }"""
+    )
+
+
 def check_pointer_tooltip(page, title):
     tooltip = page.get_by_role("tooltip")
     expect(tooltip).to_have_text("Toggle all project sections")
@@ -78,6 +101,28 @@ def main():
                 }
             ),
         )
+        # One isolated active run exercises the same green flasher as live sessions.
+        activity = {"running": False}
+        page.route(
+            "**/api/projects/activity-runs?*",
+            lambda route: route.fulfill(
+                json={
+                    "runs": [
+                        {
+                            "kind": "session",
+                            "status": "active",
+                            "number": 1,
+                            "id": "title-hover-session",
+                            "creator": "tester@example.org",
+                            "model": "gpt-6-luna",
+                            "thinking": "low",
+                        }
+                    ]
+                    if activity["running"]
+                    else []
+                }
+            ),
+        )
         for name, wrap in [
             ("Title hover " + uuid4().hex[:8], False),
             (
@@ -115,15 +160,39 @@ def main():
             assert abs(geometry["width"] - max(geometry["lines"])) <= 6, geometry
             assert geometry["width"] < geometry["rowWidth"] * 0.96, geometry
             check_pointer_tooltip(page, title)
+            idle_width = geometry["width"]
             title.click()
             expect(
                 page.locator("#project-pane-heading .workspace-section-disclosure")
             ).to_have_attribute("aria-expanded", "false")
             page.mouse.move(0, 0)
+
+            # With a green activity flasher, the button highlight should still
+            # end at the title text, and the flasher belongs just after the
+            # final glyph, including when the title wraps onto a second line.
+            activity["running"] = True
+            page.reload(wait_until="domcontentloaded")
+            active = page.locator(".project-header-title-action")
+            expect(active).to_be_visible(timeout=15000)
+            active_geometry = active_title_geometry(active)
+            assert active_geometry, "Activity title or flasher was not rendered"
+            assert abs(active_geometry["buttonWidth"] - idle_width) <= 6, active_geometry
+            assert (
+                active_geometry["longest"]
+                <= active_geometry["buttonWidth"]
+                <= active_geometry["longest"] + 6
+            ), active_geometry
+            assert 1 <= active_geometry["flasherLeft"] - active_geometry["lastRight"] <= 10, (
+                active_geometry
+            )
+            assert abs(active_geometry["flasherMiddle"] - active_geometry["lastMiddle"]) <= 3, (
+                active_geometry
+            )
+            activity["running"] = False
         assert not errors, errors
         browser.close()
         print(
-            "PASS project title hover fits text, tooltip follows pointer and click behavior remains"
+            "PASS project title hover fits text with and without flasher, including wrapped titles"
         )
 
 
