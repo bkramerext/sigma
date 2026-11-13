@@ -7037,6 +7037,8 @@ async def start_session(
             )
             unavailable_source_count = source_count - verified_source_count
             # New session records always declare their compiler policy.
+            # Frozen verified excerpts are mandatory; AI compilation of those
+            # excerpts is optional and must never consume the first research wave.
             # The explicit disabled state isolates deterministic role fixtures;
             # old saved sessions with no marker are not silently compatible.
             compilation_enabled = os.environ.get(
@@ -7044,7 +7046,7 @@ async def start_session(
             ).strip().lower() in {"1", "true", "yes", "on"}
             record["reference_compilation"] = {
                 "version": research_reference_compiler.VERSION,
-                "required_for_acceptance": bool(verified_source_count and compilation_enabled),
+                "required_for_acceptance": False,
                 "status": (
                     "disabled"
                     if not compilation_enabled
@@ -15927,20 +15929,41 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     return latest["status"] in {"queued", "running"}
 
 
-def _strict_compilation_block_reason(compilation: Any) -> str | None:
-    """A pilot that required references cannot quietly use uncompiled notes."""
-    if not isinstance(compilation, dict) or compilation.get("required_for_acceptance") is not True:
+def _strict_compilation_block_reason(record: dict[str, Any]) -> str | None:
+    """Do not make optional compiler failure an admission failure.
+
+    A saved fallback may use frozen, verified excerpts, but not a corrupted
+    source snapshot. Preserve the older strict checkpoint for unfinished
+    compiler work without treating settled fallback as missing methodology.
+    """
+    compilation = record.get("reference_compilation")
+    if not isinstance(compilation, dict):
         return None
-    if compilation.get("status") == "completed":
+    status = compilation.get("status")
+    if status in {"fallback", "skipped", "disabled", "not_needed"}:
+        if compilation.get("version") == "legacy":
+            return None
+        frozen = record.get("research_method_sources")
+        try:
+            if (
+                not isinstance(frozen, dict)
+                or compilation.get("source_sha256") != frozen.get("sha256")
+                or methodology_digest(frozen) != frozen.get("sha256")
+                or retrieval_readiness_errors(frozen)
+            ):
+                raise ValueError("Frozen research references failed integrity validation.")
+        except (ProjectError, KeyError, TypeError, ValueError, AttributeError):
+            return (
+                "Research is paused: frozen research references failed integrity "
+                "validation. No Investigator or Skeptic call was dispatched."
+            )
         return None
-    status = str(compilation.get("status") or "unknown")[:50]
-    reason = str(compilation.get("reason") or "No successful reference compilation was saved.")[
-        :400
-    ]
+    if compilation.get("required_for_acceptance") is not True or status == "completed":
+        return None
+    reason = str(compilation.get("reason") or "No completed compiler checkpoint was saved.")[:400]
     return (
-        f"Research is paused: required reference compilation is {status}. "
-        f"{reason} Review Outcome → Research Standards and resolve the cause "
-        "before clicking Resume. No Investigator or Skeptic call was dispatched."
+        f"Research is paused: reference compilation is {str(status or 'unknown')[:50]}. "
+        f"{reason} No Investigator or Skeptic call was dispatched."
     )
 
 
@@ -16439,7 +16462,7 @@ async def _worker(session_id: str, path: str) -> None:
             # before any Investigator wave, including after worker restarts.
             async with _session_state_lock(session_id):
                 latest = _read(path, session_id)
-                blocked = _strict_compilation_block_reason(latest.get("reference_compilation"))
+                blocked = _strict_compilation_block_reason(latest)
                 if blocked:
                     if latest["status"] not in {
                         "paused",

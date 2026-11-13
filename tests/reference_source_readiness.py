@@ -218,7 +218,7 @@ async def verify_provider_free_admission() -> None:
             saved = research_sessions._read(str(path), started["id"])
             assert saved["research_method_sources"]["retrieval_summary"]["retrieved"] == 3
             assert saved["reference_compilation"]["status"] == "pending"
-            assert saved["reference_compilation"]["required_for_acceptance"] is True
+            assert saved["reference_compilation"]["required_for_acceptance"] is False
             assert saved["calls_used"] == 0
             assert saved["steps"] == []
 
@@ -248,8 +248,8 @@ async def verify_provider_free_admission() -> None:
             assert resumed["calls_used"] == saved["calls_used"]
             assert resumed["steps"] == saved["steps"]
 
-            # Simulate all compiler retries exhausted. The saved strict-policy
-            # checkpoint must prevent the worker from starting research.
+            # Failed optional compilation must not strand a fresh session
+            # once its frozen source snapshot has already passed admission.
             saved["reference_compilation"]["status"] = "fallback"
             saved["reference_compilation"]["reason"] = (
                 "Known provider validation failures, three attempts exhausted."
@@ -258,12 +258,24 @@ async def verify_provider_free_admission() -> None:
 
         with patch.object(research_sessions, "_portfolio_worker", new=AsyncMock()) as portfolio:
             await research_sessions._worker(started["id"], str(path))
-            portfolio.assert_not_awaited()
-        blocked = research_sessions._read(str(path), started["id"])
-        assert blocked["status"] == "paused"
-        assert "required reference compilation" in blocked["message"]
-        assert blocked["calls_used"] == 0 and blocked["steps"] == []
-        assert blocked["outcome"]["source_material"]["compilation"]["status"] == "fallback"
+            portfolio.assert_awaited_once_with(started["id"], str(path))
+        continued = research_sessions._read(str(path), started["id"])
+        assert continued["status"] == "running"
+        assert continued["calls_used"] == 0 and continued["steps"] == []
+        assert continued["reference_compilation"]["status"] == "fallback"
+        assert research_sessions._strict_compilation_block_reason(continued) is None
+
+        # Existing sessions can retain the old strict marker after an optional
+        # compiler budget skip. They must still be able to Resume.
+        older = research_sessions._read(str(path), started["id"])
+        older["reference_compilation"]["required_for_acceptance"] = True
+        older["reference_compilation"]["status"] = "skipped"
+        assert research_sessions._strict_compilation_block_reason(older) is None
+
+        # Corrupting a saved excerpt after admission is not a valid fallback.
+        corrupted = research_sessions._read(str(path), started["id"])
+        corrupted["research_method_sources"]["sources"][0]["retrieval"]["excerpt"] = "tampered"
+        assert "integrity" in (research_sessions._strict_compilation_block_reason(corrupted) or "")
 
 
 async def verify_empty_and_single_reference_sessions() -> None:
@@ -271,7 +283,7 @@ async def verify_empty_and_single_reference_sessions() -> None:
     # three is a recommendation, not an admission minimum.
     for selected, compiler_enabled, expected_status, required in (
         ([], "true", "not_needed", False),
-        ([source("Only-selected")], "true", "pending", True),
+        ([source("Only-selected")], "true", "pending", False),
         ([source("Only-selected")], "false", "disabled", False),
     ):
         with temporary_project_directory() as tmp:

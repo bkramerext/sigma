@@ -257,14 +257,11 @@ async def verify_compilation(
             expected_limits=limits,
             strategy_ids=strategy_ids,
         )
-        # New sessions require completed compilation when enabled. These
-        # historic optional-compiler regressions deliberately replay the
-        # older durable permissive policy; the separate readiness suite tests
-        # strict new-session fallback blocking.
-        historical = research_sessions._read(str(path), started["id"])
-        assert historical["reference_compilation"]["required_for_acceptance"] is True
-        historical["reference_compilation"]["required_for_acceptance"] = False
-        research_sessions._save(str(path), historical)
+        # This is a genuinely fresh session. Optional compilation may be
+        # skipped to preserve the first Investigator wave, without bypassing
+        # the frozen source readiness and integrity admission checks.
+        fresh = research_sessions._read(str(path), started["id"])
+        assert fresh["reference_compilation"]["required_for_acceptance"] is False
         if not skip_compiler:
             await asyncio.wait_for(compilation_started.wait(), timeout=5.0)
             compiling = research_sessions._read(str(path), started["id"])
