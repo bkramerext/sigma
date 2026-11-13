@@ -362,6 +362,10 @@ _generation_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 # Covers the tiny interval between the API accepting a request and
 # generate() registering its inner authoring task. Immediate Stop is reliable.
 _submission_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+# An accepted Stop also fences future stage transitions. Cancellation of an
+# external provider call may be delayed or accidentally suppressed, but the
+# paper must never advance to PDF/scoring after Stop has been acknowledged.
+_stop_requested_keys: set[str] = set()
 
 
 def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
@@ -370,6 +374,7 @@ def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
     existing = _submission_tasks.get(key)
     if existing is not None and not existing.done():
         raise ProjectError("A paper generation is already active or queued for this project")
+    _stop_requested_keys.discard(key)
     started_at = _now()
     # API task scheduling is deferred until the request yields; committing
     # here guarantees an accepted submission survives a crash before it runs.
@@ -383,6 +388,7 @@ def register_submission(path: str, task: asyncio.Task[dict[str, Any]]) -> None:
         if _submission_tasks.get(key) is not completed:
             return  # A newer request owns the receipt; never alter its state.
         _submission_tasks.pop(key, None)
+        _stop_requested_keys.discard(key)
         try:
             receipt = _read_queue_status(path)
             if receipt is None or receipt["status"] != "queued":
@@ -10625,6 +10631,9 @@ async def _generate_impl(
             detail: str | None = None,
         ) -> None:
             nonlocal last_logged_stage, output_delta_count
+            # Never publish later stages after a user-authorized Stop, even if
+            # a library call swallowed the task's asyncio cancellation.
+            _abort_stopping_generation(path)
             # The persisted artifact determines the earliest unfinished stage;
             # do not replay prior progress markers when reconstructing locally.
             if (
@@ -11911,6 +11920,9 @@ async def _generate_impl(
                     pdf_check_passes = list(saved_pdf_pass["pdf_check_passes"])
                     diagram_fallback = saved_pdf_pass["diagram_fallback"]
                     next_pdf_pass = 4 if saved_pdf_pass["ready"] else saved_pdf_pass["next_pass"]
+            # Stop may arrive as proofreading completes. Yield at this checkpoint
+            # boundary so cancellation wins before PDF compilation starts.
+            await asyncio.sleep(0)
             for pass_number in range(next_pdf_pass, 4):
                 _abort_stopping_generation()
                 pass_diagnostics: list[str] = []
@@ -12371,6 +12383,16 @@ async def generate(
         _started_paper_attempts.discard(key)
         if _generation_tasks.get(key) is task:
             _generation_tasks.pop(key, None)
+        _stop_requested_keys.discard(key)
+
+
+def _abort_stopping_generation(path: str | None = None) -> None:
+    """Reject new work after Stop, including synchronous phase transitions."""
+    task = asyncio.current_task()
+    if (task is not None and task.cancelling()) or (
+        path is not None and _paper_state_key(path) in _stop_requested_keys
+    ):
+        raise asyncio.CancelledError()
 
 
 def _abort_stopping_generation() -> None:
@@ -12397,7 +12419,7 @@ def _cancellable_generation_task(path: str) -> asyncio.Task[dict[str, Any]] | No
 def stop_request_pending(path: str) -> bool:
     """True while an accepted Stop awaits the worker's durable cleanup."""
     task = _cancellable_generation_task(path)
-    return task is not None and task.cancelling() > 0
+    return task is not None and (task.cancelling() > 0 or _paper_state_key(path) in _stop_requested_keys)
 
 
 def request_cancel_generation(path: str) -> bool:
@@ -12411,6 +12433,7 @@ def request_cancel_generation(path: str) -> bool:
     task = _cancellable_generation_task(path)
     if task is None:
         return False
+    _stop_requested_keys.add(_paper_state_key(path))
     if task.cancelling() == 0:
         logging.getLogger("sigma.lifecycle").info("paper.stop_requested")
         task.cancel()
