@@ -100,7 +100,8 @@ def _account_emails(members: dict[str, bytes]) -> set[str]:
                     continue
                 key_lower = key.casefold()
                 if (
-                    key_lower in {
+                    key_lower
+                    in {
                         "created_by",
                         "creator_email",
                         "owner_email",
