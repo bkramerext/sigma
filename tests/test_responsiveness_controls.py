@@ -131,7 +131,11 @@ class ResponsiveControlTests(TestCase):
                         "inspect_project",
                         return_value=SimpleNamespace(project=SimpleNamespace(id="project-1")),
                     ),
-                    patch.object(api.cloud_workspaces, "current", return_value=object() if run_id else None),
+                    patch.object(
+                        api.cloud_workspaces,
+                        "current",
+                        return_value=object() if run_id else None,
+                    ),
                     patch.object(api.project_collaboration, "execution_run") as run_acl,
                     patch.object(
                         api.project_collaboration, "require_paper_draft_operator"
