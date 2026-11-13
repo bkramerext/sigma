@@ -316,7 +316,7 @@ pending.
 ---
 
 ## Version 0.4.1 — Responsive Papers and Faster Navigation
-*Release candidate · November 12, 2026 · Production deployment pending*
+*Released November 13, 2026 · Production deployment verified*
 
 **This update makes SIGMA's paper workflow more responsive and predictable, especially in projects with many papers.** It also improves navigation and adds a new Medical research category.
 
@@ -344,4 +344,4 @@ pending.
 
 SIGMA remains experimental. AI-generated conclusions, citations, papers, and paper scores require independent review. Checkpoint recovery does not mean that uncertain paid provider requests can safely be replayed.
 
-**Source cutoff for these notes:** merged `main` SHA `9faa3e667766b35d75ae3113ba5db22405c55802` (through PR #829). **This is not the final release SHA.** The version metadata still needs to be advanced to 0.4.1, the resulting exact-SHA CI must pass, and the production cutover must be verified. No tag or production deployment is claimed by this documentation change.
+**Source cutoff for these notes:** merged `main` SHA `9faa3e667766b35d75ae3113ba5db22405c55802` (through PR #829). **Final release SHA:** `03781befac94ef1235fd5630e2f061abcd4fd9c8`. The exact merged SHA passed all required CI checks and was deployed to production on November 13, 2026. The running build reports `Version 0.4.1 · Build 03781be`. See [Deployment History](DEPLOYMENT_HISTORY.md) for the backup, image identities, and production verification record. No release tag was created.
