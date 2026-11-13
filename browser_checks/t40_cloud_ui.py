@@ -745,7 +745,9 @@ def main() -> None:
             assert member.evaluate("localStorage.getItem('sigma.currentProject')") is None
             assert member.evaluate("sessionStorage.getItem('sigma.guestSamplePath')") is None
             expect(member.get_by_role("link", name="Sign in with Google")).to_be_visible()
-            status.update(authenticated=True, user={"email": "foreign@example.org", "role": "member"})
+            status.update(
+                authenticated=True, user={"email": "foreign@example.org", "role": "member"}
+            )
             member.reload()
             expect(member).to_have_url(URL + "/", timeout=10000)
             expect(member.get_by_role("heading", name="Projects")).to_be_visible()
