@@ -7892,6 +7892,9 @@ function SampleProjects({ onOpen, guest = false, active = false }: { onOpen: (vi
     try {
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
       // A sample opens an independent working copy, never mutating the template.
+      // The visitor may explore it without joining this guest path to a future
+      // Google identity (including featured-paper deep links).
+      if (guest) window.sessionStorage.setItem('sigma.guestSamplePath', copy.path);
       window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
       if (revealFeaturedPaper) await preloadPaperListing(copy.path, copy.project.id);
       const papers = revealFeaturedPaper ? initialPaperListings.get(copy.path)?.papers ?? [] : [];
@@ -9839,11 +9842,14 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   const currentProjectPath = new URLSearchParams(window.location.search).get('path');
   const notificationLink = new URLSearchParams(window.location.search);
   const fromProgressEmail = notificationLink.has('reveal_session') || notificationLink.has('reveal_paper');
-  const signInDestination = fromProgressEmail
-    ? `/project?${notificationLink.toString()}`
-    : `/project?path=${currentProjectPath}&resume_play=1`;
+  const isGuestSample = !!currentProjectPath
+    && window.sessionStorage.getItem('sigma.guestSamplePath') === currentProjectPath;
+  // Signing in from an ordinary project or guest sample starts at Home.
+  // Explicit research-notification deep links still resume their target,
+  // except when a guest opened a featured sample paper with reveal_paper.
   const projectReturn = window.location.pathname === '/project' && currentProjectPath
-    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: signInDestination })}`
+    && fromProgressEmail && !isGuestSample
+    ? `/api/cloud-auth/login?${new URLSearchParams({ return_to: `/project?${notificationLink.toString()}` })}`
     : '/api/cloud-auth/login';
   useEffect(() => {
     setInvitationRecorded(invitationRequestOpen);
@@ -9910,30 +9916,8 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
     setSigningOut(true);
     setError('');
     try {
-      let currentProjectPath = window.location.pathname === '/project'
-        ? new URLSearchParams(window.location.search).get('path')
-        : null;
-      let destination = '/';
-      if (currentProjectPath && !authenticatedGuest) {
-        try {
-          const copied = await fetch('/api/projects/guest-copy', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-            body: JSON.stringify({ path: currentProjectPath }),
-          });
-          if (!copied.ok) throw new Error('Guest copy unavailable.');
-          const result = await copied.json() as { path: string };
-          if (!result.path) throw new Error('Guest copy path unavailable.');
-          destination = projectUrl(result.path);
-          currentProjectPath = result.path;
-        } catch {
-          // Export/import validation or an active session may prevent a guest copy.
-          // Never make logout depend on the optional copy succeeding.
-          currentProjectPath = null;
-        }
-      } else if (currentProjectPath) {
-        destination = projectUrl(currentProjectPath);
-      }
+      // Identity changes must never carry an account-specific project route
+      // (or a copied guest project) into the next Google sign-in.
       // Explicit reauthentication is distinct from the browser closing: keep
       // already admitted jobs alive during a bounded identity handoff.
       // Authenticated guests cannot run paid work and do not need a handoff.
@@ -9953,9 +9937,9 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
       // quiet for this tab instead of presenting its introductory welcome.
       window.sessionStorage.setItem('sigma.guestWelcomeDismissed', 'true');
       window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed');
-      if (currentProjectPath) window.localStorage.setItem('sigma.currentProject', currentProjectPath);
-      else window.localStorage.removeItem('sigma.currentProject');
-      window.location.assign(destination);
+      window.localStorage.removeItem('sigma.currentProject');
+      window.sessionStorage.removeItem('sigma.guestSamplePath');
+      window.location.assign('/');
     } catch (cause) {
       signOutInFlight.current = false;
       setSigningOut(false);
