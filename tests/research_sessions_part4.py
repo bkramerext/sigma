@@ -824,6 +824,13 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
             side_effect=lambda: state["sponsored"],
         ),
         patch.object(research_sessions.cloud_research, "reconcile_all_orphaned_jobs"),
+        # The production ledger needs a verified sponsored workspace. This
+        # offline fixture deliberately replaces only workspace-backed ledger
+        # storage; prepare_job still asserts the correct admission snapshot.
+        patch.object(research_sessions.cloud_research, "sync_job"),
+        patch.object(research_sessions.cloud_research, "job_is_foreign", return_value=False),
+        patch.object(research_sessions.cloud_research, "job_status", return_value="queued"),
+        patch.object(research_sessions.cloud_research, "has_reserved_calls", return_value=False),
         patch.object(
             research_sessions.cloud_research,
             "prepare_job",
