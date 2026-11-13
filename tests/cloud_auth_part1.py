@@ -1232,6 +1232,22 @@ class CloudAuthTests(CloudAuthFixture):
             self.assertEqual(another_guest.get("/api/projects/samples").status_code, 200)
             self.assertEqual(another_guest.get("/api/projects/recent").json(), {"projects": []})
 
+    def test_guest_sample_signin_without_continuation_lands_home(self):
+        # The guest sample is a temporary working copy, not an account
+        # continuation. Normal successful Google login should start at Home.
+        with TestClient(app, base_url="https://testserver") as browser:
+            catalog = browser.get("/api/projects/samples")
+            self.assertEqual(catalog.status_code, 200, catalog.text)
+            opened = browser.post(
+                "/api/projects/samples/open",
+                json={"sample_id": catalog.json()["projects"][0]["id"]},
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(opened.status_code, 200, opened.text)
+            completed = self.finish(client=browser)
+            self.assertEqual(completed.status_code, 303)
+            self.assertEqual(completed.headers["location"], "/")
+
     def test_guest_play_signin_and_project_signout_keep_the_project_page(self):
         from sigma import cloud_workspaces
 
