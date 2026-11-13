@@ -4255,13 +4255,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       } else if (result.cancelled) {
         clearPaperStopIntent(runId);
         setPhase('');
-        setSuccess('Paper generation cancelled. Checkpoints remain available.');
+        setSuccess('Paper generation stopped.');
         void refresh(selected?.paper_id, true);
       } else {
-        // Nothing was running: restore the real control state.
-        clearPaperStopIntent(runId);
-        setPhase('');
-        void refresh(selected?.paper_id, true);
+        // A missing stop receipt is not a successful Stop. Restore the
+        // actual server state and surface the failure to the user.
+        throw new Error('Stop did not reach the running paper. Try again.');
       }
     } catch (cause) {
       // Rejected Stop must restore the pulsing state and usable controls.
@@ -4952,7 +4951,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 model: paperProgress?.model || selectedRun?.model || model,
                 thinking: paperProgress?.reasoning_effort || selectedRun?.thinking || effort,
               }) || 'Paper metadata unavailable'}
-              {!paperRestartPending && ' · '}{paperRestartPending ? '' : stoppingSelectedPaper ? 'Stopped'
+              {!paperRestartPending && ' · '}{paperRestartPending ? '' : stoppingSelectedPaper ? 'Stopping'
                 : paperStartOptimistic ? (paperPlayIntent === 'resuming' ? 'Resuming' : 'Starting')
                 : paperProgress?.status === 'active' ? 'Generating'
                 : paperProgress?.status === 'queued' ? 'Queued'
@@ -5048,14 +5047,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   model: run.progress?.model || run.model,
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
-                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopped' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
+                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
                 {' · Elapsed '}{savedPaperElapsed(Math.max(0, run.progress?.elapsed_seconds ?? 0))}
               </>}
-              progress={hasPaperStopIntent(run.run_id)
-                ? { ...(run.progress ?? {}), status: 'cancelled', resume_stage: run.progress?.resume_stage ?? run.progress?.stage }
-                : run.progress}
+              progress={run.progress}
               onSelectStep={!guest && (run.can_resume || run.can_control)
                 ? (step, anchor) => void proposeUnfinishedPaperStepRestart(
                     run.run_id, run.number, unfinishedPaperTarget(step), anchor,
