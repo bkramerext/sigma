@@ -5991,10 +5991,7 @@ def _validate_provider_transport_change(
     if any(
         item.get("status") == "running"
         or item.get("attempt_status") == "preparing"
-        or (
-            item.get("status") == "interrupted"
-            or item.get("attempt_status") == "unknown"
-        )
+        or (item.get("status") == "interrupted" or item.get("attempt_status") == "unknown")
         and not (
             unmetered_chatgpt_rebind
             or (
@@ -6011,11 +6008,14 @@ def _validate_provider_transport_change(
             "interrupted or its usage is unknown. Saved research is unchanged."
         )
     compiler = record.get("reference_compilation")
-    if isinstance(compiler, dict) and compiler.get("status") in {"running", "interrupted"}:
-        if not unmetered_chatgpt_rebind or compiler["status"] == "running":
-            raise ProjectError(
-                "Cannot change provider transport with unresolved reference compiler usage."
-            )
+    if (
+        isinstance(compiler, dict)
+        and compiler.get("status") in {"running", "interrupted"}
+        and (not unmetered_chatgpt_rebind or compiler["status"] == "running")
+    ):
+        raise ProjectError(
+            "Cannot change provider transport with unresolved reference compiler usage."
+        )
     reserved = record.get("estimated_cost_reserved_usd") or 0.0
     if type(reserved) not in (int, float) or not math.isfinite(reserved) or reserved < 0:
         raise ProjectError("Cannot change provider transport with invalid cost accounting.")
@@ -6042,6 +6042,8 @@ def _rebind_provider_transport(
     record: dict[str, Any], credential: Mapping[str, Any], config: Mapping[str, Any]
 ) -> None:
     """Audit a provider transport switch before any new request starts."""
+    from sigma import cloud_research
+
     _validate_provider_transport_change(
         record,
         next_model=str(config["model"]),
@@ -6051,8 +6053,6 @@ def _rebind_provider_transport(
     prior_mode = record["mode"]
     prior_model = record["model"]
     prior_identity = record.get("identity_hash")
-    from sigma import cloud_research
-
     sponsored = cloud_research.billing_enabled()
     if (
         prior_mode == "chatgpt"
