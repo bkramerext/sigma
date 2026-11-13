@@ -5954,20 +5954,127 @@ def _apply_live_model_selection(record: dict[str, Any], config: Mapping[str, Any
     )
 
 
-def _validate_provider_transport_change(record: dict[str, Any], *, next_model: str) -> None:
-    """Validate rebinding a stopped session, whether native or imported.
+def _sponsored_chatgpt_retirement(
+    record: dict[str, Any], *, next_mode: str | None, next_sponsored: bool | None
+) -> bool:
+    """Only a stopped ChatGPT sponsor -> personal transition may retire holds."""
+    return (
+        record.get("mode") == "chatgpt"
+        and record.get("cloud_sponsored") is True
+        and next_mode == "chatgpt"
+        and next_sponsored is False
+        and record.get("hard_budget_ledger") is None
+    )
 
-    No previous request or reservation is replayed, released, or re-funded.
-    Existing paid usage must be fully settled before a new transport is used.
+
+def _sponsored_attempts_to_preserve(record: dict[str, Any]) -> list[str]:
+    """Require auditable per-attempt liabilities, not just a session mode flag."""
+    attempts: list[str] = []
+    for step in record.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        if step.get("status") not in {"running", "interrupted"} and step.get(
+            "attempt_status"
+        ) not in {"reserved", "unknown", "preparing"}:
+            continue
+        if step.get("funding_provenance") == "personal_chatgpt_unmetered":
+            continue
+        amount = step.get("global_cost_reservation_usd")
+        if (
+            not isinstance(amount, (int, float))
+            or isinstance(amount, bool)
+            or not math.isfinite(amount)
+            or amount <= 0
+            or not isinstance(step.get("id"), str)
+            or not step["id"]
+        ):
+            raise ProjectError(
+                "Cannot safely switch connection: an unsettled sponsored call "
+                "has no verifiable saved reservation."
+            )
+        attempts.append(step["id"])
+    compiler = record.get("reference_compilation")
+    if (
+        isinstance(compiler, dict)
+        and compiler.get("status") in {"running", "interrupted"}
+        and compiler.get("funding_provenance") != "personal_chatgpt_unmetered"
+    ):
+        amount = compiler.get("cost_reserve")
+        attempt_id = compiler.get("attempt_id")
+        if (
+            not isinstance(amount, (int, float))
+            or isinstance(amount, bool)
+            or not math.isfinite(amount)
+            or amount <= 0
+            or not isinstance(attempt_id, str)
+            or not attempt_id
+        ):
+            raise ProjectError(
+                "Cannot safely switch connection: an unsettled sponsored "
+                "reference compiler has no verifiable saved reservation."
+            )
+        attempts.append(attempt_id)
+    if len(attempts) != len(set(attempts)):
+        raise ProjectError("Saved sponsored provider attempt identifiers conflict.")
+    return attempts
+
+
+def _validate_provider_transport_change(
+    record: dict[str, Any],
+    *,
+    next_model: str,
+    next_mode: str | None = None,
+    next_sponsored: bool | None = None,
+) -> None:
+    """Validate rebinding a stopped session without replaying old attempts.
+
+    Uncertain *paid* reservations must stay with their original provider.
+    An unmetered personal-ChatGPT attempt has no SIGMA paid reservation, so
+    its interrupted history need not block a different ChatGPT account or a
+    newly funded sponsor connection. The old attempt remains unknown and is
+    never transferred into the sponsor's ledger.
     """
     if record.get("status") not in {"paused", "stopped"}:
         raise ProjectError(
             "AI provider transport can change only while a session is stopped. "
             "Saved research and provider attempts are unchanged."
         )
+    # This exception is limited to personal ChatGPT history with no SIGMA
+    # paid ledger or outstanding accounting holds. Do not apply it to
+    # API-key-funded or previously sponsored requests.
+    unmetered_chatgpt_rebind = (
+        record.get("mode") == "chatgpt"
+        and record.get("cloud_sponsored") is not True
+        and next_mode == "chatgpt"
+        and isinstance(next_sponsored, bool)
+        and record.get("hard_budget_ledger") is None
+        and not (record.get("estimated_cost_reserved_usd") or 0)
+    )
+    retire_sponsor = _sponsored_chatgpt_retirement(
+        record, next_mode=next_mode, next_sponsored=next_sponsored
+    )
+    # The exclusive worker lock is already held by Resume. Unlike a transport
+    # replay, a paid-to-personal rebind can freeze the original sponsored
+    # reservations at their full liability without dispatching the old calls.
+    if retire_sponsor:
+        _sponsored_attempts_to_preserve(record)
     if any(
-        item.get("status") in {"running", "interrupted"}
-        or item.get("attempt_status") in {"unknown", "preparing"}
+        (
+            item.get("status") == "running"
+            or item.get("attempt_status") == "preparing"
+            or item.get("status") == "interrupted"
+            or item.get("attempt_status") == "unknown"
+        )
+        and not (
+            unmetered_chatgpt_rebind
+            or retire_sponsor
+            or (
+                item.get("funding_provenance")
+                in {"personal_chatgpt_unmetered", "sponsored_chatgpt_preserved"}
+                and record.get("hard_budget_ledger") is None
+                and not (record.get("estimated_cost_reserved_usd") or 0)
+            )
+        )
         for item in record.get("steps", [])
         if isinstance(item, dict)
     ):
@@ -5976,14 +6083,27 @@ def _validate_provider_transport_change(record: dict[str, Any], *, next_model: s
             "interrupted or its usage is unknown. Saved research is unchanged."
         )
     compiler = record.get("reference_compilation")
-    if isinstance(compiler, dict) and compiler.get("status") in {"running", "interrupted"}:
+    if (
+        isinstance(compiler, dict)
+        and compiler.get("status") in {"running", "interrupted"}
+        and not (
+            unmetered_chatgpt_rebind
+            or retire_sponsor
+            or (
+                compiler.get("funding_provenance")
+                in {"personal_chatgpt_unmetered", "sponsored_chatgpt_preserved"}
+                and record.get("hard_budget_ledger") is None
+                and not (record.get("estimated_cost_reserved_usd") or 0)
+            )
+        )
+    ):
         raise ProjectError(
             "Cannot change provider transport with unresolved reference compiler usage."
         )
     reserved = record.get("estimated_cost_reserved_usd") or 0.0
     if type(reserved) not in (int, float) or not math.isfinite(reserved) or reserved < 0:
         raise ProjectError("Cannot change provider transport with invalid cost accounting.")
-    if reserved > 0:
+    if reserved > 0 and not retire_sponsor:
         raise ProjectError("Cannot change provider transport with outstanding cost reservations.")
     ledger = record.get("hard_budget_ledger")
     if ledger is not None and (
@@ -6006,13 +6126,85 @@ def _rebind_provider_transport(
     record: dict[str, Any], credential: Mapping[str, Any], config: Mapping[str, Any]
 ) -> None:
     """Audit a provider transport switch before any new request starts."""
-    _validate_provider_transport_change(record, next_model=str(config["model"]))
+    from sigma import cloud_research
+
+    _validate_provider_transport_change(
+        record,
+        next_model=str(config["model"]),
+        next_mode=str(credential["mode"]),
+        next_sponsored=cloud_research.billing_enabled(),
+    )
     prior_mode = record["mode"]
     prior_model = record["model"]
     prior_identity = record.get("identity_hash")
-    from sigma import cloud_research
-
     sponsored = cloud_research.billing_enabled()
+    if _sponsored_chatgpt_retirement(
+        record, next_mode=str(credential["mode"]), next_sponsored=sponsored
+    ):
+        # Keep every prior sponsored call's immutable liability on the
+        # original workspace ledger. This is NOT a refund or a replay.
+        pending_ids = _sponsored_attempts_to_preserve(record)
+        try:
+            cloud_research.preserve_sponsored_history_on_connection_change(
+                record["id"], pending_ids
+            )
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
+        prior_hold = float(record.get("estimated_cost_reserved_usd") or 0.0)
+        prior_estimate = float(record.get("estimated_cost_usd") or 0.0)
+        if not math.isfinite(prior_estimate) or prior_estimate < 0:
+            raise ProjectError("Saved sponsored accounting is invalid.")
+        record["estimated_cost_usd"] = round(prior_estimate + prior_hold, 9)
+        record["estimated_cost_reserved_usd"] = 0.0
+        record["interrupted_cost_upper_bound_usd"] = round(
+            float(record.get("interrupted_cost_upper_bound_usd") or 0.0) + prior_hold, 9
+        )
+        prior_tokens = int(record.get("tokens_reserved") or 0)
+        record["historical_sponsor_tokens_held"] = (
+            int(record.get("historical_sponsor_tokens_held") or 0) + prior_tokens
+        )
+        record["tokens_reserved"] = 0
+        for old_step in record.get("steps", []):
+            if not isinstance(old_step, dict):
+                continue
+            if old_step.get("id") in pending_ids:
+                old_step["funding_provenance"] = "sponsored_chatgpt_preserved"
+                if old_step.get("status") == "running":
+                    old_step["status"] = "interrupted"
+                    old_step["failure_kind"] = "interrupted"
+                old_step["attempt_status"] = "unknown"
+        compiler = record.get("reference_compilation")
+        if isinstance(compiler, dict) and compiler.get("attempt_id") in pending_ids:
+            compiler["funding_provenance"] = "sponsored_chatgpt_preserved"
+            if compiler.get("status") == "running":
+                compiler["status"] = "interrupted"
+        _event(
+            record,
+            "session.prior_sponsor_liabilities_preserved",
+            "Unsettled sponsored requests retain their original reserved funding and "
+            "unknown delivery status. Future ChatGPT calls use the newly selected account.",
+        )
+    if (
+        prior_mode == "chatgpt"
+        and record.get("cloud_sponsored") is not True
+        and record.get("hard_budget_ledger") is None
+        and not (record.get("estimated_cost_reserved_usd") or 0)
+    ):
+        # The old personal plan's uncertain dispatch was not funded or
+        # reserved by SIGMA's sponsor. Keep its status and origin explicit;
+        # do not fold it into the new sponsor's estimated cost.
+        for old_step in record.get("steps", []):
+            if isinstance(old_step, dict) and (
+                old_step.get("status") == "interrupted"
+                or old_step.get("attempt_status") == "unknown"
+            ):
+                old_step.setdefault("funding_provenance", "personal_chatgpt_unmetered")
+        old_compiler = record.get("reference_compilation")
+        if isinstance(old_compiler, dict) and old_compiler.get("status") in {
+            "running",
+            "interrupted",
+        }:
+            old_compiler.setdefault("funding_provenance", "personal_chatgpt_unmetered")
     paid = credential["mode"] == "api_key" or sponsored
     if paid and str(config["model"]) not in TOKEN_PRICES_PER_MILLION:
         raise ProjectError("No reviewed price is available for the recipient's provider model.")
@@ -7565,14 +7757,26 @@ async def control_session(
         record["message"] = "Project identity changed; research remains paused."
         _save(record["project_path"], record)
         raise ProjectError(record["message"])
+    # Personal ChatGPT and SIGMA-sponsored ChatGPT both use mode="chatgpt".
+    # A funding/identity change still needs a stopped-session rebind: personal
+    # sessions have no sponsored cost snapshot, and cloud admission must not
+    # reject an otherwise valid Resume as "no reviewed price".
     switch_transport = (
-        credential["mode"] != record["mode"] or record.get("imported_via_bundle") is True
+        credential["mode"] != record["mode"]
+        or record.get("identity_hash") != _digest(credential["identity"])
+        or record.get("cloud_sponsored") is not cloud_research.billing_enabled()
+        or record.get("imported_via_bundle") is True
     )
     config = await configuration(view=view, context=credential)
     if switch_transport:
         # Native and imported stopped sessions may use the selected provider.
         # No historical call is replayed or re-funded.
-        _validate_provider_transport_change(record, next_model=str(config.get("model", "")))
+        _validate_provider_transport_change(
+            record,
+            next_model=str(config.get("model", "")),
+            next_mode=str(credential["mode"]),
+            next_sponsored=cloud_research.billing_enabled(),
+        )
     if not config["available"]:
         record["message"] = config.get(
             "message", "Selected model is no longer available; session remains paused."
@@ -7605,6 +7809,10 @@ async def control_session(
             record = _read(path, session_id)
             if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
+            # The previous provider's uncertain compiler usage belongs to the
+            # previous funding identity, not to the new sponsor's cloud ledger.
+            # A new sponsored compiler attempt gets its own reservation.
+            previous_cloud_sponsored = record.get("cloud_sponsored") is True
             if switch_transport:
                 # Stage the transfer only in memory. Never commit a new owner
                 # before capacity, billing and worker admission succeed.
@@ -7722,7 +7930,7 @@ async def control_session(
                         )
                     except BudgetExceeded as exc:
                         raise ProjectError(str(exc)) from exc
-                if cloud_research.billing_enabled():
+                if cloud_research.billing_enabled() and previous_cloud_sponsored:
                     try:
                         cloud_research.mark_call_unknown(record["id"], attempt_id)
                     except cloud_research.CloudResearchUnavailable as exc:

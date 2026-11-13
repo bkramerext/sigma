@@ -648,9 +648,44 @@ def exercise(origin: str) -> None:
         expect(api_pill).to_have_attribute(
             "data-tooltip", re.compile("Click to connect the designated ChatGPT sponsor account")
         )
+        # Browser windows have independent Google sessions. A popup navigation
+        # cannot send X-Sigma-Window as fetch does; the one-time OAuth handoff
+        # must select the initiating window's session through its query string.
+        scoped_window = "abcdef0123456789abcdef0123456789"
+        page.evaluate(
+            """identifier => {
+              sessionStorage.setItem('sigma.auth.window', identifier);
+              sessionStorage.setItem('sigma.auth.windowScoped', 'yes');
+            }""",
+            scoped_window,
+        )
+        page.reload(wait_until="domcontentloaded")
+        dismiss_sponsor_welcome(page)
+        api_pill = page.locator(".api-connection > summary")
+        page.evaluate(
+            """() => {
+              window.__sigmaAuthHandoffs = [];
+              window.open = () => {
+                let closed = false;
+                return {
+                  opener: null,
+                  location: {
+                    replace: url => window.__sigmaAuthHandoffs.push(url),
+                  },
+                  get closed() { return closed; },
+                  close() { closed = true; },
+                };
+              };
+            }"""
+        )
         with page.expect_request("**/api/ai/sponsor-auth/begin") as api_sponsor_auth:
             api_pill.get_by_role("status").click()
         assert api_sponsor_auth.value.method == "POST"
+        page.wait_for_function("window.__sigmaAuthHandoffs?.length === 1")
+        handoff = page.evaluate("window.__sigmaAuthHandoffs[0]")
+        assert handoff == (
+            f"/api/ai/auth/open/sponsor-auth-fixture?sigma_window={scoped_window}"
+        ), handoff
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
         expect(api_pill).to_have_attribute(
             "data-tooltip",

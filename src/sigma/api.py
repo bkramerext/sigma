@@ -16,7 +16,13 @@ from urllib.parse import quote, urlencode
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -3260,8 +3266,29 @@ async def auth_api_key(body: ApiKeyRequest):
 
 @app.get("/api/ai/auth/open/{identifier}")
 async def auth_open(identifier: str):
+    try:
+        target = chatgpt_auth.authorization_url(identifier)
+    except ProjectError:
+        # A browser navigation must not expose a raw JSON API error. This can
+        # happen when a sign-in tab is reused, the Google session expires, or
+        # an OAuth attempt has already been consumed. No provider URL is issued.
+        return HTMLResponse(
+            """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatGPT connection could not start · SIGMA</title>
+<style>
+body{font:16px system-ui,sans-serif;line-height:1.6;max-width:38rem;margin:12vh auto;
+padding:0 1.5rem;color:#ddd;background:#171b20}
+h1{font-size:1.5rem;font-weight:600}p{color:#bdc5ce}
+</style></head><body><main><h1>ChatGPT sign-in needs to be restarted</h1>
+<p>This authorization link is no longer active for this SIGMA window.
+Close this tab and start a new connection from the original SIGMA window.
+Your saved research is unchanged.</p></main></body></html>""",
+            status_code=400,
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
     return RedirectResponse(
-        chatgpt_auth.authorization_url(identifier),
+        target,
         headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
     )
 

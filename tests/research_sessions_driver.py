@@ -131,6 +131,11 @@ def main(part: int = 1):
                 Path(temporary) / "native-provider-travel.sigma"
             )
         )
+        asyncio.run(
+            test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
+                Path(temporary) / "personal-sponsored-resume.sigma"
+            )
+        )
         test_model_switch_preserves_old_hard_budget_costs()
         asyncio.run(
             test_emailed_project_import_resumes_under_recipient_provider(

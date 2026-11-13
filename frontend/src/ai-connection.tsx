@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import './ai-connection.css';
+import { windowAuthUrl } from './window-auth';
 import { sponsoredProviderLabel, type SponsoredInferenceProvider } from './provider-usage-guidance';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; sponsor_account_selected?: boolean; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
@@ -204,8 +205,12 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
       attempt.id = data.id;
       const url = new URL(data.authorization_url, window.location.origin);
       if (url.origin !== window.location.origin || url.pathname !== `/api/ai/auth/open/${data.id}` || url.search || url.hash) throw new Error('Unsafe sign-in handoff rejected.');
-      if (!popup) setHandoff(url.href);
-      if (popup) popup.location.replace(url.href);
+      // Popup navigations have no X-Sigma-Window fetch header. Preserve the
+      // initiating Google session in both the popup and blocked-popup link,
+      // without forwarding the window selector to OpenAI.
+      const handoffUrl = windowAuthUrl(url.pathname);
+      if (!popup) setHandoff(handoffUrl);
+      if (popup) popup.location.replace(handoffUrl);
       const deadline = Date.now() + 305000;
       let popupClosedDeadline: number | null = null;
       while (!controller.signal.aborted && Date.now() < deadline) {

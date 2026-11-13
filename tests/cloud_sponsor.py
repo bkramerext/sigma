@@ -110,6 +110,65 @@ class SponsorTests(IsolatedAsyncioTestCase):
             self.assertTrue(any("SIGMA_CLOUD_SPONSOR_EMAIL" in line for line in captured.output))
             self.assertFalse(any("sponsor@example.test" in line for line in captured.output))
 
+    async def test_oauth_popup_uses_correct_window_session_cookie(self):
+        # A new OAuth browser tab does not send the initiating window's custom
+        # X-Sigma-Window header. The sigma_window query selects that window's
+        # independently authenticated HttpOnly cookie instead.
+        from typing import cast
+
+        from starlette.requests import Request
+
+        from sigma import cloud_auth
+
+        identifier = "abcdef0123456789abcdef0123456789"
+        other = "9876543210abcdef9876543210abcdef"
+        cookies = (
+            f"__Host-sigma_session_{identifier}=admin-session; "
+            f"__Host-sigma_session_{other}=other-user-session; "
+            "__Host-sigma_session=legacy-user-session"
+        )
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "scheme": "https",
+                "path": "/api/ai/auth/open/attempt",
+                "query_string": f"sigma_window={identifier}".encode(),
+                "headers": [(b"cookie", cookies.encode())],
+            }
+        )
+        cfg = cast(cloud_auth.Config, type("ConfigFixture", (), {"local": False})())
+        self.assertEqual(cloud_auth._raw_session(request, cfg), "admin-session")
+        unrelated = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "scheme": "https",
+                "path": "/api/ai/auth/open/attempt",
+                "query_string": f"sigma_window={other}".encode(),
+                "headers": [(b"cookie", cookies.encode())],
+            }
+        )
+        self.assertEqual(cloud_auth._raw_session(unrelated, cfg), "other-user-session")
+
+    async def test_expired_signin_handoff_is_readable_browser_page(self):
+        from fastapi.responses import HTMLResponse
+
+        from sigma import api
+
+        with patch.object(
+            chatgpt_auth,
+            "authorization_url",
+            side_effect=ProjectError("Sign-in attempt expired or belongs to another user."),
+        ):
+            response = await api.auth_open("expired-attempt")
+        self.assertIsInstance(response, HTMLResponse)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"ChatGPT sign-in needs to be restarted", response.body)
+        self.assertNotIn(b"belongs to another user", response.body)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
+        self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+
     async def test_hosted_admin_connection_is_role_based(self):
         from types import SimpleNamespace
         from typing import cast
