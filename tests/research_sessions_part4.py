@@ -803,6 +803,7 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
     }
     state = {"account": personal, "sponsored": False}
     admitted: list[dict[str, Any]] = []
+    preserved_liabilities: list[tuple[str, list[str]]] = []
 
     async def connected_account():
         return state["account"]
@@ -831,6 +832,13 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
         patch.object(research_sessions.cloud_research, "job_is_foreign", return_value=False),
         patch.object(research_sessions.cloud_research, "job_status", return_value="queued"),
         patch.object(research_sessions.cloud_research, "has_reserved_calls", return_value=False),
+        patch.object(
+            research_sessions.cloud_research,
+            "preserve_sponsored_history_on_connection_change",
+            side_effect=lambda session, attempts: preserved_liabilities.append(
+                (session, list(attempts))
+            ),
+        ),
         patch.object(
             research_sessions.cloud_research,
             "prepare_job",
@@ -887,21 +895,74 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
         assert saved["transport_change_history"][-1]["from_mode"] == "chatgpt"
         assert saved["transport_change_history"][-1]["to_mode"] == "chatgpt"
 
-        # Switching back to personal uses its own accounting without erasing
-        # the completed/preserved history of the sponsored session.
+        # Stop after an interrupted sponsored dispatch with unsettled usage,
+        # exactly the second failure observed in the local UI. The saved hold
+        # must remain attached to the original sponsored workspace ledger.
         stopped_again = await research_sessions.control_session(str(path), started["id"], "stop")
         assert stopped_again["status"] == "stopped"
+        interrupted = research_sessions._read(str(path), started["id"])
+        interrupted["steps"].append(
+            {
+                "id": "sponsor-interrupted-attempt",
+                "attempt_id": "sponsor-interrupted-attempt",
+                "strategy_id": strategy.id,
+                "role": "skeptic",
+                "model": MODEL,
+                "status": "interrupted",
+                "attempt_status": "unknown",
+                "global_cost_reservation_usd": 0.07,
+                "cost_reserve": 0.07,
+            }
+        )
+        interrupted["estimated_cost_reserved_usd"] = 0.07
+        interrupted["tokens_reserved"] = 700
+        interrupted["calls_used"] += 1
+        interrupted["strategy_runs"][0]["calls_used"] += 1
+        research_sessions._save(str(path), interrupted)
         state.update(account=personal, sponsored=False)
         resumed_personal = await research_sessions.control_session(
             str(path), started["id"], "resume"
         )
         assert resumed_personal["status"] == "queued"
+        assert preserved_liabilities == [
+            (started["id"], ["sponsor-interrupted-attempt"])
+        ]
         personal_record = research_sessions._read(str(path), started["id"])
         assert personal_record["mode"] == "chatgpt"
         assert personal_record["cloud_sponsored"] is False
         assert personal_record["cost_status"] == "unavailable"
-        assert personal_record["steps"] == saved["steps"]
-        assert personal_record["calls_used"] == prior["calls_used"]
+        assert personal_record["estimated_cost_reserved_usd"] == 0.0
+        assert personal_record["estimated_cost_usd"] == 0.07
+        assert personal_record["historical_sponsor_tokens_held"] == 700
+        assert personal_record["tokens_reserved"] == 0
+        assert personal_record["steps"][:1] == saved["steps"]
+        assert personal_record["steps"][-1]["status"] == "interrupted"
+        assert personal_record["steps"][-1]["attempt_status"] == "unknown"
+        assert (
+            personal_record["steps"][-1]["funding_provenance"]
+            == "sponsored_chatgpt_preserved"
+        )
+        assert personal_record["calls_used"] == interrupted["calls_used"]
+
+        # Round trip again without erasing either old provider's uncertain
+        # requests or recharging the original sponsored liability.
+        stopped_third = await research_sessions.control_session(
+            str(path), started["id"], "stop"
+        )
+        assert stopped_third["status"] == "stopped"
+        state.update(account=sponsor, sponsored=True)
+        resumed_sponsor = await research_sessions.control_session(
+            str(path), started["id"], "resume"
+        )
+        assert resumed_sponsor["status"] == "queued"
+        final = research_sessions._read(str(path), started["id"])
+        assert final["cloud_sponsored"] is True
+        assert final["cost_status"] == "available"
+        assert final["estimated_cost_usd"] == 0.07
+        assert final["estimated_cost_reserved_usd"] == 0.0
+        assert final["steps"] == personal_record["steps"]
+        assert final["calls_used"] == personal_record["calls_used"]
+        assert len(preserved_liabilities) == 1
 
 
 def test_model_switch_preserves_old_hard_budget_costs() -> None:
