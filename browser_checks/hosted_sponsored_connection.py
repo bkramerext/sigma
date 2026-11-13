@@ -590,6 +590,17 @@ def exercise(origin: str) -> None:
         expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
             "no SIGMA member-level spending cap"
         )
+        expect(api_pill).to_have_attribute(
+            "data-tooltip", re.compile("Click to connect the designated ChatGPT sponsor account")
+        )
+        with page.expect_request("**/api/ai/sponsor-auth/begin") as api_sponsor_auth:
+            api_pill.get_by_role("status").click()
+        assert api_sponsor_auth.value.method == "POST"
+        expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
+        expect(api_pill).to_have_attribute(
+            "data-tooltip",
+            re.compile("ChatGPT sponsor credentials are saved in persistent storage"),
+        )
 
         # Admin-only sponsor sign-in writes OAuth credentials directly on the
         # server; no local account credential file is imported or transferred.
