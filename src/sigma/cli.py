@@ -288,7 +288,9 @@ def main() -> None:
         help="Publish a complete project bundle as a curated sample",
     )
     sample.add_argument("exported_project")
-    sample.add_argument("--name", help="Override the automatically matched or derived sample identifier")
+    sample.add_argument(
+        "--name", help="Override the automatically matched or derived sample identifier"
+    )
     add_command(commands, "setup", help="Install locked Python and frontend dependencies")
     add_command(commands, "test", help="Run tests, API/CLI checks, lint, types and build")
     feedback = add_command(commands, "send_feedback")
@@ -344,12 +346,26 @@ def main() -> None:
 
         sys.exit(run(args.path))
     if args.command == "make_sample":
+        from pathlib import Path
+
         from sigma.sample_promotion import promote_bundle
 
         try:
-            published = promote_bundle(args.exported_project, args.name)
-            print(json.dumps(published, indent=2))
-        except (ProjectError, OSError) as exc:
+            # Retain the historical export_version=2 / --name contract for
+            # callers that have not migrated to complete project bundles.
+            export_path = Path(args.exported_project).expanduser()
+            exported = json.loads(export_path.read_text(encoding="utf-8"))
+            if isinstance(exported, dict) and exported.get("export_version") == 2:
+                from sigma.samples import make_sample
+
+                if args.name is None:
+                    raise ProjectError("--name is required for a legacy project export.")
+                destination = make_sample(args.exported_project, args.name)
+                print(json.dumps({"sample": args.name, "path": str(destination)}, indent=2))
+            else:
+                published = promote_bundle(args.exported_project, args.name)
+                print(json.dumps(published, indent=2))
+        except (ProjectError, OSError, ValueError, UnicodeError) as exc:
             print(str(exc), file=sys.stderr)
             sys.exit(2)
         sys.exit(0)

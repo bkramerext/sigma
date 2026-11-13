@@ -21,7 +21,8 @@ from uuid import uuid4
 
 from sigma import paper_scores, project_bundle, samples
 from sigma.project_copy import rebase_copy
-from sigma.projects import ProjectError, _decode as decode_project
+from sigma.projects import ProjectError
+from sigma.projects import _decode as decode_project
 
 SNAPSHOT_NAME = "sample-snapshot.json"
 CURATION_NAME = "sample-curation.json"
@@ -30,9 +31,19 @@ _VERSION_SUFFIX = re.compile(r"\s+v[0-9]+(?:\.[0-9]+)*\s*$", re.IGNORECASE)
 _PAPER_METADATA = re.compile(r"artifacts/papers/([0-9a-f]{32})\.json$")
 _ACCOUNT_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _ATTRIBUTION_KEYS = {
-    "created_by", "creator", "creator_email", "author_email", "owner_email",
-    "user_email", "account_email", "started_by", "initiated_by", "submitted_by",
-    "requested_by", "actor_email", "last_modified_by",
+    "created_by",
+    "creator",
+    "creator_email",
+    "author_email",
+    "owner_email",
+    "user_email",
+    "account_email",
+    "started_by",
+    "initiated_by",
+    "submitted_by",
+    "requested_by",
+    "actor_email",
+    "last_modified_by",
 }
 
 
@@ -71,9 +82,7 @@ def _is_publishable_member(name: str) -> bool:
         return False
     if name == "project.json" or name == "artifacts/research-qa/records.json":
         return True
-    if name.startswith("research-sessions/") or name.startswith(
-        ("agentic-runs/", "evidence/agentic-runs/")
-    ):
+    if name.startswith(("research-sessions/", "agentic-runs/", "evidence/agentic-runs/")):
         return name.endswith(".json")
     if name.startswith(("papers/", "artifacts/papers/", "artifacts/generated_papers/")):
         return not any(part.startswith(".") and part != ".snapshots" for part in name.split("/"))
@@ -90,12 +99,21 @@ def _account_emails(members: dict[str, bytes]) -> set[str]:
                 if not isinstance(key, str):
                     continue
                 key_lower = key.casefold()
-                if key_lower in {
-                    "created_by", "creator_email", "owner_email", "user_email",
-                    "account_email", "started_by", "initiated_by", "submitted_by",
-                }:
-                    if isinstance(entry, str) and _ACCOUNT_EMAIL.fullmatch(entry):
-                        found.add(entry)
+                if (
+                    key_lower in {
+                        "created_by",
+                        "creator_email",
+                        "owner_email",
+                        "user_email",
+                        "account_email",
+                        "started_by",
+                        "initiated_by",
+                        "submitted_by",
+                    }
+                    and isinstance(entry, str)
+                    and _ACCOUNT_EMAIL.fullmatch(entry)
+                ):
+                    found.add(entry)
                 if key_lower == "artifact_authors" and isinstance(entry, dict):
                     for address in entry.values():
                         if isinstance(address, str) and _ACCOUNT_EMAIL.fullmatch(address):
@@ -182,18 +200,19 @@ def _paper_inventory(members: dict[str, bytes]) -> tuple[str, int | None, int, i
         total = score["total"] if score is not None else None
         if total is not None:
             best = max(best or 0, total)
-        papers.append((
-            total if total is not None else -1,
-            int(record.get("paper_version") or 0),
-            str(record.get("created_at") or ""),
-            identifier,
-        ))
+        papers.append(
+            (
+                total if total is not None else -1,
+                int(record.get("paper_version") or 0),
+                str(record.get("created_at") or ""),
+                identifier,
+            )
+        )
     if not papers:
         raise ProjectError("A curated sample must contain at least one published paper.")
     papers.sort(reverse=True)
     sessions = sum(
-        1 for name in members
-        if re.fullmatch(r"research-sessions/[0-9a-f-]{36}\.json", name)
+        1 for name in members if re.fullmatch(r"research-sessions/[0-9a-f-]{36}\.json", name)
     )
     return papers[0][3], best, len(papers), sessions
 
@@ -201,7 +220,9 @@ def _paper_inventory(members: dict[str, bytes]) -> tuple[str, int | None, int, i
 def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["git", "-C", str(root), *args],
-        text=True, capture_output=True, check=False,
+        text=True,
+        capture_output=True,
+        check=False,
     )
     if check and result.returncode:
         raise ProjectError(result.stderr.strip() or f"git {args[0]} failed.")
@@ -249,7 +270,9 @@ def _publish(
         published = True
         _git(root, "add", "-A", "--", relative)
         if _git(root, "diff", "--cached", "--quiet", "--", relative, check=False).returncode:
-            _git(root, "commit", "--only", "-m", f"Curate SIGMA sample: {identifier}", "--", relative)
+            _git(
+                root, "commit", "--only", "-m", f"Curate SIGMA sample: {identifier}", "--", relative
+            )
             committed = True
         commit = _git(root, "rev-parse", "HEAD").stdout.strip()
         return destination, commit
@@ -308,7 +331,14 @@ def promote_bundle(export_file: str | Path, name: str | None = None) -> dict[str
         project_document = json.loads(saved["project.json"])
         decode_project(project_document)
         featured, best, count, sessions = _paper_inventory(saved)
-    except (OSError, UnicodeError, ValueError, TypeError, KeyError, project_bundle.BundleError) as exc:
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        project_bundle.BundleError,
+    ) as exc:
         if isinstance(exc, ProjectError):
             raise
         raise ProjectError(f"Cannot publish project bundle: {exc}") from exc

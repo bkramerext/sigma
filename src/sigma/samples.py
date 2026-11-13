@@ -263,9 +263,13 @@ def _curation_metadata(identifier: str) -> dict[str, Any] | None:
         or value.get("curated") is not True
         or not isinstance(value.get("featured_paper_id"), str)
         or not re.fullmatch(r"[0-9a-f]{32}", value["featured_paper_id"])
-        or (value.get("best_paper_score") is not None
-            and (type(value["best_paper_score"]) is not int
-                 or not 0 <= value["best_paper_score"] <= 100))
+        or (
+            value.get("best_paper_score") is not None
+            and (
+                type(value["best_paper_score"]) is not int
+                or not 0 <= value["best_paper_score"] <= 100
+            )
+        )
         or type(value.get("paper_count")) is not int
         or value["paper_count"] < 1
     ):
