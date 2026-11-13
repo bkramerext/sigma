@@ -1009,9 +1009,12 @@ def papers_preflight_view(
 
 @app.get("/api/projects/papers/progress")
 def papers_progress_view(path: str, run_id: str | None = None):
-    if run_id is not None:
-        project_collaboration.execution_run(path, "paper", run_id)
-    with papers.paper_run_scope(run_id) if run_id is not None else nullcontext():
+    # Local generation is project-scoped even if an older UI submitted a
+    # transient client run ID. Only shared-workspace runs have scoped workers.
+    scoped_run_id = run_id if cloud_workspaces.current() is not None else None
+    if scoped_run_id is not None:
+        project_collaboration.execution_run(path, "paper", scoped_run_id)
+    with papers.paper_run_scope(scoped_run_id) if scoped_run_id is not None else nullcontext():
         progress = papers.progress_status(path)
         preflight = papers.needs_preflight_on_open(path)
         stop_pending = papers.stop_request_pending(path)
@@ -1033,7 +1036,11 @@ async def paper_cancel_view(body: PaperCancelRequest):
     view = await run_in_threadpool(inspect_project, body.path)
     if view.project.id != body.expected_project_id:
         raise HTTPException(404, "Project not found or access denied.")
-    if body.run_id is None:
+    # The generation endpoint ignores client run IDs in local mode and uses
+    # the project task key. Stop must target that SAME worker, not the
+    # optimistic client ID (otherwise it acknowledges a nonexistent task).
+    scoped_run_id = body.run_id if cloud_workspaces.current() is not None else None
+    if scoped_run_id is None:
         await run_in_threadpool(
             project_collaboration.require_paper_draft_operator,
             body.path,
@@ -1045,10 +1052,10 @@ async def paper_cancel_view(body: PaperCancelRequest):
             project_collaboration.execution_run,
             body.path,
             "paper",
-            body.run_id,
+            scoped_run_id,
             operator=True,
         )
-    with papers.paper_run_scope(body.run_id) if body.run_id is not None else nullcontext():
+    with papers.paper_run_scope(scoped_run_id) if scoped_run_id is not None else nullcontext():
         if body.request_only:
             # Stop is accepted and cancellation scheduled; cleanup may still
             # be running. Never return "cancelled" before it is durable.
