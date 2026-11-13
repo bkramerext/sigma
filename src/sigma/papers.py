@@ -12787,14 +12787,82 @@ def preflight(
     }
 
 
-def list_papers(path: str) -> list[dict[str, Any]]:
-    """List saved paper records without opening or verifying PDF contents.
+def _paper_listing_summary(value: Any) -> tuple[str, dict[str, Any]] | None:
+    """Project identity and display fields derived from one canonical paper record."""
+    if not isinstance(value, dict):
+        return None
+    try:
+        from sigma.paper_scores import cached_score
 
-    PDF integrity is checked when a paper is retrieved or scored, not while
-    decorating Home or Most Recent with counts and scores.
+        generation = value["generation"]
+        if not isinstance(generation, dict):
+            return None
+        digest = value.get("pdf_sha256")
+        size = value.get("pdf_size_bytes")
+        return (
+            value["project_id"],
+            {
+                "paper_id": value["paper_id"],
+                "paper_version": value.get("paper_version"),
+                "created_by": value.get("created_by"),
+                "title": value["draft"]["title"],
+                "created_at": value["created_at"],
+                "snapshot_sha256": value["snapshot_sha256"],
+                "validation_warnings": value["validation_warnings"],
+                "generation": {
+                    key: item
+                    for key, item in generation.items()
+                    if key
+                    not in {
+                        "omitted_evidence",
+                        "reduction_source_refs_omitted",
+                        "source_reference_map",
+                    }
+                },
+                "pdf_available": (
+                    isinstance(digest, str)
+                    and len(digest) == 64
+                    and type(size) is int
+                    and 0 < size <= 80_000_000
+                ),
+                "pdf_sha256": digest,
+                "score": cached_score(value),
+            },
+        )
+    except (KeyError, TypeError):
+        return None
+
+
+@lru_cache(maxsize=256)
+def _cached_paper_listing_summary(
+    filename: str, signature: tuple[int, int, int, int]
+) -> tuple[str, dict[str, Any]] | None:
+    """Transient metadata cache keyed by the canonical record's filesystem identity.
+
+    No additional on-disk index or sidecar is maintained. A publication, score
+    update, or deletion changes the signature and invalidates this entry.
+    """
+    del signature
+    try:
+        return _paper_listing_summary(json.loads(Path(filename).read_bytes()))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def list_papers(path: str) -> list[dict[str, Any]]:
+    """List canonical paper metadata without reading PDF, TeX, or archived drafts.
+
+    Each unchanged JSON record is parsed only once per server process. The
+    cache holds small summaries, never the full authored record or PDF bytes.
     """
     target = project_path(path)
+    project = inspect_project(path).project
+    records: list[dict[str, Any]] = []
     if target.suffix == ".json":
+        # Legacy bundle format: keep existing read semantics without another
+        # persistent representation of its contents.
+        from sigma.projects import read_project_artifact
+
         names = sorted(
             name
             for name in _paper_artifact_names(target)
@@ -12802,63 +12870,31 @@ def list_papers(path: str) -> list[dict[str, Any]]:
             and name.endswith(".json")
             and "/" not in name[len("artifacts/papers/") :]
         )
-        from sigma.projects import read_project_artifact
-
-        # Read only one paper at a time. A collection of 50 large paper
-        # artifacts must not be held in memory while building a small listing.
-        files = ((Path(name).name, read_project_artifact(target, name)) for name in names)
+        for name in names:
+            try:
+                item = _paper_listing_summary(json.loads(read_project_artifact(target, name)))
+            except (OSError, ValueError, TypeError):
+                continue
+            if item is not None and item[0] == project.id:
+                records.append(dict(item[1]))
     else:
         directory = _paper_dir(path, create=False)
-        if not directory.exists():
-            return []
-        files = (
-            (file, file.read_bytes())
-            for file in directory.glob("*.json")
-            if not file.is_symlink() and file.is_file() and file.stat().st_size <= MAX_PAPER_BYTES
-        )
-    project = inspect_project(path).project
-    records = []
-    for file, contents in files:
-        try:
-            value = json.loads(contents)
-            if isinstance(value, dict) and value.get("project_id") == project.id:
-                records.append(
-                    {
-                        "paper_id": value["paper_id"],
-                        "paper_version": value.get("paper_version"),
-                        "created_by": value.get("created_by"),
-                        "title": value["draft"]["title"],
-                        "created_at": value["created_at"],
-                        "snapshot_sha256": value["snapshot_sha256"],
-                        "validation_warnings": value["validation_warnings"],
-                        "generation": {
-                            key: item
-                            for key, item in value["generation"].items()
-                            if key
-                            not in {
-                                "omitted_evidence",
-                                "reduction_source_refs_omitted",
-                                "source_reference_map",
-                            }
-                        },
-                        # Publication metadata is enough for a listing; integrity
-                        # remains checked by get_paper/get_pdf/score operations.
-                        "pdf_available": (
-                            isinstance(value.get("pdf_sha256"), str)
-                            and len(value["pdf_sha256"]) == 64
-                            and type(value.get("pdf_size_bytes")) is int
-                            and 0 < value["pdf_size_bytes"] <= 80_000_000
-                        ),
-                        "pdf_sha256": value.get("pdf_sha256"),
-                        "score": __import__(
-                            "sigma.paper_scores", fromlist=["cached_score"]
-                        ).cached_score(value),
-                    }
-                )
-        except (OSError, ValueError, KeyError, TypeError):
-            continue
+        if directory.exists():
+            for file in directory.glob("*.json"):
+                if file.is_symlink() or not file.is_file():
+                    continue
+                try:
+                    info = file.stat()
+                except OSError:
+                    continue
+                if info.st_size > MAX_PAPER_BYTES:
+                    continue
+                signature = (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+                item = _cached_paper_listing_summary(str(file), signature)
+                if item is not None and item[0] == project.id:
+                    records.append(dict(item[1]))
     records.sort(key=lambda item: (item["created_at"], item["paper_id"]), reverse=True)
-    slug = _paper_filename_slug(inspect_project(path).project.title)
+    slug = _paper_filename_slug(project.title)
     for index, item in enumerate(records):
         if type(item["paper_version"]) is not int or item["paper_version"] < 1:
             item["paper_version"] = len(records) - index
