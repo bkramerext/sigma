@@ -31,7 +31,12 @@ def dismiss_sponsor_welcome(page) -> None:
     welcome = page.locator("#invitation-welcome-dialog")
     if not welcome.count() or not welcome.is_visible():
         return
-    welcome.get_by_role("button", name="Let's get started").click(timeout=2000)
+    dismiss = welcome.get_by_role("button", name="Let's get started")
+    if not dismiss.count():
+        dismiss = welcome.get_by_role("button", name="Explore as guest")
+    if not dismiss.count():
+        dismiss = welcome.get_by_role("button", name="Continue as guest")
+    dismiss.click(timeout=2000)
     expect(welcome).to_have_count(0)
 
 
@@ -106,6 +111,7 @@ def exercise(origin: str) -> None:
         personal_signin_pending = {"value": False}
         sponsored_test_mode = {"value": False}
         mock_provider = {"value": "connected"}
+        sponsored_provider = {"provider": "chatgpt", "status": "connected"}
         local_connect_succeeds = {"value": False}
         welcome_pending = {"value": True}
         guest_mode = {"value": False}
@@ -277,11 +283,22 @@ def exercise(origin: str) -> None:
             elif path.endswith("/api/cloud-research/connection"):
                 payload = {
                     "mode": "sponsored",
-                    "status": "connected",
-                    "label": "OpenAI API connected",
+                    "provider": sponsored_provider["provider"],
+                    "status": sponsored_provider["status"],
+                    "label": "OpenAI API connected"
+                    if sponsored_provider["provider"] == "api_key"
+                    else "SIGMA-sponsored ChatGPT · " + sponsored_provider["status"],
                     "guidance": "",
                     "checked_at": "2026-10-27T00:00:00Z",
                 }
+            elif path.endswith("/api/ai/sponsor-auth/begin") and method == "POST":
+                payload = {
+                    "id": "sponsor-auth-fixture",
+                    "authorization_url": origin + "/api/ai/auth/open/sponsor-auth-fixture",
+                }
+            elif path.endswith("/api/ai/auth/attempt/sponsor-auth-fixture"):
+                sponsored_provider["status"] = "connected"
+                payload = {"status": "connected"}
             elif path.endswith("/api/ai/connection"):
                 if local_sponsor_reauth["value"]:
                     payload = {
@@ -504,13 +521,17 @@ def exercise(origin: str) -> None:
         pill = page.locator(".api-connection > summary")
         expect(pill).to_be_visible()
         expect(pill).to_contain_text("Sponsored ChatGPT")
-        expect(pill.locator(".sponsored-allowance-inline")).to_have_text("1.50")
+        expect(pill.locator(".sponsored-allowance-inline")).to_have_text("Allocation: $1.50")
         allowance = page.get_by_role("button", name="Show sponsorship details")
         assert allowance.evaluate("e => getComputedStyle(e).backgroundColor") == "rgba(0, 0, 0, 0)"
-        expect(allowance).to_have_attribute("title", "Click to show sponsorship details.")
+        expect(allowance).to_have_attribute(
+            "data-tooltip", re.compile(r"Sponsored model connection: Connected\.")
+        )
         allowance.hover()
         allowance_text = page.locator(".sponsored-allowance-tooltip")
-        expect(allowance_text).to_contain_text("$1.50 remaining · Connected.")
+        expect(allowance_text).to_contain_text(
+            "$1.50 remaining of $2.00 per-user sponsored allocation."
+        )
         expect(allowance_text).not_to_contain_text("admin@example.test")
         funding.update(remaining_usd=1.25, estimated_usage_usd=0.50)
         page.evaluate("window.dispatchEvent(new Event('sigma-sponsored-budget-refresh'))")
@@ -523,7 +544,9 @@ def exercise(origin: str) -> None:
         expect(allowance).to_have_attribute("aria-expanded", "false")
         pill.click()
         expect(pill).to_contain_text("Sponsored ChatGPT")
-        expect(allowance_text).to_contain_text("$1.25 remaining · Connected.")
+        expect(allowance_text).to_contain_text(
+            "$1.25 remaining of $2.00 per-user sponsored allocation."
+        )
         expect(page.get_by_text("Request Failed", exact=True)).to_have_count(0)
         assert not any(path.endswith("/api/ai/mode") for path, _ in posts), posts
         assert not any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
@@ -547,12 +570,46 @@ def exercise(origin: str) -> None:
         )
         forced_pill.hover()
         expect(forced_pill).to_have_attribute(
-            "title", re.compile("SIGMA-sponsored ChatGPT · Connected")
+            "data-tooltip", re.compile("Sponsored model connection: Connected\\.")
         )
         forced_pill.click()
         assert not any(path.endswith("/api/ai/mode") for path, _ in posts), posts
         page.reload(wait_until="domcontentloaded")
         expect(page.locator(".api-connection > summary")).to_contain_text("Sponsored ChatGPT")
+        # Hosted presentation follows effective runtime routing; the admin's
+        # SIGMA allowance does not imply the provider's own limit is unlimited.
+        admin_mode["value"] = True
+        forced["value"] = False
+        sponsored_provider.update(provider="api_key", status="connected")
+        page.goto(origin + "/", wait_until="domcontentloaded")
+        dismiss_sponsor_welcome(page)
+        api_pill = page.locator(".api-connection > summary")
+        expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
+        expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("No member cap")
+        api_pill.hover()
+        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
+            "no SIGMA member-level spending cap"
+        )
+
+        # Admin-only sponsor sign-in writes OAuth credentials directly on the
+        # server; no local account credential file is imported or transferred.
+        sponsored_provider.update(provider="chatgpt", status="disconnected")
+        page.goto(origin + "/", wait_until="domcontentloaded")
+        dismiss_sponsor_welcome(page)
+        sponsor_pill = page.locator(".api-connection > summary")
+        expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(sponsor_pill).to_have_attribute(
+            "data-tooltip", re.compile("Sponsored model connection: disconnected\\.")
+        )
+        sponsor_pill.get_by_role("status").click()
+        page.wait_for_timeout(500)
+        assert any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), {
+            "aria_disabled": sponsor_pill.get_attribute("aria-disabled"),
+            "tooltip": sponsor_pill.get_attribute("data-tooltip"),
+            "posts": posts[-10:],
+        }
+        expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        assert not failures, failures
         if os.environ.get("SIGMA_HOSTED_CONNECTION_FOCUSED") == "1":
             browser.close()
             print(
@@ -588,6 +645,8 @@ def exercise(origin: str) -> None:
         page.goto(origin + "/?access=denied", wait_until="domcontentloaded")
         dismiss_welcome_if_present(page, timeout=10000)
         invitation_dialog = page.locator("#google-invitation-dialog")
+        if not invitation_dialog.is_visible():
+            page.locator(".home-auth-pills .identity-pill-stack .project-invite-me").click()
         expect(invitation_dialog).to_be_visible()
         invitation_dialog.get_by_role("button", name="Close").click()
         invite = page.locator(".home-auth-pills .identity-pill-stack .project-invite-me")
@@ -1019,7 +1078,9 @@ def exercise(origin: str) -> None:
         expect(page.locator("#invitation-welcome-dialog")).to_be_visible()
         dismiss_sponsor_welcome(page)
         sponsored_summary = page.locator(".api-connection > summary")
-        expect(sponsored_summary.locator(".sponsored-allowance-inline")).to_have_text("0.75")
+        expect(sponsored_summary.locator(".sponsored-allowance-inline")).to_have_text(
+            "Allocation: $0.75"
+        )
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_be_visible()
         expect(sponsored_summary.locator(".connection-dot")).to_have_css(
             "background-color", "rgb(117, 177, 140)"
@@ -1027,7 +1088,7 @@ def exercise(origin: str) -> None:
         allowance = page.get_by_role("button", name="Show sponsorship details")
         allowance.hover()
         expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
-            "$0.75 remaining · Connected."
+            "$0.75 remaining of $1.00 per-user sponsored allocation."
         )
         sponsored_summary.click()
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")

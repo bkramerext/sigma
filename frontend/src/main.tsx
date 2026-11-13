@@ -5,7 +5,7 @@ import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
 import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
-import { friendlyProviderError, providerInterruptionCopy, providerUsageLimitCopy, setSponsoredUsageConnection } from './provider-usage-guidance';
+import { friendlyProviderError, isOpenAIProjectSpendLimit, openAIProjectSpendLimitCopy, providerInterruptionCopy, providerUsageLimitCopy, setSponsoredUsageConnection, type SponsoredInferenceProvider } from './provider-usage-guidance';
 import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
@@ -363,11 +363,10 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   const compilation = session.outcome.source_material?.compilation;
   const lastCompilerAttempt = compilation?.attempts?.at(-1);
   const providerErrorCode = lastCompilerAttempt?.provider_error_code ?? compilation?.provider_error_code ?? '';
-  if (/project_spend_limit_exceeded|insufficient_quota|billing_hard_limit_reached|billing_not_active/.test(`${evidence} ${providerErrorCode}`))
-    return {
-      cause: 'The AI provider rejected reference compilation because the API project spending allowance is exhausted (HTTP 429). Research is preserved.',
-      next: 'Check OpenAI Platform → Organization settings → the project that owns SIGMA’s hosted API key → Limits. Review its Monthly spend limit and Enforce a hard limit setting; an authorized project owner can raise or remove the hard limit, or wait for the monthly reset. The organization spend limit and prepaid credit balance may also apply. Then Resume; no Investigator or Skeptic call was dispatched.',
-    };
+  if (isOpenAIProjectSpendLimit(`${evidence} ${providerErrorCode}`)) {
+    const copy = openAIProjectSpendLimitCopy();
+    return { cause: copy.description, next: copy.next };
+  }
   if (/required reference compilation/i.test(evidence))
     return {
       cause: recordedReason,
@@ -9598,7 +9597,7 @@ function App() {
 type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
-type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedIdentityAvailable: boolean; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -10409,7 +10408,7 @@ function CloudAuthGate() {
     try {
       const response = await fetch('/api/cloud-research/connection', { credentials: 'same-origin', cache: 'no-store' });
       if (!response.ok) throw await cloudFailure(response, 'SIGMA-sponsored model access could not be checked.');
-      const current = await response.json() as { status: string; guidance: string };
+      const current = await response.json() as { provider?: SponsoredInferenceProvider; status: string; guidance: string };
       setProviderStatus(current);
     } catch (cause) {
       setProviderError(cause instanceof Error ? cause.message : 'SIGMA-sponsored model access could not be checked.');

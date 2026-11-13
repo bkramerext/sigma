@@ -53,6 +53,14 @@ def main() -> None:
     assert "SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces" in gce_compose
     assert "SIGMA_PROJECTS_ROOT" not in compose + gce_compose
     assert "SIGMA_CLOUD_OPENAI_API_KEY_FILE" in compose
+    assert "SIGMA_CLOUD_INFERENCE_PROVIDER: ${SIGMA_CLOUD_INFERENCE_PROVIDER:-chatgpt}" in compose
+    assert "SIGMA_CLOUD_CHATGPT_AUTH_HOME: /var/lib/sigma-auth/chatgpt-sponsor" in compose
+    assert "SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt" in (ROOT / "deploy/env.example").read_text(
+        encoding="utf-8"
+    )
+    assert 'values.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt")' in (
+        ROOT / "deploy/gce_preflight.py"
+    ).read_text(encoding="utf-8")
     assert "SIGMA_CLOUD_SPONSORED_ENABLED: ${SIGMA_CLOUD_SPONSORED_ENABLED:-false}" in compose
     assert "SIGMA_CLOUD_FORCE_SPONSORED_MODE: ${SIGMA_CLOUD_FORCE_SPONSORED_MODE:-false}" in compose
     assert "SIGMA_RESEARCH_DOCKER_HOST" in compose

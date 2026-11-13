@@ -1,5 +1,6 @@
 """No-network sponsor isolation, protected import, refresh, and no billing fallback."""
 
+import json
 import os
 import time
 from pathlib import Path
@@ -143,6 +144,50 @@ class SponsorTests(IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as rejected:
                 await api.sponsor_auth_begin(request)
             self.assertEqual(rejected.exception.status_code, 403)
+
+    async def test_hosted_connection_reports_the_effective_inference_provider(self):
+        from typing import cast
+
+        from starlette.requests import Request
+
+        from sigma import api, cloud_auth, cloud_workspaces
+
+        principal = cloud_auth.Principal(
+            subject="member-subject", email="member@example.test", role="member"
+        )
+        request = cast(
+            Request,
+            type(
+                "RequestFixture", (), {"state": type("State", (), {"cloud_principal": principal})()}
+            )(),
+        )
+        with (
+            patch.object(cloud_workspaces, "enabled", return_value=True),
+            patch.object(cloud_auth, "sponsored_access_enabled", return_value=True),
+            patch.object(
+                api,
+                "sponsored_auth_context",
+                AsyncMock(
+                    return_value={"mode": "api_key", "status": "connected", "token": "secret"}
+                ),
+            ),
+            patch.object(
+                api,
+                "connection",
+                AsyncMock(
+                    return_value={"status": "connected", "label": "OpenAI API · key billing"}
+                ),
+            ),
+            patch.object(cloud_auth, "model_access_for_subject", return_value="sponsored"),
+            patch.object(cloud_auth, "persist_model_connection_status"),
+            patch.dict(os.environ, {"SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key"}),
+        ):
+            response = await api.cloud_sponsored_connection(request)
+        body = bytes(response.body)
+        payload = json.loads(body)
+        self.assertEqual(payload["provider"], "api_key")
+        self.assertEqual(payload["label"], "OpenAI API · key billing")
+        self.assertNotIn("secret", body.decode())
 
     async def test_hosted_sponsor_oauth_callback_persists_connected_credentials(self):
         from urllib.parse import parse_qs, urlsplit
