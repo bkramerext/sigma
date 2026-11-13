@@ -4,117 +4,16 @@ SIGMA is a local workspace for investigating difficult questions with multiple r
 
 ## Install and start
 
-On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+, and npm. `./sigma setup` also installs the zstd CLI/native library on macOS with Homebrew or Debian/Ubuntu with apt, if missing; other Linux distributions should install zstd with their package manager first. From the repository root:
+Local installation, prerequisites, startup, Google sign-in, personal and sponsored ChatGPT credentials, API keys, macOS Keychain, local spending guards, and troubleshooting are documented together in **[Local Hosting](LOCAL_HOSTING.md)**. The consolidated local-hosting procedure is **not yet retested end to end** and should be maintained as implementation changes.
 
-```sh
+From an already cloned and configured local checkout:
+
+~~~sh
 ./sigma setup
-./sigma start
-```
+./sigma start --navigate
+~~~
 
-Open **http://127.0.0.1:5173** if the browser does not open automatically. Stop SIGMA with **Ctrl+C**, or use `./sigma shutdown` from another terminal. Running `./sigma start` again replaces a verified local instance; unrelated services using the ports are left alone.
-
-For an eligible Google account, normal `./sigma start` sign-in selects
-sponsored mode by default. The pill shows the remaining allowance from the
-local sponsored ledger. Sponsored inference uses the operator-configured
-`SIGMA_CLOUD_SPONSOR_EMAIL` ChatGPT account, never the signed-in member's
-ChatGPT session. For local use, SIGMA reads that account from the private
-`SIGMA_AUTH_HOME` store and pins it to the configured sponsor email. Set `SIGMA_CLOUD_SPONSOR_EMAIL`
-privately in the backend environment or ignored checkout-local `.env`.
-Missing configuration is reported in backend startup logs; sponsored access
-fails closed. Local spend is reserved against the signed-in member's configured allowance before
-provider dispatch. Local sponsored inference selects ChatGPT when
-`SIGMA_CLOUD_INFERENCE_PROVIDER` is unset. Local sponsored research has a bounded **$50-per-UTC-calendar-month shared
-API-rate-equivalent ceiling** when no explicit global ceiling is configured.
-Past months' settled usage no longer consumes the new month's allowance;
-unresolved reserved and unknown provider calls remain held until reconciled.
-This is separate from each member's individual allowance, which remains subject
-to its own configured accounting or an administrator-approved reload.
-
-To inspect durable spending obligations without exposing account identities:
-
-```sh
-uv run --locked --no-sync python scripts/inspect_cloud_spend.py
-```
-
-The diagnostic shows the full historical ledger; it does not establish which
-configuration the running backend actually uses. A connected ChatGPT account
-may separately reach a provider plan/app usage limit; changing the SIGMA
-ceiling cannot bypass it.
-
-An operator-set `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` overrides the local
-default and is **cumulative unless `SIGMA_CLOUD_GLOBAL_SPEND_WINDOW=calendar_month`
-is explicitly selected**. For example, after approving a $5 *cumulative*
-local ceiling:
-
-```sh
-SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD=5.00 ./sigma start
-```
-
-The ledger is never reset by changing these settings. A production-hosted
-deployment also defaults to cumulative global spend accounting unless the
-operator explicitly configures a different window. Changes to actual API
-billing exposure still require the operator's approval; a SIGMA allowance
-does not provide provider-side payment authorization.
-
-If the operator provisions a dedicated
-SIGMA-sponsored OpenAI API service key, local sponsored Play can instead use:
-
-```bash
-SIGMA_CLOUD_INFERENCE_PROVIDER=api_key
-SIGMA_CLOUD_OPENAI_API_KEY_FILE=/absolute/path/to/sigma-sponsored-api-key
-./sigma start
-```
-
-The key file must contain the sponsored project's API key. A direct
-`SIGMA_CLOUD_OPENAI_API_KEY` environment variable is also supported, but do not
-set both sources. SIGMA does not use the personal `OPENAI_API_KEY` for sponsored
-calls. The operator must confirm the sponsored API project's billing and usage
-limits before supplying this key; API usage is billed separately from a ChatGPT
-plan. To roll back local service-key routing, unset
-`SIGMA_CLOUD_INFERENCE_PROVIDER` and the dedicated key setting, then restart.
-An account with only `$0.01` remaining may still be unable to start a call:
-the server reserves a conservative, model-specific amount before each provider
-request and never exceeds the member's allowance.
-In sponsored mode, **Project Settings → Limits** controls session duration,
-call, round, and estimated-cost limits. Duration can be set to **Unlimited**;
-this removes the overall session deadline, not the independent call, round,
-spending, concurrent-session, or per-provider-call timeout limits. A session
-keeps its saved limits and build identity even after the project or running
-server is updated. Sponsorship governs money allowance only; member and
-configured global spend ceilings are enforced before each call.
-Hosted deployments retain their own provider setting. The option does not
-enable the hosted forced-sponsored setting. Use `./sigma start` to return to
-normal local mode.
-
-If sponsored Play is temporarily unavailable, the signed-in member's research
-is preserved. The backend reports token-free status codes in the private,
-bounded `sponsor-diagnostics.log` file at the checkout root. Run
-`tail -n 30 sponsor-diagnostics.log` there to read the latest entries. The
-`sponsor_play` event shows whether the start request was accepted or rejected;
-`sponsor_inference` records call start, provider HTTP status, completion, and
-fixed failure categories. Endpoint-specific `sponsor_sessions_api`,
-`sponsor_config_api`, `sponsor_limits_api`, and `sponsor_project_api` events
-record failed project requests, including whether the error body was unusually
-large. No prompt, response, provider message, identity, or credential is
-written to this log.
-`credential_missing` means the server has no usable sponsor session. Only a
-verified local administrator can renew the shared sponsor credential through
-the admin-only `/api/ai/sponsor-auth/begin` maintenance flow. The member-facing
-Sponsored ChatGPT pill never starts that flow. A sponsored member is not asked
-to authorize or reconnect the sponsor account. The OAuth flow is bound to
-SIGMA's saved sponsor account. The same log records
-`sponsor_oauth status=started`, then `connected`, `failed`, or `cancelled` so
-the operator can tell whether renewal completed. A member's Google sign-in
-alone does not renew the server's sponsor credential. Clicking **Sponsored
-ChatGPT** starts authorization for the user's own personal ChatGPT account.
-After connection, the pill reads **Disconnect from ChatGPT**; disconnecting
-returns to sponsored mode without changing shared sponsor credentials. If
-personal authorization fails or is cancelled, **Connect to ChatGPT** remains
-available and the selected funding mode is preserved.
-
-To test with mock identities and controls, use `./sigma start --mock-auth`.
-The mock member's $25 allowance is simulated. For its sponsored presentation,
-combine the options: `./sigma start --mock-auth --sponsored`.
+Open **http://127.0.0.1:5173** if needed. Press **Ctrl+C** to stop or run `./sigma shutdown` in another terminal. Manual project editing does not require an AI connection.
 
 ## Start a project
 
