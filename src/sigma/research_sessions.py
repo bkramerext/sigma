@@ -6197,6 +6197,12 @@ def _rebind_provider_transport(
                 or old_step.get("attempt_status") == "unknown"
             ):
                 old_step.setdefault("funding_provenance", "personal_chatgpt_unmetered")
+        old_compiler = record.get("reference_compilation")
+        if isinstance(old_compiler, dict) and old_compiler.get("status") in {
+            "running",
+            "interrupted",
+        }:
+            old_compiler.setdefault("funding_provenance", "personal_chatgpt_unmetered")
     paid = credential["mode"] == "api_key" or sponsored
     if paid and str(config["model"]) not in TOKEN_PRICES_PER_MILLION:
         raise ProjectError("No reviewed price is available for the recipient's provider model.")
