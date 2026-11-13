@@ -199,15 +199,19 @@ with sync_playwright() as playwright:
     expect(project_groups_title).to_be_visible()
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     initial = metadata.inner_text()
-    assert initial.startswith("Hard difficulty · 3 strategies · 0 papers"), initial
-    assert "Running" not in initial and initial.count(" · ") == 2, initial
+    # Paper counts are unknown during lightweight Home loading; never invent zero.
+    assert initial in (
+        "Hard difficulty · 3 strategies",
+        "Hard difficulty · 3 strategies · 0 papers",
+    ), initial
+    assert "Running" not in initial, initial
     assert project_path not in initial, initial
     activity = entry.locator("xpath=..").locator(".recent-activity-jump")
     expect(activity).to_have_count(0)
 
     running.add(project_id)
     expect(activity).to_be_visible(timeout=10000)
-    expect(metadata).to_have_text(initial)
+    expect(metadata).to_contain_text("Hard difficulty · 3 strategies")
     category_indicator = recent_group.locator("summary .research-running-indicator")
     expect(category_indicator).to_have_count(0)
     recent_group.locator("summary").click()
@@ -233,10 +237,10 @@ with sync_playwright() as playwright:
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     activity = entry.locator("xpath=..").locator(".recent-activity-jump")
     expect(activity).to_be_visible(timeout=10000)
-    expect(metadata).to_have_text(initial)
+    expect(metadata).to_contain_text("Hard difficulty · 3 strategies")
     running.clear()
     expect(activity).to_have_count(0, timeout=10000)
-    expect(metadata).to_have_text(initial, timeout=10000)
+    expect(metadata).to_contain_text("Hard difficulty · 3 strategies", timeout=10000)
 
     # Unavailable records remain in storage but never reach the Saved UI.
     unavailable_fixture["enabled"] = True
