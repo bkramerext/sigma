@@ -1,4 +1,4 @@
-import { Component, createContext, createElement, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { Component, createContext, createElement, forwardRef, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
@@ -30,7 +30,7 @@ import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
 import GlobalModelPill from './GlobalModelPill';
-import ProjectDescriptionEditor, { type ProjectDescriptionDraft } from './ProjectDescriptionEditor';
+import ProjectDescriptionEditor, { type ProjectDescriptionDraft, type ProjectDescriptionEditorHandle } from './ProjectDescriptionEditor';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // A failure while presenting historical research must never unmount the app.
@@ -8197,10 +8197,12 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheSco
   </div>;
 }
 
-function StrategyTitleEditor({ authorEmail, strategy, path, onSaved, modeDisabled, descriptionDraft, onEnterMode, onExitMode, onEditDescription, expanded, onToggle, commands }: {
+type PaneEditorHandle = { saveBeforeCollapse: () => Promise<boolean> };
+type StrategyTitleEditorProps = {
   authorEmail?: string; strategy: Strategy; path: string; onSaved: (view: ProjectView) => void; modeDisabled: boolean; descriptionDraft: string; onEnterMode: () => boolean; onExitMode: () => void;
   onEditDescription: () => void; expanded: boolean; onToggle: () => void; commands: ReactNode;
-}) {
+};
+const StrategyTitleEditor = forwardRef<PaneEditorHandle, StrategyTitleEditorProps>(function StrategyTitleEditor({ authorEmail, strategy, path, onSaved, modeDisabled, descriptionDraft, onEnterMode, onExitMode, onEditDescription, expanded, onToggle, commands }, ref) {
   const [editing, setEditing] = useState(false);
   const shownTitle = displayStrategyTitle(strategy);
   const [draft, setDraft] = useState(shownTitle);
@@ -8215,19 +8217,34 @@ function StrategyTitleEditor({ authorEmail, strategy, path, onSaved, modeDisable
     setEditing(false); onExitMode(); setDraft(shownTitle); setError('');
     if (restoreFocus) requestAnimationFrame(() => trigger.current?.focus());
   }
-  async function save(event: FormEvent) {
-    event.preventDefault(); event.stopPropagation();
-    if (busy) return;
-    if (!draft.trim()) { setError('Enter a strategy title.'); input.current?.focus(); return; }
-    setBusy(true); setError('');
+  const saving = useRef(false);
+  async function saveDraft(): Promise<boolean> {
+    if (busy || saving.current) return false;
+    if (!draft.trim()) { setError('Enter a strategy title.'); input.current?.focus(); return false; }
+    if (!descriptionDraft.trim()) { setError('Enter a strategy approach.'); return false; }
+    if (draft === shownTitle && descriptionDraft === strategy.approach) {
+      cancel(false);
+      return true;
+    }
+    saving.current = true; setBusy(true); setError('');
     try {
       const next = await post<ProjectView>('strategies/edit', {
         path, strategy_id: strategy.id, title: draft, approach: descriptionDraft,
       });
       setEditing(false); onExitMode(); onSaved(next);
       requestAnimationFrame(() => trigger.current?.focus());
-    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
-    finally { setBusy(false); }
+      return true;
+    } catch (cause) {
+      setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause));
+      return false;
+    } finally {
+      saving.current = false; setBusy(false);
+    }
+  }
+  useImperativeHandle(ref, () => ({ saveBeforeCollapse: saveDraft }));
+  function save(event: FormEvent) {
+    event.preventDefault(); event.stopPropagation();
+    void saveDraft();
   }
   return <div className={`strategy-title-editor${editing ? ' is-renaming' : ''}`}>
     {editing ? <form ref={form} onSubmit={save} className="strategy-rename-form">
@@ -8244,7 +8261,7 @@ function StrategyTitleEditor({ authorEmail, strategy, path, onSaved, modeDisable
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
   </div>;
-}
+});
 
 function StrategyCommands({ strategy, onCommand, disabled = false }: {
   strategy: Strategy; onCommand: (mode: 'remove' | 'fork' | 'toggle', strategy: Strategy) => void; disabled?: boolean;
@@ -8281,9 +8298,10 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
   </span>;
 }
 
-function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
+type NewStrategyProps = {
   path: string; initialDraft?: { title: string; approach: string; summary?: string }; onSaved: (view: ProjectView) => void; onCancel: () => void;
-}) {
+};
+const NewStrategy = forwardRef<PaneEditorHandle, NewStrategyProps>(function NewStrategy({ path, onSaved, onCancel, initialDraft }, ref) {
   const submitting = useRef(false);
   const [title, setTitle] = useState(initialDraft?.title ?? '');
   const [approach, setApproach] = useState(initialDraft?.approach ?? '');
@@ -8291,11 +8309,37 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
   const [busy, setBusy] = useState(false);
   const titleInput = useRef<HTMLInputElement>(null);
   useEffect(() => { titleInput.current?.focus(); }, []);
-  async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current) return; submitting.current = true; setBusy(true); setError('');
-    try { onSaved(await post<ProjectView>('strategies', { path, title, approach, summary: initialDraft?.summary ?? '' })); }
-    catch (error) { setError(errorMessage(error)); }
-    finally { submitting.current = false; setBusy(false); }
+  async function saveDraft(): Promise<boolean> {
+    if (submitting.current) return false;
+    if (!title.trim() || !approach.trim()) {
+      setError('Enter both a strategy title and a hypothesis / approach before saving.');
+      if (!title.trim()) titleInput.current?.focus();
+      return false;
+    }
+    submitting.current = true; setBusy(true); setError('');
+    try {
+      onSaved(await post<ProjectView>('strategies', { path, title, approach, summary: initialDraft?.summary ?? '' }));
+      return true;
+    } catch (cause) {
+      setError(errorMessage(cause));
+      return false;
+    } finally {
+      submitting.current = false; setBusy(false);
+    }
+  }
+  useImperativeHandle(ref, () => ({
+    saveBeforeCollapse: () => {
+      // Only an untouched, empty manual draft is disposable.
+      if (!initialDraft && !title.trim() && !approach.trim()) {
+        onCancel();
+        return Promise.resolve(true);
+      }
+      return saveDraft();
+    },
+  }));
+  function save(event: FormEvent) {
+    event.preventDefault();
+    void saveDraft();
   }
   return <form className="strategy-form" aria-labelledby="new-strategy-heading" onSubmit={save}
     onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); onCancel(); } }}>
@@ -8311,7 +8355,7 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
       {error && <p role="alert" className="error">{error}</p>}
     </fieldset>
   </form>;
-}
+});
 
 function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManual, onAI }: {
   buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; hideNew?: boolean; onManual: () => void; onAI: () => void;
@@ -8692,6 +8736,8 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
+  const newStrategyEditor = useRef<PaneEditorHandle>(null);
+  const strategyTitleEditors = useRef<Record<string, PaneEditorHandle | null>>({});
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -8740,6 +8786,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const [descriptionEditing, setDescriptionEditing] = useState(false);
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionDirty, setDescriptionDirty] = useState(false);
+  const projectDescriptionEditor = useRef<ProjectDescriptionEditorHandle>(null);
   const [ordering, setOrdering] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -8830,6 +8877,23 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const sectionOpen = useCallback((section: 'project' | 'strategies' | 'sessions' | 'papers') => {
     if (exclusiveSections) window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: section }));
   }, [exclusiveSections]);
+  // Collapse is a commit boundary for authored Project and Strategies fields.
+  // Never hide a failing editor or leave its mode lock active behind a closed pane.
+  async function collapseProjectPane(): Promise<boolean> {
+    if (descriptionEditing && !(await projectDescriptionEditor.current?.saveBeforeCollapse())) return false;
+    setProjectExpanded(false);
+    window.localStorage.setItem(`sigma.projectPane:${path}`, 'false');
+    return true;
+  }
+  async function collapseStrategiesPane(): Promise<boolean> {
+    if (editing && !(await newStrategyEditor.current?.saveBeforeCollapse())) return false;
+    const strategyTitleId = modeOwner.current?.startsWith('strategy-title-')
+      ? modeOwner.current.slice('strategy-title-'.length) : null;
+    if (strategyTitleId && !(await strategyTitleEditors.current[strategyTitleId]?.saveBeforeCollapse())) return false;
+    setStrategiesExpanded(false);
+    window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'false');
+    return true;
+  }
   useEffect(() => {
     // Error-card Source Material links can originate from a collapsed Sessions
     // pane. Reveal Project even in the exclusive-one-section layout.
@@ -8844,18 +8908,12 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   useEffect(() => {
     const opened = (event: Event) => {
       const section = (event as CustomEvent<string>).detail;
-      if (section !== 'project') {
-        setProjectExpanded(false);
-        window.localStorage.setItem(`sigma.projectPane:${path}`, 'false');
-      }
-      if (section !== 'strategies') {
-        setStrategiesExpanded(false);
-        window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'false');
-      }
+      if (section !== 'project') void collapseProjectPane();
+      if (section !== 'strategies') void collapseStrategiesPane();
     };
     window.addEventListener('sigma-project-section-opened', opened);
     return () => window.removeEventListener('sigma-project-section-opened', opened);
-  }, [path]);
+  }, [path, descriptionEditing, editing, activeMode]);
   useEffect(() => {
     if (guest) return;
     const controller = new AbortController();
@@ -9020,8 +9078,13 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     },
   };
   function toggleStrategiesPane() {
-    if (!strategiesExpanded) sectionOpen('strategies');
-    setStrategiesExpanded(open => { window.localStorage.setItem(`sigma.strategiesPane:${path}`, String(!open)); return !open; });
+    if (strategiesExpanded) {
+      void collapseStrategiesPane();
+    } else {
+      sectionOpen('strategies');
+      setStrategiesExpanded(true);
+      window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'true');
+    }
   }
   function showStrategy(id: string) {
     sectionOpen('strategies');
@@ -9225,7 +9288,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
-          <button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" data-tooltip={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => { if (!projectExpanded) sectionOpen('project'); setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; }); }}>
+          <button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" data-tooltip={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => { if (projectExpanded) void collapseProjectPane(); else { sectionOpen('project'); setProjectExpanded(true); window.localStorage.setItem(`sigma.projectPane:${path}`, 'true'); } }}>
             <DisclosureChevron expanded={projectExpanded}/>Project
           </button>
         </h2>
@@ -9235,7 +9298,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
       {missingProjectType && <div className="project-type-missing-warning" role="status"><strong>Project type unavailable</strong><p>This project was created with “{savedTypeSnapshot?.name ?? project.investigation_type}”, which is no longer available. Its existing settings and icon are preserved. Choose a replacement in Project Settings to use a current type.</p><button type="button" onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>Choose replacement</button></div>}
       <div className="project-overview-card">
       <div className="project-description-columns"><span>TITLE</span></div>
-      <ProjectDescriptionEditor view={view} guest={guest} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined}
+      <ProjectDescriptionEditor ref={projectDescriptionEditor} view={view} guest={guest} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined}
         editing={descriptionEditing} busy={descriptionBusy}
         canEditTitle={!sharedActivity?.owner || sharedActivity.owner === sharedActivity.you}
         onBusyChange={setDescriptionBusy}
@@ -9278,7 +9341,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
       {guestAiNotice && <p className="hint guest-ai-notice" role="status">{guestAiNotice}</p>}
       <div id="strategies-pane-content" hidden={!strategiesExpanded}>
       <p className="sr-only" role="status">{announcement}</p>
-      <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {
+      <div id="strategy-composer">{editing && <NewStrategy ref={newStrategyEditor} initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {
         const strategy = next.project.strategies[next.project.strategies.length - 1];
         setView(next); setEditing(false); exitMode('new-strategy'); setAnnouncement(`Strategy added: ${strategy.title}`);
         setFocusStrategy(strategy.id);
@@ -9291,7 +9354,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor key={`${strategy.id}:${editorVersion}`} authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={readOnlyGuest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={readOnlyGuest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
+            <StrategyTitleEditor ref={instance => { strategyTitleEditors.current[strategy.id] = instance; }} key={`${strategy.id}:${editorVersion}`} authorEmail={sharedActivity?.shared ? sharedActivity.artifact_authors?.strategy?.[strategy.id] : undefined} strategy={strategy} path={view.path} onSaved={setView} modeDisabled={readOnlyGuest || (activeMode !== null && activeMode !== `strategy-title-${strategy.id}`)} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={readOnlyGuest || activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
               if (readOnlyGuest || ordering || dragId || activeMode !== null || processControls.confirming) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;

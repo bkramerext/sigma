@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type FormEvent } from 'react';
 import RenderedMarkdown from './RenderedMarkdown';
 import './project-settings.css';
 import './project-description.css';
@@ -293,9 +293,8 @@ const definitions = [
   { key: 'paper_requirements', title: 'Paper Requirements', help: 'What should the finished publication contain?', rows: 4 },
 ] as const;
 
-export default function ProjectDescriptionEditor({
-  view, editing, busy, canEditTitle = true, onBusyChange, onDirtyChange, onExitMode, onSave, guest, collaborationRevision,
-}: {
+export type ProjectDescriptionEditorHandle = { saveBeforeCollapse: () => Promise<boolean> };
+type ProjectDescriptionEditorProps = {
   view: ProjectDescriptionView;
   guest: boolean;
   editing: boolean;
@@ -306,7 +305,11 @@ export default function ProjectDescriptionEditor({
   onDirtyChange: (dirty: boolean) => void;
   onExitMode: () => void;
   onSave: (draft: ProjectDescriptionDraft) => Promise<void>;
-}) {
+};
+
+const ProjectDescriptionEditor = forwardRef<ProjectDescriptionEditorHandle, ProjectDescriptionEditorProps>(function ProjectDescriptionEditor({
+  view, editing, busy, canEditTitle = true, onBusyChange, onDirtyChange, onExitMode, onSave, guest, collaborationRevision,
+}, ref) {
   const original = (): ProjectDescriptionDraft => ({
     title: view.project.title,
     problem: view.project.problem,
@@ -372,20 +375,30 @@ export default function ProjectDescriptionEditor({
     if (editing && canEditTitle) { titleInput.current?.focus(); titleInput.current?.select(); }
   }, [editing, canEditTitle]);
 
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (busy || !dirty) return;
+  const saving = useRef(false);
+  async function saveDraft(): Promise<boolean> {
+    if (busy || saving.current) return false;
+    if (!dirty) { onExitMode(); return true; }
     if (!draft.title.trim() || !draft.problem.trim()) {
       setError('Project title and Research Problem are required.');
-      return;
+      return false;
     }
-    onBusyChange(true); setError('');
+    saving.current = true; onBusyChange(true); setError('');
     try {
       await onSave(draft);
       onExitMode();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally { onBusyChange(false); }
+      return false;
+    } finally {
+      saving.current = false; onBusyChange(false);
+    }
+  }
+  useImperativeHandle(ref, () => ({ saveBeforeCollapse: saveDraft }));
+  function save(event: FormEvent) {
+    event.preventDefault();
+    void saveDraft();
   }
 
   const fields = <div className="sigma-description-fields">
@@ -429,4 +442,6 @@ export default function ProjectDescriptionEditor({
       {fields}
     </>}
   </div>;
-}
+});
+
+export default ProjectDescriptionEditor;
