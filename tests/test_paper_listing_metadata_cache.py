@@ -18,9 +18,7 @@ class PaperListingEndpointTests(TestCase):
 
         with (
             patch.object(api.papers, "list_papers", return_value=[]) as listed,
-            patch.object(
-                api.papers, "next_paper_number_for_activity", return_value=11
-            ) as numbered,
+            patch.object(api.papers, "next_paper_number_for_activity", return_value=11) as numbered,
             patch.object(
                 api.papers,
                 "run_progress_list",
