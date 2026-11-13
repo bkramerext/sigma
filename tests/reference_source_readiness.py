@@ -265,12 +265,17 @@ async def verify_provider_free_admission() -> None:
         assert continued["reference_compilation"]["status"] == "fallback"
         assert research_sessions._strict_compilation_block_reason(continued) is None
 
+        # Existing sessions can retain the old strict marker after an optional
+        # compiler budget skip. They must still be able to Resume.
+        older = research_sessions._read(str(path), started["id"])
+        older["reference_compilation"]["required_for_acceptance"] = True
+        older["reference_compilation"]["status"] = "skipped"
+        assert research_sessions._strict_compilation_block_reason(older) is None
+
         # Corrupting a saved excerpt after admission is not a valid fallback.
         corrupted = research_sessions._read(str(path), started["id"])
         corrupted["research_method_sources"]["sources"][0]["retrieval"]["excerpt"] = "tampered"
-        assert "integrity" in (
-            research_sessions._strict_compilation_block_reason(corrupted) or ""
-        )
+        assert "integrity" in (research_sessions._strict_compilation_block_reason(corrupted) or "")
 
 
 async def verify_empty_and_single_reference_sessions() -> None:
