@@ -843,6 +843,27 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
         await asyncio.sleep(0)
         stopped = await research_sessions.control_session(str(path), started["id"], "stop")
         assert stopped["status"] == "stopped"
+        # The real Session 1 contains an interrupted/unknown personal
+        # provider attempt, but no completed Investigator or Skeptic result.
+        # Its liability remains with the prior personal account, not the
+        # new sponsor's persistent billing ledger.
+        prior = research_sessions._read(str(path), started["id"])
+        prior["steps"].append(
+            {
+                "id": "prior-personal-attempt",
+                "attempt_id": "prior-personal-attempt",
+                "strategy_id": strategy.id,
+                "role": "investigator",
+                "cycle": 1,
+                "model": MODEL,
+                "status": "interrupted",
+                "failure_kind": "interrupted",
+                "attempt_status": "unknown",
+            }
+        )
+        prior["calls_used"] = 1
+        prior["strategy_runs"][0]["calls_used"] = 1
+        research_sessions._save(str(path), prior)
         prior = deepcopy(research_sessions._read(str(path), started["id"]))
         assert prior["mode"] == "chatgpt"
         assert prior["cost_status"] == "unavailable"
@@ -3358,7 +3379,9 @@ async def test_legacy_compiler_checkpoint_resumes_after_account_change(path: Pat
         persisted = research_sessions._read(str(path), started["id"])
         assert persisted["reference_compilation"]["status"] == "not_needed"
         assert persisted["reference_compilation"]["required_for_acceptance"] is False
-        assert persisted["identity_hash"] == research_sessions._digest(credential["identity"])
+        assert persisted["identity_hash"] == research_sessions._digest(
+            current_account["value"]["identity"]
+        )
         assert persisted["preserved_legacy_note"] == saved["preserved_legacy_note"]
 
 
