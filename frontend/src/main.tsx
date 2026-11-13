@@ -96,6 +96,7 @@ const researchTypes: { value: ResearchMode; label: string }[] = [
   { value: 'law', label: 'Law' },
   { value: 'literature', label: 'Literature' },
   { value: 'mathematical', label: 'Mathematics' },
+  { value: 'medical', label: 'Medical' },
   { value: 'military', label: 'Military' },
   { value: 'philosophy', label: 'Philosophy' },
   { value: 'physics', label: 'Physics' },
@@ -356,6 +357,22 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   const hasCompleteFinding = session.artifacts.some(artifact =>
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
   const evidence = `${action} ${recordedReason}`;
+  // Provider error codes are not project-change diagnoses. In particular,
+  // project_spend_limit_exceeded contains the word "project" and must never
+  // be interpreted by the generic project/strategy guard below.
+  const compilation = session.outcome.source_material?.compilation;
+  const lastCompilerAttempt = compilation?.attempts?.at(-1);
+  const providerErrorCode = lastCompilerAttempt?.provider_error_code ?? compilation?.provider_error_code ?? '';
+  if (/project_spend_limit_exceeded|insufficient_quota|billing_hard_limit_reached|billing_not_active/.test(`${evidence} ${providerErrorCode}`))
+    return {
+      cause: 'The AI provider rejected reference compilation because the API project spending allowance is exhausted (HTTP 429). Research is preserved.',
+      next: 'Restore the provider project spending allowance before resuming. No Investigator or Skeptic call was dispatched.',
+    };
+  if (/required reference compilation/i.test(evidence))
+    return {
+      cause: recordedReason,
+      next: 'Review Outcome → Research Standards. After correcting the compilation failure, Resume can make a new separately budgeted attempt when the safety limits permit it.',
+    };
   // Preserve branch-local context diagnostics after aggregate messages change.
   // Ignore branches not currently paused/stopped/failed.
   const contextBranchReasons = /context/i.test(evidence)

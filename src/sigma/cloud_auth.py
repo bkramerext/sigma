@@ -1852,12 +1852,11 @@ def login(
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
     denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
-    session_cookie = request.cookies.get(_session_cookie_name(cfg, window_id or None))
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
-        if session_cookie:
-            db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
+        # A transient OAuth failure must not revoke an already verified session.
+        # Revoke the old cookie only on a completed replacement sign-in.
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
             "INSERT INTO flows(state_hash,nonce,verifier,expires_at,return_to,window_id) VALUES(?,?,?,?,?,?)",
@@ -1899,7 +1898,8 @@ def login(
     else:
         _clear_cookie(response, cfg, INVITE_INTENT_COOKIE)
     _clear_cookie(response, cfg, DENIED_COOKIE)
-    _clear_window_session(response, cfg, window_id or None)
+    # Preserve the current browser session if Google's first redirect or
+    # callback fails. Successful replacement or explicit logout clears it.
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -2165,6 +2165,8 @@ async def callback(
                 return_to = "/?project_resume=unavailable"
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
+        if session_cookie:
+            db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
         if role == "member" and _materialize_domain_member(db, subject, email):
             auto_domain_member = True
         existing_account = db.execute(

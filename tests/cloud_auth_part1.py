@@ -1404,6 +1404,26 @@ class CloudAuthTests(CloudAuthFixture):
         self.assertEqual(self.client.get("/api/ai/auth/open/guessed").status_code, 400)
         self.assertEqual(TestClient(app).get("/api/ai/models").status_code, 401)
 
+    def test_unverified_replacement_login_keeps_existing_session(self):
+        signed_in = self.finish()
+        old = signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        self.client.cookies.set(cloud_auth.SESSION_COOKIE, old)
+        started = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+        self.assertEqual(started.status_code, 302)
+        self.assertIsNotNone(cloud_auth.resolve_session(old))
+        self.assertNotIn(
+            '__Host-sigma_session="";',
+            started.headers["set-cookie"],
+            "Beginning another Google login must not discard the previous session",
+        )
+        invalid = self.client.get(
+            "/api/cloud-auth/callback",
+            params={"state": "not-the-new-flow", "code": "invalid"},
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIsNotNone(cloud_auth.resolve_session(old))
+        self.assertNotIn('__Host-sigma_session="";', invalid.headers.get("set-cookie", ""))
+
     def test_session_persists_across_client_restart_and_logout_revokes_it(self):
         signed_in = self.finish()
         raw = signed_in.cookies[cloud_auth.SESSION_COOKIE]

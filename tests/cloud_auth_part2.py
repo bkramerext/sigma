@@ -397,13 +397,13 @@ class CloudAuthTests(CloudAuthFixture):
         self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
 
         begin = self.client.get("/api/cloud-auth/login", follow_redirects=False)
-        self.assertIn('__Host-sigma_session="";', begin.headers["set-cookie"])
-        self.assertIn("Max-Age=0", begin.headers["set-cookie"])
-        self.assertIsNone(cloud_auth.resolve_session(first_raw))
+        # A new OAuth attempt may fail before identity is verified. Preserve
+        # the currently authenticated session until replacement completes.
+        self.assertNotIn('__Host-sigma_session="";', begin.headers["set-cookie"])
+        self.assertIsNotNone(cloud_auth.resolve_session(first_raw))
         with cloud_auth._db(cloud_auth.config()) as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 0)
-        self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 401)
-        self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1)
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
 
         denied = self.finish("visitor@example.org", "visitor-sub")
         self.assertEqual(denied.status_code, 303)
@@ -426,9 +426,9 @@ class CloudAuthTests(CloudAuthFixture):
             200,
         )
         begin = self.client.get("/api/cloud-auth/login", follow_redirects=False)
-        self.assertIn('__Host-sigma_session="";', begin.headers["set-cookie"])
-        self.assertIsNone(cloud_auth.resolve_session(first_raw))
-        self.assertEqual(self.client.get("/api/projects/recent").json(), {"projects": []})
+        self.assertNotIn('__Host-sigma_session="";', begin.headers["set-cookie"])
+        self.assertIsNotNone(cloud_auth.resolve_session(first_raw))
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
 
         second = self.finish("member@example.org", "member-sub")
         second_raw = second.cookies[cloud_auth.SESSION_COOKIE]
