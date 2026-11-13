@@ -11905,6 +11905,9 @@ async def _generate_impl(
                     pdf_check_passes = list(saved_pdf_pass["pdf_check_passes"])
                     diagram_fallback = saved_pdf_pass["diagram_fallback"]
                     next_pdf_pass = 4 if saved_pdf_pass["ready"] else saved_pdf_pass["next_pass"]
+            # Stop may arrive as proofreading completes. Yield at this checkpoint
+            # boundary so cancellation wins before PDF compilation starts.
+            await asyncio.sleep(0)
             for pass_number in range(next_pdf_pass, 4):
                 pass_diagnostics: list[str] = []
                 await report("compile", pass_number, 3)
