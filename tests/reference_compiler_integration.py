@@ -993,14 +993,20 @@ def verify_bounded_retry_policy() -> None:
         billing_settled=True,
         retry_after_seconds=50,
     ) == ("rate_limit_wait_exceeds_bound", 0.0)
-    assert plan(
-        attempt_number=1,
-        http_status=429,
-        validation_failure=None,
-        usage_status="rejected",
-        billing_settled=True,
-        provider_error_code="project_spend_limit_exceeded",
-    ) == ("provider_spend_limit_exceeded", 0.0)
+    for provider_error_code in (
+        "project_spend_limit_exceeded",
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+    ):
+        assert plan(
+            attempt_number=1,
+            http_status=429,
+            validation_failure=None,
+            usage_status="rejected",
+            billing_settled=True,
+            provider_error_code=provider_error_code,
+        ) == ("provider_spend_limit_exceeded", 0.0)
     assert plan(
         attempt_number=3,
         http_status=429,

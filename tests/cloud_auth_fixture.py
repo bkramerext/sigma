@@ -102,6 +102,8 @@ def token(
 
 class CloudAuthFixture(TestCase):
     def setUp(self):
+        with cloud_auth._GOOGLE_OIDC_CACHE_LOCK:
+            cloud_auth._GOOGLE_OIDC_CACHE = None
         self.temp = TemporaryDirectory(prefix="sigma-cloud-auth-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "auth"

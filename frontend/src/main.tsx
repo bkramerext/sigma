@@ -366,7 +366,7 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   if (/project_spend_limit_exceeded|insufficient_quota|billing_hard_limit_reached|billing_not_active/.test(`${evidence} ${providerErrorCode}`))
     return {
       cause: 'The AI provider rejected reference compilation because the API project spending allowance is exhausted (HTTP 429). Research is preserved.',
-      next: 'Restore the provider project spending allowance before resuming. No Investigator or Skeptic call was dispatched.',
+      next: 'Check OpenAI Platform → Organization settings → the project that owns SIGMA’s hosted API key → Limits. Review its Monthly spend limit and Enforce a hard limit setting; an authorized project owner can raise or remove the hard limit, or wait for the monthly reset. The organization spend limit and prepaid credit balance may also apply. Then Resume; no Investigator or Skeptic call was dispatched.',
     };
   if (/required reference compilation/i.test(evidence))
     return {
