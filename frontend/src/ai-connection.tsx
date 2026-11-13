@@ -205,11 +205,12 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
       attempt.id = data.id;
       const url = new URL(data.authorization_url, window.location.origin);
       if (url.origin !== window.location.origin || url.pathname !== `/api/ai/auth/open/${data.id}` || url.search || url.hash) throw new Error('Unsafe sign-in handoff rejected.');
-      if (!popup) setHandoff(url.href);
-      // The popup is a new tab: it has no X-Sigma-Window fetch header.
-      // Include the originating tab's scoped session selector in the one-time
-      // same-origin handoff, otherwise the server sees another/anonymous user.
-      if (popup) popup.location.replace(windowAuthUrl(url.pathname));
+      // Popup navigations have no X-Sigma-Window fetch header. Preserve the
+      // initiating Google session in both the popup and blocked-popup link,
+      // without forwarding the window selector to OpenAI.
+      const handoffUrl = windowAuthUrl(url.pathname);
+      if (!popup) setHandoff(handoffUrl);
+      if (popup) popup.location.replace(handoffUrl);
       const deadline = Date.now() + 305000;
       let popupClosedDeadline: number | null = null;
       while (!controller.signal.aborted && Date.now() < deadline) {
