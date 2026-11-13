@@ -84,11 +84,9 @@ export default function ResumeAuthorizationDialog({ request, anchor, onAuthorize
       <h3 id="resume-authorization-title">Resume Session {request.sessionNumber}</h3>
       <div id="resume-authorization-message">
         {request.kind === 'attempts' ? <>
-          <p>Continuing requires {request.count} additional provider attempt{request.count === 1 ? '' : 's'} beyond the saved limit.</p>
-          <p>These may use more allowance. Saved research will be kept.</p>
+          <p>Authorize {request.count} additional provider attempt{request.count === 1 ? '' : 's'} (may use more allowance)?</p>
         </> : <>
           <p>Authorize up to {request.count} more minutes of research?</p>
-          <p>The session time limit was reached. Saved research and spending limits are unchanged; completion is not guaranteed.</p>
         </>}
       </div>
       <div className="resume-authorization-actions">
