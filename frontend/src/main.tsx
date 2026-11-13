@@ -3437,7 +3437,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   useEffect(() => {
     if (guest) {
       const controller = new AbortController();
-      void fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, {
+      void fetch(`/api/projects/papers?${new URLSearchParams({ path, include_runs: 'false' })}`, {
         signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
       }).then(async response => {
         const data = await response.json();
@@ -3484,14 +3484,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const query = new URLSearchParams({ path });
       // The library is independent of provider configuration, progress and
       // recovery. Show paper metadata immediately when its own request finishes.
-      const listing = fetch(`/api/projects/papers?${query}`, {
+      const listing = fetch(`/api/projects/papers?${new URLSearchParams({ path, include_runs: 'false' })}`, {
         cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
       }).then(async listResponse => {
         const list = await listResponse.json();
         if (!listResponse.ok) throw new Error(list.error ?? 'Could not load papers.');
         if (!obsolete()) {
           setPapers(Array.isArray(list.papers) ? list.papers as PaperSummary[] : []);
-          setPaperRuns(Array.isArray(list.runs) ? list.runs as PaperRun[] : []);
           setNextPaperNumber(typeof list.next_paper_number === 'number' ? list.next_paper_number : null);
           if (!silent) setLoading(false);
         }
@@ -3505,7 +3504,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const config = await configResponse.json();
       const savedProgress = progressResponse.ok ? await progressResponse.json() : null;
       if (obsolete()) return;
-      const runs = (Array.isArray(list.runs) ? list.runs : []) as PaperRun[];
+      const runs = (Array.isArray(savedProgress?.runs) ? savedProgress.runs
+        : Array.isArray(list.runs) ? list.runs : []) as PaperRun[];
       setPaperRuns(runs);
       let currentId = selectedRunIdRef.current;
       const selectable = runs.filter(run => run.can_control && run.status !== 'complete' && !run.paper_id);
@@ -3744,7 +3744,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         // open confirmation to the durable published paper, not an old draft.
         let published = papers.find(item => item.paper_id === options.published_paper_id);
         if (!published) {
-          const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, {
+          const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path, include_runs: 'false' })}`, {
             cache: 'no-store', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' },
           });
           const latest = await readPaperResponse(response, 'Finding saved paper');
@@ -7496,7 +7496,7 @@ async function preloadPaperListing(path: string, projectId: string): Promise<voi
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path })}`, {
+    const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path, include_runs: 'false' })}`, {
       signal: controller.signal, cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
     });
     if (!response.ok) return; // The Project pane will show its own retry/error.
