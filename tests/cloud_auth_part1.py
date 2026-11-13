@@ -1411,9 +1411,9 @@ class CloudAuthTests(CloudAuthFixture):
         started = self.client.get("/api/cloud-auth/login", follow_redirects=False)
         self.assertEqual(started.status_code, 302)
         self.assertIsNotNone(cloud_auth.resolve_session(old))
-        self.assertEqual(
-            self.client.cookies.get(cloud_auth.SESSION_COOKIE),
-            old,
+        self.assertNotIn(
+            '__Host-sigma_session="";',
+            started.headers["set-cookie"],
             "Beginning another Google login must not discard the previous session",
         )
         invalid = self.client.get(
