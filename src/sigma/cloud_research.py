@@ -1769,7 +1769,8 @@ def preserve_sponsored_history_on_connection_change(
                     not call
                     or call["workspace_id"] != owner
                     or call["session_id"] != session_id
-                    or call["status"] not in {
+                    or call["status"]
+                    not in {
                         "reserved",
                         "unknown",
                         "usage_estimated",
