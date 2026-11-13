@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from types import SimpleNamespace
 from unittest import TestCase, main
 from unittest.mock import AsyncMock, patch
@@ -131,11 +132,12 @@ class PaperStopPreflightTests(TestCase):
             reached_proofreading = asyncio.Event()
             stages: list[str] = []
 
-            async def fake_generation() -> None:
+            async def fake_generation() -> dict[str, Any]:
                 stages.append("proofreading")
                 reached_proofreading.set()
                 await asyncio.Event().wait()
                 stages.extend(["generate_pdf", "scoring", "finish"])
+                return {}
 
             with (
                 patch.object(api.cloud_workspaces, "current", return_value=None),
