@@ -780,6 +780,102 @@ async def test_native_stopped_session_moves_between_providers(path: Path) -> Non
         assert saved["imported_via_bundle"] is False
 
 
+async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
+    path: Path,
+) -> None:
+    """Resume an unpriced personal session under the same ChatGPT provider,
+    but with the sponsored account and its durable cost accounting.
+
+    Regression: previously both modes were called "chatgpt"; Resume skipped
+    the rebind and cloud admission refused the saved "unavailable" cost status,
+    even though starting a new sponsored session succeeded.
+    """
+    view, strategy, account, config = await setup(path)
+    personal = {
+        **account,
+        "mode": "chatgpt",
+        "identity": "chatgpt:personal-account",
+    }
+    sponsor = {
+        **account,
+        "mode": "chatgpt",
+        "identity": "cloud_sponsor:member:sponsor-account",
+    }
+    state = {"account": personal, "sponsored": False}
+    admitted: list[dict[str, Any]] = []
+
+    async def connected_account():
+        return state["account"]
+
+    def admit_sponsored(record: dict[str, Any]) -> None:
+        assert record["mode"] == "chatgpt"
+        assert record["cloud_sponsored"] is True
+        assert record["cost_status"] == "available"
+        assert record["estimated_cost_usd"] == 0.0
+        admitted.append(deepcopy(record))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=connected_account),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+        patch.object(
+            research_sessions.cloud_research,
+            "billing_enabled",
+            side_effect=lambda: state["sponsored"],
+        ),
+        patch.object(research_sessions.cloud_research, "reconcile_all_orphaned_jobs"),
+        patch.object(
+            research_sessions.cloud_research,
+            "prepare_job",
+            side_effect=admit_sponsored,
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, personal["identity"]
+        )
+        await asyncio.sleep(0)
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+        assert stopped["status"] == "stopped"
+        prior = deepcopy(research_sessions._read(str(path), started["id"]))
+        assert prior["mode"] == "chatgpt"
+        assert prior["cost_status"] == "unavailable"
+        assert prior["cloud_sponsored"] is False
+
+        # Same model and mode; only the selected account/funding changed.
+        state.update(account=sponsor, sponsored=True)
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        assert len(admitted) == 1
+        saved = research_sessions._read(str(path), started["id"])
+        assert saved["mode"] == "chatgpt"
+        assert saved["identity_hash"] == research_sessions._digest(sponsor["identity"])
+        assert saved["cost_status"] == "available"
+        assert saved["cloud_sponsored"] is True
+        assert saved["steps"] == prior["steps"]
+        assert saved["artifacts"] == prior["artifacts"]
+        assert saved["calls_used"] == prior["calls_used"]
+        assert saved["transport_change_history"][-1]["from_mode"] == "chatgpt"
+        assert saved["transport_change_history"][-1]["to_mode"] == "chatgpt"
+
+        # Switching back to personal uses its own accounting without erasing
+        # the completed/preserved history of the sponsored session.
+        stopped_again = await research_sessions.control_session(
+            str(path), started["id"], "stop"
+        )
+        assert stopped_again["status"] == "stopped"
+        state.update(account=personal, sponsored=False)
+        resumed_personal = await research_sessions.control_session(
+            str(path), started["id"], "resume"
+        )
+        assert resumed_personal["status"] == "queued"
+        personal_record = research_sessions._read(str(path), started["id"])
+        assert personal_record["mode"] == "chatgpt"
+        assert personal_record["cloud_sponsored"] is False
+        assert personal_record["cost_status"] == "unavailable"
+        assert personal_record["steps"] == prior["steps"]
+        assert personal_record["calls_used"] == prior["calls_used"]
+
+
 def test_model_switch_preserves_old_hard_budget_costs() -> None:
     """Old settled calls retain their cost; future calls use the new model price."""
     current_model = MODEL
