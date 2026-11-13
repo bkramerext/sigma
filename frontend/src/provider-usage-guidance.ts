@@ -4,6 +4,28 @@
  */
 let sponsoredConnection = false;
 
+export type SponsoredInferenceProvider = 'chatgpt' | 'api_key';
+
+export function sponsoredProviderLabel(provider: SponsoredInferenceProvider | undefined): string {
+  if (provider === 'api_key') return 'Sponsored OpenAI API';
+  if (provider === 'chatgpt') return 'Sponsored ChatGPT';
+  return 'Sponsored inference';
+}
+
+export function openAIProjectSpendLimitCopy(): {
+  title: string; description: string; next: string;
+} {
+  return {
+    title: 'OpenAI API project spending limit reached',
+    description: 'OpenAI rejected reference compilation with project_spend_limit_exceeded (HTTP 429). SIGMA usage allowances do not override the API project hard limit. Saved research is intact.',
+    next: 'An OpenAI project owner should review Organization settings → the project used by SIGMA → Limits, including Monthly spend limit and Enforce a hard limit. Raise or disable the limit only if authorized, or wait for its reset. Organization limits and prepaid credit may also apply. Then resume the saved session; no Investigator or Skeptic call was dispatched.',
+  };
+}
+
+export function isOpenAIProjectSpendLimit(message: string): boolean {
+  return /project_spend_limit_exceeded|provider_spend_limit_exceeded|insufficient_quota|billing_hard_limit_reached|billing_not_active/.test(message);
+}
+
 export function setSponsoredUsageConnection(sponsored: boolean): void {
   sponsoredConnection = sponsored;
 }
@@ -49,6 +71,7 @@ export function isSponsoredChatGPTUnavailable(message: string): boolean {
 export function providerInterruptionCopy(
   message: string, sponsored = sponsoredConnection,
 ): { title: string; description: string; next: string } | null {
+  if (isOpenAIProjectSpendLimit(message)) return openAIProjectSpendLimitCopy();
   if (isProviderUsageLimit(message)) return providerUsageLimitCopy(sponsored);
   if (isSponsoredChatGPTUnavailable(message)) return {
     title: 'Sponsored ChatGPT unavailable',

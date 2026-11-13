@@ -434,6 +434,8 @@ class GceHostToolingTests(unittest.TestCase):
             "SIGMA_DOMAIN": "sigma-research.duckdns.org",
             "SIGMA_TLS_EMAIL": "ops@example.org",
             "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "ops@example.org",
+            "SIGMA_CLOUD_INFERENCE_PROVIDER": "chatgpt",
+            "SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com",
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE": "/run/sigma-secrets/google-oauth-client-secret",
             "SIGMA_CLOUD_OPENAI_API_KEY_FILE": "/run/sigma-secrets/openai-api-key",

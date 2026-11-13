@@ -503,6 +503,8 @@ async def cloud_sponsored_connection(request: Request):
         raise HTTPException(401, "Authentication required.")
     sponsor_context = await sponsored_auth_context()
     state = await connection(refresh=True, context=sponsor_context)
+    from sigma.cloud_sponsor import inference_provider
+
     try:
         if cloud_auth.model_access_for_subject(principal.subject) == "sponsored":
             cloud_auth.persist_model_connection_status(principal.subject, str(state.get("status")))
@@ -511,6 +513,7 @@ async def cloud_sponsored_connection(request: Request):
     return JSONResponse(
         {
             "mode": "sponsored",
+            "provider": inference_provider(),
             "status": state.get("status", "unavailable"),
             "label": state.get("label", "Sponsored model access unavailable"),
             "guidance": state.get("guidance", "Retry the connection check."),

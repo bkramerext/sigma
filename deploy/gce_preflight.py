@@ -119,7 +119,7 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
         return None, "release must be a full 40-character commit SHA"
     if not re.fullmatch(r"[A-Za-z0-9.-]+", values["SIGMA_DOMAIN"]):
         return None, "domain format is invalid"
-    provider = values.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
+    provider = values.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "chatgpt")
     if values.get("SIGMA_CLOUD_SPONSORED_ENABLED", "false") not in {"true", "false"}:
         return None, "sponsored access setting must be true or false"
     if values.get("SIGMA_CLOUD_FORCE_SPONSORED_MODE", "false") not in {"true", "false"}:
