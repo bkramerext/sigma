@@ -114,6 +114,8 @@ class SponsorTests(IsolatedAsyncioTestCase):
         # A new OAuth browser tab does not send the initiating window's custom
         # X-Sigma-Window header. The sigma_window query selects that window's
         # independently authenticated HttpOnly cookie instead.
+        from typing import cast
+
         from starlette.requests import Request
 
         from sigma import cloud_auth
@@ -135,7 +137,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
                 "headers": [(b"cookie", cookies.encode())],
             }
         )
-        cfg = type("ConfigFixture", (), {"local": False})()
+        cfg = cast(cloud_auth.Config, type("ConfigFixture", (), {"local": False})())
         self.assertEqual(cloud_auth._raw_session(request, cfg), "admin-session")
         unrelated = Request(
             {
