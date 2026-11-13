@@ -1044,6 +1044,12 @@ with sync_playwright() as playwright:
     step = page.locator(".paper-stage-list [data-paper-step='Write sections']")
     expect(step.locator("strong")).to_have_text("Writing sections (1/3)", timeout=10000)
     expect(step.locator(".paper-activity-line")).to_contain_text("Writing in progress ·")
+    # The metadata already reports generating status and elapsed time.
+    # Do not repeat a ticking Generating message beneath that line.
+    active_draft = page.locator(".papers-pane .paper-draft-card").first
+    expect(active_draft.locator(".saved-paper-meta")).to_contain_text("Generating")
+    expect(active_draft.locator(".saved-paper-meta")).to_contain_text("Elapsed")
+    expect(active_draft.locator(".paper-timeline-message")).to_have_count(0)
     expect(page.locator(".paper-draft-card .paper-draft-pulse")).to_have_count(0)
     page.unroute("**/api/projects/papers/progress?*")
     stale_output_at = (datetime.now(UTC) - timedelta(minutes=6)).isoformat()
@@ -1348,7 +1354,27 @@ with sync_playwright() as playwright:
     expect(confirm_restart).to_have_count(0)
     assert reset_calls == [], reset_calls
     restart.click()
+    # Hold the reset response to prove that Confirm dismisses and Restarting
+    # renders BEFORE the server responds, not merely after a fast fixture.
+    page.evaluate("""() => {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (...args) => {
+        if (args[0] !== '/api/projects/papers/restart') return originalFetch(...args);
+        return new Promise((resolve, reject) => {
+          window.__releasePaperRestart = () => {
+            window.fetch = originalFetch;
+            originalFetch(...args).then(resolve, reject);
+          };
+        });
+      };
+    }""")
     confirm_restart.get_by_role("button", name="Confirm").click()
+    expect(confirm_restart).to_have_count(0, timeout=1500)
+    expect(
+        page.locator(".papers-pane .paper-draft-card").first.locator(".paper-timeline-message")
+    ).to_contain_text("Restarting...", timeout=1500)
+    assert reset_calls == [], reset_calls
+    page.evaluate("window.__releasePaperRestart()")
     for _ in range(80):
         if len(dispatched) >= 2:
             break
@@ -1453,7 +1479,27 @@ with sync_playwright() as playwright:
         actions.nth(1).evaluate("(button) => getComputedStyle(button).textDecorationLine")
         == "underline"
     )
+    # This Play confirmation is also a restart. Hold checkpoint reset so the
+    # immediate acknowledgment cannot be mistaken for a fast server response.
+    page.evaluate("""() => {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (...args) => {
+        if (args[0] !== '/api/projects/papers/restart') return originalFetch(...args);
+        return new Promise((resolve, reject) => {
+          window.__releasePlayRestart = () => {
+            window.fetch = originalFetch;
+            originalFetch(...args).then(resolve, reject);
+          };
+        });
+      };
+    }""")
     play_confirm.get_by_role("button", name="Confirm", exact=True).click()
+    expect(play_confirm).to_have_count(0, timeout=1500)
+    expect(
+        page.locator(".papers-pane .paper-draft-card").first.locator(".paper-timeline-message")
+    ).to_contain_text("Restarting...", timeout=1500)
+    assert reset_calls == ["POST"], reset_calls
+    page.evaluate("window.__releasePlayRestart()")
     for _ in range(80):
         if len(dispatched) == 5:
             break
@@ -1605,28 +1651,57 @@ with sync_playwright() as playwright:
     }""")
     assert hover_style["background"] in ("rgba(0, 0, 0, 0)", "transparent"), hover_style
     start_button.click()
-    start_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
+    start_group = page.get_by_role("dialog", name="Confirm paper restart")
     expect(start_group).to_contain_text("at Started")
+    assert "checkpoint" not in start_group.inner_text().lower()
+    assert start_group.locator("p").first.inner_text().strip().endswith("?")
     start_group.get_by_role("button", name="Cancel").click()
     # Clicking non-checkpoint Extract evidence rewinds to Started on a saved
     # Paper (the fixture offers Started, Writing, and Proofread boundaries).
     paper_row.get_by_role("button", name="Restart paper at step Extract evidence").click()
-    evidence_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
+    evidence_group = page.get_by_role("dialog", name="Confirm paper restart")
     expect(evidence_group).to_contain_text("at Started")
     evidence_group.get_by_role("button", name="Cancel").click()
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
+    restart_group = page.get_by_role("dialog", name="Confirm paper restart")
     expect(restart_group).to_be_visible()
+    assert restart_group.locator("p").first.inner_text().strip() == (
+        "Restart paper 1 at Write sections?"
+    )
     assert rewind_calls == []
     restart_group.get_by_role("button", name="Cancel").click()
     expect(restart_group).to_have_count(0)
     assert rewind_calls == []
     paper_row.get_by_role("button", name="Restart paper at step Write sections").click()
-    restart_group = page.get_by_role("dialog", name="Confirm Paper restart from checkpoint")
+    restart_group = page.get_by_role("dialog", name="Confirm paper restart")
     confirm = restart_group.get_by_role("button", name="Confirm", exact=True)
     expect(confirm).to_be_enabled(timeout=10000)
+    # A published paper starts a separate draft. Hold its checkpoint admission
+    # to verify the confirmation closes and the new run appears optimistically.
+    page.evaluate("""() => {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (...args) => {
+        if (!String(args[0]).includes('/api/projects/papers/fixture-paper-1/rewind') ||
+            args[1]?.method !== 'POST') return originalFetch(...args);
+        return new Promise((resolve, reject) => {
+          window.__releasePaperRewind = () => {
+            window.fetch = originalFetch;
+            originalFetch(...args).then(resolve, reject);
+          };
+        });
+      };
+    }""")
     confirm.click()
-    expect(restart_group).to_have_count(0, timeout=10000)
+    expect(restart_group).to_have_count(0, timeout=1500)
+    expect(
+        page.locator(".papers-pane .paper-draft-card").first.locator(".paper-timeline-message")
+    ).to_contain_text("Restarting...", timeout=1500)
+    assert rewind_calls == [], rewind_calls
+    page.evaluate("window.__releasePaperRewind()")
+    for _ in range(60):
+        if rewind_calls:
+            break
+        page.wait_for_timeout(50)
     assert len(rewind_calls) == 1, rewind_calls
     assert rewind_calls[0]["stage"] == "writing"
     assert rewind_calls[0]["source_pdf_sha256"] == "c" * 64
