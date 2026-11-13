@@ -15960,9 +15960,7 @@ def _strict_compilation_block_reason(record: dict[str, Any]) -> str | None:
         return None
     if compilation.get("required_for_acceptance") is not True or status == "completed":
         return None
-    reason = str(compilation.get("reason") or "No completed compiler checkpoint was saved.")[
-        :400
-    ]
+    reason = str(compilation.get("reason") or "No completed compiler checkpoint was saved.")[:400]
     return (
         f"Research is paused: reference compilation is {str(status or 'unknown')[:50]}. "
         f"{reason} No Investigator or Skeptic call was dispatched."
