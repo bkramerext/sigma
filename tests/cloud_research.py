@@ -2985,12 +2985,89 @@ def test_reservation_on_legacy_sqlite_schema_with_extra_columns() -> None:
                 cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_sponsored_connection_change_keeps_old_write_ahead_liability() -> None:
+    """Switching to personal never refunds an unknown sponsored call."""
+    with TemporaryDirectory(prefix="sigma-sponsored-history-") as temp:
+        root = Path(temp)
+        ledger_root = root / "service"
+        ledger_root.mkdir(mode=0o700)
+        a = workspace(root, "a" * 32)
+        b = workspace(root, "b" * 32)
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_ENABLED": "true",
+                    "SIGMA_CLOUD_INFERENCE_PROVIDER": "chatgpt",
+                    "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+                    "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "1.00",
+                    "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000",
+                },
+            ),
+            patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        ):
+            token = cloud_workspaces._CURRENT.set(a)
+            try:
+                record = {**job(a.workspace_id), "mode": "chatgpt"}
+                cloud_research.prepare_job(record)
+                assert cloud_research.claim_job(record["id"])
+                call_id = "sponsor-unknown-after-switch"
+                cloud_research.reserve_call(record["id"], call_id, 0.25, 100)
+                try:
+                    cloud_research.preserve_sponsored_history_on_connection_change(
+                        record["id"], ["missing-reservation"]
+                    )
+                    raise AssertionError("Missing sponsored liability was accepted")
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "original billing reservation" in str(exc)
+                with cloud_research._connect() as db:
+                    status = db.execute(
+                        "SELECT status FROM calls WHERE call_id=?", (call_id,)
+                    ).fetchone()[0]
+                assert status == "reserved"
+                cloud_research.preserve_sponsored_history_on_connection_change(
+                    record["id"], [call_id]
+                )
+                with cloud_research._connect() as db:
+                    row = db.execute(
+                        "SELECT status,amount_usd,token_reservation FROM calls WHERE call_id=?",
+                        (call_id,),
+                    ).fetchone()
+                    job_status = db.execute(
+                        "SELECT status FROM jobs WHERE session_id=?", (record["id"],)
+                    ).fetchone()[0]
+                assert tuple(row) == ("unknown", 0.25, 100), tuple(row)
+                assert job_status == "interrupted"
+                summary = cloud_research.snapshot()
+                assert summary["user_reserved_and_estimated_usd"] == 0.25
+                assert summary["unknown_provider_attempts"] == 1
+                # Repeated freezes are idempotent and never erase the charge.
+                cloud_research.preserve_sponsored_history_on_connection_change(
+                    record["id"], [call_id]
+                )
+                assert cloud_research.snapshot()["user_reserved_and_estimated_usd"] == 0.25
+            finally:
+                cloud_workspaces._CURRENT.reset(token)
+            other = cloud_workspaces._CURRENT.set(b)
+            try:
+                try:
+                    cloud_research.preserve_sponsored_history_on_connection_change(
+                        record["id"], [call_id]
+                    )
+                    raise AssertionError("Foreign workspace modified sponsored liability")
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "accounting owner" in str(exc)
+            finally:
+                cloud_workspaces._CURRENT.reset(other)
+
+
 def main() -> None:
     # This suite validates the explicitly configured API-key admission path;
     # never inherit the repository's local ChatGPT provider default.
     os.environ.setdefault("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key")
     os.environ.setdefault("SIGMA_CLOUD_OPENAI_API_KEY", "cloud-research-fixture-key")
     test_hosted_deployment_forwards_global_spend_window()
+    test_sponsored_connection_change_keeps_old_write_ahead_liability()
     test_maximum_liability_enforced_across_calls()
     test_reservation_on_legacy_sqlite_schema_with_extra_columns()
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
