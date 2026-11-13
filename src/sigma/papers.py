@@ -12386,24 +12386,17 @@ async def generate(
         _stop_requested_keys.discard(key)
 
 
+
 def _abort_stopping_generation(path: str | None = None) -> None:
-    """Reject new work after Stop, including synchronous phase transitions."""
+    """Prevent phase changes after Stop, even if a provider suppresses cancellation.
+
+    Accept an optional path so checks inside generation can enforce the stop
+    fence, while legacy internal callers still check the current task.
+    """
     task = asyncio.current_task()
     if (task is not None and task.cancelling()) or (
         path is not None and _paper_state_key(path) in _stop_requested_keys
     ):
-        raise asyncio.CancelledError()
-
-
-def _abort_stopping_generation() -> None:
-    """Stop before the next paper stage, even if a helper returned normally.
-
-    Cancellation can be requested while proofreading is unwinding or while
-    saved checkpoint writes are completing. The checkpoint remains durable,
-    but no new PDF compilation is allowed after that request.
-    """
-    task = asyncio.current_task()
-    if task is not None and task.cancelling():
         raise asyncio.CancelledError()
 
 
