@@ -12386,7 +12386,6 @@ async def generate(
         _stop_requested_keys.discard(key)
 
 
-
 def _abort_stopping_generation(path: str | None = None) -> None:
     """Prevent phase changes after Stop, even if a provider suppresses cancellation.
 
