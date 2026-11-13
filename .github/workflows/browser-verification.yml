@@ -216,6 +216,8 @@ jobs:
           # Fit the project-title hover rectangle to the longer rendered
           # line and center its tooltip. Reuse the already running fixture.
           uv run --with playwright python browser_checks/project_title_hover.py
+          # Preserve in-progress edits on pane collapse, and do not lock hidden editors.
+          uv run --with playwright python browser_checks/pane_collapse_autosave.py
       - name: Obligation recovery and public legal pages browser acceptance
         # Independent suites should all run, even after another suite fails.
         if: ${{ matrix.group == '2' && !cancelled() && steps.dependencies.outcome == 'success' && steps.chromium.outcome == 'success' }}
