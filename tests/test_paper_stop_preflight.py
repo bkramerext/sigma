@@ -100,6 +100,7 @@ class PaperStopPreflightTests(TestCase):
 
     def test_stage_guard_allows_new_generation_without_stop(self) -> None:
         """A normal paper must reach its first progress callback."""
+
         async def scenario() -> None:
             key = "fresh-paper-fixture"
             with patch.object(api.papers, "_paper_state_key", return_value=key):
@@ -113,6 +114,7 @@ class PaperStopPreflightTests(TestCase):
 
     def test_stage_guard_blocks_progress_after_accepted_stop(self) -> None:
         """A swallowed cancellation cannot advance a stopped paper."""
+
         async def scenario() -> None:
             key = "stopped-paper-fixture"
             with patch.object(api.papers, "_paper_state_key", return_value=key):
