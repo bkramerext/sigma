@@ -1107,7 +1107,7 @@
   box-sizing: border-box;
   display: flex;
   justify-self: stretch;
-  width: max-content;
+  width: auto;
   min-width: 0;
   max-width: none;
   height: 34px;
@@ -1120,10 +1120,10 @@
 :is(.home-page .home-account-grid, .workspace-page .project-art-header)
 .sigma-header-account-column.project-identity-pill-stack > .api-connection {
   box-sizing: border-box;
-  contain: inline-size;
+  contain: none; /* Override the older Project-header inline-size containment. */
   justify-self: stretch;
   align-self: start;
-  width: 100%;
+  width: auto;
   min-width: 0;
   max-width: none;
   margin: 0;
@@ -1135,7 +1135,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  width: 100%;
+  width: auto;
   min-width: 0;
   max-width: none;
   height: 40px;
@@ -1166,7 +1166,10 @@
   }
 }
 
-/* The outer inset is adjusted from measured visible pill bounds in
+/* The account column's max-content track now measures both Google and ChatGPT:
+   no inline-size containment hides the current provider label, and both rows
+   stretch to the resulting intrinsic width with the existing 12px insets.
+   The outer inset is adjusted from measured visible pill bounds in
    useEqualHeaderPillInsets; no extra Project-only margin corrections. */
 @media (min-width: 901px) {
   .home-page .home-right-actions { top: 13px; right: 13px; }
