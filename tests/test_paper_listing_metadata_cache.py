@@ -12,6 +12,29 @@ from unittest.mock import patch
 from sigma import papers
 
 
+class PaperListingEndpointTests(TestCase):
+    def test_metadata_only_endpoint_never_recovers_run_progress(self) -> None:
+        from sigma import api
+
+        with (
+            patch.object(api.papers, "list_papers", return_value=[]) as listed,
+            patch.object(
+                api.papers, "next_paper_number_for_activity", return_value=11
+            ),
+            patch.object(
+                api.papers,
+                "run_progress_list",
+                side_effect=AssertionError("Paper listing must not load run checkpoints"),
+            ) as recovered,
+        ):
+            result = api.papers_view("/unused", include_runs=False)
+            self.assertEqual(result["papers"], [])
+            self.assertEqual(result["runs"], [])
+            self.assertEqual(result["next_paper_number"], 11)
+            listed.assert_called_once_with("/unused")
+            recovered.assert_not_called()
+
+
 class PaperListingPerformanceTests(TestCase):
     def test_one_ten_and_fifty_papers_keep_pdf_opaque_and_reuse_canonical_metadata(self) -> None:
         original_read = Path.read_bytes
