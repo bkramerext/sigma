@@ -9,6 +9,69 @@ procedure and does not authorize a release.** Use
 procedure and [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md) for live host and
 incident guidance.
 
+## 2026-11-13 — SIGMA v0.4.1 production deployment complete
+
+PR [#831](https://github.com/bkramerext/sigma/pull/831) merged the v0.4.1
+version bump. The final release SHA is
+`03781befac94ef1235fd5630e2f061abcd4fd9c8`, following the v0.4.1 source
+cutoff `9faa3e667766b35d75ae3113ba5db22405c55802`. All 14 exact-merge GitHub
+checks passed: eight SIGMA test shards, three Browser acceptance jobs, the
+two-creator real PDF gate, frontend typecheck/build, and Ruff. The local
+`./sigma test` run on macOS/Python 3.14 failed in `project_collaboration.py`
+and `research_qa.py`; the exact merged-SHA Linux CI passed every required
+check. A standalone frontend production build passed. No paid inference ran.
+
+Before cutover, production was healthy on v0.4.0 at
+`02cd31299deb9581bf31de60aafcfe057012733a`, and its checkout matched the
+protected release pin. All 23 host preflight checks passed. The boot disk UUID
+was `016a55ad-ee12-4ca2-ba46-31afd363950e` with 71 GB free; the persistent
+state disk remained mounted at `/srv/sigma-state` from UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. Projects used schema versions 8 (15),
+9 (1), 11 (1), and 13 (2), all within the 1–13 range supported by both the
+previous and candidate code.
+
+A consistent copy was made after stopping SIGMA writers at 2026-11-13
+02:23:30 UTC, on the existing boot disk at
+`/var/backups/sigma-state-v041-pre-03781bef-20261113T022329Z/state`. The copy
+is `root:root` mode 0700 and contains 149 files. A checksum/metadata rsync dry
+run found no differences; the read-only restore verifier passed three SQLite
+integrity checks and the data baseline below. The service was active again by
+02:23:42 UTC.
+
+The guarded command was:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py \
+  03781befac94ef1235fd5630e2f061abcd4fd9c8 \
+  --backup-verified --schema-compatible
+```
+
+The production stack stopped at 02:27:27 UTC and the new backend and frontend
+were healthy by 02:27:36 UTC; the edge was healthy by 02:27:48 UTC. Caddy
+maintenance was disabled at 02:27:58 UTC, for an approximately 31-second
+maintenance window. The release helper reported success. Checkout, protected
+pin, and release record match the full SHA. Immutable release images:
+
+| Image | Immutable image ID | Source revision |
+| --- | --- | --- |
+| Backend | `sha256:fe810a5566356bb24532efb404cc8944b9f9de411081aea2cb79dda2a87fc5dd` | `03781befac94ef1235fd5630e2f061abcd4fd9c8` |
+| Frontend | `sha256:aa3eaf3803ceebe42ff1e6918943f21d71bf315758b7452905e7d3a09c41fcb7` | `03781befac94ef1235fd5630e2f061abcd4fd9c8` |
+| Edge | `sha256:cf1bd22f2415bc99b785ece1df2c49d32985ac4ac42d84df335be17350593693` | Existing image retained |
+
+Post-deployment verification passed: systemd active; all three containers
+healthy; maintenance off; the approved state UUID remained mounted; and the
+read-only verifier matched the pre-cutover data: 3 identities/workspaces, 19
+project records, 43 research artifacts, one TeX/PDF pair, 10 terminal
+historical job rows, and 46 accounting rows ($5.938237 recorded/reserved,
+including 15 reserved or unknown outcomes). DNS, HTTPS/TLS, HTTP redirect,
+private ports, SPA deep link, hosted API status, and Google sign-in readiness
+passed. Anonymous `/api/health` returned the expected 401. Real Chrome loaded
+the 26-item guest sample catalog, including Medical; About displayed
+`Version 0.4.1 · Build 03781be`; no PDF/TeX assets were requested and no
+browser page errors occurred. The first-visit invitation welcome overlay was
+present, so no sample project was opened or copied. No paid inference or
+authenticated member workflow was exercised.
+
 ## 2026-11-12 — SIGMA v0.4.0 production deployment complete
 
 The approved source cutoff was

@@ -1,5 +1,40 @@
 # SIGMA status
 
+## 2026-11-13 — SIGMA v0.4.1 production deployment complete
+
+Production runs v0.4.1 from merged `main` SHA
+`03781befac94ef1235fd5630e2f061abcd4fd9c8`. All 14 exact-merge checks
+passed: eight SIGMA test shards, three Browser acceptance jobs, real
+two-creator PDF acceptance, frontend typecheck/build, and Ruff. The guarded
+deployment helper completed successfully. The local `./sigma test` run on
+macOS/Python 3.14 reported failures in `project_collaboration.py` and
+`research_qa.py`; exact merged-SHA CI passed all required suites. The
+standalone frontend production build passed.
+
+Before cutover, production was healthy on v0.4.0 at
+`02cd31299deb9581bf31de60aafcfe057012733a`; all 23 host preflight checks
+passed. Production schemas 8, 9, 11, and 13 were supported by both versions.
+A root-owned mode-0700 state copy was saved on the existing boot disk at
+`/var/backups/sigma-state-v041-pre-03781bef-20261113T022329Z/state`. Its
+149-file checksum/metadata comparison had no differences. The read-only
+verifier passed before and after deployment with the same baseline: 3
+identities/workspaces, 19 projects, 43 research artifacts, one matching
+TeX/PDF pair, 10 terminal historical job rows, and 46 accounting rows
+($5.938237 recorded/reserved, including 15 reserved or unknown outcomes).
+
+The release pin, host checkout, release record, and backend/frontend image
+labels match `03781befac94ef1235fd5630e2f061abcd4fd9c8`. Backend and frontend
+are healthy with immutable image IDs recorded in `DEPLOYMENT_HISTORY.md`; the
+edge is healthy and retains its existing image. Maintenance is off. The
+persistent disk UUID and mount are unchanged. Public DNS, HTTPS, redirect,
+private-port, SPA, hosted-auth, and same-origin API checks passed; hosted auth
+reported ready and anonymous `/api/health` returned the expected 401. Real
+Chrome loaded all 26 guest samples, including Medical, and About showed
+`Version 0.4.1 · Build 03781be`; the page requested no PDF/TeX assets and
+reported no page errors. The first-visit invitation overlay remained open, so
+no sample was opened or copied. No paid inference ran. Authenticated member
+workflows were not exercised. See `DEPLOYMENT_HISTORY.md` for the full record.
+
 ## 2026-11-12 — SIGMA v0.4.0 production deployment complete
 
 Production runs v0.4.0 from merged release SHA
