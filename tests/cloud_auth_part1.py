@@ -1422,6 +1422,7 @@ class CloudAuthTests(CloudAuthFixture):
         )
         self.assertEqual(invalid.status_code, 400)
         self.assertIsNotNone(cloud_auth.resolve_session(old))
+        self.assertNotIn('__Host-sigma_session="";', invalid.headers.get("set-cookie", ""))
 
     def test_session_persists_across_client_restart_and_logout_revokes_it(self):
         signed_in = self.finish()
