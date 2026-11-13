@@ -634,6 +634,16 @@
 .workspace-page .papers-pane .saved-paper-card .paper-unified-timeline .paper-stage-list {
   margin: 4px 0 0;
 }
+/* Paper activity messages are equally prominent, whether an immediate
+   restart acknowledgment or a live generation timer. */
+.workspace-page .papers-pane .paper-unified-timeline .paper-timeline-message {
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+}
+.workspace-page .papers-pane .paper-unified-timeline .paper-timeline-message .paper-progress-substep {
+  font-weight: 400;
+}
 .workspace-page .papers-pane .paper-unified-timeline > .ai-paper-status[hidden] {
   display: none;
 }
@@ -646,7 +656,6 @@
 .workspace-page .papers-pane .saved-paper-card .paper-completed-progress,
 .workspace-page .papers-pane .saved-paper-card .paper-draft-content { text-align: left; }
 
-.workspace-page .papers-pane .paper-checkpoint-check { margin: 8px 0; font-size: 12px; }
 
 /* Unfinished Papers share the same step actions as their Play/Start over
    controls. The next stopped step remains current (copper), not disabled. */
@@ -660,8 +669,8 @@
 }
 /* Started remains an ordinary-looking checked step even though it invokes
    the same Start over action as the control in the title row. */
-.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Wait"] .paper-step-restart,
-.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Wait"] .paper-step-restart:hover {
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Starting"] .paper-step-restart,
+.workspace-page .papers-pane .paper-stage-list li[data-paper-step="Starting"] .paper-step-restart:hover {
   background: transparent;
 }
 .workspace-page .papers-pane .paper-stage-list li,
