@@ -1652,7 +1652,7 @@ with sync_playwright() as playwright:
     assert hover_style["background"] in ("rgba(0, 0, 0, 0)", "transparent"), hover_style
     start_button.click()
     start_group = page.get_by_role("dialog", name="Confirm paper restart")
-    expect(start_group).to_contain_text("at Started")
+    expect(start_group).to_contain_text("Restart paper from beginning?")
     assert "checkpoint" not in start_group.inner_text().lower()
     assert start_group.locator("p").first.inner_text().strip().endswith("?")
     start_group.get_by_role("button", name="Cancel").click()
