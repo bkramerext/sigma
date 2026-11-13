@@ -333,11 +333,19 @@ def check_shallow_home_does_not_load_deep_status(root: Path) -> None:
         rows = {item["id"]: item for item in home_projects(lightweight=True)["projects"]}
         assert rows[view.project.id]["available"]
         assert rows[view.project.id]["title"] == "Fast Home listing"
+        assert rows[view.project.id]["paper_count"] is None, (
+            "Lightweight listing must not claim zero papers before metadata loads"
+        )
+        assert rows[view.project.id]["best_paper_score"] is None
         with TestClient(app) as client:
             response = client.get("/api/projects/recent?lightweight=true")
             assert response.status_code == 200
             rows = {item["id"]: item for item in response.json()["projects"]}
             assert rows[view.project.id]["available"]
+            assert rows[view.project.id]["paper_count"] is None
+    # Only the hydrated listing may report a true zero.
+    hydrated = {item["id"]: item for item in home_projects()["projects"]}
+    assert hydrated[view.project.id]["paper_count"] == 0
     with (
         patch.object(
             paper_scores,
