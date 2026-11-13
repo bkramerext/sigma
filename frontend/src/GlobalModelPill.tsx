@@ -204,9 +204,7 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
     {settings && error && <span className="global-model-error" role="alert">{error}</span>}
     {pending && createPortal(<div className="project-model-confirm-popover global-model-confirm-popover"
       role="group" aria-label={'Confirm switch to ' + modelName(pending, pending.id)} style={popup}>
-      <p><strong>Switch to {modelName(pending, pending.id)}?</strong> Its published API token cost tier
-        ({pending.relative_cost}) is higher than the current tier ({selected?.relative_cost ?? 'unknown'}).
-        Continue with this user-wide default?</p>
+      <p>Switch to {modelName(pending, pending.id)} at the higher API cost tier ({pending.relative_cost} vs. {selected?.relative_cost ?? 'unknown'})?</p>
       <div className="project-model-confirm-actions">
         <button ref={confirm} type="button" onClick={() => { const choice = pending; dismiss(); void save(choice, undefined, 'model'); }}>Confirm</button>
         <button type="button" onClick={dismiss}>Cancel</button>
