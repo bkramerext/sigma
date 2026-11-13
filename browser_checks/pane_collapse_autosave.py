@@ -192,8 +192,9 @@ def main():
         expect(strategies).to_have_attribute("aria-expanded", "false")
         expect(new).to_be_enabled()
         strategies.click()
-        expect(page.locator(".strategy-row")).to_contain_text("Renamed on collapse")
-        expect(page.locator(".strategy-approach")).to_contain_text(
+        renamed = page.locator(".strategy-row").filter(has_text="Renamed on collapse")
+        expect(renamed).to_have_count(1)
+        expect(renamed.locator(".strategy-approach")).to_contain_text(
             "A revised approach saved with the strategy title."
         )
 
