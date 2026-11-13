@@ -7,7 +7,9 @@ let sponsoredConnection = false;
 export type SponsoredInferenceProvider = 'chatgpt' | 'api_key';
 
 export function sponsoredProviderLabel(provider: SponsoredInferenceProvider | undefined): string {
-  return provider === 'api_key' ? 'Sponsored OpenAI API' : 'Sponsored ChatGPT';
+  if (provider === 'api_key') return 'Sponsored OpenAI API';
+  if (provider === 'chatgpt') return 'Sponsored ChatGPT';
+  return 'Sponsored inference';
 }
 
 export function openAIProjectSpendLimitCopy(): {

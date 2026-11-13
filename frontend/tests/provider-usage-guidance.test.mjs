@@ -11,8 +11,7 @@ import {
 test('hosted sponsored pill names the effective inference provider', () => {
   assert.equal(sponsoredProviderLabel('api_key'), 'Sponsored OpenAI API');
   assert.equal(sponsoredProviderLabel('chatgpt'), 'Sponsored ChatGPT');
-  // Older API fixtures omit this field and retain the prior ChatGPT label.
-  assert.equal(sponsoredProviderLabel(undefined), 'Sponsored ChatGPT');
+  assert.equal(sponsoredProviderLabel(undefined), 'Sponsored inference');
 });
 
 test('project hard-cap responses give project-level recovery guidance', () => {
