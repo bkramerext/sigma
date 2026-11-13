@@ -716,42 +716,41 @@ def main() -> None:
             expect(member.get_by_role("link", name="Administrator Settings")).to_have_count(0)
             expect(member.get_by_text("member@example.org", exact=True)).to_have_count(0)
 
-            # A guest-copy export/import failure must not block Google
-            # sign-out or discard the private original.
+            # Signing out from a member's project must always return Home.
+            # No guest copy may retain the private project path, and a later
+            # different Google identity must not reopen the previous owner's
+            # project or display a misleading project-access 404.
             copies: list[str] = []
             logouts: list[str] = []
 
-            def rejected_guest_copy(route):
-                copies.append(route.request.post_data or "")
-                route.fulfill(
-                    status=400,
-                    content_type="application/json",
-                    body='{"detail":"Project could not be safely copied to this account."}',
-                )
+            def unexpected_guest_copy(route):
+                copies.append(route.request.url)
+                route.fulfill(status=500, body="Guest copy must not run during sign-out")
 
             def successful_logout(route):
                 logouts.append(route.request.method)
                 status.update(authenticated=False, user=None)
                 route.fulfill(status=200, content_type="application/json", body="{}")
 
-            member.route("**/api/projects/guest-copy", rejected_guest_copy)
+            member.route("**/api/projects/guest-copy", unexpected_guest_copy)
             member.route("**/api/cloud-auth/logout", successful_logout)
             member.evaluate(
                 "() => { localStorage.setItem('sigma.currentProject', '/private/old.json'); "
+                "sessionStorage.setItem('sigma.guestSamplePath', '/private/old.json'); "
                 "history.pushState(null, '', '/project?path=%2Fprivate%2Fpaused.json'); }"
             )
             member.get_by_role("button", name="Sign out of Google").click()
             expect(member).to_have_url(URL + "/", timeout=10000)
-            expect(member.locator(".home-signout-copy-notice")).to_contain_text(
-                "original project remains saved in your Google account"
-            )
-            assert copies and logouts == ["POST"], (copies, logouts)
+            assert not copies and logouts == ["POST"], (copies, logouts)
             assert member.evaluate("localStorage.getItem('sigma.currentProject')") is None
-            expect(member.locator(".request-toast").filter(has_text="safely copied")).to_have_count(
-                0
-            )
+            assert member.evaluate("sessionStorage.getItem('sigma.guestSamplePath')") is None
+            expect(member.get_by_role("link", name="Sign in with Google")).to_be_visible()
+            status.update(authenticated=True, user={"email": "foreign@example.org", "role": "member"})
             member.reload()
-            expect(member.locator(".home-signout-copy-notice")).to_have_count(0)
+            expect(member).to_have_url(URL + "/", timeout=10000)
+            expect(member.get_by_role("heading", name="Projects")).to_be_visible()
+            expect(member.get_by_text("Project unavailable")).to_have_count(0)
+            assert not copies
 
             assert not errors, errors
             assert admin_requests and all("127.0.0.1" in request for request in admin_requests)
