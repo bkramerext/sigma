@@ -1747,8 +1747,8 @@ def preserve_sponsored_history_on_connection_change(
     if (
         not isinstance(session_id, str)
         or not isinstance(attempt_ids, list)
-        or len(attempt_ids) != len(set(attempt_ids))
         or any(not isinstance(identifier, str) or not identifier for identifier in attempt_ids)
+        or len(attempt_ids) != len(set(attempt_ids))
     ):
         raise CloudResearchUnavailable("Saved sponsored attempt identifiers are invalid.")
     try:
