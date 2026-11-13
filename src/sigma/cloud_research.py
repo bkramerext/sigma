@@ -1733,6 +1733,71 @@ def settle_call(
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
 
 
+def preserve_sponsored_history_on_connection_change(
+    session_id: str, attempt_ids: list[str]
+) -> None:
+    """Freeze original sponsored liabilities before switching to personal ChatGPT.
+
+    Called only after the exclusive session worker lock proves there is no
+    live provider dispatch. An unresolved call remains charged at its durable
+    write-ahead reservation. Missing or foreign ledger entries fail closed;
+    neither provider usage nor spending limits are reset.
+    """
+    owner = _workspace_id()
+    if (
+        not isinstance(session_id, str)
+        or not isinstance(attempt_ids, list)
+        or len(attempt_ids) != len(set(attempt_ids))
+        or any(not isinstance(identifier, str) or not identifier for identifier in attempt_ids)
+    ):
+        raise CloudResearchUnavailable("Saved sponsored attempt identifiers are invalid.")
+    try:
+        with _transaction() as db:
+            job = db.execute(
+                "SELECT workspace_id FROM jobs WHERE session_id=?", (session_id,)
+            ).fetchone()
+            if not job or job["workspace_id"] != owner:
+                raise CloudResearchUnavailable(
+                    "The saved sponsored session's accounting owner is unavailable."
+                )
+            for identifier in attempt_ids:
+                call = db.execute(
+                    "SELECT workspace_id,session_id,status FROM calls WHERE call_id=?",
+                    (identifier,),
+                ).fetchone()
+                if (
+                    not call
+                    or call["workspace_id"] != owner
+                    or call["session_id"] != session_id
+                    or call["status"] not in {
+                        "reserved",
+                        "unknown",
+                        "usage_estimated",
+                        "provider_rejected",
+                        "not_dispatched",
+                    }
+                ):
+                    raise CloudResearchUnavailable(
+                        "Cannot change connection: an old sponsored attempt lacks "
+                        "its original billing reservation."
+                    )
+            now = _now()
+            # Conservative: reserved might have reached the provider. Never
+            # delete, refund, or claim that uncertain usage cost zero.
+            db.execute(
+                "UPDATE calls SET status='unknown',updated_at=? "
+                "WHERE session_id=? AND workspace_id=? AND status='reserved'",
+                (now, session_id, owner),
+            )
+            db.execute(
+                "UPDATE jobs SET status='interrupted',updated_at=? "
+                "WHERE session_id=? AND workspace_id=? AND status IN ('running','stopping')",
+                (now, session_id, owner),
+            )
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
 def mark_call_unknown(session_id: str, call_id: str) -> None:
     owner = _workspace_id()
     try:
