@@ -812,7 +812,9 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
         assert record["mode"] == "chatgpt"
         assert record["cloud_sponsored"] is True
         assert record["cost_status"] == "available"
-        assert record["estimated_cost_usd"] == 0.0
+        # First sponsored admission starts at zero. After a personal round
+        # trip, the old interrupted sponsored reservation is still charged.
+        assert record["estimated_cost_usd"] == (0.07 if admitted else 0.0)
         admitted.append(deepcopy(record))
 
     with (
