@@ -345,3 +345,37 @@ pending.
 SIGMA remains experimental. AI-generated conclusions, citations, papers, and paper scores require independent review. Checkpoint recovery does not mean that uncertain paid provider requests can safely be replayed.
 
 **Source cutoff for these notes:** merged `main` SHA `9faa3e667766b35d75ae3113ba5db22405c55802` (through PR #829). **Final release SHA:** `03781befac94ef1235fd5630e2f061abcd4fd9c8`. The exact merged SHA passed all required CI checks and was deployed to production on November 13, 2026. The running build reports `Version 0.4.1 · Build 03781be`. See [Deployment History](DEPLOYMENT_HISTORY.md) for the backup, image identities, and production verification record. No release tag was created.
+
+---
+
+## Version 0.4.2 — Reliable Connections and Research Startup
+*November 13, 2026 · Hotpatch release candidate; not yet deployed*
+
+**This update focuses on keeping research usable when ChatGPT connections change, optional preparation cannot run, or a browser sign-in encounters a temporary problem.** It also makes project editing and sample browsing more predictable.
+
+### Research that can start and resume
+
+- **Fresh Sessions no longer stall on optional reference compilation.** When the compiler is skipped to protect research-turn funding, SIGMA can proceed with the frozen, verified methodology excerpts. Settled compiler fallback is not treated as a reason to reject an otherwise runnable session; corrupt or inconsistent references are still blocked.
+- **Resume across personal and sponsored ChatGPT.** Stopped Sessions can continue under the currently authorized connection while retaining previous work, account attribution, spending provenance, and original provider-attempt history. A past uncertain call is not silently replayed or charged to the newly selected connection.
+- **Safer sponsored accounting.** Existing sponsored reservations and uncertain liabilities remain attached to their original account/workspace when switching back to personal ChatGPT; authorization and funding integrity guards remain in force.
+
+### More dependable sign-in and provider handling
+
+- **Improved hosted ChatGPT authorization.** Sponsor sign-in preserves the originating browser window's account context through the OAuth handoff, including a popup fallback.
+- **More resilient Google sign-in.** Google identity metadata is prepared before consuming a one-time authorization flow, with bounded retries and signing-key refresh for transient availability or rotation.
+- **Clear provider and spending guidance.** Hosted sponsored provider selection and status better reflect the configured connection. OpenAI API project hard-limit failures are identified as provider-side settings rather than ambiguous SIGMA research errors; SIGMA does not change billing caps.
+- **Dismissible connection errors.** ChatGPT sign-in and connection-choice failures appear in SIGMA's standard toast notifications instead of permanently widening the account controls.
+
+### Editing, samples, and interface refinements
+
+- **Auto-save on collapse.** Collapsing Project or Strategies saves valid pending edits. An empty new strategy is dismissed without creating anything, while incomplete or failed saves leave the editor open for correction.
+- **Consistent header geometry.** Google and ChatGPT pills remain aligned and equally sized as connection labels change. Active project-title hover targets remain precise even beside the activity indicator.
+- **Richer curated samples.** Promoted sample projects can retain complete saved research, papers, PDFs, LaTeX, and evidence with original personal execution attribution removed. Featured sample stars provide a direct way to open the showcased paper, independently of its score.
+- **Simpler local setup documentation.** A dedicated Local Hosting guide consolidates supported installation, authentication, provider configuration, and environment-variable guidance.
+
+### Limitations and release status
+
+SIGMA remains experimental: research conclusions, citations, generated papers, and Paper Scores require independent review. A provider-side spending hard limit, unavailable authorization, actual funding exhaustion, or invalid frozen evidence can still prevent a paid call; this release does not bypass those safeguards.
+
+**Source cutoff for these notes:** merged `main` SHA `91ca6f391ffafd77aba9e7570b81b390b3f0c6fb` (through PR #845; changes since the deployed v0.4.1 SHA `03781befac94ef1235fd5630e2f061abcd4fd9c8`). **Status:** Prepared for Red's v0.4.2 hotpatch; version metadata and final merged deployment SHA are not yet selected. Do not mark this version deployed until Red completes guarded cutover and production verification under the [merged deployment runbook](DEPLOYMENT_RUNBOOK.md).
+
