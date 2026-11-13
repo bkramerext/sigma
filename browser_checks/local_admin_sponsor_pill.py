@@ -165,7 +165,7 @@ def exercise(origin: str) -> None:
                     {
                         "status": "failed",
                         "retryable": False,
-                        "message": "Simulated OAuth cancellation.",
+                        "message": "ChatGPT sign-in validation failed. Retry; existing accounts were retained.",
                     }
                     if attempt_failure["value"]
                     else {
@@ -224,7 +224,16 @@ def exercise(origin: str) -> None:
         assert not any(url.endswith("/api/ai/sponsor-auth/begin") for url, _ in posts), posts
         attempt_complete["value"] = True
         connected["value"] = True
+
+        def assert_paired_pills() -> None:
+            google = page.locator(".home-account-grid .project-google-signin").bounding_box()
+            chatgpt = page.locator(".home-account-grid .api-connection > summary").bounding_box()
+            assert google and chatgpt
+            assert abs(google["x"] - chatgpt["x"]) < 1, (google, chatgpt)
+            assert abs(google["width"] - chatgpt["width"]) < 1, (google, chatgpt)
+
         expect(pill.get_by_role("status")).to_have_text("ChatGPT connected")
+        assert_paired_pills()
         expect(pill).to_have_attribute("aria-label", "ChatGPT connected")
         expect(pill).not_to_contain_text("Unlimited")
         assert pill.get_attribute("data-tooltip") == (
@@ -239,6 +248,7 @@ def exercise(origin: str) -> None:
         posts.clear()
         pill.click()
         expect(pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        assert_paired_pills()
         assert selected_mode["value"] == "sponsored", posts
         expect(pill.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
         assert any(
@@ -312,14 +322,26 @@ def exercise(origin: str) -> None:
         member_pill.click()
         expect(member_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
         assert selected_mode["value"] == "sponsored"
+        assert_paired_pills()
+        width_before_error = member_pill.bounding_box()["width"]
         posts.clear()
         attempt_complete["value"] = False
         attempt_failure["value"] = True
         with page.expect_request("**/api/ai/auth/begin"):
             member_pill.click()
-        expect(page.locator(".connection-pill-message[role=alert]")).to_have_text(
-            "Simulated OAuth cancellation."
+        error_message = page.locator(".connection-pill-message[role=alert]")
+        expect(error_message).to_have_text(
+            "ChatGPT sign-in validation failed. Retry; existing accounts were retained."
         )
+        assert_paired_pills()
+        width_after_error = member_pill.bounding_box()["width"]
+        assert abs(width_after_error - width_before_error) < 1
+        message_box = error_message.bounding_box()
+        summary_box = member_pill.bounding_box()
+        assert message_box and summary_box
+        assert message_box["y"] >= summary_box["y"] + summary_box["height"] + 4
+        assert message_box["width"] <= summary_box["width"] + 1
+        assert error_message.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
         expect(member_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
         assert selected_mode["value"] == "sponsored"
         assert not any(url.endswith("/api/ai/mode") for url, _ in posts), posts

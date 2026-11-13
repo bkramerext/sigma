@@ -396,9 +396,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
-    {ai.connecting && !sponsoredPill && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>}
-    {ai.error && <p className="connection-pill-message" role="alert">{ai.error}</p>}
-    {cloudFunding?.connectionError && <p className="connection-pill-message" role="alert">{cloudFunding.connectionError}</p>}
+    {(ai.connecting && !sponsoredPill || ai.error || cloudFunding?.connectionError) && <div className="connection-pill-messages">
+      {ai.connecting && !sponsoredPill && <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>}
+      {ai.error && <p className="connection-pill-message" role="alert">{ai.error}</p>}
+      {cloudFunding?.connectionError && <p className="connection-pill-message" role="alert">{cloudFunding.connectionError}</p>}
+    </div>}
   </details>
   {zeroAllowance && zeroAllowanceAction}
   </>;

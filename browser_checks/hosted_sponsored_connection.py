@@ -576,8 +576,33 @@ def exercise(origin: str) -> None:
         assert not any(path.endswith("/api/ai/mode") for path, _ in posts), posts
         page.reload(wait_until="domcontentloaded")
         expect(page.locator(".api-connection > summary")).to_contain_text("Sponsored ChatGPT")
+
+        def assert_account_pill_geometry() -> None:
+            geometry = page.evaluate(
+                """() => {
+                    const column = document.querySelector('.home-account-grid .sigma-header-account-column');
+                    const google = column?.querySelector(':scope > .project-google-signin');
+                    const chatgpt = column?.querySelector(':scope > .api-connection > summary');
+                    const status = chatgpt?.querySelector('[role="status"]');
+                    if (!google || !chatgpt || !status) return null;
+                    const g = google.getBoundingClientRect();
+                    const c = chatgpt.getBoundingClientRect();
+                    const s = status.getBoundingClientRect();
+                    return {
+                        google_left: g.left, google_right: g.right,
+                        chatgpt_left: c.left, chatgpt_right: c.right,
+                        label_right_inset: c.right - s.right,
+                    };
+                }"""
+            )
+            assert geometry, "Google / ChatGPT header pills not found"
+            assert abs(geometry["google_left"] - geometry["chatgpt_left"]) < 1, geometry
+            assert abs(geometry["google_right"] - geometry["chatgpt_right"]) < 1, geometry
+            assert geometry["label_right_inset"] >= 10, geometry
+
         # Hosted presentation follows effective runtime routing; the admin's
         # SIGMA allowance does not imply the provider's own limit is unlimited.
+        page.set_viewport_size({"width": 1280, "height": 800})
         admin_mode["value"] = True
         forced["value"] = False
         sponsored_provider.update(provider="api_key", status="connected")
@@ -586,6 +611,36 @@ def exercise(origin: str) -> None:
         api_pill = page.locator(".api-connection > summary")
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
         expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("No member cap")
+        assert_account_pill_geometry()
+        # Enlarged provider text must grow both pills, not overflow a Google-sized column.
+        api_pill.get_by_role("status").evaluate("el => el.style.fontSize = '1.5em'")
+        assert_account_pill_geometry()
+        api_pill.get_by_role("status").evaluate("el => el.style.fontSize = ''")
+        stable_width = api_pill.bounding_box()["width"]
+        # A long visible validation error must not resize either account pill.
+        page.evaluate(
+            """() => {
+                const details = document.querySelector('.home-account-grid .api-connection');
+                const messages = document.createElement('div');
+                messages.className = 'connection-pill-messages';
+                const error = document.createElement('p');
+                error.className = 'connection-pill-message';
+                error.setAttribute('role', 'alert');
+                error.textContent =
+                    'ChatGPT sign-in validation failed. Retry; existing accounts were retained.';
+                messages.appendChild(error);
+                details.appendChild(messages);
+                details.open = true;
+            }"""
+        )
+        error_message = page.locator(".connection-pill-message")
+        expect(error_message).to_be_visible()
+        assert_account_pill_geometry()
+        assert abs(api_pill.bounding_box()["width"] - stable_width) < 1
+        assert error_message.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+        page.locator(".connection-pill-messages").evaluate(
+            "el => { el.parentElement.open = false; el.remove(); }"
+        )
         api_pill.hover()
         expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
             "no SIGMA member-level spending cap"
@@ -609,6 +664,7 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         sponsor_pill = page.locator(".api-connection > summary")
         expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        assert_account_pill_geometry()
         expect(sponsor_pill).to_have_attribute(
             "data-tooltip", re.compile("Sponsored model connection: disconnected\\.")
         )
