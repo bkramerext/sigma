@@ -6150,14 +6150,35 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       if (!button.isConnected) return;
       button.style.width = '100%';
       const available = button.getBoundingClientRect();
+      const label = button.querySelector('.project-header-title-label');
+      const titleText = button.querySelector<HTMLElement>('.project-header-title-text');
+      const pulse = button.querySelector<HTMLElement>('.research-running-indicator-frame');
+      // The button shrinks to the longest text line, but the title must keep
+      // the full wrapping width. Otherwise narrowing the button changes the
+      // line breaks and invalidates the hover measurement.
+      if (titleText) titleText.style.width = `${available.width}px`;
       const range = document.createRange();
-      range.selectNodeContents(button);
+      // The active title contains a block wrapper and a flasher. Neither
+      // belongs in the hover hit box: measure only the rendered title text.
+      range.selectNodeContents(label ?? button);
       const longest = Math.max(0, ...Array.from(range.getClientRects())
         .filter(rect => rect.width > 0 && rect.top < available.bottom + 1)
         .map(rect => rect.width));
       button.style.width = longest > 0
         ? `${Math.min(available.width, Math.ceil(longest + 4))}px`
         : '';
+      // Keep the pulse beside the final glyph even when the title wraps.
+      // Absolute positioning makes it visual only, not part of button width.
+      if (pulse && label) {
+        const fragments = Array.from(range.getClientRects()).filter(rect => rect.width > 0);
+        const last = fragments.at(-1);
+        if (last) {
+          const box = button.getBoundingClientRect();
+          const pulseHeight = pulse.getBoundingClientRect().height;
+          pulse.style.left = `${Math.ceil(last.right - box.left + 4)}px`;
+          pulse.style.top = `${Math.round(last.top - box.top + (last.height - pulseHeight) / 2)}px`;
+        }
+      }
     };
     measure();
     // Watch the enclosing track, not the button whose width we adjust.
@@ -6178,7 +6199,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
-        ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" data-tooltip-follow-cursor="true" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={onActivityClick ?? (() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa')))}><span className="project-header-title-text">{projectTitle}{' '}<span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
+        ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" data-tooltip-follow-cursor="true" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={onActivityClick ?? (() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa')))}><span className="project-header-title-text"><span className="project-header-title-label">{projectTitle}</span><span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
           ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" data-tooltip-follow-cursor="true" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
