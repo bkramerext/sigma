@@ -12901,6 +12901,7 @@ def list_papers(path: str) -> list[dict[str, Any]]:
         item["download_basename"] = f"{slug}-v{item['paper_version']}"
     return records
 
+
 def _paper_tex_source(path: str, paper_id: str, record: dict[str, Any]) -> str:
     """Read TeX on demand; older saved versions contain inline TeX."""
     inline = record.get("tex_source")
