@@ -50,7 +50,6 @@ class PaperStopPreflightTests(TestCase):
             )
             stopped.assert_awaited_once_with("/unused/project.json")
 
-
     def test_local_stop_ignores_transient_client_run_id(self) -> None:
         """Local generation is project-scoped even when the UI holds a run ID."""
         observed: list[str | None] = []
@@ -71,9 +70,7 @@ class PaperStopPreflightTests(TestCase):
             patch.object(api.papers, "request_cancel_generation", side_effect=cancel_local),
         ):
             request = self._request().model_copy(update={"request_only": True})
-            self.assertEqual(
-                asyncio.run(api.paper_cancel_view(request)), {"stop_requested": True}
-            )
+            self.assertEqual(asyncio.run(api.paper_cancel_view(request)), {"stop_requested": True})
             self.assertEqual(observed, [None])
             authorized.assert_called_once_with(
                 "/unused/project.json", "project-1", controlling_active=True
@@ -130,9 +127,7 @@ class PaperStopPreflightTests(TestCase):
                 api.papers.register_submission("/unused/project.json", task)
                 await reached_proofreading.wait()
                 request = self._request().model_copy(update={"request_only": True})
-                self.assertEqual(
-                    await api.paper_cancel_view(request), {"stop_requested": True}
-                )
+                self.assertEqual(await api.paper_cancel_view(request), {"stop_requested": True})
                 result = await asyncio.gather(task, return_exceptions=True)
                 self.assertIsInstance(result[0], asyncio.CancelledError)
                 self.assertEqual(stages, ["proofreading"])
