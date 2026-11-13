@@ -859,9 +859,7 @@ async def test_resume_personal_chatgpt_under_sponsored_chatgpt_rebinds_funding(
 
         # Switching back to personal uses its own accounting without erasing
         # the completed/preserved history of the sponsored session.
-        stopped_again = await research_sessions.control_session(
-            str(path), started["id"], "stop"
-        )
+        stopped_again = await research_sessions.control_session(str(path), started["id"], "stop")
         assert stopped_again["status"] == "stopped"
         state.update(account=personal, sponsored=False)
         resumed_personal = await research_sessions.control_session(
