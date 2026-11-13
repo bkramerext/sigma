@@ -970,7 +970,9 @@ def research_qa_markdown(qa_id: str, path: str):
 
 
 @app.get("/api/projects/papers")
-def papers_view(path: str):
+def papers_view(path: str, include_runs: bool = True):
+    # A metadata-only list must never wait for unfinished run recovery or
+    # checkpoint inspection. Run activity is fetched via /papers/progress.
     saved = papers.list_papers(path)
     available = [paper for paper in saved if paper.get("pdf_available")]
     return {
@@ -978,7 +980,7 @@ def papers_view(path: str):
         "next_paper_number": papers.next_paper_number_for_activity(path),
         "paper_count": len(available),
         "best_paper_score": paper_scores.best_score(available),
-        "runs": papers.run_progress_list(path),
+        "runs": papers.run_progress_list(path) if include_runs else [],
     }
 
 
