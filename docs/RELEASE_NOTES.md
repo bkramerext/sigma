@@ -109,9 +109,9 @@ This release strengthens recovery from interrupted streams, provider errors, cap
 <details>
 <summary>Maintainer release boundary</summary>
 
-Deployed v0.1.7 SHA: \`802e9b6b7da5829868070f760e17280cd8a927f2\`.
-Deployed v0.2.0 SHA: \`9d938907ffd02fb89c9d10545e8df61484310cbd\`.
-Deployed v0.2.1 SHA: \`5435e14eeea159ab207ad50016577b9a9542ae59\`.
+Deployed v0.1.7 SHA: `802e9b6b7da5829868070f760e17280cd8a927f2`.
+Deployed v0.2.0 SHA: `9d938907ffd02fb89c9d10545e8df61484310cbd`.
+Deployed v0.2.1 SHA: `5435e14eeea159ab207ad50016577b9a9542ae59`.
 Each section describes the changes since the preceding deployed version.
 </details>
 
@@ -311,3 +311,37 @@ SIGMA remains experimental. Source Materials can contain incorrect premises, Inv
 **Production deployment:** November 12, 2026; exact-SHA CI and production
 acceptance passed. Live two-real-account collaboration smoke testing remains
 pending.
+
+
+---
+
+## Version 0.4.1 — Responsive Papers and Faster Navigation
+*Release candidate · November 12, 2026 · Production deployment pending*
+
+**This update makes SIGMA's paper workflow more responsive and predictable, especially in projects with many papers.** It also improves navigation and adds a new Medical research category.
+
+### More dependable paper controls
+
+- **Responsive Play, Stop, and Resume.** Session and paper controls acknowledge the user's action promptly in both personal and shared projects, while retaining authoritative backend state and creator permissions.
+- **Truthful progress and restart steps.** Every paper displays its metadata and workflow history. Where verified saved checkpoints exist, selecting a restart step replays work from a real, safe boundary; unavailable boundaries are not presented as runnable. Published papers remain intact when starting a new attempt.
+- **Reliable cancellation.** Stopping a paper during proofreading now targets the actual local worker and waits for its cancellation acknowledgement. Once cancellation is accepted, the workflow must not advance into PDF generation, scoring, or Finish.
+- **Clearer paper interactions.** Confirmations, activity indicators, error notices, step labels, and restart messages are simpler and more consistent. Paper removal remains available independently of other active paper runs.
+- **Nonblocking explanations.** Plain-language paper explanations can begin without blocking unrelated activity, and concurrent requests do not overwrite one another.
+
+### Faster Home and project navigation
+
+- **Papers load from metadata, not PDFs.** Opening a project or listing papers no longer reads or validates stored PDF/LaTeX files. Paper summaries come from existing canonical records, with an automatically invalidated in-memory cache rather than a second metadata database.
+- **Show the paper list sooner.** Paper cards appear when the lightweight listing returns; progress recovery and optional details are loaded separately. Repeated visits and projects with many papers should involve less unnecessary work.
+- **More accurate Home summaries.** SIGMA avoids temporarily showing “0 papers” before counts are known, refreshes activity without scanning historical paper work, and retains previously loaded project information during navigation.
+- **Find the best paper faster.** Clicking a high-score star on Home opens the corresponding project's highest-scoring published paper. Group settings and project navigation avoid unnecessary paper-loading delays.
+
+### New research example
+
+- **Medical Project Type.** Adds research-review and publication guidance appropriate for medical topics.
+- **Fully implantable cochlear implant sample.** A new example investigates candidate microphone locations and the trade-offs among acoustics, implantation, durability, and safety. It is a research starting point, not a clinical recommendation or a claim that a device has been validated for patients.
+
+### Limitations and release status
+
+SIGMA remains experimental. AI-generated conclusions, citations, papers, and paper scores require independent review. Checkpoint recovery does not mean that uncertain paid provider requests can safely be replayed.
+
+**Source cutoff for these notes:** merged `main` SHA `9faa3e667766b35d75ae3113ba5db22405c55802` (through PR #829). **This is not the final release SHA.** The version metadata still needs to be advanced to 0.4.1, the resulting exact-SHA CI must pass, and the production cutover must be verified. No tag or production deployment is claimed by this documentation change.
