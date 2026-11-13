@@ -5981,7 +5981,8 @@ def _sponsored_attempts_to_preserve(record: dict[str, Any]) -> list[str]:
             continue
         amount = step.get("global_cost_reservation_usd")
         if (
-            type(amount) not in {int, float}
+            not isinstance(amount, (int, float))
+            or isinstance(amount, bool)
             or not math.isfinite(amount)
             or amount <= 0
             or not isinstance(step.get("id"), str)
@@ -6001,7 +6002,8 @@ def _sponsored_attempts_to_preserve(record: dict[str, Any]) -> list[str]:
         amount = compiler.get("cost_reserve")
         attempt_id = compiler.get("attempt_id")
         if (
-            type(amount) not in {int, float}
+            not isinstance(amount, (int, float))
+            or isinstance(amount, bool)
             or not math.isfinite(amount)
             or amount <= 0
             or not isinstance(attempt_id, str)
