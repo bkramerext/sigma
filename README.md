@@ -78,106 +78,25 @@ These papers are **proofs of concept**, demonstrating what SIGMA can produce tod
 
 A research **session** runs selected strategies through **rounds** of Investigator/Skeptic **turns**. Each turn pairs one Investigator proposal with one Skeptic critique; later turns and rounds can use selected earlier findings and objections. The default configuration allows up to **54 agent calls** across 3 rounds, 3 turns per strategy per round, and 3 strategies. See [Information Flow](docs/INFORMATION_FLOW.md) for how work and evidence move between turns, rounds, and strategies—and how Session Outcome and Current Understanding summarize the results.
 
+
 ## Run locally
 
-Requires **macOS or Linux**, **Python 3.11+**, **[uv](https://docs.astral.sh/uv/)**, and **Node.js 20.19+** with npm. SIGMA uses Zstandard-compressed project bundles; `./sigma setup` installs `zstd` via Homebrew (macOS) or apt (Debian/Ubuntu Linux) when it is missing. From a terminal:
+Requires **macOS or Linux**, **Python 3.11+**, **uv**, and **Node.js 20.19+** with npm.
 
-```sh
+~~~sh
 git clone https://github.com/bkramerext/sigma.git
 cd sigma
 ./sigma setup
 ./sigma start --navigate
-```
+~~~
 
-If the browser does not open, visit **http://127.0.0.1:5173**. Press **Ctrl+C** in the launcher terminal to stop. The default project directory is `projects/`; set `SIGMA_PROJECTS_ROOT` to an **existing absolute directory** before starting to store projects elsewhere.
+Open **http://127.0.0.1:5173** if needed. Manual project editing works without Google or AI sign-in. Local Google OAuth, personal and sponsored ChatGPT, optional API-key billing, macOS Keychain, sending email, spending limits, and diagnostics are documented in **[Local Hosting](docs/LOCAL_HOSTING.md)**.
 
-You can create projects and strategies without an AI connection. To use AI research, choose **Connect AI** for a ChatGPT connection (subject to account and provider limits), or set a separately billed `OPENAI_API_KEY` in the server environment or ignored `.env` and restart. **ChatGPT connection and Google sign-in are different:** the former supplies access to an inference provider; the latter identifies a SIGMA user for account and membership controls. Provider usage and billing are not included with a local installation.
-
-`./sigma setup` installs the locked Python development environment with `uv sync --locked --group dev` and the frontend dependencies with `npm ci`. Setup and local startup were verified in a fresh Git worktree on the existing macOS 14.6 Apple Silicon host (not on a clean machine); the frontend and local API both returned ready responses. This does not establish behavior on every macOS/Linux distribution. See [Getting Started](docs/GETTING_STARTED.md) for troubleshooting.
-
-## Optional: local feedback and Email Project (Gmail or SMTP)
-
-Local SIGMA can send **Send Feedback** notifications and **Email Project** messages (including JSON, PDF, and LaTeX attachments).
-
-**Gmail through Google sign-in (recommended for localhost):** Set `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` (or its `_FILE` form) in this checkout's ignored `.env`. Use the **same local Google web OAuth client** as SIGMA's UI, with `http://127.0.0.1:5173/api/cloud-auth/callback` as an authorized redirect URI. Then run:
-
-```sh
-./sigma send_feedback "hello world" --transport gmail
-./sigma send_feedback "hello world" --transport gmail --attach ./path/to/file.pdf
-```
-
-Use `--attach PATH` to send a single local file as a MIME attachment with a feedback test message. Both Gmail API and SMTP are supported. Relative, absolute, and `~/` paths work. Files over 18 MB, missing files, and unreadable files are rejected before opening Google authorization or contacting the mail provider. The CLI does not persist an application Feedback record, and the browser Feedback endpoint is unchanged.
-
-The command opens your default browser for Google's explicit **Gmail Send** permission, captures the OAuth callback using a temporary localhost listener, stores an account-bound grant privately under `~/.sigma/local-cloud-auth/gmail-send-token.json`, and sends one feedback test message. It does **not** start the SIGMA UI, need a separate terminal, or read browser session cookies. It verifies the Google account you select through the OAuth identity token and uses that verified address as the feedback contact; `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` is the test recipient and can be a different mailbox. The command reuses an existing matching grant on later calls. Add `--reauthorize` if you want to choose a different sending account. If port 5173 is free, the CLI listens for the Google callback itself. If your **updated local SIGMA UI is already running** on that port, the CLI uses its local-only callback handoff instead; you do not need to navigate through the UI or stop it. An older running SIGMA process without the new handoff must be restarted once, or shut down with `./sigma shutdown`. An unrelated process on the port is never stopped or trusted. Production is not modified.
-
-Gmail's `gmail.send` scope may require app verification or tester authorization. An External Testing OAuth app may issue a refresh token that expires after seven days. If consent is blocked, resolve it in the **local OAuth project**, not the production deployment.
-
-**SMTP alternative:** Local email can also use SMTP. **Google OAuth branding verification is not required for SMTP.** The sender needs an SMTP credential, such as a Gmail **app password**, not your normal Google-account password. Gmail accounts must meet Google's eligibility requirements for app passwords.
-
-*Needs a guinea pig to prove local setup works. Will pay with lettuce.*
-
-Keep the credential outside the repository. For an existing local setup, check whether the password file already exists:
-
-```sh
-ls -l ~/.config/sigma/smtp-password
-```
-
-Do **not** print or paste its contents. A private password file should be accessible only to your user (for example, permissions `600`). If you need to create it, use a protected local file containing only the app password. The example path is a convention, **not** a password that SIGMA creates automatically.
-
-Configure the local checkout's ignored `.env` file (or export equivalent shell variables):
-
-```dotenv
-SIGMA_EMAIL_SMTP_HOST=smtp.gmail.com
-SIGMA_EMAIL_SMTP_PORT=587
-SIGMA_EMAIL_SMTP_USERNAME=your-sending-account@gmail.com
-SIGMA_EMAIL_SMTP_PASSWORD_FILE=/absolute/path/to/.config/sigma/smtp-password
-SIGMA_CLOUD_ADMIN_CONTACT_EMAIL=your-google-sign-in@gmail.com
-```
-
-Replace the example addresses and file path with your own; **the password-file path must be absolute**. In `.env`, `~` and `$HOME` are **not expanded**, so use your real home-directory path. The SMTP username is the account that sends mail. The administrator contact is the local sign-in/admin address; these may be different.
-
-From the checkout, test the SMTP transport directly (without requiring a running browser or sending a feedback database record):
-
-```sh
-./sigma send_feedback "hello world" --transport smtp
-```
-
-The diagnostic prints which transport was selected, whether SMTP credentials are configured, and whether the mail provider accepted delivery; it never prints the password. It sends the test message to `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`. SMTP testing uses the configured local contact address, while Gmail OAuth testing uses the Google-verified sender as its contact. Normal browser **Send Feedback** uses the authenticated Google account's email as its contact address, or an optional unverified contact address for guests.
-
-If you previously configured `SIGMA_GMAIL_TOKEN_FILE`, `SIGMA_EMAIL_GMAIL_TOKEN_FILE`, or `SIGMA_INVITATION_GMAIL_TOKEN_FILE`, ordinary feedback sending prefers the Gmail API path instead of SMTP. The `--transport smtp` flag overrides this **for the CLI invocation only**; to use SMTP in the browser, remove/disable the Gmail token-file setting from the local backend environment and restart `./sigma start`. Environment variables exported in your shell override the ignored `.env`, even if empty. Never commit credentials or copy the protected password file into Git.
-
-## Optional: test Google sign-in locally
-
-Google authentication is **not required** for ordinary local use. To exercise the authenticated account flow, create a Google OAuth **web** client with:
-
-- Authorized JavaScript origin: `http://127.0.0.1:5173`
-- Authorized redirect URI: `http://127.0.0.1:5173/api/cloud-auth/callback`
-
-Put `GOOGLE_OIDC_CLIENT_ID` (the Google OAuth application's identifier) and `GOOGLE_OIDC_CLIENT_SECRET` (its server-side credential) in the checkout-root `.env` or the server environment. **Each Git checkout/worktree needs its own `.env`**: Git ignores this file, so it will not follow you into a new checkout. If another local checkout already has working credentials, copy its `.env` to this checkout and restrict access with `chmod 600 .env`. Never commit or share the secrets. Exported shell variables take precedence over `.env`, even when exported as empty strings.
-
-Set your administrator contact in `.env` or export it, then launch SIGMA:
-
-```sh
-export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
-./sigma start --navigate
-```
-
-Use the **Google Sign In** pill to choose a real Google account. **Do not pass `--signin` for this test**: that option now supplies a local administrator identity without performing Google OAuth. Sign in with the account matching `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to establish the local administrator; other accounts require membership grants. Local authentication state is stored under `~/.sigma/local-cloud-auth`. Use separate browser profiles when testing multiple accounts.
-
-This is a **local authentication test**, not a hosted deployment. For hosted configuration and administrator operations, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). For a provider-free UI simulation of membership, allowances, and errors, see [Local Mock Authentication](docs/LOCAL_MOCK_AUTH.md). Mock identities are not real Google accounts and mock research is not AI inference.
-
-## Optional: scientific computation
-
-Build the optional Python execution sandbox with:
-
-```sh
-docker build -t sigma-research-python:0.1 sandbox-poc
-```
-
-Docker and the sandbox image are **not required** for the basic local UI. See [Python Execution](docs/RESEARCH_PYTHON_EXECUTION.md) and [Sage Execution](docs/SAGE_EXECUTION.md) for isolation assumptions, setup, and limitations.
+**Installation documentation disclaimer:** The Local Hosting guide has **not been retested end to end** on a clean installation and must be maintained as setup and authentication change.
 
 ## Documentation
 
+- [Local Hosting](docs/LOCAL_HOSTING.md) — complete local installation, identities, AI providers, secrets, email and troubleshooting (not clean-install retested)
 - [Getting Started](docs/GETTING_STARTED.md) — workflows, setup, and troubleshooting
 - [Journal](docs/JOURNAL.md) — day-by-day story of building SIGMA
 - [Product Rationale](docs/PRODUCT_RATIONALE.md) and [Research Quality Charter](docs/RESEARCH_QUALITY_CHARTER.md) — research goals and evidence standards
