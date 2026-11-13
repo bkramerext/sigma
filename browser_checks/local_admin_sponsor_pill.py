@@ -329,19 +329,21 @@ def exercise(origin: str) -> None:
         attempt_failure["value"] = True
         with page.expect_request("**/api/ai/auth/begin"):
             member_pill.click()
-        error_message = page.locator(".connection-pill-message[role=alert]")
-        expect(error_message).to_have_text(
-            "ChatGPT sign-in validation failed. Retry; existing accounts were retained."
+        error_toast = page.locator(".request-toast").filter(
+            has_text="ChatGPT sign-in validation failed. Retry; existing accounts were retained."
         )
+        expect(error_toast).to_be_visible()
+        expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
         assert_paired_pills()
         width_after_error = member_pill.bounding_box()["width"]
         assert abs(width_after_error - width_before_error) < 1
-        message_box = error_message.bounding_box()
-        summary_box = member_pill.bounding_box()
-        assert message_box and summary_box
-        assert message_box["y"] >= summary_box["y"] + summary_box["height"] + 4
-        assert message_box["width"] <= summary_box["width"] + 1
-        assert error_message.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+        toast_box = error_toast.bounding_box()
+        assert toast_box
+        viewport = page.viewport_size
+        assert toast_box["x"] > viewport["width"] / 2
+        assert toast_box["y"] + toast_box["height"] >= viewport["height"] - 90
+        error_toast.get_by_role("button", name="Dismiss request error").click()
+        expect(error_toast).not_to_be_visible()
         expect(member_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
         assert selected_mode["value"] == "sponsored"
         assert not any(url.endswith("/api/ai/mode") for url, _ in posts), posts
