@@ -10551,7 +10551,9 @@ function CloudAuthGate() {
       await refresh();
       if (mode === 'sponsored') await refreshSponsoredConnection();
     } catch (cause) {
-      setConnectionError(cause instanceof Error ? cause.message : 'Connection choice could not be saved.');
+      const detail = cause instanceof Error ? cause.message : 'Connection choice could not be saved.';
+      setConnectionError(detail);
+      reportRequestFailure(detail);
       throw cause;
     } finally { setSelectingConnection(false); }
   }, [refresh, refreshSponsoredConnection, selectingConnection, status?.mock_auth]);

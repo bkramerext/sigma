@@ -87,6 +87,8 @@ export function AIProvider({ children, unavailable = false }: { children: ReactN
   const [connecting, setConnecting] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [error, setError] = useState('');
+  // Report on failure transitions, not when a header remounts after navigation.
+  useEffect(() => { if (error) reportRequestFailure(error); }, [error]);
   const [handoff, setHandoff] = useState('');
   const [welcome, setWelcome] = useState(false);
   const welcomed = useRef(false);
@@ -260,12 +262,6 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
 }
 export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
-  // Connection failures are global error notifications, not inline pill content.
-  // Preserve in-pill guidance only for an actively pending browser sign-in.
-  useEffect(() => { if (ai.error) reportRequestFailure(ai.error); }, [ai.error]);
-  useEffect(() => {
-    if (cloudFunding?.connectionError) reportRequestFailure(cloudFunding.connectionError);
-  }, [cloudFunding?.connectionError]);
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const [chatgptSponsorPrepared, setChatgptSponsorPrepared] = useState(false);
   const providerActive = useProviderActivity();
