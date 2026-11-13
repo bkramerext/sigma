@@ -5985,6 +5985,9 @@ def _validate_provider_transport_change(
         and record.get("hard_budget_ledger") is None
         and not (record.get("estimated_cost_reserved_usd") or 0)
     )
+    # A later sponsored-to-personal change must not reclassify an *older*
+    # interrupted personal call as a sponsored liability. Provenance is
+    # written only during a verified unmetered personal-ChatGPT rebind.
     if any(
         item.get("status") == "running"
         or item.get("attempt_status") == "preparing"
@@ -5992,7 +5995,14 @@ def _validate_provider_transport_change(
             item.get("status") == "interrupted"
             or item.get("attempt_status") == "unknown"
         )
-        and not unmetered_chatgpt_rebind
+        and not (
+            unmetered_chatgpt_rebind
+            or (
+                item.get("funding_provenance") == "personal_chatgpt_unmetered"
+                and record.get("hard_budget_ledger") is None
+                and not (record.get("estimated_cost_reserved_usd") or 0)
+            )
+        )
         for item in record.get("steps", [])
         if isinstance(item, dict)
     ):
@@ -6044,6 +6054,21 @@ def _rebind_provider_transport(
     from sigma import cloud_research
 
     sponsored = cloud_research.billing_enabled()
+    if (
+        prior_mode == "chatgpt"
+        and record.get("cloud_sponsored") is not True
+        and record.get("hard_budget_ledger") is None
+        and not (record.get("estimated_cost_reserved_usd") or 0)
+    ):
+        # The old personal plan's uncertain dispatch was not funded or
+        # reserved by SIGMA's sponsor. Keep its status and origin explicit;
+        # do not fold it into the new sponsor's estimated cost.
+        for old_step in record.get("steps", []):
+            if isinstance(old_step, dict) and (
+                old_step.get("status") == "interrupted"
+                or old_step.get("attempt_status") == "unknown"
+            ):
+                old_step.setdefault("funding_provenance", "personal_chatgpt_unmetered")
     paid = credential["mode"] == "api_key" or sponsored
     if paid and str(config["model"]) not in TOKEN_PRICES_PER_MILLION:
         raise ProjectError("No reviewed price is available for the recipient's provider model.")
