@@ -43,11 +43,30 @@ Use the workspace's **Report / Export** actions to create a complete, importable
 
 The optional **Issues and Bugs** paper section records problems observed in SIGMA's own generation and typesetting process, including repairs and unresolved layout diagnostics. It excludes defects in the input research and does not prevent SIGMA from saving a paper if the optional section itself cannot compile.
 
-To turn completed work into a reusable catalog sample, pass a complete Project
-file bundle to `./sigma make_sample bundle.json --name my-sample`. The sample
-keeps validated paper metadata, TeX, PDF bytes, research evidence, and
-provenance. Project Audit JSON is a review view and contains no binary paper
-files; converting that audit alone cannot restore PDFs.
+To curate and publish a complete research project as a bundled **Sample snapshot**,
+export its Project file (not the Project Audit JSON), then run from a local Git
+checkout:
+
+```sh
+./sigma make_sample ~/Downloads/sovereign-ai-v12.bundle.json
+```
+
+The command strips a trailing version suffix (such as `v12`) from the sample
+title, matches the existing catalog entry by title or derives a new identifier,
+and replaces that sample's source-controlled snapshot. `--name` is an optional
+override. It commits **only `samples/<identifier>/`** on the current branch; it
+does not push, deploy, or commit the source export or unrelated staged work.
+Stop any active sessions before exporting; inspect the resulting commit before
+pushing. Publishing requires a configured local Git author identity.
+
+Curated samples are marked ★ on Home's **Samples** tab regardless of paper
+score. The star opens a selected published paper, and opening the sample creates
+an independent working project with its complete saved sessions, papers, TeX,
+PDFs, and frozen evidence. Original model names, thinking levels and scores
+remain intact; the original Google account's execution attribution is removed
+from copied metadata. Cited scientific authors are not removed from paper
+content. No paid model calls are made during promotion. Legacy uncurated samples
+continue to work.
 
 ## Optional computational experiments
 

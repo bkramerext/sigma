@@ -17,7 +17,7 @@ from tempfile import TemporaryDirectory
 import httpx
 from playwright.sync_api import expect, sync_playwright
 
-from sigma import paper_scores
+from sigma import paper_scores, samples
 
 ROOT = Path(__file__).resolve().parents[1]
 CHROME = os.environ.get(
@@ -99,6 +99,33 @@ def make_scored_sample_fixture(directory: Path) -> bytes:
     }
     (paper / f"{paper_id}.json").write_text(json.dumps(record), encoding="utf-8")
     (paper / f"{paper_id}.pdf").write_bytes(pdf)
+
+    # The sample star now marks a curated, shareable snapshot independently
+    # of the score. Include the real portable bundle the star opens.
+    from sigma import project_bundle
+
+    snapshot_record = {**record, "project_id": project["id"]}
+    members = {
+        "project.json": project_path.read_bytes(),
+        f"artifacts/papers/{paper_id}.json": json.dumps(snapshot_record).encode(),
+        f"artifacts/papers/{paper_id}.pdf": pdf,
+    }
+    (sample / samples.SAMPLE_SNAPSHOT).write_text(
+        json.dumps(project_bundle.portable_bundle(members)), encoding="utf-8"
+    )
+    (sample / samples.SAMPLE_CURATION).write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "curated": True,
+                "featured_paper_id": paper_id,
+                "best_paper_score": 75,
+                "paper_count": 1,
+                "session_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
     return pdf
 
 
@@ -285,10 +312,8 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
             has_text="Warp Drive Design v9 (acceptance fixture)"
         )
         scored_group.evaluate("element => { element.open = true; }")
-        star = scored_group.get_by_role("button", name="Open high scoring paper (75/100)")
-        expect(star).to_have_attribute(
-            "data-tooltip", "Marked as a high scoring paper (70 or higher)"
-        )
+        star = scored_group.get_by_role("button", name="Open curated sample paper")
+        expect(star).to_have_attribute("data-tooltip", "Includes a sample paper")
         # Public sample PDFs remain accessible even though the star now
         # navigates to an editable copy rather than opening a PDF tab.
         rows = page.evaluate(

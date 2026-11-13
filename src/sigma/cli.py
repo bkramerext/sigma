@@ -134,9 +134,9 @@ COMMAND_DETAILS = {
         "A runtime is available only when its image and container runtime are ready.",
     ),
     "make_sample": (
-        "Create a Samples catalog entry from an exported project JSON file.",
-        "./sigma make_sample export.json --name demo",
-        "The export must be valid; the sample name must satisfy catalog naming rules.",
+        "Publish a complete project bundle as a curated sample in a local Git commit.",
+        "./sigma make_sample ~/Downloads/project.bundle.json",
+        "Derives the sample title and existing catalog name; --name overrides the identifier. Only the sample files are committed, never pushed.",
     ),
     "setup": (
         "Install locked Python and frontend dependencies.",
@@ -285,10 +285,12 @@ def main() -> None:
     sample = add_command(
         commands,
         "make_sample",
-        help="Create a Samples catalog entry from a project export JSON file",
+        help="Publish a complete project bundle as a curated sample",
     )
     sample.add_argument("exported_project")
-    sample.add_argument("--name", required=True)
+    sample.add_argument(
+        "--name", help="Override the automatically matched or derived sample identifier"
+    )
     add_command(commands, "setup", help="Install locked Python and frontend dependencies")
     add_command(commands, "test", help="Run tests, API/CLI checks, lint, types and build")
     feedback = add_command(commands, "send_feedback")
@@ -344,12 +346,26 @@ def main() -> None:
 
         sys.exit(run(args.path))
     if args.command == "make_sample":
-        from sigma.samples import make_sample
+        from pathlib import Path
+
+        from sigma.sample_promotion import promote_bundle
 
         try:
-            destination = make_sample(args.exported_project, args.name)
-            print(json.dumps({"sample": args.name, "path": str(destination)}, indent=2))
-        except ProjectError as exc:
+            # Retain the historical export_version=2 / --name contract for
+            # callers that have not migrated to complete project bundles.
+            export_path = Path(args.exported_project).expanduser()
+            exported = json.loads(export_path.read_text(encoding="utf-8"))
+            if isinstance(exported, dict) and exported.get("export_version") == 2:
+                from sigma.samples import make_sample
+
+                if args.name is None:
+                    raise ProjectError("--name is required for a legacy project export.")
+                destination = make_sample(args.exported_project, args.name)
+                print(json.dumps({"sample": args.name, "path": str(destination)}, indent=2))
+            else:
+                published = promote_bundle(args.exported_project, args.name)
+                print(json.dumps(published, indent=2))
+        except (ProjectError, OSError, ValueError, UnicodeError) as exc:
             print(str(exc), file=sys.stderr)
             sys.exit(2)
         sys.exit(0)
