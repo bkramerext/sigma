@@ -364,7 +364,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const allowanceText = !sponsoredPresentation
     ? 'Personal'
     : adminSponsored
-      ? 'No SIGMA cap'
+      ? 'Unlimited'
     : globalFundingExhausted
       ? 'Global limit'
     : cloudFunding?.error

@@ -610,7 +610,7 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         api_pill = page.locator(".api-connection > summary")
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
-        expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("No SIGMA cap")
+        expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
         assert_account_pill_geometry()
         # Enlarged provider text must grow both pills, not overflow a Google-sized column.
         api_pill.get_by_role("status").evaluate("el => el.style.fontSize = '1.5em'")
