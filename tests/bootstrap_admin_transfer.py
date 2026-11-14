@@ -68,6 +68,13 @@ def main() -> None:
             raise AssertionError("Conflicting subject was accepted")
         with sqlite3.connect(path) as db:
             db.execute("DELETE FROM contact_admin_subject")
+        try:
+            transfer(path, from_email=OLD, to_email=NEW, apply=True)
+        except TransferRefused:
+            pass
+        else:
+            raise AssertionError("Old administrator was silently locked out")
+        with sqlite3.connect(path) as db:
             db.execute("INSERT INTO grants VALUES ('email',?,?,1)", (OLD, "member"))
         result = transfer(path, from_email=OLD, to_email=NEW, apply=True)
         assert result == {"status": "transferred", "changed": True, "old_role": "member"}

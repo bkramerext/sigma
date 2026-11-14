@@ -85,6 +85,10 @@ def transfer(
         if old_identity is None or old_identity["email"] != source:
             raise TransferRefused("Bootstrap subject does not match verified Google identity.")
         prior_role = _grant_role(db, source)
+        if apply and prior_role is None:
+            raise TransferRefused(
+                "Previous administrator would lose access; approve and grant an independent role first."
+            )
         if apply:
             changed = db.execute(
                 "UPDATE bootstrap_subject SET email=?,subject=? WHERE email=? AND subject=?",

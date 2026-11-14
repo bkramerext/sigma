@@ -95,3 +95,5 @@ it to `false` and redeploy to turn it off. Production has not been changed.
 - Run real browser acceptance for the notice and invitation link appearance
   and validate all CI checks. This is not a claim that hosted personal
   ChatGPT authorization has been enabled.
+
+Administrator transfer safety gate: the old bootstrap user must retain an independently granted role; the utility refuses any transfer that would silently lock the previous identity out. The dry-run identifies that role before changes, and the cutover must verify it afterward.

@@ -76,8 +76,9 @@ python -m sigma.bootstrap_admin_transfer --from-email brian.kramer.personal@gmai
 ```
 
 First inspect the read-only dry-run result, especially the previous
-administrator's **independent resulting role**. Refuse any ambiguous or
-mismatched identity. With the full backup verified, while writers remain
+administrator's **independent resulting role**. The tool refuses to remove
+that user's access: if no independent authorization exists, first arrange
+an explicit approved membership grant. Refuse any ambiguous or mismatched identity. With the full backup verified, while writers remain
 stopped, run the same command with `--apply --backup-verified`. The tool
 changes **only** the bootstrap subject binding, contact-admin subject binding
 if absent, source-account authorization cache, source browser sessions, and a

@@ -24,6 +24,18 @@ provider fixture. They never call OpenAI or use real credentials. The fixture is
 not loaded by `sigma ui` and never belongs in a production launch. Test context
 and model names explicitly say TEST-FIXTURE.
 
+## Two-agent chat
+
+Start the local UI with `./sigma chat`, then run
+`uv run --with playwright python browser_checks/chat.py`. The check uses real
+Chrome while intercepting chat configuration and turn responses with
+deterministic fixtures. It checks the Human, AI #1, and AI #2 boxes, alternating
+turn order, account-verified model and supported Thinking controls, Markdown and
+math rendering, the visible full transcript path and append-only
+speaker entries, a human intervention, and stopping. AI reply panels are
+read-only. It checks that model/Thinking pills are in SIGMA's top bar and that
+transcript filenames contain no ID. It makes no provider calls.
+
 ## Local sponsored call limits
 
 With the local SIGMA UI running on `127.0.0.1:5173`, run

@@ -1,5 +1,65 @@
 # SIGMA Deployment History (archived)
 
+## 2026-11-14 — PR #859 hosted-sponsored-pill hotpatch
+
+PR #859 merged as `ff9ca956c3d7d4b97591606248da61175fc5462e`, with the same
+Git tree as its checked head. Version remains 0.4.2. All five exact-tree CI
+workflows passed: Ruff, frontend build, SIGMA verification (eight test shards
+and real two-creator PDF acceptance), Browser verification, and Project Types
+browser acceptance.
+
+Before cutover, production ran `3508d560e35043f65f507deefef7841c5a076c68`;
+systemd and all three containers were healthy. Effective inference provider
+was `chatgpt`, sponsored inference was enabled, and
+`SIGMA_CLOUD_SPONSOR_EMAIL` matched the designated sponsor. The dedicated
+persistent ChatGPT registration and model catalog passed a non-inference
+readiness check. Four saved `project_spend_limit_exceeded` sessions were
+recorded under `api_key` before this release; no such errors appeared in the
+last two hours of backend logs. No provider billing settings, credentials, or
+SIGMA spending limits were changed, and no provider inference ran.
+
+A fresh, application-consistent state copy was made on the existing boot disk
+at `/var/backups/sigma-state-hotpatch-pre-ff9ca956-20261114T0550Z/state`.
+It contains 228 files (47 MB), is root-owned mode 0700, and its full-tree
+checksum/metadata comparison was clean while the service was stopped. The full
+copy retains `auth/workspaces/provider-slots` and its four zero-byte locks. A
+separate verifier view omitted only that lock-only directory. The read-only
+restore verifier passed three SQLite integrity checks, 3 identities and
+workspace mappings, 23 projects, 53 artifacts, one matching TeX/PDF pair, 10
+terminal historical job rows, and 59 accounting calls ($6.085737
+recorded/reserved; 16 reserved or unknown).
+
+The guarded helper command was:
+
+```sh
+sudo python3 /opt/sigma/current/deploy/deploy-gce-release.py \
+  ff9ca956c3d7d4b97591606248da61175fc5462e \
+  --backup-verified --schema-compatible
+```
+
+The protected release pin, backend/frontend image labels, and release record
+match the full SHA. Backend image ID:
+`sha256:b6b701a10a2e1d66e85a6cb53d2cde222911da7040079c4bbb719e2175217a75`.
+Frontend image ID:
+`sha256:70f571ff42b60f64e1a79ffd6c22db041a857bf248b3ee5869f192dc732f9b83`.
+The existing healthy edge image
+`sha256:cf1bd22f2415bc99b785ece1df2c49d32985ac4ac42d84df335be17350593693`
+was retained. Systemd and all containers are healthy; the approved persistent
+state UUID `28ef67cb-4da8-46e7-9a8b-dce0470153a5` is unchanged.
+
+Post-deploy read-only checks retained 3 identities/workspaces, 23 projects, 53
+research assets, and the same job and accounting status counts. Credential-free
+backend readiness passed. Public DNS, private-port, HTTP redirect, HTTPS/TLS,
+SPA, and hosted API readiness checks passed. A fresh Google login-start request
+returned HTTP 302 to Google's authorization host and used the configured HTTPS
+callback path; no Google account sign-in was completed. No paid inference ran.
+
+Hosted Personal ChatGPT remains unavailable under the existing OpenAI
+registration: the documented plan-use flow requires a loopback `127.0.0.1`
+callback, not the hosted HTTPS callback. No new permissions were requested. The
+required real 180-second production Session acceptance remains outstanding
+until an authorized Google user session is available in the production browser.
+
 The material below is preserved from the former combined deployment runbook
 for traceability. It contains version-specific authorization records, previous
 release controls, schema-specific compatibility analysis, past outcomes,
