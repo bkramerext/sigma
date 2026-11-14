@@ -28,6 +28,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma import (
+    chat,
+    chat_transcripts,
     chatgpt_auth,
     cloud_auth,
     cloud_demo,
@@ -3199,6 +3201,88 @@ class AuthModeRequest(BaseModel):
 class ApiKeyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     api_key: SecretStr
+
+
+class ChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    speaker: Literal["human", "ai_1", "ai_2"]
+    text: str = Field(min_length=1, max_length=chat.MAX_MESSAGE_CHARS)
+
+
+class ChatTranscriptMessageRequest(ChatMessageRequest):
+    conversation_id: str = Field(
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    )
+
+
+class ChatTurnRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    conversation_id: str = Field(
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    )
+    expected_binding: str = Field(min_length=1, max_length=256)
+    speaker: Literal["ai_1", "ai_2"]
+    messages: list[ChatMessageRequest] = Field(min_length=1, max_length=chat.MAX_MESSAGES)
+    model: str = Field(min_length=1, max_length=100)
+    reasoning_effort: Literal["low", "medium", "high", "xhigh"]
+
+
+@app.post("/api/chat/session")
+def open_chat_transcript():
+    """Create a timestamped transcript in the authenticated user's private state."""
+    return JSONResponse(chat_transcripts.open_transcript(), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/chat/message", status_code=204)
+def append_chat_transcript_message(body: ChatTranscriptMessageRequest):
+    """Append one participant message to its private timestamped transcript."""
+    chat_transcripts.append_message(body.conversation_id, body.speaker, body.text)
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/chat/config")
+async def chat_configuration_view():
+    return JSONResponse(await chat.configuration(), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/chat/turn")
+async def chat_turn_view(body: ChatTurnRequest):
+    """Stream one of the two ephemeral chat participants' completed turns."""
+    config = await chat.configuration()
+    if not config["available"]:
+        raise HTTPException(503, config["message"] or "Connect an AI account before chatting.")
+    if body.expected_binding != config["binding"]:
+        raise HTTPException(
+            409, "The selected AI account changed. Review the connection and retry."
+        )
+    available_model = next(
+        (item for item in config.get("models", []) if item.get("id") == body.model), None
+    )
+    if available_model is None or body.reasoning_effort not in available_model.get("efforts", []):
+        raise HTTPException(422, "Choose a model and Thinking level available to this account.")
+
+    async def events():
+        yield 'data: {"type":"started"}\n\n'
+        try:
+            result = await chat.respond(
+                speaker=body.speaker,
+                messages=[item.model_dump() for item in body.messages],
+                conversation_id=str(UUID(body.conversation_id)),
+                expected_binding=body.expected_binding,
+                model=body.model,
+                reasoning_effort=body.reasoning_effort,
+            )
+            yield "data: " + json.dumps({"type": "complete", "text": result}) + "\n\n"
+        except asyncio.CancelledError:
+            raise
+        except ProjectError as exc:
+            yield "data: " + json.dumps({"type": "error", "error": str(exc)}) + "\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/ai/auth/begin")
