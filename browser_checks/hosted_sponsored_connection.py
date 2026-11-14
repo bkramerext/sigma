@@ -101,6 +101,17 @@ def exercise(origin: str) -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
+        page.add_init_script(
+            """window.__sponsoredPillTransientLabels = [];
+            window.setInterval(() => {
+                const label = document.querySelector(
+                    '.api-connection > summary [role="status"]'
+                )?.textContent?.trim() || '';
+                if (/^(Connecting|Checking)/.test(label)) {
+                    window.__sponsoredPillTransientLabels.push(label);
+                }
+            }, 10);"""
+        )
         selected = {"mode": "personal"}
         forced = {"value": False}
         local_sponsored_mode = {"value": False}
@@ -118,6 +129,7 @@ def exercise(origin: str) -> None:
         denied_identity_available = {"value": False}
         denied_invitation_status = {"value": None}
         admin_mode = {"value": False}
+        delay_provider_connection = {"value": False}
         admin_grants = [
             {
                 "kind": "email",
@@ -281,6 +293,8 @@ def exercise(origin: str) -> None:
                     "unknown_provider_attempts": 0,
                 }
             elif path.endswith("/api/cloud-research/connection"):
+                if delay_provider_connection["value"]:
+                    time.sleep(0.5)
                 payload = {
                     "mode": "sponsored",
                     "provider": sponsored_provider["provider"],
@@ -600,17 +614,22 @@ def exercise(origin: str) -> None:
             assert abs(geometry["google_right"] - geometry["chatgpt_right"]) < 1, geometry
             assert geometry["label_right_inset"] >= 10, geometry
 
-        # Hosted presentation follows effective runtime routing; the admin's
-        # SIGMA allowance does not imply the provider's own limit is unlimited.
+        # Hosted presentation follows effective runtime routing. The admin's
+        # per-user SIGMA allowance is Unlimited; provider/global limits still
+        # appear in the sponsorship details.
         page.set_viewport_size({"width": 1280, "height": 800})
         admin_mode["value"] = True
         forced["value"] = False
         sponsored_provider.update(provider="api_key", status="connected")
+        delay_provider_connection["value"] = True
+        page.evaluate("window.__sponsoredPillTransientLabels = []")
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         api_pill = page.locator(".api-connection > summary")
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
-        expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("No SIGMA cap")
+        expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
+        assert page.evaluate("window.__sponsoredPillTransientLabels") == []
+        delay_provider_connection["value"] = False
         assert_account_pill_geometry()
         # Enlarged provider text must grow both pills, not overflow a Google-sized column.
         api_pill.get_by_role("status").evaluate("el => el.style.fontSize = '1.5em'")

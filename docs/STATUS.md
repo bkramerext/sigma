@@ -1,5 +1,37 @@
 # SIGMA status
 
+## 2026-11-14 — issue #854 production follow-up
+
+The current production backend was read-only checked at merged SHA
+`3508d560e35043f65f507deefef7841c5a076c68`. Its effective inference provider is
+`chatgpt`, sponsored inference is enabled, and the configured sponsor email
+matches the designated account. The dedicated persistent sponsor registration
+passed non-inference credential and model-catalog health checks. The four saved
+`project_spend_limit_exceeded` sessions inspected were all recorded with
+`api_key` routing and predate this deployment; no such errors appeared in the
+last two hours of backend logs. No inference was dispatched and no provider
+billing or SIGMA spending limits were changed.
+
+Direct hosted Personal ChatGPT authorization remains unsupported with the
+existing OpenAI OAuth registration: its documented plan-use flow requires the
+loopback `127.0.0.1` callback, while production uses an HTTPS callback. No new
+OpenAI permission was requested. The production sponsor health path is ready,
+but the issue's real 180-second production Session acceptance has not run. It
+requires a currently authenticated, authorized Google user session in the
+production browser; this environment has no such session. No production
+credentials were accessed or impersonated.
+
+## 2026-11-14 — hosted sponsored pill copy adjustment
+
+The sponsored status pill keeps its provider label while hosted provider checks
+or connection selection are in progress; transient progress messaging stays out
+of this compact control. Administrator sponsored allowance displays
+`Unlimited`, while the details tooltip still clarifies that provider and global
+spending limits may apply. The focused real-browser check passed with a delayed
+provider response, and the frontend build passed. `./sigma test` completed with
+two unrelated Python 3.14 fixture failures in `project_collaboration.py` and
+`research_qa.py`; other checks passed.
+
 ## Two-agent chat UI (2026-11-13)
 
 Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
