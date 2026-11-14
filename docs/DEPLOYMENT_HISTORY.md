@@ -9,6 +9,70 @@ procedure and does not authorize a release.** Use
 procedure and [OPERATION_RUNBOOK.md](OPERATION_RUNBOOK.md) for live host and
 incident guidance.
 
+## 2026-11-14 — second SIGMA v0.4.2 production deployment
+
+This supplementary cutover deploys merged `main` SHA
+`2cc08b5eae6acd661d485878f4ce84ca962786f8`, containing PR #850 (Google
+sign-out and guest-sample sign-in return to Home) and PR #851 (About legal
+action styling and Home invitation retry). Version remains 0.4.2. The first
+v0.4.2 deployment above remains an accurate record of its original source and
+cutover.
+
+The #851 checked PR head was `548a2072ed669e4f8705fbc6f016a8c8a454861e`,
+with tree `faa01017aeb805a42727196cd33d707cb1f62a8a`; the deployed target tree
+is `1dff1d19aa8084f49357a6a2d0c43e154a30450f`. Since trees differ, the green
+PR-head checks were not treated as equivalent to the deployed target. GitHub
+checks on the exact target SHA passed: Ruff, frontend typecheck/build, all
+eight SIGMA test shards, the real two-creator PDF gate, and all three Browser
+acceptance jobs; Project Types acceptance ran successfully as a step in the
+Browser workflow. The project UI and tests changed after the PR head, but no
+backend or data-schema files changed.
+
+Before cutover, production was pinned to the first v0.4.2 SHA
+`0201c706d0ad63d3909016c9c4cc35e6f9ecb074`; systemd and all three containers
+were healthy. All 23 host preflight checks passed. The persistent state disk
+remained mounted at `/srv/sigma-state` with UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`, and the existing 96 GB boot disk had
+68 GB free. A fresh app-consistent copy was made on that boot disk at
+`/var/backups/sigma-state-v042-second-pre-2cc08b5e-20261114T002323Z/state`.
+The full copy contains 196 files; its root and `state` directory are root-owned
+mode 0700, and source ownership/metadata were preserved. The full tree's
+checksum/metadata rsync comparison was clean. As before, the complete copy
+retains the unmapped `provider-slots` directory with three zero-byte lock
+files; only the separate read-only verifier view excluded that directory.
+SQLite integrity and restore verification passed against that view before
+cutover.
+
+The guarded deployment helper ran with `--backup-verified --schema-compatible`
+and reported success. Protected release pin, checkout, release record, and
+backend/frontend image source labels match the full target SHA. Backend image
+ID: `sha256:ea3112b5e2ae9853ce348fa69f39e2f82f1b0b7a31e1f275176c775343431e14`.
+Frontend image ID:
+`sha256:17ee7817898a552875a808c62a7040d6c106fa21b9335718f91c36142745b521`.
+The existing healthy edge image
+`sha256:cf1bd22f2415bc99b785ece1df2c49d32985ac4ac42d84df335be17350593693`
+was retained. Systemd and all three containers are healthy, the approved disk
+UUID is unchanged, and maintenance is off.
+
+The post-deploy read-only verifier passed: 3 SQLite integrity checks, 3
+identities/workspaces, 21 project records, 49 research assets, one verified
+TeX/PDF pair, 10 terminal historical job rows, and 53 accounting rows
+($5.938237 recorded/reserved; all 15 reserved or unknown outcomes retained).
+Public DNS, private-port, redirect, HTTPS/TLS, SPA deep link, same-origin API,
+hosted Google-auth readiness, Google OAuth-start redirect, and anonymous
+`/api/health` (expected 401) passed. Real Chrome showed `Version 0.4.2 · Build
+2cc08b5` and 26 guest samples. Against the deployed UI, the About legal actions
+rendered as transparent underlined text links, the Terms quote was italic, and
+the Home invitation request displayed and retried its text-only `Try again`
+action after a browser-mocked 503; that mocked invitation did not write to the
+production backend. No real Google account was signed in or signed out. The
+exact-target Browser CI passed the guest-sample and sign-out navigation checks;
+a live authenticated account round trip was not performed. No paid inference
+ran.
+
+The previous provider configuration and sponsor provisioning remain unchanged
+from the first v0.4.2 deployment; see that entry for the operator-only action.
+
 ## 2026-11-13 — SIGMA v0.4.2 production deployment complete
 
 PR #846 merged the 0.4.2 release notes/handoff. Version-only PR #848 merged

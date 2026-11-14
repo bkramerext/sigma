@@ -1,5 +1,36 @@
 # SIGMA status
 
+## 2026-11-14 — second SIGMA v0.4.2 deployment complete
+
+The second v0.4.2 cutover deployed exact merged `main` SHA
+`2cc08b5eae6acd661d485878f4ce84ca962786f8` (PRs #850 and #851); no version
+bump was made. The protected release pin, checkout, release record, and
+backend/frontend image labels match this SHA. All three containers and
+systemd are healthy, state UUID is unchanged, and maintenance is off.
+
+GitHub checks ran on the exact target SHA and passed: Ruff, frontend build,
+eight SIGMA shards, two-creator real PDF acceptance, and three Browser
+acceptance jobs including Project Types. The PR #851 head tree differed from
+the merged target tree, so PR-head CI was not reused as proof for this SHA.
+
+A fresh root-only complete state copy was made on the existing boot disk at
+`/var/backups/sigma-state-v042-second-pre-2cc08b5e-20261114T002323Z/state`
+(196 files). Full-tree checksum/metadata comparison and the read-only restore
+verifier view passed. Post-deploy checks found 3 identities/workspaces, 21
+projects, 49 research assets, one verified TeX/PDF pair, 10 terminal job
+rows, and 53 accounting rows ($5.938237 recorded/reserved, including 15
+reserved/unknown outcomes). The full copy retains the three zero-byte
+`provider-slots` lock files; only the verifier view excludes their directory.
+
+Public HTTPS/auth readiness, anonymous API behavior, and real Chrome acceptance
+passed. About shows `Version 0.4.2 · Build 2cc08b5`; 26 guest samples loaded.
+The About legal actions showed transparent underlined styling, the Terms quote
+was italic, and the Home invitation retry remained available after a mocked
+503. The failed invite was intercepted in the browser and did not modify
+production. Exact-target browser CI covered guest sign-in/sign-out navigation;
+no real account was authenticated. No paid inference ran. Detailed evidence is
+in `DEPLOYMENT_HISTORY.md`; the first v0.4.2 deployment record is unchanged.
+
 ## 2026-11-13 — SIGMA v0.4.2 production deployment complete
 
 PR #846 merged the release notes/handoff, and version-only PR #848 passed
