@@ -59,12 +59,16 @@ class CompanionBridgeTests(TestCase):
 
     def test_expired_code_and_disabled_flag(self):
         code = bridge.start_pairing("a")["code"]
-        with patch.object(bridge.time, "monotonic", return_value=time.monotonic() + 500):
-            with self.assertRaises(ProjectError):
-                bridge.redeem(code)
-        with patch.dict(os.environ, {"SIGMA_PERSONAL_COMPANION_ENABLED": "false"}):
-            with self.assertRaises(ProjectError):
-                bridge.start_pairing("a")
+        with (
+            patch.object(bridge.time, "monotonic", return_value=time.monotonic() + 500),
+            self.assertRaises(ProjectError),
+        ):
+            bridge.redeem(code)
+        with (
+            patch.dict(os.environ, {"SIGMA_PERSONAL_COMPANION_ENABLED": "false"}),
+            self.assertRaises(ProjectError),
+        ):
+            bridge.start_pairing("a")
 
 
 if __name__ == "__main__":

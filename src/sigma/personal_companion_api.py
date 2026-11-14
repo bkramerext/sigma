@@ -1,4 +1,5 @@
 """Prototype Personal ChatGPT companion API: no OpenAI token on the server."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -6,7 +7,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from sigma import cloud_auth, personal_companion_bridge as bridge
+from sigma import cloud_auth
+from sigma import personal_companion_bridge as bridge
 from sigma.projects import ProjectError
 
 router = APIRouter(prefix="/api/personal-companion")
@@ -72,8 +74,10 @@ def pair(request: Request) -> dict[str, Any]:
 @router.get("/status")
 def status(request: Request) -> dict[str, Any]:
     subject = _owner(request)
-    return {**bridge.status(subject),
-            "selected_personal": cloud_auth.model_access_for_subject(subject) == "personal"}
+    return {
+        **bridge.status(subject),
+        "selected_personal": cloud_auth.model_access_for_subject(subject) == "personal",
+    }
 
 
 @router.post("/test")
@@ -124,8 +128,9 @@ def worker_next(request: Request) -> dict[str, Any]:
 @router.post("/worker/complete")
 def worker_complete(request: Request, body: Complete) -> dict[str, bool]:
     try:
-        bridge.complete(_bearer(request), body.job_id, result=body.result,
-                        model=body.model, failed=body.failed)
+        bridge.complete(
+            _bearer(request), body.job_id, result=body.result, model=body.model, failed=body.failed
+        )
         return {"ok": True}
     except ProjectError as exc:
         raise HTTPException(403, str(exc)) from exc

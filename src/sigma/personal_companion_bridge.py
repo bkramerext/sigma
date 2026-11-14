@@ -59,7 +59,9 @@ _jobs: dict[str, Job] = {}
 def enabled() -> bool:
     """Explicit per-runtime switch; ordinary local SIGMA is unchanged."""
     return os.environ.get("SIGMA_PERSONAL_COMPANION_ENABLED", "").strip().lower() in {
-        "true", "1", "yes"
+        "true",
+        "1",
+        "yes",
     }
 
 
@@ -168,8 +170,7 @@ def submit(subject: str, prompt: str) -> str:
     job_id = secrets.token_urlsafe(18)
     with _LOCK:
         if any(
-            j.subject == subject and j.status in {"queued", "dispatched"}
-            for j in _jobs.values()
+            j.subject == subject and j.status in {"queued", "dispatched"} for j in _jobs.values()
         ):
             raise ProjectError("A Personal companion test is already in progress.")
         _jobs[job_id] = Job(subject, prompt.strip(), job_id, created=time.monotonic())

@@ -318,7 +318,9 @@ async def auth_context() -> AuthContext:
     # --prod never borrows a preexisting localhost Personal token.
     # Only the separately paired companion can execute Personal test calls.
     if os.environ.get("SIGMA_PERSONAL_COMPANION_ENABLED") == "true":
-        return AuthContext(token="", mode="chatgpt", status="unavailable", identity="companion_required")
+        return AuthContext(
+            token="", mode="chatgpt", status="unavailable", identity="companion_required"
+        )
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
     if mode == "api_key":

@@ -191,7 +191,10 @@ def run_ui(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )
                 if prod:
-                    print("Personal companion pairing enabled on localhost. Pair the separate companion in the UI.", flush=True)
+                    print(
+                        "Personal companion pairing enabled on localhost. Pair the separate companion in the UI.",
+                        flush=True,
+                    )
                 for command in commands:
                     children.append(
                         subprocess.Popen(
