@@ -1008,8 +1008,11 @@ def main() -> None:
                 page.reload(wait_until="domcontentloaded")
                 hosted_pill = page.locator(".api-connection > summary")
                 expect(hosted_pill.get_by_role("status")).to_have_text(
-                    "Personal ChatGPT unavailable", timeout=10000
+                    "Sponsored ChatGPT", timeout=10000
                 )
+                expect(hosted_pill).to_have_class(re.compile("has-sponsored-allowance"))
+                expect(hosted_pill.get_by_role("button", name="Show sponsorship details")).to_be_visible()
+                expect(hosted_pill.locator(".sponsored-allowance-inline")).not_to_have_text("Personal")
                 hosted_pill.click(position={"x": 25, "y": 14})
                 hosted_notice = page.get_by_role(
                     "dialog", name="Personal ChatGPT unavailable in hosted SIGMA"

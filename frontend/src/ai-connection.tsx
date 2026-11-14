@@ -292,16 +292,17 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? sponsoredProviderLabel(cloudFunding?.provider?.provider)
     : 'Sponsored ChatGPT';
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored';
-  const adminSponsored = sponsoredSelected && !!cloudFunding?.sponsorshipUnlimited;
+  // The hosted notice changes the action, never the established sponsored pill layout.
+  const hostedPersonalUnavailable = (hosted || !!cloudFunding?.personalChatGPTNoticePreview) && !!cloudFunding?.authorized
+    && cloudFunding.selectedConnection === 'personal' && !cloudFunding.forcedSponsored;
+  const sponsoredPresentation = sponsoredSelected || hostedPersonalUnavailable;
+  const adminSponsored = sponsoredPresentation && !!cloudFunding?.sponsorshipUnlimited;
   const adminNeedsSponsorProvisioning = !!hosted && adminSponsored
     && (cloudFunding?.provider?.provider === 'api_key'
       || (cloudFunding?.provider?.provider === 'chatgpt'
         && cloudFunding.provider.status !== 'connected'));
-  const hostedPersonalUnavailable = (hosted || !!cloudFunding?.personalChatGPTNoticePreview) && !!cloudFunding?.authorized
-    && cloudFunding.selectedConnection === 'personal' && !cloudFunding.forcedSponsored;
-  const sponsoredPill = hosted
-    ? !!cloudFunding?.authorized && sponsoredSelected
-    : (!!cloudFunding?.authorized && !!cloudFunding.sponsorshipEligible && sponsoredSelected);
+  const sponsoredPill = !!cloudFunding?.authorized && (hostedPersonalUnavailable
+    || (hosted ? sponsoredSelected : !!cloudFunding.sponsorshipEligible && sponsoredSelected));
   const googleRequired = !!cloudFunding?.authenticationEnabled && !cloudFunding.authorized;
   // Keep the ChatGPT credential intact while Google is signed out, but present
   // the pill as unavailable until an authorized Google session returns.
@@ -314,9 +315,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
-  const visibleLabel = hostedPersonalUnavailable
-    ? 'Personal ChatGPT unavailable'
-    : sponsoredPill
+  const visibleLabel = sponsoredPill
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
       : hostedPillLabel
@@ -361,8 +360,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? 'Hosted inference is currently routed to Sponsored OpenAI API key billing. SIGMA does not fall back between providers. To use the designated ChatGPT sponsor, set SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt and provision the sponsor registration using the supported local sign-in and protected VM import flow.'
     : 'Hosted ChatGPT sponsor credentials are not connected. The production HTTPS callback is not a supported ChatGPT sign-in flow. Complete sign-in locally with the designated account, then securely import its protected registration on the VM; SIGMA validates the account and scopes and keeps the VM host ID.';
   const sponsorTooltip = 'SIGMA covers eligible ChatGPT model calls.';
-  const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode required' : ''}${connected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
-  const allowanceText = !sponsoredSelected
+  const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode required' : ''}${connected && sponsoredSelected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
+  const allowanceText = !sponsoredPresentation
     ? 'Personal'
     : adminSponsored
       ? 'No SIGMA cap'

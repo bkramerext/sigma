@@ -21,6 +21,8 @@ For example, use SIGMA's standardized tooltip system, **never native browser too
 
 **If the applicable SIGMA convention is unclear, inconsistent, or missing, ask the user before choosing a UI behavior or appearance.** Do not silently decide on an assumed default.
 
+**The ChatGPT/Google header pills have an established, operator-approved form.** Reuse the existing Sponsored ChatGPT pill implementation and its exact geometry, two-line metadata and interaction affordances. Never invent an alternate pill label, size or layout to explain a provider restriction; put that explanation in the existing standard dialog pattern. Ask the operator before proposing any pill variation.
+
 ## CI failure batching
 
 When running CI, **wait for all workflows and test shards to finish reporting failures** before preparing a correction. Review the complete failure set, fix **all known issues together**, and push **one consolidated batch** rather than pushing a fix after each failure. In particular, collect all Ruff lint and formatting diagnostics, run **both** `ruff check` and `ruff format --check` on the complete patch, and resolve every Ruff finding before the next push. This avoids repeated CI rounds and reduces fix cycle time. Do not launch overlapping CI reruns merely to address individual failures.
