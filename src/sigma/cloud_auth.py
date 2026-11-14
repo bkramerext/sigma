@@ -1757,6 +1757,12 @@ def adopt_window_session(request: Request):
 @router.get("/status")
 def status(request: Request):
     cfg = config()
+    personal_chatgpt_notice_enabled = (
+        cfg.enabled
+        and not cfg.local
+        and os.environ.get("SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED", "").strip().casefold()
+        in {"1", "true", "yes"}
+    )
     local_setup_missing = []
     if not cfg.enabled or cfg.local:
         local_setup_missing = [
@@ -1779,6 +1785,7 @@ def status(request: Request):
             "local_setup_missing": local_setup_missing,
             "authenticated": False,
             "user": None,
+            "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
         }
     account = None
     if principal is not None:
@@ -1810,6 +1817,7 @@ def status(request: Request):
                 "account": None,
                 "admin_contact_email": None,
                 "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
+                "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
             }
     return {
         "enabled": cfg.enabled,
@@ -1827,6 +1835,7 @@ def status(request: Request):
         "account": account,
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
+        "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
     }
 
 

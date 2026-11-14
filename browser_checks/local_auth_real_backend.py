@@ -459,10 +459,7 @@ def main() -> None:
                 assert ("POST", "/api/ai/disconnect") in requests, requests
                 assert ("POST", "/api/ai/mode") in requests, requests
                 pill.hover(position={"x": 25, "y": 15})
-                assert pill.get_attribute("title") == (
-                    "Sponsor Connected · sponsor@example.test · Unlimited. "
-                    "Click to connect your own ChatGPT account."
-                )
+                assert pill.get_attribute("title") == "SIGMA covers eligible ChatGPT model calls."
                 detail = page.locator(".sponsored-allowance-trigger")
                 assert detail.get_attribute("title") == "Click to show sponsorship details."
                 requests.clear()
@@ -996,6 +993,44 @@ def main() -> None:
                 assert action_style["color"] == "rgb(227, 180, 133)", action_style
                 assert abs(action_style["left"] - action_style["textareaLeft"]) < 1, action_style
                 assert action_style["top"] >= action_style["textareaBottom"], action_style
+
+                def hosted_personal_status(route):
+                    response = route.fetch()
+                    status = response.json()
+                    status["target"] = "hosted"
+                    status["personal_chatgpt_notice_enabled"] = True
+                    status["account"]["model_access"]["mode"] = "personal"
+                    route.fulfill(response=response, json=status)
+
+                page.route("**/api/cloud-auth/status", hosted_personal_status)
+                page.reload(wait_until="domcontentloaded")
+                hosted_pill = page.locator(".api-connection > summary")
+                expect(hosted_pill.get_by_role("status")).to_have_text(
+                    "Personal ChatGPT unavailable", timeout=10000
+                )
+                hosted_pill.click(position={"x": 25, "y": 14})
+                hosted_notice = page.get_by_role(
+                    "dialog", name="Personal ChatGPT unavailable in hosted SIGMA"
+                )
+                expect(hosted_notice).to_be_visible()
+                expect(hosted_notice).to_contain_text(
+                    "Unfortunately, Open AI doesn't let us connect using personal accounts while using a hosted application. Installing and running SIGMA locally allows this."
+                )
+                close_notice = hosted_notice.get_by_role(
+                    "button", name="Close Personal ChatGPT information"
+                )
+                close_rect = close_notice.evaluate(
+                    "e => { const d=e.closest('dialog').getBoundingClientRect(); const r=e.getBoundingClientRect(); const s=getComputedStyle(e); return {right:d.right-r.right,top:r.top-d.top,border:s.borderColor}; }"
+                )
+                assert close_rect["right"] >= 8 and close_rect["right"] <= 16, close_rect
+                assert close_rect["top"] >= 8 and close_rect["top"] <= 16, close_rect
+                close_notice.hover()
+                close_hover = close_notice.evaluate(
+                    "e => { const s=getComputedStyle(e); return {background:s.backgroundImage,border:s.borderColor}; }"
+                )
+                assert close_hover["background"] != "none", close_hover
+                close_notice.click()
+                expect(hosted_notice).to_have_count(0)
                 browser.close()
             print(
                 "PASS local Chromium ↔ real SIGMA API: Google sign-in, new and reviewed-request reapplication, invitation/reload admin actions, member approval, feedback identity/removal/action styling, cache headers, and cross-identity workspace isolation"

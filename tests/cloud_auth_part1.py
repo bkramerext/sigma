@@ -21,6 +21,27 @@ class FirstMetadataFailureGoogleClient(GoogleClient):
 
 
 class CloudAuthTests(CloudAuthFixture):
+    def test_hosted_personal_chatgpt_notice_is_explicitly_configurable_and_local_stays_off(self):
+        with patch.dict(os.environ, {"SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": "true"}):
+            hosted = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(hosted["target"], "hosted")
+            self.assertTrue(hosted["personal_chatgpt_notice_enabled"])
+
+            with patch.dict(
+                os.environ,
+                {
+                    "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                    "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+                },
+            ):
+                local = self.client.get("/api/cloud-auth/status").json()
+                self.assertEqual(local["target"], "local")
+                self.assertFalse(local["personal_chatgpt_notice_enabled"])
+
+        with patch.dict(os.environ, {"SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": "false"}):
+            disabled = self.client.get("/api/cloud-auth/status").json()
+            self.assertFalse(disabled["personal_chatgpt_notice_enabled"])
+
     def test_first_signin_retries_cold_oidc_metadata_before_consuming_code(self):
         FirstMetadataFailureGoogleClient.discovery_requests = 0
         FirstMetadataFailureGoogleClient.token_requests = 0

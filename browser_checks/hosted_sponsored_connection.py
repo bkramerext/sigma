@@ -1083,7 +1083,7 @@ def exercise(origin: str) -> None:
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
         expect(sponsored_summary).to_have_attribute(
-            "title", re.compile("Click to connect your own ChatGPT account")
+            "title", "SIGMA covers eligible ChatGPT model calls."
         )
         details = page.get_by_role("button", name="Show sponsorship details")
         details.click()

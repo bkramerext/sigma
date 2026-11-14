@@ -1,5 +1,32 @@
 # SIGMA status
 
+## 2026-11-14 — hosted Personal ChatGPT notice WIP
+
+Added the default-off `SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED` deployment
+flag, exposed it only for hosted cloud-auth status, and wired it through
+`deploy/compose.yaml`. When enabled, clicking the hosted Personal ChatGPT
+unavailable pill opens a centered SIGMA dialog with the requested explanation
+and standard upper-right close control. Sponsored ChatGPT pill hovertext is
+shortened to “SIGMA covers eligible ChatGPT model calls.” The fuller allowance
+details remain available from the separate allowance control.
+
+Focused cloud-auth regression tests (59) passed. Frontend typecheck and
+production build passed; Ruff check/format passed for changed Python/browser
+files. `./sigma test` did not pass: existing `project_collaboration.py` and
+`research_qa.py` suites hit macOS/Python 3.14 temporary-path symlink errors.
+The local browser checks did not reach the new hosted-dialog assertion: the
+real-auth browser flow failed its existing Google-cookie assertion, and the
+local sponsor-pill browser fixture failed an earlier personal-pill tooltip
+assertion. The dialog's real-browser acceptance remains unverified.
+
+The built-in administrator identity issue is not changed in this WIP. The
+existing production auth database binds its bootstrap administrator to Brian's
+Google subject, while `zetacontinuation@gmail.com` is a separate admin. A
+contact-email change alone intentionally preserves that bound bootstrap
+identity. Coordinator handoff requests a safe, explicit transfer to the
+designated zeta identity and regression coverage before deployment. No
+production environment or database was changed.
+
 ## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
 
 Read-only production inspection confirmed runtime pin
