@@ -231,3 +231,28 @@
   }
   .brainstorm-workspace .chat-combined-model-pill { padding-inline: 9px; }
 }
+
+/* Keep the exchange controls and transcript path immediately below the artwork
+   header instead of leaving an empty gutter or burying them after the history. */
+.brainstorm-workspace .chat-page { margin-top: 0; }
+.brainstorm-workspace .chat-session-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 24px;
+  row-gap: 4px;
+  margin: 0 0 14px;
+  padding-top: 4px;
+}
+.brainstorm-workspace .chat-session-toolbar .chat-controls { min-height: 42px; margin: 0; }
+.brainstorm-workspace .chat-session-toolbar .chat-privacy-note {
+  flex: 1 1 300px;
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.brainstorm-workspace .chat-page-header { margin-bottom: 16px; }
+@media (max-width: 900px) {
+  .brainstorm-workspace .chat-session-toolbar .chat-privacy-note { text-align: left; }
+}

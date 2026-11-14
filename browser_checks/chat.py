@@ -128,6 +128,14 @@ with sync_playwright() as playwright:
     assert first.locator("textarea").count() == 0
     assert second.locator("textarea").count() == 0
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
+    toolbar = page.get_by_role("region", name="Brainstorm exchange controls")
+    expect(toolbar).to_be_visible()
+    expect(toolbar).to_contain_text("Transcript file:")
+    assert "Messages are appended" not in toolbar.inner_text()
+    assert toolbar.bounding_box()["y"] < page.locator(".chat-page-header").bounding_box()["y"]
+    assert page.locator(".chat-page").bounding_box()["y"] <= page.locator(".chat-site-header").bounding_box()["height"] + 5
+    repeated = page.get_by_label("Repeated:", exact=True)
+    repeated.fill("Always challenge the assumptions.")
     transcript_filename = page.locator(".chat-privacy-note code")
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120001.md")
     expect(transcript_filename).to_contain_text(".md")
@@ -155,6 +163,7 @@ with sync_playwright() as playwright:
     while time.monotonic() < deadline and not turns:
         page.wait_for_timeout(50)
     assert turns, "The first AI turn was not requested."
+    assert turns[0]["repeated_text"] == "Always challenge the assumptions."
     assert turns[0]["model"] == "gpt-6-luna"
     assert turns[0]["reasoning_effort"] == "medium"
     expect(first.locator(".chat-markdown strong")).to_have_text("formatted")
@@ -173,6 +182,7 @@ with sync_playwright() as playwright:
         for item in turn["messages"]
     ):
         page.wait_for_timeout(100)
+    assert all(turn["repeated_text"] == "Always challenge the assumptions." for turn in turns)
     assert len(turns) >= 2
     assert all(
         turn["speaker"] == ("ai_1" if index % 2 == 0 else "ai_2")

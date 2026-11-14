@@ -132,6 +132,7 @@ def check_service() -> None:
                 expected_binding="api_key",
                 model="gpt-6.1-sol",
                 reasoning_effort="low",
+                repeated_text="Always challenge the assumptions.",
             )
         )
     assert result == "A deterministic reply."
@@ -141,6 +142,9 @@ def check_service() -> None:
     assert captured["payload"]["store"] is False
     assert captured["payload"]["instructions"] == chat.INSTRUCTIONS["ai_1"]
     assert "Human:\nQuestion for the pair." in captured["payload"]["input"][0]["content"]
+    assert captured["payload"]["input"][0]["content"].startswith(
+        "Always challenge the assumptions.\n\nHuman:"
+    )
 
     with patch(
         "sigma.chat.auth_context", new=AsyncMock(return_value={**credential, "identity": "changed"})

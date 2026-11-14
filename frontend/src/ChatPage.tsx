@@ -336,6 +336,17 @@ export default function ChatPage() {
   return <>
   {headerControlsTarget && createPortal(modelThinkingControls, headerControlsTarget)}
   <main className="chat-page">
+    <section className="chat-session-toolbar" aria-label="Brainstorm exchange controls">
+      <div className="chat-controls">
+        {running
+          ? <button type="button" className="chat-stop" onClick={stopConversation}>Stop exchange</button>
+          : <button type="button" className="chat-clear" disabled={!messages.length} onClick={clearConversation}>Clear conversation</button>}
+        <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
+      </div>
+      <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
+    </section>
+    {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
+    {error && <p className="chat-error" role="alert">{error}</p>}
     <header className="chat-page-header">
       <div><p className="chat-eyebrow">Open conversation</p><h1>Brainstorm</h1></div>
       <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
@@ -374,15 +385,6 @@ export default function ChatPage() {
         <strong>{labels[message.speaker]}</strong><MarkdownReply body={message.text}/>
       </li>)}
     </ol>}
-    <div className="chat-controls">
-      {running
-        ? <button type="button" className="chat-stop" onClick={stopConversation}>Stop exchange</button>
-        : <button type="button" className="chat-clear" disabled={!messages.length} onClick={clearConversation}>Clear conversation</button>}
-      <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
-    </div>
-    {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
-    {error && <p className="chat-error" role="alert">{error}</p>}
-    <p className="chat-privacy-note">Messages are appended to a private transcript in SIGMA state and sent to the selected AI provider for each turn. Transcript file: <code>{transcriptPath || 'opening…'}</code>. It is not saved as a SIGMA project.</p>
   </main>
   </>;
 }
