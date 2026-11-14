@@ -32,7 +32,7 @@ function MarkdownReply({ body }: { body: string }) {
   </div>;
 }
 
-export default function ChatPage({ onHome }: { onHome: () => void }) {
+export default function ChatPage() {
   const [config, setConfig] = useState<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -310,7 +310,6 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   {headerControlsTarget && createPortal(modelThinkingControls, headerControlsTarget)}
   <main className="chat-page">
     <header className="chat-page-header">
-      <button type="button" className="chat-home-link" onClick={onHome}>← SIGMA Home</button>
       <div><p className="chat-eyebrow">Open conversation</p><h1>Brainstorm</h1></div>
       <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
     </header>
