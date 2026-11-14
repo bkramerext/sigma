@@ -26,6 +26,7 @@ import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRe
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
+import ChatPage from './ChatPage';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
@@ -6125,8 +6126,8 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -6195,7 +6196,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     void document.fonts.ready.then(() => { if (!disposed) measure(); });
     return () => { disposed = true; observer.disconnect(); };
   }, [projectTitle, hasActivity, projectArtwork]);
-  return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
+  return <header className={`${projectArtwork ? 'site-header project-art-header' : 'site-header'}${chatPage ? ' chat-site-header' : ''}`}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
@@ -6210,7 +6211,12 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {close && projectView && onProjectUpdated ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
-    </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+    </> : chatPage
+      ? <div className="brainstorm-header-pill-stack">
+          {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+          <div className="chat-header-center-slot" aria-label="Brainstorm model and thinking settings"/>
+        </div>
+      : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>} 
     {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
         {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
@@ -8060,11 +8066,12 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   </dialog>;
 }
 
-function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheScope }: {
+function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrainstorm, cacheScope }: {
   initialPath: string;
   onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
+  onBrainstorm: () => void;
   cacheScope: string;
 }) {
   const cloud = useCloudIdentity();
@@ -8180,7 +8187,10 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheSco
           <div ref={homePillsRef} className="home-account-grid">
             <div className="sigma-header-model-column">
               <div className="sigma-header-secondary-row">
-                {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
+                <div className="home-brainstorm-actions">
+                  {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
+                  <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>
+                </div>
                 <div className="sigma-header-about-model-anchor">
                   <div className="sigma-header-first-row">
                     <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" data-tooltip-disabled aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
@@ -9644,10 +9654,13 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
+  if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
+    return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>;
+  }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onBrainstorm={() => navigate('/brainstorm')} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
       await preloadProjectArtwork();
       setArtworkDecoded(true);
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
@@ -9683,10 +9696,10 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; personal_chatgpt_notice_enabled?: boolean; personal_chatgpt_notice_preview?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; personal_chatgpt_notice_enabled?: boolean; personal_chatgpt_notice_preview?: boolean; personal_companion_enabled?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
-type CloudFunding = { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled: boolean; personalChatGPTNoticePreview: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled: boolean; personalChatGPTNoticePreview: boolean; personalCompanionEnabled: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedIdentityAvailable: boolean; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -9707,7 +9720,7 @@ function ConnectedModelPill({ enabled }: { enabled: boolean }) {
   const sponsoredSelected = funding?.selectedConnection === 'sponsored';
   const sponsoredPillVisible = !!funding?.authorized && sponsoredSelected
     && (funding.target === 'hosted' || funding.sponsorshipEligible);
-  const personalConnected = !ai.connecting && !ai.initialLoading && !ai.healthError
+  const personalConnected = !funding?.personalCompanionEnabled && !ai.connecting && !ai.initialLoading && !ai.healthError
     && ai.info?.status === 'connected';
   const visible = sponsoredPillVisible || (!sponsoredSelected && personalConnected);
   return enabled && visible && !googleRequired
@@ -10568,7 +10581,7 @@ function CloudAuthGate() {
     if (!response.ok) throw await cloudFailure(response, 'The simulated provider connection could not be changed.');
     setProviderStatus({ status: next, guidance: 'Simulated local provider status.' });
   }, [providerStatus?.status]);
-  const funding: CloudFunding = { target: status?.target ?? 'local', personalChatGPTNoticeEnabled: !!status?.personal_chatgpt_notice_enabled, personalChatGPTNoticePreview: !!status?.personal_chatgpt_notice_preview, authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
+  const funding: CloudFunding = { target: status?.target ?? 'local', personalChatGPTNoticeEnabled: !!status?.personal_chatgpt_notice_enabled, personalChatGPTNoticePreview: !!status?.personal_chatgpt_notice_preview, personalCompanionEnabled: !!status?.personal_companion_enabled, authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
   useEffect(() => {
     setSponsoredUsageConnection(funding.target === 'hosted' || funding.selectedConnection === 'sponsored');
   }, [funding.target, funding.selectedConnection]);

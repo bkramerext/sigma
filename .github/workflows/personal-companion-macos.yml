@@ -1,0 +1,29 @@
+name: Build standalone SIGMA Personal Companion (prototype)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build standalone macOS executable
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . 'pyinstaller>=6,<7'
+          python -m PyInstaller --noconfirm --clean --onefile --name sigma-personal-companion \
+            --collect-submodules sigma --collect-data sigma src/sigma/personal_companion_cli.py
+      - name: Check packaged CLI
+        run: |
+          ./dist/sigma-personal-companion --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sigma-personal-companion-macos-unsigned-prototype
+          path: dist/sigma-personal-companion
+          retention-days: 7

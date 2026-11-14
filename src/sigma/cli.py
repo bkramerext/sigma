@@ -161,7 +161,7 @@ COMMAND_DETAILS = {
     "start": (
         "Start or safely restart this checkout's browser UI.",
         "./sigma start --prod --signin --navigate",
-        "Uses SIGMA local configuration and the configured UI ports; `--prod` previews the hosted Personal ChatGPT notice locally without connecting to production, changing billing, or disabling local OAuth. `--navigate` opens a browser tab.",
+        "Uses SIGMA local configuration and the configured UI ports; `--prod` enables the localhost companion pairing/model-call prototype without changing normal Personal login or production. `--navigate` opens a browser tab.",
     ),
     "shutdown": (
         "Stop identifiable local SIGMA UI servers safely.",
@@ -320,7 +320,7 @@ def main() -> None:
     ui_command.add_argument(
         "--prod",
         action="store_true",
-        help="Preview hosted Personal ChatGPT notice locally (UI only; no live production routing)",
+        help="Run localhost Personal ChatGPT companion connection prototype",
     )
     ui_command.add_argument(
         "--signin",
@@ -333,6 +333,11 @@ def main() -> None:
         dest="navigate",
         action="store_true",
         help="Open SIGMA in a browser tab after startup",
+    )
+    ui_command.add_argument(
+        "--brainstorm",
+        action="store_true",
+        help="Open Brainstorm in a browser tab (implies --navigate)",
     )
     add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
     for command_parser in commands.choices.values():
@@ -422,11 +427,12 @@ def main() -> None:
     if args.command == "start":
         sys.exit(
             run_ui(
-                navigate=args.navigate,
+                navigate=args.navigate or args.brainstorm,
                 signin=args.signin,
                 mock_auth=args.mock_auth,
                 sponsored=args.sponsored,
                 prod=args.prod,
+                **({"navigate_path": "/brainstorm"} if args.brainstorm else {}),
             )
         )
     if args.command == "shutdown":

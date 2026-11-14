@@ -3206,7 +3206,7 @@ class ApiKeyRequest(BaseModel):
 class ChatMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     speaker: Literal["human", "ai_1", "ai_2"]
-    text: str = Field(min_length=1, max_length=chat.MAX_MESSAGE_CHARS)
+    text: str = Field(min_length=1)
 
 
 class ChatTranscriptMessageRequest(ChatMessageRequest):
@@ -3225,7 +3225,7 @@ class ChatTurnRequest(BaseModel):
     messages: list[ChatMessageRequest] = Field(min_length=1, max_length=chat.MAX_MESSAGES)
     model: str = Field(min_length=1, max_length=100)
     reasoning_effort: Literal["low", "medium", "high", "xhigh"]
-    repeated_text: str = Field(default="", max_length=chat.MAX_REPEATED_TEXT_CHARS)
+    repeated_text: str = ""
 
 
 @app.post("/api/chat/session")
@@ -3289,6 +3289,8 @@ async def chat_turn_view(body: ChatTurnRequest):
 
 @app.post("/api/ai/auth/begin")
 async def auth_begin(body: AuthBeginRequest):
+    if cloud_auth.config().local and os.environ.get("SIGMA_PERSONAL_COMPANION_ENABLED") == "true":
+        raise HTTPException(409, "Connect Personal ChatGPT using the separate SIGMA Companion.")
     # This route always operates on the authenticated user's personal store.
     # Sponsor maintenance has its own admin-only endpoint; email equality does
     # not change credential ownership or OAuth intent.

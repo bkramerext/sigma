@@ -107,6 +107,7 @@ def run_ui(
     mock_auth: bool = False,
     sponsored: bool = False,
     prod: bool = False,
+    navigate_path: str = "/",
 ) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
@@ -122,6 +123,9 @@ def run_ui(
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
+        if navigate_path not in {"/", "/brainstorm"}:
+            print("Invalid SIGMA navigation destination.", file=sys.stderr)
+            return 2
         load_local_config()
         if warning := local_google_configuration_warning():
             print(warning, file=sys.stderr, flush=True)
@@ -178,16 +182,16 @@ def run_ui(
                 child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
-                # A presentation-only rehearsal. Authentication, credentials and inference stay local.
-                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "true" if prod else "false"
-                child_env["SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED"] = (
-                    "true" if prod else "false"
-                )
+                # Developer-only local rehearsal of the production companion protocol.
+                # The separate companion owns all Personal ChatGPT credentials.
+                child_env["SIGMA_PERSONAL_COMPANION_ENABLED"] = "true" if prod else "false"
+                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "false"
+                child_env["SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED"] = "false"
                 child_env.setdefault(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )
                 if prod:
-                    print("Previewing hosted Personal ChatGPT notice (local UI only).", flush=True)
+                    print("Personal companion pairing enabled on localhost. Pair the separate companion in the UI.", flush=True)
                 for command in commands:
                     children.append(
                         subprocess.Popen(
@@ -241,11 +245,14 @@ def run_ui(
                             announced = True
                             instance.unlock()
                             if navigate:
+                                destination = URL
+                                if navigate_path != "/":
+                                    destination = URL.rstrip("/") + navigate_path
                                 try:
-                                    if not webbrowser.open(URL, new=2):
-                                        print(f"Open {URL} in your browser.", flush=True)
+                                    if not webbrowser.open(destination, new=2):
+                                        print(f"Open {destination} in your browser.", flush=True)
                                 except (OSError, webbrowser.Error):
-                                    print(f"Open {URL} in your browser.", flush=True)
+                                    print(f"Open {destination} in your browser.", flush=True)
                             else:
                                 print(
                                     f"Use your existing browser tab at {URL} (reload if needed).",

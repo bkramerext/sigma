@@ -875,6 +875,7 @@ def set_model_access(subject: str, mode: str) -> None:
             and eligibility is not None
             and eligibility["sponsorship_eligible"]
             and not eligibility["personal_authorized"]
+            and not (cfg.local and os.environ.get("SIGMA_PERSONAL_COMPANION_ENABLED") == "true")
         ):
             # A mode flag is not evidence of OAuth. This subject-bound record
             # is written only after a successful local OAuth callback with plan
@@ -1757,6 +1758,9 @@ def adopt_window_session(request: Request):
 @router.get("/status")
 def status(request: Request):
     cfg = config()
+    personal_companion_enabled = (
+        cfg.enabled and cfg.local and os.environ.get("SIGMA_PERSONAL_COMPANION_ENABLED") == "true"
+    )
     # --prod previews this notice on localhost without changing any hosted
     # authentication, server origin, provider routing, or spending behavior.
     personal_chatgpt_notice_preview = cfg.local and os.environ.get(
@@ -1792,6 +1796,7 @@ def status(request: Request):
             "user": None,
             "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
             "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
+            "personal_companion_enabled": personal_companion_enabled,
         }
     account = None
     if principal is not None:
@@ -1825,6 +1830,7 @@ def status(request: Request):
                 "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
                 "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
                 "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
+                "personal_companion_enabled": personal_companion_enabled,
             }
     return {
         "enabled": cfg.enabled,
@@ -1844,6 +1850,7 @@ def status(request: Request):
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
         "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
         "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
+        "personal_companion_enabled": personal_companion_enabled,
     }
 
 

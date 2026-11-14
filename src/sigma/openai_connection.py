@@ -315,6 +315,10 @@ async def auth_context() -> AuthContext:
     ):
         workspace = cloud_workspaces.workspace_for_subject(local_principal.subject)
         return await _cloud_sponsored_context(workspace.subject_hash)
+    # --prod never borrows a preexisting localhost Personal token.
+    # Only the separately paired companion can execute Personal test calls.
+    if os.environ.get("SIGMA_PERSONAL_COMPANION_ENABLED") == "true":
+        return AuthContext(token="", mode="chatgpt", status="unavailable", identity="companion_required")
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
     if mode == "api_key":

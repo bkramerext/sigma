@@ -4,6 +4,7 @@ import { windowAuthUrl } from './window-auth';
 import { sponsoredProviderLabel, type SponsoredInferenceProvider } from './provider-usage-guidance';
 import { reportRequestFailure } from './request-toast';
 import DialogDismissButton from './DialogDismissButton';
+import PersonalCompanionLab from './PersonalCompanionLab';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; sponsor_account_selected?: boolean; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
 type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; sponsor?: boolean; signal?: AbortSignal };
@@ -280,11 +281,24 @@ function HostedPersonalChatGPTNotice({ open, onClose }: { open: boolean; onClose
   </dialog>;
 }
 
-export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
+export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalCompanionEnabled?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
+  const [personalCompanionOpen, setPersonalCompanionOpen] = useState(false);
+  const [companionReady, setCompanionReady] = useState(false);
+  useEffect(() => {
+    if (!cloudFunding?.personalCompanionEnabled || !cloudFunding.authorized) return;
+    let active = true;
+    const check = () => { void fetch('/api/personal-companion/status', { credentials: 'same-origin', cache: 'no-store' })
+      .then(response => response.ok ? response.json() as Promise<{ ready: boolean }> : Promise.reject())
+      .then(value => { if (active) setCompanionReady(value.ready); })
+      .catch(() => { if (active) setCompanionReady(false); }); };
+    check();
+    const timer = window.setInterval(check, 3000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [cloudFunding?.personalCompanionEnabled, cloudFunding?.authorized]);
   const pillTrigger = useRef<HTMLElement>(null);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
@@ -313,8 +327,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const forcedSponsored = !!cloudFunding?.forcedSponsored && !!cloudFunding?.authorized;
   const connected = (hosted ? hostedConnected : simulatedSponsored
     ? sponsoredPill && sponsoredSelected && cloudFunding?.provider?.status === 'connected'
+    : cloudFunding?.personalCompanionEnabled && !sponsoredSelected ? companionReady
     : status === 'connected') && !googleRequired;
-  const disabled = (!hosted && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection;
+  const disabled = (!hosted && !cloudFunding?.personalCompanionEnabled && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection;
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
@@ -418,7 +433,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen}>
-    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (hostedPersonalUnavailable && cloudFunding?.personalChatGPTNoticeEnabled) { setPersonalHostedNoticeOpen(true); return; } if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled || (connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (cloudFunding?.personalCompanionEnabled) { if (sponsoredSelected) { void cloudFunding.selectConnection?.('personal').then(() => setPersonalCompanionOpen(true)).catch(() => undefined); } else setPersonalCompanionOpen(true); return; } if (hostedPersonalUnavailable && cloudFunding?.personalChatGPTNoticeEnabled) { setPersonalHostedNoticeOpen(true); return; } if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
@@ -430,6 +445,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       <button type="button" className="connection-text-action" onClick={() => setSponsorProvisioningHelpOpen(false)}>Dismiss</button>
     </div>}
   </details>
+  <PersonalCompanionLab open={personalCompanionOpen} onClose={() => setPersonalCompanionOpen(false)}/>
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
     setPersonalHostedNoticeOpen(false);
     window.requestAnimationFrame(() => pillTrigger.current?.focus());
