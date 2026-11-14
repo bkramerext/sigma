@@ -126,7 +126,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   }
 
   useEffect(() => {
-    document.title = 'Chat · SIGMA';
+    document.title = 'Brainstorm · SIGMA';
     setHeaderControlsTarget(document.querySelector<HTMLElement>('.chat-site-header .chat-header-center-slot'));
     const controller = new AbortController();
     void refreshConfig(controller.signal);
@@ -281,7 +281,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
 
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
   const modelControlHint = !config
-    ? error || 'Chat settings are loading.'
+    ? error || 'Brainstorm settings are loading.'
     : !config.available
       ? config.message || 'Connect an AI account to enable model selection.'
       : running
@@ -297,7 +297,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   const canSend = !!config?.available && !!conversationId && !error.startsWith('The chat contains too many messages')
     && !!draft.trim() && draft.trim().length <= (config?.max_message_characters ?? 0);
 
-  const modelThinkingControls = <div className="chat-model-controls chat-header-model-controls" aria-label="Chat model and thinking controls">
+  const modelThinkingControls = <div className="chat-model-controls chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
     <button type="button" className="chat-control-pill" aria-label={`Model ${config?.model ?? 'loading'}`} data-tooltip={modelControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleModel}>
       Model · {config?.model ?? 'Loading'}
     </button>
@@ -311,7 +311,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   <main className="chat-page">
     <header className="chat-page-header">
       <button type="button" className="chat-home-link" onClick={onHome}>← SIGMA Home</button>
-      <div><p className="chat-eyebrow">Open conversation</p><h1>Two AI chat</h1></div>
+      <div><p className="chat-eyebrow">Open conversation</p><h1>Brainstorm</h1></div>
       <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
     </header>
     <section className="chat-repeated-prompt" aria-label="Repeated text">
@@ -354,7 +354,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
         : <button type="button" className="chat-clear" disabled={!messages.length} onClick={clearConversation}>Clear conversation</button>}
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
     </div>
-    {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start chatting.'}</p>}
+    {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
     <p className="chat-privacy-note">Messages are appended to a private transcript in SIGMA state and sent to the selected AI provider for each turn. Transcript file: <code>{transcriptPath || 'opening…'}</code>. It is not saved as a SIGMA project.</p>
   </main>
