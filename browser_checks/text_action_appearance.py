@@ -120,7 +120,9 @@ def main():
         invite = page.get_by_role("button", name="Invite me!", exact=True)
         expect(invite).to_be_visible()
         invite.click()
-        expect(page.get_by_role("alert")).to_contain_text("Temporary invitation request failure.")
+        expect(page.locator(".home-right-actions [role=alert]")).to_contain_text(
+            "Temporary invitation request failure."
+        )
         retry = page.get_by_role("button", name="Try again", exact=True)
         expect(retry).to_be_visible()
         assert_link_appearance(retry, color="rgb(224, 196, 160)")
