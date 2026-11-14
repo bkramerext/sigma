@@ -121,12 +121,10 @@ with sync_playwright() as playwright:
     expect(first).to_be_visible()
     expect(second).to_be_visible()
     expect(
-        page.locator(".chat-site-header .chat-header-center-slot .chat-header-model-controls")
+        page.locator(".chat-site-header .header-controls .chat-header-center-slot .chat-header-model-controls")
     ).to_be_visible()
     assert page.locator(".chat-page-header .chat-model-controls").count() == 0
-    assert (
-        page.locator(".chat-site-header .header-controls .chat-header-model-controls").count() == 0
-    )
+    assert page.locator(".chat-site-header .chat-header-model-controls button").count() == 1
     assert first.locator("textarea").count() == 0
     assert second.locator("textarea").count() == 0
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
@@ -134,12 +132,21 @@ with sync_playwright() as playwright:
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120001.md")
     expect(transcript_filename).to_contain_text(".md")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_visible()
-    model_pill = page.get_by_role("button", name="Model gpt-6.1-sol")
-    thinking_pill = page.get_by_role("button", name="Thinking level Low")
-    model_pill.click()
-    expect(page.get_by_role("button", name="Model gpt-6-luna")).to_be_visible()
-    thinking_pill.click()
-    expect(page.get_by_role("button", name="Thinking level Medium")).to_be_visible()
+    model_pill = page.locator(".chat-combined-model-pill")
+    expect(model_pill).to_contain_text("GPT-6.1-Sol")
+    expect(model_pill).to_contain_text("Thinking · Low")
+    model_pill.click(position={"x": 12, "y": 8})
+    expect(model_pill).to_contain_text("GPT-6-Luna")
+    bounds = model_pill.bounding_box()
+    assert bounds is not None
+    model_pill.click(position={"x": 12, "y": int(bounds["height"]) - 8})
+    expect(model_pill).to_contain_text("Thinking · Medium")
+    connection = page.locator(".chat-site-header .header-controls .api-connection")
+    connection_bounds = connection.bounding_box()
+    model_bounds = model_pill.bounding_box()
+    assert connection_bounds and model_bounds
+    assert connection_bounds["x"] + connection_bounds["width"] < model_bounds["x"]
+    assert abs((connection_bounds["y"] + connection_bounds["height"] / 2) - (model_bounds["y"] + model_bounds["height"] / 2)) < 8
 
     human.fill("Start the two-agent exchange.")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_enabled()

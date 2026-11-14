@@ -1,5 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { ScrollingLabel } from './GlobalModelPill';
+import { modelDisplayLabel } from './model-display';
 import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
@@ -45,6 +47,8 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState('');
   const [transcriptPath, setTranscriptPath] = useState('');
   const [headerControlsTarget, setHeaderControlsTarget] = useState<HTMLElement | null>(null);
+  const [modelCycleRevision, setModelCycleRevision] = useState(0);
+  const [thinkingCycleRevision, setThinkingCycleRevision] = useState(0);
   const messagesRef = useRef<ChatMessage[]>([]);
   const runningRef = useRef(false);
   const runId = useRef(0);
@@ -80,6 +84,7 @@ export default function ChatPage() {
     if (!next) return;
     setConfig({ ...config, model: next.id,
       reasoning_effort: next.efforts.includes(config.reasoning_effort) ? config.reasoning_effort : next.efforts[0] });
+    setModelCycleRevision(revision => revision + 1);
   }
 
   function cycleThinking() {
@@ -87,7 +92,10 @@ export default function ChatPage() {
     const efforts = config.models.find(item => item.id === config.model)?.efforts ?? [];
     const index = efforts.indexOf(config.reasoning_effort);
     const next = efforts[(index + 1 + efforts.length) % efforts.length];
-    if (next) setConfig({ ...config, reasoning_effort: next });
+    if (next) {
+      setConfig({ ...config, reasoning_effort: next });
+      setThinkingCycleRevision(revision => revision + 1);
+    }
   }
 
   const openTranscript = useCallback(async (signal?: AbortSignal) => {
@@ -297,12 +305,31 @@ export default function ChatPage() {
   const canSend = !!config?.available && !!conversationId && !error.startsWith('The chat contains too many messages')
     && !!draft.trim() && draft.trim().length <= (config?.max_message_characters ?? 0);
 
+  const selectedModel = config?.models.find(item => item.id === config.model);
+  const displayedModel = selectedModel ? modelDisplayLabel(selectedModel) : config?.model ?? 'Loading';
+  const displayedThinking = thinkingLabels[config?.reasoning_effort ?? 'low'];
+  const selectionDisabled = !config?.available || !config.models.length || running;
   const modelThinkingControls = <div className="chat-model-controls chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
-    <button type="button" className="chat-control-pill" aria-label={`Model ${config?.model ?? 'loading'}`} data-tooltip={modelControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleModel}>
-      Model · {config?.model ?? 'Loading'}
-    </button>
-    <button type="button" className="chat-control-pill" aria-label={`Thinking level ${thinkingLabels[config?.reasoning_effort ?? 'low']}`} data-tooltip={thinkingControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleThinking}>
-      Thinking · {thinkingLabels[config?.reasoning_effort ?? 'low']}
+    <button type="button" className="global-model-pill chat-combined-model-pill"
+      aria-label={`Model ${displayedModel}, Thinking ${displayedThinking}`}
+      data-tooltip={`${modelControlHint} ${thinkingControlHint} Click the upper half to cycle models; click the lower half to cycle thinking levels.`}
+      disabled={selectionDisabled}
+      onClick={event => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.clientY >= rect.top + rect.height / 2) cycleThinking();
+        else cycleModel();
+      }}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
+      }}>
+      <span className="global-model-pill-current">
+        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${displayedModel}`} direction="forward" userCycleRevision={modelCycleRevision}/>
+        <ScrollingLabel className="global-model-pill-secondary" value={`Thinking · ${displayedThinking}`} direction="forward" userCycleRevision={thinkingCycleRevision}/>
+      </span>
+      <span className="global-model-pill-max-labels" aria-hidden="true">
+        <span>Model · GPT-6-Astra · $$$</span>
+        <span>Thinking · Extra High</span>
+      </span>
     </button>
   </div>;
 

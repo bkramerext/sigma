@@ -159,3 +159,75 @@
   .brainstorm-workspace .chat-page-header > div,
   .brainstorm-workspace .chat-description { grid-column: 1; justify-self: start; text-align: left; }
 }
+
+/* Match the Home/Project header: one right-justified row, with the combined
+   rotating Model/Thinking pill to the right of the existing ChatGPT pill. */
+.workspace-page.brainstorm-workspace .project-art-header .header-controls {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  width: auto;
+  margin-left: auto;
+  padding-top: 6px;
+}
+.brainstorm-workspace .chat-site-header .chat-header-center-slot {
+  position: static;
+  display: flex;
+  flex: 0 0 auto;
+  order: initial;
+  align-items: center;
+  justify-content: flex-end;
+  width: auto;
+  transform: none;
+}
+.brainstorm-workspace .chat-site-header .chat-header-model-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  width: auto;
+}
+.brainstorm-workspace .chat-combined-model-pill {
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: auto;
+  justify-items: stretch;
+  min-width: 0;
+  max-width: none;
+  padding: 8px 12px;
+  color: var(--sigma-copper-foreground);
+  text-align: left;
+}
+.brainstorm-workspace .chat-combined-model-pill > .global-model-pill-current,
+.brainstorm-workspace .chat-combined-model-pill > .global-model-pill-max-labels {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.35;
+  text-align: left;
+}
+.brainstorm-workspace .chat-combined-model-pill > .global-model-pill-max-labels {
+  visibility: hidden;
+  pointer-events: none;
+}
+.brainstorm-workspace .chat-combined-model-pill .global-model-pill-slide-viewport {
+  width: 100%;
+  height: 1.35em;
+  text-align: left;
+}
+.brainstorm-workspace .chat-combined-model-pill .global-model-pill-slide-static,
+.brainstorm-workspace .chat-combined-model-pill .global-model-pill-slide-pair > span {
+  text-align: left;
+}
+@media (max-width: 700px) {
+  .workspace-page.brainstorm-workspace .project-art-header .header-controls {
+    column-gap: var(--identity-pill-gap);
+  }
+  .brainstorm-workspace .chat-combined-model-pill { padding-inline: 9px; }
+}
