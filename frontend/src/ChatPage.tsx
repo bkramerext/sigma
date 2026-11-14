@@ -36,6 +36,8 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   const [config, setConfig] = useState<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [repeatedText, setRepeatedText] = useState('');
+  const repeatedTextRef = useRef('');
   const [running, setRunning] = useState(false);
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
@@ -160,6 +162,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
         messages: history.slice(-settings.max_messages),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
+        repeated_text: repeatedTextRef.current,
       }),
     });
     if (!response.ok) {
@@ -311,6 +314,15 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       <div><p className="chat-eyebrow">Open conversation</p><h1>Two AI chat</h1></div>
       <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
     </header>
+    <section className="chat-repeated-prompt" aria-label="Repeated text">
+      <label htmlFor="chat-repeated-text">Repeated:</label>
+      <textarea id="chat-repeated-text" value={repeatedText}
+        onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
+        placeholder="Optional text to include at the start of every AI turn…"
+        maxLength={8000} />
+      <p>Tip: this text is prepended to every AI #1 and AI #2 request, including later turns after a human message.</p>
+      <small>{repeatedText.length}/8000 characters</small>
+    </section>
     <section className="chat-boxes" aria-label="Conversation participants">
       <form className="chat-box chat-human" onSubmit={sendHuman}>
         <label htmlFor="chat-human-message">Human</label>

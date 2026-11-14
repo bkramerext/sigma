@@ -16,6 +16,7 @@ from sigma.projects import ProjectError
 
 MAX_MESSAGES = 80
 MAX_MESSAGE_CHARS = 8000
+MAX_REPEATED_TEXT_CHARS = 8000
 MAX_CONTEXT_CHARS = 48000
 MAX_OUTPUT_TOKENS = 1200
 TIMEOUT_SECONDS = 60
@@ -131,6 +132,7 @@ async def respond(
     expected_binding: str,
     model: str,
     reasoning_effort: str,
+    repeated_text: str = "",
 ) -> str:
     """Generate one bounded agent turn and account hosted sponsored usage."""
     if len(messages) > MAX_MESSAGES or not messages:
@@ -145,6 +147,8 @@ async def respond(
         for item in messages
     ):
         raise ProjectError("A chat message is empty or exceeds the 8,000-character limit.")
+    if not isinstance(repeated_text, str) or len(repeated_text) > MAX_REPEATED_TEXT_CHARS:
+        raise ProjectError("Repeated text exceeds the 8,000-character limit.")
 
     credential = await auth_context()
     if not credential["token"] or credential["status"] != "connected":
@@ -174,7 +178,16 @@ async def respond(
         "max_output_tokens": MAX_OUTPUT_TOKENS,
         "reasoning": {"effort": reasoning_effort},
         "instructions": INSTRUCTIONS[speaker],
-        "input": [{"role": "user", "content": transcript}],
+        "input": [
+            {
+                "role": "user",
+                "content": (
+                    f"{repeated_text.strip()}\n\n{transcript}"
+                    if repeated_text.strip()
+                    else transcript
+                ),
+            }
+        ],
     }
     if credential["mode"] == "chatgpt":
         payload.pop("max_output_tokens")
