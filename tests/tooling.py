@@ -273,6 +273,29 @@ def check_start_cli() -> None:
     launch.assert_called_once_with(
         navigate=False, signin=False, mock_auth=False, sponsored=False, prod=True
     )
+    for flags, prod in (
+        (["--brainstorm"], False),
+        (["--brainstorm", "--navigate"], False),
+        (["--brainstorm", "--prod"], True),
+    ):
+        with (
+            patch("sys.argv", ["sigma", "start", *flags]),
+            patch("sigma.cli.run_ui", return_value=0) as launch,
+        ):
+            try:
+                cli_main()
+            except SystemExit as exc:
+                assert exc.code == 0
+            else:
+                raise AssertionError("start --brainstorm did not exit")
+        launch.assert_called_once_with(
+            navigate=True,
+            navigate_path="/brainstorm",
+            signin=False,
+            mock_auth=False,
+            sponsored=False,
+            prod=prod,
+        )
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
         try:
@@ -283,6 +306,7 @@ def check_start_cli() -> None:
             raise AssertionError("start --help did not exit")
     help_text = output.getvalue()
     assert "--nav" in help_text and "--navigate" in help_text
+    assert "--brainstorm" in help_text
     assert "--admin" not in help_text and "--google-auth" not in help_text
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--admin"]), redirect_stderr(output):

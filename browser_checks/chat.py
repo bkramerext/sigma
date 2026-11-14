@@ -107,33 +107,126 @@ with sync_playwright() as playwright:
         route.continue_()
 
     page.route("**/api/**", respond)
-    page.goto(ORIGIN + "/chat", wait_until="networkidle")
+    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
+    expect(page.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(page.locator(".project-art-header .project-header-art")).to_be_visible()
+    assert page.locator(".chat-home-link").count() == 0
+    page.locator(".project-art-header .project-header-art").click()
+    expect(page).to_have_url(ORIGIN + "/")
+    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
     human = page.get_by_label("Human", exact=True)
     first = page.get_by_role("region", name="AI #1 latest reply")
     second = page.get_by_role("region", name="AI #2 latest reply")
     expect(human).to_be_visible()
     expect(first).to_be_visible()
     expect(second).to_be_visible()
-    expect(
-        page.locator(".chat-site-header .chat-header-center-slot .chat-header-model-controls")
-    ).to_be_visible()
+    expect(page.locator(".chat-header-model-controls .global-model-pill")).to_be_visible()
     assert page.locator(".chat-page-header .chat-model-controls").count() == 0
-    assert (
-        page.locator(".chat-site-header .header-controls .chat-header-model-controls").count() == 0
-    )
+    assert page.locator(".chat-site-header .chat-header-model-controls button").count() == 1
     assert first.locator("textarea").count() == 0
     assert second.locator("textarea").count() == 0
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
+    toolbar = page.get_by_role("region", name="Brainstorm exchange controls")
+    expect(toolbar).to_be_visible()
+    metadata = page.locator(".chat-privacy-note")
+    expect(metadata).to_contain_text("Transcript file:")
+    assert "Messages are appended" not in metadata.inner_text()
+    title_bounds = page.locator(".chat-page-header").bounding_box()
+    metadata_bounds = metadata.bounding_box()
+    repeated = page.get_by_label("Repeated:", exact=True)
+    repeated_bounds = repeated.bounding_box()
+    human_bounds = human.bounding_box()
+    toolbar_bounds = toolbar.bounding_box()
+    first_bounds = first.bounding_box()
+    second_bounds = second.bounding_box()
+    page_bounds = page.locator(".chat-page").bounding_box()
+    assert all(
+        bounds is not None
+        for bounds in (
+            title_bounds,
+            metadata_bounds,
+            repeated_bounds,
+            human_bounds,
+            toolbar_bounds,
+            first_bounds,
+            second_bounds,
+            page_bounds,
+        )
+    )
+    assert (
+        title_bounds["y"]
+        < metadata_bounds["y"]
+        < repeated_bounds["y"]
+        < human_bounds["y"]
+        < toolbar_bounds["y"]
+        < first_bounds["y"]
+    )
+    assert repeated_bounds["width"] >= page_bounds["width"] - 4
+    assert human_bounds["width"] >= page_bounds["width"] - 4
+    assert abs(first_bounds["y"] - second_bounds["y"]) < 2
+    assert first_bounds["x"] < second_bounds["x"]
+    assert first_bounds["width"] >= page_bounds["width"] * 0.40
+    assert second_bounds["width"] >= page_bounds["width"] * 0.40
+    assert abs(first_bounds["x"] - page_bounds["x"]) < 3
+    assert (
+        abs(
+            (second_bounds["x"] + second_bounds["width"])
+            - (page_bounds["x"] + page_bounds["width"])
+        )
+        < 3
+    )
+    assert repeated.get_attribute("rows") == "2"
+    assert human.get_attribute("rows") == "2"
+    assert repeated.get_attribute("maxlength") is None
+    assert human.get_attribute("maxlength") is None
+    assert page.locator(".chat-field-heading small").count() == 0
+    repeated.fill("R" * 8100)
+    assert len(repeated.input_value()) == 8100
+    human.fill("H" * 8100)
+    assert len(human.input_value()) == 8100
+    human.fill("")
+    repeated.fill("A")
+    narrow_bounds = repeated.bounding_box()
+    repeated.fill("Always challenge the assumptions.")
+    filled_bounds = repeated.bounding_box()
+    assert narrow_bounds is not None and filled_bounds is not None
+    assert abs(narrow_bounds["width"] - filled_bounds["width"]) < 1
+    assert abs(narrow_bounds["x"] - filled_bounds["x"]) < 1
     transcript_filename = page.locator(".chat-privacy-note code")
-    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120001.md")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120002.md")
     expect(transcript_filename).to_contain_text(".md")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_visible()
-    model_pill = page.get_by_role("button", name="Model gpt-6.1-sol")
-    thinking_pill = page.get_by_role("button", name="Thinking level Low")
-    model_pill.click()
-    expect(page.get_by_role("button", name="Model gpt-6-luna")).to_be_visible()
-    thinking_pill.click()
-    expect(page.get_by_role("button", name="Thinking level Medium")).to_be_visible()
+    model_pill = page.locator(".chat-header-model-controls .global-model-pill")
+    expect(model_pill).to_contain_text("GPT-6.1-Sol")
+    expect(model_pill).to_contain_text("Thinking · Low")
+    model_pill.click(position={"x": 12, "y": 8})
+    expect(model_pill).to_contain_text("GPT-6-Luna")
+    bounds = model_pill.bounding_box()
+    assert bounds is not None
+    model_pill.click(position={"x": 12, "y": int(bounds["height"]) - 8})
+    expect(model_pill).to_contain_text("Thinking · Medium")
+    connection = page.locator(".chat-site-header .header-controls .api-connection")
+    connection_bounds = connection.locator("summary").bounding_box()
+    model_bounds = model_pill.bounding_box()
+    assert connection_bounds and model_bounds
+    assert (
+        abs(
+            (connection_bounds["x"] + connection_bounds["width"])
+            - (model_bounds["x"] + model_bounds["width"])
+        )
+        < 3
+    ), (connection_bounds, model_bounds)
+    assert connection_bounds["y"] + connection_bounds["height"] < model_bounds["y"]
+    assert abs(model_bounds["y"] - (connection_bounds["y"] + connection_bounds["height"]) - 12) < 6
+    header_bounds = page.locator(".chat-site-header").bounding_box()
+    assert header_bounds is not None
+    right_inset = page.viewport_size["width"] - (model_bounds["x"] + model_bounds["width"])
+    top_inset = connection_bounds["y"] - header_bounds["y"]
+    bottom_inset = (
+        header_bounds["y"] + header_bounds["height"] - model_bounds["y"] - model_bounds["height"]
+    )
+    assert abs(right_inset - top_inset) < 6
+    assert abs(bottom_inset - top_inset) < 14
 
     human.fill("Start the two-agent exchange.")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_enabled()
@@ -142,12 +235,30 @@ with sync_playwright() as playwright:
     while time.monotonic() < deadline and not turns:
         page.wait_for_timeout(50)
     assert turns, "The first AI turn was not requested."
+    assert turns[0]["repeated_text"] == "Always challenge the assumptions."
     assert turns[0]["model"] == "gpt-6-luna"
     assert turns[0]["reasoning_effort"] == "medium"
     expect(first.locator(".chat-markdown strong")).to_have_text("formatted")
     expect(first.locator(".katex")).to_be_visible()
     expect(second.locator(".chat-markdown strong")).to_have_text("formatted")
 
+    before_repeated_edit = len(turns)
+    human_messages_before = sum(message["speaker"] == "human" for message in transcript_messages)
+    repeated.fill("New instruction applies without a Human message.")
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any(
+        turn["repeated_text"] == "New instruction applies without a Human message."
+        for turn in turns[before_repeated_edit:]
+    ):
+        page.wait_for_timeout(100)
+    assert any(
+        turn["repeated_text"] == "New instruction applies without a Human message."
+        for turn in turns[before_repeated_edit:]
+    )
+    assert (
+        sum(message["speaker"] == "human" for message in transcript_messages)
+        == human_messages_before
+    )
     before_intervention = len(turns)
     human.fill("Human intervention: focus on the counterexample.")
     page.get_by_role("button", name="Send", exact=True).click()
@@ -160,6 +271,11 @@ with sync_playwright() as playwright:
         for item in turn["messages"]
     ):
         page.wait_for_timeout(100)
+    assert turns[0]["repeated_text"] == "Always challenge the assumptions."
+    assert all(
+        turn["repeated_text"] == "New instruction applies without a Human message."
+        for turn in turns[before_intervention:]
+    )
     assert len(turns) >= 2
     assert all(
         turn["speaker"] == ("ai_1" if index % 2 == 0 else "ai_2")
@@ -172,7 +288,7 @@ with sync_playwright() as playwright:
         for item in turn["messages"]
     )
     page.get_by_role("button", name="Stop exchange", exact=True).click()
-    expect(page.get_by_role("button", name="Clear conversation", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Clear", exact=True)).to_be_enabled()
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
     history = page.get_by_role("list", name="Conversation history")
     assert history.locator("li").count() >= 4
@@ -191,10 +307,10 @@ with sync_playwright() as playwright:
         and message["text"] == "Human intervention: focus on the counterexample."
         for message in transcript_messages
     )
-    assert session_calls == 1
-    page.get_by_role("button", name="Clear conversation", exact=True).click()
-    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120002.md")
     assert session_calls == 2
+    page.get_by_role("button", name="Clear", exact=True).click()
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120003.md")
+    assert session_calls == 3
     assert not errors, errors
     assert config_calls >= 1
     browser.close()

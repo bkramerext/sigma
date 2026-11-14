@@ -15,8 +15,6 @@ from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError
 
 MAX_MESSAGES = 80
-MAX_MESSAGE_CHARS = 8000
-MAX_REPEATED_TEXT_CHARS = 8000
 MAX_CONTEXT_CHARS = 48000
 MAX_OUTPUT_TOKENS = 1200
 TIMEOUT_SECONDS = 60
@@ -73,7 +71,6 @@ async def configuration() -> dict[str, Any]:
         "models": choices,
         "reasoning_effort": "low",
         "max_messages": MAX_MESSAGES,
-        "max_message_characters": MAX_MESSAGE_CHARS,
     }
 
 
@@ -143,12 +140,11 @@ async def respond(
         item.get("speaker") not in {"human", "ai_1", "ai_2"}
         or not isinstance(item.get("text"), str)
         or not item["text"].strip()
-        or len(item["text"]) > MAX_MESSAGE_CHARS
         for item in messages
     ):
-        raise ProjectError("A chat message is empty or exceeds the 8,000-character limit.")
-    if not isinstance(repeated_text, str) or len(repeated_text) > MAX_REPEATED_TEXT_CHARS:
-        raise ProjectError("Repeated text exceeds the 8,000-character limit.")
+        raise ProjectError("A chat message must contain nonempty text.")
+    if not isinstance(repeated_text, str):
+        raise ProjectError("Repeated text must be a string.")
 
     credential = await auth_context()
     if not credential["token"] or credential["status"] != "connected":

@@ -26,6 +26,7 @@ import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRe
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
+import ChatPage from './ChatPage';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
@@ -6125,8 +6126,8 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -6195,7 +6196,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     void document.fonts.ready.then(() => { if (!disposed) measure(); });
     return () => { disposed = true; observer.disconnect(); };
   }, [projectTitle, hasActivity, projectArtwork]);
-  return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
+  return <header className={`${projectArtwork ? 'site-header project-art-header' : 'site-header'}${chatPage ? ' chat-site-header' : ''}`}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
@@ -6210,7 +6211,12 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {close && projectView && onProjectUpdated ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
-    </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+    </> : chatPage
+      ? <div className="brainstorm-header-pill-stack">
+          {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+          <div className="chat-header-center-slot" aria-label="Brainstorm model and thinking settings"/>
+        </div>
+      : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>} 
     {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
         {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
@@ -8060,11 +8066,12 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   </dialog>;
 }
 
-function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheScope }: {
+function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrainstorm, cacheScope }: {
   initialPath: string;
   onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
+  onBrainstorm: () => void;
   cacheScope: string;
 }) {
   const cloud = useCloudIdentity();
@@ -8180,7 +8187,10 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, cacheSco
           <div ref={homePillsRef} className="home-account-grid">
             <div className="sigma-header-model-column">
               <div className="sigma-header-secondary-row">
-                {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
+                <div className="home-brainstorm-actions">
+                  {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
+                  <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>
+                </div>
                 <div className="sigma-header-about-model-anchor">
                   <div className="sigma-header-first-row">
                     <button type="button" ref={aboutButton} className="home-about-button" aria-label="About SIGMA" data-tooltip-disabled aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About SIGMA</button>
@@ -9644,10 +9654,13 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
+  if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
+    return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>;
+  }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onBrainstorm={() => navigate('/brainstorm')} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
       await preloadProjectArtwork();
       setArtworkDecoded(true);
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);

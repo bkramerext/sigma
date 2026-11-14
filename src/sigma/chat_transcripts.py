@@ -98,8 +98,8 @@ def append_message(conversation_id: str, speaker: str, text: str) -> None:
     canonical_id = str(parsed)
     if conversation_id != canonical_id or speaker not in SPEAKER_LABELS:
         raise ProjectError("Invalid chat transcript message.")
-    if not isinstance(text, str) or not text.strip() or len(text) > 8000:
-        raise ProjectError("A chat message is empty or exceeds the 8,000-character limit.")
+    if not isinstance(text, str) or not text.strip():
+        raise ProjectError("A chat message must contain nonempty text.")
 
     directory = _directory()
     matches = []
