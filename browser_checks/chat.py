@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -52,7 +53,13 @@ with sync_playwright() as playwright:
                     'data: {"type":"started"}\n\n'
                     + "data: "
                     + json.dumps(
-                        {"type": "complete", "text": f"{body['speaker']} reply {len(turns)}"}
+                        {
+                            "type": "complete",
+                            "text": (
+                                f"{body['speaker']} **formatted** reply {len(turns)}\n\n"
+                                r"Value: \(8.08\times10^{53}\)."
+                            ),
+                        }
                     )
                     + "\n\n"
                 ),
@@ -66,8 +73,8 @@ with sync_playwright() as playwright:
     page.route("**/api/**", respond)
     page.goto(ORIGIN + "/chat", wait_until="networkidle")
     human = page.get_by_label("Human", exact=True)
-    first = page.get_by_label("AI #1 latest reply; editable")
-    second = page.get_by_label("AI #2 latest reply; editable")
+    first = page.get_by_role("region", name="AI #1 latest reply")
+    second = page.get_by_role("region", name="AI #2 latest reply")
     expect(human).to_be_visible()
     expect(first).to_be_visible()
     expect(second).to_be_visible()
@@ -76,23 +83,52 @@ with sync_playwright() as playwright:
     human.fill("Start the two-agent exchange.")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_enabled()
     page.get_by_role("button", name="Send", exact=True).click()
-    expect(first).to_have_value("ai_1 reply 1")
-    expect(second).to_have_value("ai_2 reply 2")
+    expect(first.locator(".chat-markdown strong")).to_have_text("formatted")
+    expect(first.locator(".katex")).to_be_visible()
+    expect(second.locator(".chat-markdown strong")).to_have_text("formatted")
 
+    before_intervention = len(turns)
     human.fill("Human intervention: focus on the counterexample.")
     page.get_by_role("button", name="Send", exact=True).click()
-    expect(first).to_have_value("ai_1 reply 3")
-    assert turns[:3] and [turn["speaker"] for turn in turns[:3]] == ["ai_1", "ai_2", "ai_1"]
+    expect(first.locator(".chat-markdown strong")).to_have_text("formatted")
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any(
+        item["speaker"] == "human"
+        and item["text"] == "Human intervention: focus on the counterexample."
+        for turn in turns[before_intervention:]
+        for item in turn["messages"]
+    ):
+        page.wait_for_timeout(100)
+    assert len(turns) >= 2
+    assert all(
+        turn["speaker"] == ("ai_1" if index % 2 == 0 else "ai_2")
+        for index, turn in enumerate(turns)
+    )
     assert any(
         item["speaker"] == "human"
         and item["text"] == "Human intervention: focus on the counterexample."
-        for item in turns[2]["messages"]
+        for turn in turns[before_intervention:]
+        for item in turn["messages"]
     )
     page.get_by_role("button", name="Stop exchange", exact=True).click()
     expect(page.get_by_role("button", name="Clear conversation", exact=True)).to_be_visible()
-    assert page.get_by_role("list", name="Conversation history").locator("li").count() >= 4
+    first.get_by_text("Edit reply text").click()
+    editor = first.get_by_label("AI #1 reply source")
+    source = editor.input_value()
+    assert source.startswith("ai_1 **formatted** reply ")
+    assert "Value: \\(8.08\\times10^{53}\\)." in source
+    editor.fill("AI #1 **edited** reply")
+    expect(first.locator(".chat-markdown strong")).to_have_text("edited")
+    history = page.get_by_role("list", name="Conversation history")
+    assert history.locator("li").count() >= 4
+    expect(history.locator(".chat-history-ai_2 .chat-markdown strong").first).to_have_text(
+        "formatted"
+    )
+    expect(history.locator(".chat-history-ai_2 .katex").first).to_be_visible()
     assert not errors, errors
     assert config_calls >= 1
     browser.close()
 
-print("PASS Chrome chat boxes, AI #1/AI #2 alternation, human intervention, and stop control")
+print(
+    "PASS Chrome chat Markdown/math rendering, source editing, two-agent alternation, intervention, and stop"
+)

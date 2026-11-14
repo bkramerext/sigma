@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import './chat-page.css';
+
+const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 type Speaker = 'human' | 'ai_1' | 'ai_2';
 type ChatMessage = { speaker: Speaker; text: string };
@@ -18,6 +20,12 @@ type ChatConfig = {
 const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2' };
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Chat could not continue.';
+
+function MarkdownReply({ body }: { body: string }) {
+  return <div className="chat-markdown">
+    <Suspense fallback={<p>{body}</p>}><RenderedMarkdown body={body}/></Suspense>
+  </div>;
+}
 
 export default function ChatPage({ onHome }: { onHome: () => void }) {
   const [config, setConfig] = useState<ChatConfig | null>(null);
@@ -209,18 +217,25 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
         </div>
         <small>{draft.length}/{config?.max_message_characters ?? 8000} characters</small>
       </form>
-      <div className={`chat-box chat-agent${speaker === 'ai_1' ? ' is-speaking' : ''}`}>
-        <label htmlFor="chat-ai-1">AI #1{speaker === 'ai_1' ? ' · responding' : ''}</label>
-        <textarea id="chat-ai-1" value={latest('ai_1')} onChange={event => editLatestAgent('ai_1', event.target.value)} placeholder="AI #1’s reply will appear here." aria-label="AI #1 latest reply; editable"/>
-      </div>
-      <div className={`chat-box chat-agent${speaker === 'ai_2' ? ' is-speaking' : ''}`}>
-        <label htmlFor="chat-ai-2">AI #2{speaker === 'ai_2' ? ' · responding' : ''}</label>
-        <textarea id="chat-ai-2" value={latest('ai_2')} onChange={event => editLatestAgent('ai_2', event.target.value)} placeholder="AI #2’s reply will appear here." aria-label="AI #2 latest reply; editable"/>
-      </div>
+      {(['ai_1', 'ai_2'] as const).map(who => <section key={who}
+        className={`chat-box chat-agent${speaker === who ? ' is-speaking' : ''}`}
+        aria-label={`${labels[who]} latest reply`}>
+        <h2>{labels[who]}{speaker === who ? ' · responding' : ''}</h2>
+        {latest(who)
+          ? <MarkdownReply body={latest(who)}/>
+          : <p className="chat-agent-placeholder">{labels[who]}’s reply will appear here.</p>}
+        <details className="chat-source-editor">
+          <summary>Edit reply text</summary>
+          <label htmlFor={`chat-${who}`}>{labels[who]} reply source</label>
+          <textarea id={`chat-${who}`} value={latest(who)}
+            onChange={event => editLatestAgent(who, event.target.value)}
+            placeholder={`${labels[who]}’s reply will appear here.`}/>
+        </details>
+      </section>)}
     </section>
     {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
       {messages.map((message, index) => <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-        <strong>{labels[message.speaker]}</strong><p>{message.text}</p>
+        <strong>{labels[message.speaker]}</strong><MarkdownReply body={message.text}/>
       </li>)}
     </ol>}
     <div className="chat-controls">

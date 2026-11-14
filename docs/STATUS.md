@@ -4,8 +4,9 @@
 
 Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
 the selected SIGMA ChatGPT or API-key connection and alternates AI turns until
-the user stops or intervenes. The real-Chrome browser check passed against
-deterministic chat fixtures; no provider inference was made. The production
+the user stops or intervenes. AI replies and transcript entries render Markdown
+and LaTeX, with reply source still editable. The real-Chrome browser check passed
+against deterministic chat fixtures; no provider inference was made. The production
 frontend build and focused chat API tests passed. A full `./sigma test` run on
 the original implementation base passed; after moving onto current `main`, the
 full run reported failures in `tests/project_collaboration.py` and
