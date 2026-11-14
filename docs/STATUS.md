@@ -8,11 +8,13 @@ the user stops or intervenes. AI replies and transcript entries render Markdown
 and LaTeX, with reply source still editable. The real-Chrome browser check passed
 against deterministic chat fixtures; no provider inference was made. The production
 frontend build and focused chat API tests passed. A full `./sigma test` run on
-the original implementation base passed; after moving onto current `main`, the
-full run reported failures in `tests/project_collaboration.py` and
-`tests/research_qa.py`, plus a CSS policy check. The CSS policy violation is
-fixed and its regression test passes; the other failing files are unchanged from
-current `main`. The app was launched with `./sigma chat` for manual use.
+the original implementation base passed. The latest current-main run reports
+failures in `tests/project_collaboration.py` and `tests/research_qa.py`; their
+test and service files are unchanged from current `main`. Ruff, formatting,
+Pyright, frontend typecheck, focused chat tests, and the CSS policy regression
+pass. The suite skips its build step after those failures, so the production
+build was run separately and passed. The app was launched with `./sigma chat`
+for manual use.
 
 GitHub Issue #458 was separately fixed by merged PR #459. Its root cause was a
 valid schema-v1 Recent Projects index with legacy `pinned` fields rejected by
