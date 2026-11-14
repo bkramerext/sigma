@@ -33,7 +33,8 @@ deterministic fixtures. It checks the Human, AI #1, and AI #2 boxes, alternating
 turn order, account-verified model and supported Thinking controls, Markdown and
 math rendering, the visible full transcript path and append-only
 speaker entries, a human intervention, and stopping. AI reply panels are
-read-only. It makes no provider calls.
+read-only. It checks that model/Thinking pills are in SIGMA's top bar and that
+transcript filenames contain no ID. It makes no provider calls.
 
 ## Local sponsored call limits
 

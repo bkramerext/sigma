@@ -23,7 +23,7 @@ models verified for the selected account and the reasoning levels supported by
 the selected model. A new chat starts with the verified default model and Low
 thinking. The active transcript's full path appears in the chat window; messages
 are appended to a private, timestamped Markdown file in SIGMA's state directory
-with a `YYYYMMDD_HHMMSS` timestamp. The transcript is not saved as a SIGMA
+with a `YYYYMMDD_HHMMSS` timestamp and no ID in the filename. The transcript is not saved as a SIGMA
 project. These chat settings are separate from project settings and are reset
 to the account's defaults when the chat page is reopened.
 

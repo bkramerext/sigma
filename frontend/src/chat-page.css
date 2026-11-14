@@ -26,7 +26,9 @@
 
 .chat-home-link { justify-self: start; }
 .chat-page-header > div { text-align: center; }
-.chat-model-controls { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chat-site-header { align-items: center; padding-bottom: 22px; }
+.chat-site-header .header-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-left: auto; min-width: 0; }
+.chat-model-controls { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .chat-control-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 12px; border: 1px solid #73583e; border-radius: 999px; background: #091824ed; color: #e0d0c8; font: 500 11px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
 .chat-control-pill:hover:not(:disabled), .chat-control-pill:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
 .chat-control-pill:focus-visible { outline: 2px solid #e9bc82; outline-offset: 2px; }
@@ -119,6 +121,8 @@
 }
 
 @media (max-width: 520px) {
+  .chat-site-header { padding-bottom: 18px; }
+  .chat-site-header .header-controls { width: 100%; justify-content: flex-start; }
   .chat-page { width: calc(100% - 28px); margin-top: 22px; }
   .chat-page-header { gap: 10px; }
   .chat-home-link { padding: 8px; font-size: .82rem; }

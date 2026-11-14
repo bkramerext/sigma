@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import re
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from sigma.ui_instance import private_directory
 
 MAX_TRANSCRIPT_BYTES = 64 * 1024 * 1024
 SPEAKER_LABELS = {"human": "Human", "ai_1": "AI #1", "ai_2": "AI #2"}
+TRANSCRIPT_FILENAME = re.compile(r"^\d{8}_\d{6}(?:_\d+)?\.md$")
 
 
 def _directory() -> Path:
@@ -51,15 +53,27 @@ def open_transcript() -> dict[str, str]:
     """Create a private timestamped transcript and return its session ID and name."""
     conversation_id = str(uuid4())
     started = datetime.now().astimezone()
-    name = f"{started.strftime('%Y%m%d_%H%M%S')}_{conversation_id}.md"
-    path = _directory() / name
-    header = (f"# SIGMA two-agent chat transcript\n\nStarted: {started.isoformat()}\n\n").encode()
+    directory = _directory()
+    timestamp = started.strftime("%Y%m%d_%H%M%S")
+    header = (
+        f"# SIGMA two-agent chat transcript\n\nStarted: {started.isoformat()}\n"
+        f"Session ID: {conversation_id}\n\n"
+    ).encode()
     try:
-        fd = os.open(
-            path,
-            os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o600,
-        )
+        collision = 1
+        while True:
+            suffix = "" if collision == 1 else f"_{collision}"
+            name = f"{timestamp}{suffix}.md"
+            path = directory / name
+            try:
+                fd = os.open(
+                    path,
+                    os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                )
+                break
+            except FileExistsError:
+                collision += 1
         with os.fdopen(fd, "ab") as stream:
             _check_file(stream.fileno())
             fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
@@ -88,8 +102,21 @@ def append_message(conversation_id: str, speaker: str, text: str) -> None:
         raise ProjectError("A chat message is empty or exceeds the 8,000-character limit.")
 
     directory = _directory()
-    suffix = f"_{canonical_id}.md"
-    matches = [path for path in directory.iterdir() if path.name.endswith(suffix)]
+    matches = []
+    try:
+        for candidate in directory.iterdir():
+            if not TRANSCRIPT_FILENAME.fullmatch(candidate.name):
+                continue
+            fd = os.open(candidate, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                _check_file(fd)
+                header = os.read(fd, 1024)
+            finally:
+                os.close(fd)
+            if f"Session ID: {canonical_id}\n".encode() in header:
+                matches.append(candidate)
+    except OSError as exc:
+        raise ProjectError("The private chat transcript could not be located safely.") from exc
     if len(matches) != 1:
         raise ProjectError("The chat transcript session was not found or is ambiguous.")
     path = matches[0]

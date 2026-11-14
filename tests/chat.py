@@ -245,11 +245,11 @@ def check_transcripts() -> None:
             directory = state / "chat-transcripts"
             path = directory / session["transcript_name"]
             assert path.is_file()
-            assert session["transcript_name"].endswith(f"_{session['conversation_id']}.md")
             assert re.fullmatch(
-                rf"\d{{8}}_\d{{6}}_{session['conversation_id']}\.md",
+                r"\d{8}_\d{6}(?:_\d+)?\.md",
                 session["transcript_name"],
             )
+            assert session["conversation_id"] not in session["transcript_name"]
             assert session["transcript_path"] == str(path.resolve())
             assert stat.S_IMODE(directory.stat().st_mode) == 0o700
             assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -262,6 +262,7 @@ def check_transcripts() -> None:
             for speaker, text in messages:
                 chat_transcripts.append_message(session["conversation_id"], speaker, text)
             content = path.read_text(encoding="utf-8")
+            assert f"Session ID: {session['conversation_id']}" in content
             assert content.index("## Human ·") < content.index("## AI #1 ·")
             assert content.index("## AI #1 ·") < content.index("## AI #2 ·")
             assert all(text in content for _, text in messages)

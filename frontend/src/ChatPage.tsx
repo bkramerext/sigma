@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
@@ -41,6 +42,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   const [notice, setNotice] = useState('');
   const [conversationId, setConversationId] = useState('');
   const [transcriptPath, setTranscriptPath] = useState('');
+  const [headerControlsTarget, setHeaderControlsTarget] = useState<HTMLElement | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const runningRef = useRef(false);
   const runId = useRef(0);
@@ -123,6 +125,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
 
   useEffect(() => {
     document.title = 'Chat · SIGMA';
+    setHeaderControlsTarget(document.querySelector<HTMLElement>('.chat-site-header .header-controls'));
     const controller = new AbortController();
     void refreshConfig(controller.signal);
     void openTranscript(controller.signal).catch(cause => {
@@ -291,19 +294,21 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   const canSend = !!config?.available && !!conversationId && !error.startsWith('The chat contains too many messages')
     && !!draft.trim() && draft.trim().length <= (config?.max_message_characters ?? 0);
 
-  return <main className="chat-page">
+  const modelThinkingControls = <div className="chat-model-controls chat-header-model-controls" aria-label="Chat model and thinking controls">
+    <button type="button" className="chat-control-pill" aria-label={`Model ${config?.model ?? 'loading'}`} data-tooltip={modelControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleModel}>
+      Model · {config?.model ?? 'Loading'}
+    </button>
+    <button type="button" className="chat-control-pill" aria-label={`Thinking level ${thinkingLabels[config?.reasoning_effort ?? 'low']}`} data-tooltip={thinkingControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleThinking}>
+      Thinking · {thinkingLabels[config?.reasoning_effort ?? 'low']}
+    </button>
+  </div>;
+
+  return <>
+  {headerControlsTarget && createPortal(modelThinkingControls, headerControlsTarget)}
+  <main className="chat-page">
     <header className="chat-page-header">
       <button type="button" className="chat-home-link" onClick={onHome}>← SIGMA Home</button>
-      <div className="chat-heading"><p className="chat-eyebrow">Open conversation</p><h1>Two AI chat</h1>
-        <div className="chat-model-controls" aria-label="Chat model and thinking controls">
-          <button type="button" className="chat-control-pill" aria-label={`Model ${config?.model ?? 'loading'}`} data-tooltip={modelControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleModel}>
-            Model · {config?.model ?? 'Loading'}
-          </button>
-          <button type="button" className="chat-control-pill" aria-label={`Thinking level ${thinkingLabels[config?.reasoning_effort ?? 'low']}`} data-tooltip={thinkingControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleThinking}>
-            Thinking · {thinkingLabels[config?.reasoning_effort ?? 'low']}
-          </button>
-        </div>
-      </div>
+      <div><p className="chat-eyebrow">Open conversation</p><h1>Two AI chat</h1></div>
       <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
     </header>
     <section className="chat-boxes" aria-label="Conversation participants">
@@ -340,5 +345,6 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start chatting.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
     <p className="chat-privacy-note">Messages are appended to a private transcript in SIGMA state and sent to the selected AI provider for each turn. Transcript file: <code>{transcriptPath || 'opening…'}</code>. It is not saved as a SIGMA project.</p>
-  </main>;
+  </main>
+  </>;
 }
