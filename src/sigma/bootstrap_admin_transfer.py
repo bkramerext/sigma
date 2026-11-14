@@ -112,7 +112,13 @@ def transfer(
             )
             db.execute(
                 "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
-                ("bootstrap-admin-transfer", "bootstrap_admin_transferred", "email", target, int(time.time())),
+                (
+                    "bootstrap-admin-transfer",
+                    "bootstrap_admin_transferred",
+                    "email",
+                    target,
+                    int(time.time()),
+                ),
             )
             db.commit()
         else:
@@ -148,9 +154,7 @@ def main() -> int:
             or cfg.database is None
             or (cfg.admin_contact_email or "").strip().casefold() != target
         ):
-            raise TransferRefused(
-                "Hosted configuration must name the target as its admin contact."
-            )
+            raise TransferRefused("Hosted configuration must name the target as its admin contact.")
         if args.apply and not args.backup_verified:
             raise TransferRefused("A verified production backup is required for --apply.")
         result = transfer(

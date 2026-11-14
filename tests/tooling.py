@@ -257,8 +257,22 @@ def check_start_cli() -> None:
             else:
                 raise AssertionError("start did not exit")
         launch.assert_called_once_with(
-            navigate=False, signin=False, mock_auth=mock_auth, sponsored=True
+            navigate=False, signin=False, mock_auth=mock_auth, sponsored=True, prod=False
         )
+    # --prod is forwarded to the local UI launcher, not a production backend.
+    with (
+        patch("sys.argv", ["sigma", "start", "--prod"]),
+        patch("sigma.cli.run_ui", return_value=0) as launch,
+    ):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("start --prod did not exit")
+    launch.assert_called_once_with(
+        navigate=False, signin=False, mock_auth=False, sponsored=False, prod=True
+    )
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
         try:

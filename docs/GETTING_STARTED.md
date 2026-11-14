@@ -15,6 +15,21 @@ From an already cloned and configured local checkout:
 
 Open **http://127.0.0.1:5173** if needed. Press **Ctrl+C** to stop or run `./sigma shutdown` in another terminal. Manual project editing does not require an AI connection.
 
+To open the two-agent chat directly, run `./sigma chat`. It uses the selected
+ChatGPT or API-key connection. Send a human message to start; AI #1 and AI #2
+then alternate until you stop the exchange or send another human message.
+The Model and Thinking pills show the settings for this chat. They cycle through
+models verified for the selected account and the reasoning levels supported by
+the selected model. A new chat starts with the verified default model and Low
+thinking. The active transcript's full path appears in the chat window; messages
+are appended to a private, timestamped Markdown file in SIGMA's state directory
+with a `YYYYMMDD_HHMMSS` timestamp and no ID in the filename. The transcript is not saved as a SIGMA
+project. These chat settings are separate from project settings and are reset
+to the account's defaults when the chat page is reopened.
+The **Repeated** field at the top of the page optionally prepends the same text
+to each AI #1 and AI #2 request. Changes apply to subsequent turns, including
+turns later in an active exchange; repeated text is not added to the transcript.
+
 ## Start a project
 
 Home offers **Samples** and **Recent** projects. Choose a sample to create your own editable copy, reopen a recent project, or select **New Project** to enter a title, research problem, research type, and difficulty.

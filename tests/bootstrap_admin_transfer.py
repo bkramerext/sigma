@@ -72,11 +72,16 @@ def main() -> None:
         result = transfer(path, from_email=OLD, to_email=NEW, apply=True)
         assert result == {"status": "transferred", "changed": True, "old_role": "member"}
         assert rows(path, "SELECT email,subject FROM bootstrap_subject") == [(NEW, "google-new")]
-        assert rows(path, "SELECT email,subject FROM contact_admin_subject") == [(NEW, "google-new")]
+        assert rows(path, "SELECT email,subject FROM contact_admin_subject") == [
+            (NEW, "google-new")
+        ]
         assert rows(path, "SELECT token_hash FROM sessions") == [("new-session",)]
-        assert rows(path, "SELECT role,access_active FROM user_state WHERE subject='google-old'") == [("member", 1)]
+        assert rows(
+            path, "SELECT role,access_active FROM user_state WHERE subject='google-old'"
+        ) == [("member", 1)]
         assert rows(path, "SELECT subject,data FROM saved_projects ORDER BY subject") == [
-            ("google-new", "saved new work"), ("google-old", "saved old work")
+            ("google-new", "saved new work"),
+            ("google-old", "saved old work"),
         ]
         assert rows(path, "SELECT action,value FROM audit") == [
             ("bootstrap_admin_transferred", NEW)

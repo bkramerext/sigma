@@ -525,7 +525,7 @@ def exercise(origin: str) -> None:
         allowance = page.get_by_role("button", name="Show sponsorship details")
         assert allowance.evaluate("e => getComputedStyle(e).backgroundColor") == "rgba(0, 0, 0, 0)"
         expect(allowance).to_have_attribute(
-            "data-tooltip", re.compile(r"Sponsored model connection: Connected\.")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         allowance.hover()
         allowance_text = page.locator(".sponsored-allowance-tooltip")
@@ -570,7 +570,7 @@ def exercise(origin: str) -> None:
         )
         forced_pill.hover()
         expect(forced_pill).to_have_attribute(
-            "data-tooltip", re.compile("Sponsored model connection: Connected\\.")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         forced_pill.click()
         assert not any(path.endswith("/api/ai/mode") for path, _ in posts), posts
@@ -646,7 +646,7 @@ def exercise(origin: str) -> None:
             "provider limits still apply"
         )
         expect(api_pill).to_have_attribute(
-            "data-tooltip", re.compile("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         # Hosted ChatGPT OAuth cannot use the production HTTPS callback.
         # Clicking explains the supported local sign-in/import path and never
@@ -665,7 +665,7 @@ def exercise(origin: str) -> None:
         )
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
         expect(api_pill).to_have_attribute(
-            "data-tooltip", re.compile("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
 
         # Admin-only sponsor sign-in writes OAuth credentials directly on the
@@ -677,7 +677,7 @@ def exercise(origin: str) -> None:
         expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
         assert_account_pill_geometry()
         expect(sponsor_pill).to_have_attribute(
-            "data-tooltip", re.compile("Sponsored model connection: disconnected\\.")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         calls_before = sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
         sponsor_pill.get_by_role("status").click()
