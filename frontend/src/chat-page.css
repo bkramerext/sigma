@@ -2,7 +2,7 @@
 .brainstorm-workspace { height: 100dvh; overflow-y: auto; }
 .brainstorm-workspace .chat-page {
   box-sizing: border-box; flex: 0 0 auto; width: calc(100% - 48px);
-  min-width: 0; max-width: none; margin: 0 auto 40px; color: #f0e6d7;
+  min-width: 0; max-width: none; margin: 0 auto 40px; padding: 0; color: #f0e6d7;
 }
 .brainstorm-workspace .chat-page-header {
   display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px 32px;
