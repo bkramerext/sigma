@@ -146,3 +146,16 @@
   .chat-page-header h1 { font-size: 1.35rem; }
   .chat-box { padding: 12px; }
 }
+
+/* Brainstorm uses the same clickable, project-artwork SIGMA header as a project.
+   Keep the conversation vertically scrollable within the workspace shell. */
+.brainstorm-workspace { overflow-y: auto; height: 100dvh; }
+.brainstorm-workspace .chat-page { flex: 0 0 auto; }
+.brainstorm-workspace .chat-page-header { grid-template-columns: 1fr auto 1fr; }
+.brainstorm-workspace .chat-page-header > div { grid-column: 2; }
+.brainstorm-workspace .chat-description { grid-column: 3; }
+@media (max-width: 900px) {
+  .brainstorm-workspace .chat-page-header { grid-template-columns: 1fr; }
+  .brainstorm-workspace .chat-page-header > div,
+  .brainstorm-workspace .chat-description { grid-column: 1; justify-self: start; text-align: left; }
+}
