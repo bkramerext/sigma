@@ -436,6 +436,7 @@ class GceHostToolingTests(unittest.TestCase):
             "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "ops@example.org",
             "SIGMA_CLOUD_INFERENCE_PROVIDER": "chatgpt",
             "SIGMA_CLOUD_SPONSOR_EMAIL": "zetacontinuation@gmail.com",
+            "SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": "true",
             "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
             "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE": "/run/sigma-secrets/google-oauth-client-secret",
             "SIGMA_CLOUD_OPENAI_API_KEY_FILE": "/run/sigma-secrets/openai-api-key",
@@ -475,6 +476,13 @@ class GceHostToolingTests(unittest.TestCase):
                 )
                 forced_values, _ = gce_preflight._parse_env(path)
                 self.assertEqual(forced_values is not None, valid)
+            for enabled, valid in (("true", True), ("false", True), ("yes", False)):
+                candidate = values | {"SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": enabled}
+                path.write_text(
+                    "\n".join(f"{key}={value}" for key, value in candidate.items()) + "\n"
+                )
+                notice_values, _ = gce_preflight._parse_env(path)
+                self.assertEqual(notice_values is not None, valid)
         self.assertEqual(parsed, {**values, "SIGMA_CADDY_SCHEME": "https"})
         self.assertIn("valid", detail)
 
