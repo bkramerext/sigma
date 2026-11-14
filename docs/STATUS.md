@@ -1,5 +1,19 @@
 # SIGMA status
 
+## Two-agent chat UI (2026-11-13)
+
+Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
+the selected SIGMA ChatGPT or API-key connection and alternates AI turns until
+the user stops or intervenes. `./sigma test` passed, including Ruff, formatting,
+Pyright (0 diagnostics), frontend typecheck, and production build. The real-Chrome
+browser check passed against deterministic chat fixtures; no provider inference
+was made. The app was launched with `./sigma chat` for manual use.
+
+GitHub Issue #458 was separately fixed by merged PR #459. Its root cause was a
+valid schema-v1 Recent Projects index with legacy `pinned` fields rejected by
+the v2 exact-key validator; the earlier permissions repair did not address
+that schema mismatch.
+
 ## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
 
 Read-only production inspection confirmed runtime pin

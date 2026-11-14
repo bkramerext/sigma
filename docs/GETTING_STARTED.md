@@ -15,6 +15,12 @@ From an already cloned and configured local checkout:
 
 Open **http://127.0.0.1:5173** if needed. Press **Ctrl+C** to stop or run `./sigma shutdown` in another terminal. Manual project editing does not require an AI connection.
 
+To open the two-agent chat directly, run `./sigma chat`. It uses the selected
+ChatGPT or API-key connection. Send a human message to start; AI #1 and AI #2
+then alternate until you stop the exchange or send another human message.
+Conversation text is kept in the browser session and sent to the selected
+provider for each turn; it is not saved as a SIGMA project.
+
 ## Start a project
 
 Home offers **Samples** and **Recent** projects. Choose a sample to create your own editable copy, reopen a recent project, or select **New Project** to enter a title, research problem, research type, and difficulty.

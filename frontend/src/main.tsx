@@ -26,6 +26,7 @@ import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRe
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
+import ChatPage from './ChatPage';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
@@ -9644,6 +9645,9 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
+  if (url.pathname === '/chat') {
+    return <><Header goHome={goHome}/><ChatPage onHome={() => navigate('/')}/><FloatingTooltip/></>;
+  }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
