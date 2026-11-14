@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
-from sigma.ui_instance import Instance, identity, stop_registered_instances
+from sigma.ui_instance import Instance, identity, recognized_launcher, stop_registered_instances
 
 
 def serve(instance: Instance, stopped: list[str]) -> None:
@@ -59,10 +59,38 @@ def main() -> None:
         state.mkdir(mode=0o700)
         roots = [base / "red-checkout", base / "blue-checkout", base / "legacy-checkout"]
         with patch("sigma.ui_instance.STATE_ROOT", state):
+            entry = str(roots[0] / ".venv/bin/sigma")
+            python = str(roots[0] / ".venv/bin/python")
+            for switches in (
+                "",
+                "--nav",
+                "--prod",
+                "--prod --signin",
+                "--brainstorm",
+                "--mock-auth",
+                "--sponsored",
+                "--future-start-switch",
+            ):
+                command = f"{python} {entry} start {switches}".strip()
+                assert recognized_launcher(command, entry), command
+            assert not recognized_launcher(f"{python} {entry} shutdown", entry)
+            assert not recognized_launcher(f"{python} {entry} start --prod positional", entry)
+            assert not recognized_launcher(f"{python} {entry} start --prod --prod", entry)
             instances = [
                 register_fixture(root, 101 + index, include_root=index != 2)
                 for index, root in enumerate(roots)
             ]
+            # Simulate registered launchers started with newer CLI switches.
+            # Previously, shutdown refused these as "process identity changed"
+            # even though UID, PID, birth time and command all matched.
+            for instance, switches in (
+                (instances[0], "--prod --signin"),
+                (instances[1], "--brainstorm --navigate"),
+                (instances[2], "--mock-auth"),
+            ):
+                record = json.loads(instance.owner_path.read_text(encoding="utf-8"))
+                record["command"] += " " + switches
+                instance.owner_path.write_text(json.dumps(record), encoding="utf-8")
             stopped: list[str] = []
             threads = [
                 threading.Thread(target=serve, args=(instance, stopped)) for instance in instances
