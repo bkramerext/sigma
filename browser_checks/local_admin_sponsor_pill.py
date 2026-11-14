@@ -255,10 +255,7 @@ def exercise(origin: str) -> None:
             url.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for url, body in posts
         ), posts
         tip = page.locator("#sponsored-allowance-tooltip")
-        assert pill.get_attribute("title") == (
-            "Sponsor Connected · sponsor@example.test · Unlimited. "
-            "Click to connect your own ChatGPT account."
-        )
+        assert pill.get_attribute("title") == "SIGMA covers eligible ChatGPT model calls."
         pill.hover(position={"x": 20, "y": 15})
         expect(tip).not_to_be_visible()
         allowance_trigger = page.locator(".sponsored-allowance-trigger")
@@ -288,9 +285,7 @@ def exercise(origin: str) -> None:
         expect(member_pill).to_have_attribute("aria-label", "Sponsored ChatGPT")
         member_tip = page.locator("#sponsored-allowance-tooltip")
         member_pill.hover(position={"x": 20, "y": 17})
-        assert member_pill.get_attribute("title") == (
-            "$0.37 remaining · Unavailable. Click to connect your own ChatGPT account."
-        )
+        assert member_pill.get_attribute("title") == "SIGMA covers eligible ChatGPT model calls."
         assert "sponsor@example.test" not in (member_pill.get_attribute("aria-label") or "")
         member_tip = page.locator("#sponsored-allowance-tooltip")
         expect(member_tip).to_have_text("$0.37 remaining · Unavailable.")

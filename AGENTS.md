@@ -6,7 +6,7 @@ For historical milestone context, consult [the development journal](docs/JOURNAL
 
 Use shared typed Python services across browser, API, CLI, and executable scenarios. Protect project identity, research history, and existing data. Choose simple implementations; document consequential tradeoffs.
 
-Run `./sigma test` and relevant real-browser checks. Record actual results in the ticket or committed PR handoff under `messages/`; commit and push completed assignments. No speculative agents, paid calls, secrets, force pushes, or private recruiting context.
+Run `./sigma test` and relevant real-browser checks. Record actual results in the ticket or committed PR handoff under `messages/`; commit and push completed assignments. **Do not update `docs/STATUS.md`: it is a retired status journal and causes needless merge conflicts.** Use the ticket, PR description or committed handoff instead. No speculative agents, paid calls, secrets, force pushes, or private recruiting context.
 
 Blue's ongoing mailbox/implementation cycle follows
 [Blue operating protocol](docs/BLUE_OPERATING_PROTOCOL.md): validate and export
@@ -20,6 +20,8 @@ every 30 seconds with a clean tree and fast-forward-only synchronization.
 For example, use SIGMA's standardized tooltip system, **never native browser tooltips** (including HTML `title` attributes or SVG `<title>` hover bubbles). Disclosure tooltips describe the action a click will perform (`Expand` or `Collapse`), not the current state.
 
 **If the applicable SIGMA convention is unclear, inconsistent, or missing, ask the user before choosing a UI behavior or appearance.** Do not silently decide on an assumed default.
+
+**The ChatGPT/Google header pills have an established, operator-approved form.** Reuse the existing Sponsored ChatGPT pill implementation and its exact geometry, two-line metadata and interaction affordances. Never invent an alternate pill label, size or layout to explain a provider restriction; put that explanation in the existing standard dialog pattern. Ask the operator before proposing any pill variation.
 
 ## CI failure batching
 

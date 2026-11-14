@@ -6216,7 +6216,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
           {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
           <div className="chat-header-center-slot" aria-label="Brainstorm model and thinking settings"/>
         </div>
-      : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+      : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>} 
     {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
         {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
@@ -9655,7 +9655,7 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
-    return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>
+    return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>;
   }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
@@ -9696,10 +9696,10 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; personal_chatgpt_notice_enabled?: boolean; personal_chatgpt_notice_preview?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
-type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled: boolean; personalChatGPTNoticePreview: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedIdentityAvailable: boolean; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -10581,7 +10581,7 @@ function CloudAuthGate() {
     if (!response.ok) throw await cloudFailure(response, 'The simulated provider connection could not be changed.');
     setProviderStatus({ status: next, guidance: 'Simulated local provider status.' });
   }, [providerStatus?.status]);
-  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
+  const funding: CloudFunding = { target: status?.target ?? 'local', personalChatGPTNoticeEnabled: !!status?.personal_chatgpt_notice_enabled, personalChatGPTNoticePreview: !!status?.personal_chatgpt_notice_preview, authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
   useEffect(() => {
     setSponsoredUsageConnection(funding.target === 'hosted' || funding.selectedConnection === 'sponsored');
   }, [funding.target, funding.selectedConnection]);
