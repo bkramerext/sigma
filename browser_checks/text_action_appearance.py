@@ -92,7 +92,7 @@ def main():
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         welcome = page.locator("#invitation-welcome-dialog")
         if welcome.count() and welcome.is_visible():
-            welcome.get_by_role("button", name="Let's get started").click()
+            welcome.get_by_role("button", name="Explore as guest").click()
             expect(welcome).not_to_be_visible()
 
         page.get_by_role("button", name="About SIGMA").click()
