@@ -1,39 +1,124 @@
 # SIGMA status
 
-## 2026-11-14 — hosted Personal ChatGPT notice WIP
+## Repeated prompt text in two-agent chat (2026-11-14)
 
-Added the default-off `SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED` deployment
-flag, exposed it only for hosted cloud-auth status, and wired it through
-`deploy/compose.yaml`. When enabled, clicking the hosted Personal ChatGPT
-unavailable pill opens a centered SIGMA dialog with the requested explanation
-and standard upper-right close control. Sponsored ChatGPT pill hovertext is
-shortened to “SIGMA covers eligible ChatGPT model calls.” The fuller allowance
-details remain available from the separate allowance control.
+Added a top-of-page **Repeated** field and tip to `./sigma chat`. Its optional
+text is prepended to each AI request for both participants, and edits take
+effect on subsequent turns in an active exchange. The text is bounded to 8,000
+characters and is not written as a conversation message in the transcript.
+Implementation and documentation are updated. Tests and browser checks have
+not been run for this change.
 
-Focused cloud-auth regression tests (59) passed. Frontend typecheck and
-production build passed; Ruff check/format passed for changed Python/browser
-files. `./sigma test` did not pass: existing `project_collaboration.py` and
-`research_qa.py` suites hit macOS/Python 3.14 temporary-path symlink errors.
-The local browser checks did not reach the new hosted-dialog assertion: the
-real-auth browser flow failed its existing Google-cookie assertion, and the
-local sponsor-pill browser fixture failed an earlier personal-pill tooltip
-assertion. The dialog's real-browser acceptance remains unverified.
+## 2026-11-14 — issue #854 hosted sponsored hotpatch deployed
 
-The built-in administrator identity issue is not changed in this WIP. The
-existing production auth database binds its bootstrap administrator to Brian's
-Google subject, while `zetacontinuation@gmail.com` is a separate admin. A
-contact-email change alone intentionally preserves that bound bootstrap
-identity. Coordinator handoff requests a safe, explicit transfer to the
-designated zeta identity and regression coverage as a requirement of the next
-production deployment. Verify the deployed auth database and Administrator
-Settings identify zeta as the built-in administrator; the separate admin
-grant alone is insufficient. No production environment or database was
-changed.
+PR #859 (`ff9ca956c3d7d4b97591606248da61175fc5462e`) deployed the hosted
+sponsored pill copy adjustment without a version bump. Its exact-tree Ruff,
+frontend build, SIGMA verification, Browser verification, and Project Types
+browser acceptance workflows all passed. The guarded release helper built and
+started backend/frontend images from the merged SHA; the existing healthy edge
+image was retained.
 
-The earlier request to remove visible borders from “Invite Me” and “Explore as
-Guest” in the invitation welcome dialog is also in the Coordinator handoff.
-Their current `.invitation-welcome-link` style already specifies `border: 0`,
-so the rendered computed-style override still needs to be found and verified.
+Before cutover the effective production provider was `chatgpt`, sponsored
+inference was enabled, the configured sponsor email matched the designated
+account, and the persistent sponsor credential/model catalog passed the
+non-inference readiness check. The four saved hard-cap sessions inspected
+predated this deployment and were routed through `api_key`. No provider billing
+settings, credentials, or SIGMA spending limits were changed; no inference ran.
+
+A fresh root-only, app-consistent copy was made at
+`/var/backups/sigma-state-hotpatch-pre-ff9ca956-20261114T0550Z/state` on the
+existing boot disk. The full 228-file copy is 47 MB and is root-owned mode
+0700; its checksum/metadata comparison was clean while SIGMA writers were
+stopped. The separate read-only verifier view excluded only the preserved
+`auth/workspaces/provider-slots` directory containing four zero-byte lock
+files. Verification passed three SQLite integrity checks, 3 identities and
+workspace mappings, 23 projects, 53 research artifacts, one matching TeX/PDF
+pair, 10 terminal historical job rows, and 59 accounting calls ($6.085737
+recorded/reserved, with 16 reserved or unknown outcomes).
+
+Post-deploy, the protected release pin and both image source labels match the
+merged SHA; systemd and all three containers are healthy. The persistent state
+filesystem remains mounted at `/srv/sigma-state` with UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. Read-only live counts still show 3
+identities, 3 workspace mappings, 23 projects, 53 research assets, and the same
+job/call status counts. Credential-free backend readiness passed. Public DNS,
+private-port closure, HTTP redirect, HTTPS/TLS, SPA deep link, and hosted API
+readiness passed. A fresh Google OAuth-start request returned HTTP 302 to
+`accounts.google.com` with the configured HTTPS callback path. It did not
+complete account sign-in.
+
+This deployment does not enable hosted Personal ChatGPT account selection.
+With the existing OpenAI authorization, the documented ChatGPT plan-use flow
+requires a `127.0.0.1` callback; the current hosted HTTPS callback is rejected.
+No new OpenAI permissions were requested. A real 180-second production Session
+has not run: completing that acceptance requires an authorized Google user
+session in the production browser, which was not available during this run. No
+paid inference was dispatched.
+
+## 2026-11-14 — issue #854 production follow-up
+
+Before the #859 deployment, production was read-only checked at merged SHA
+`3508d560e35043f65f507deefef7841c5a076c68`. Its effective inference provider was
+`chatgpt`, sponsored inference is enabled, and the configured sponsor email
+matches the designated account. The dedicated persistent sponsor registration
+passed non-inference credential and model-catalog health checks. The four saved
+`project_spend_limit_exceeded` sessions inspected were all recorded with
+`api_key` routing and predate this deployment; no such errors appeared in the
+last two hours of backend logs. No inference was dispatched and no provider
+billing or SIGMA spending limits were changed.
+
+Direct hosted Personal ChatGPT authorization remains unsupported with the
+existing OpenAI OAuth registration: its documented plan-use flow requires the
+loopback `127.0.0.1` callback, while production uses an HTTPS callback. No new
+OpenAI permission was requested. The production sponsor health path is ready,
+but the issue's real 180-second production Session acceptance has not run. It
+requires a currently authenticated, authorized Google user session in the
+production browser; this environment has no such session. No production
+credentials were accessed or impersonated.
+
+## 2026-11-14 — hosted sponsored pill copy adjustment
+
+The sponsored status pill keeps its provider label while hosted provider checks
+or connection selection are in progress; transient progress messaging stays out
+of this compact control. Administrator sponsored allowance displays
+`Unlimited`, while the details tooltip still clarifies that provider and global
+spending limits may apply. The focused real-browser check passed with a delayed
+provider response, and the frontend build passed. `./sigma test` completed with
+two unrelated Python 3.14 fixture failures in `project_collaboration.py` and
+`research_qa.py`; other checks passed.
+
+## Two-agent chat UI (2026-11-13)
+
+Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
+the selected SIGMA ChatGPT or API-key connection and alternates AI turns until
+the user stops or intervenes. AI replies and transcript entries render Markdown
+and LaTeX; AI reply panels are read-only. Each chat opens a private, timestamped
+Markdown transcript under SIGMA state, displays its full path in the chat window,
+and appends Human, AI #1, and AI #2 messages. Chat Model and Thinking pills cycle
+only through account-verified models and supported reasoning levels; each turn
+uses the selected pair. A new chat starts with the verified default model and
+Low thinking. The pills are centered in SIGMA's top bar, and transcript filenames use
+`YYYYMMDD_HHMMSS` plus a collision suffix only when needed; no ID appears in
+the filename.
+
+Verification on the follow-up branch: `tests/chat.py` passes configuration,
+model/Thinking validation, transcript mode/append/symlink checks, and API turns.
+`browser_checks/chat.py` passes in real Chrome against deterministic fixtures,
+including the visible full transcript path, timestamp format, all three transcript speakers,
+Markdown/LaTeX display, model/Thinking selection, human intervention, and no AI
+reply editors. Frontend typecheck and production build pass. Ruff check and
+format checks pass. No provider inference was made. The full `./sigma test`
+completed with two pre-existing failures outside this chat change:
+`tests/project_collaboration.py` (four symlink-guard errors) and
+`tests/research_qa.py` (`Collaboration is not available for this project`).
+Because of those failures, the suite skipped its later production build; the
+build passed separately. Pyright passed with zero diagnostics. The app was
+launched with `./sigma chat` on the earlier implementation branch.
+
+GitHub Issue #458 was separately fixed by merged PR #459. Its root cause was a
+valid schema-v1 Recent Projects index with legacy `pinned` fields rejected by
+the v2 exact-key validator; the earlier permissions repair did not address
+that schema mismatch. `tests/recents.py` passes on current `main`.
 
 ## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
 

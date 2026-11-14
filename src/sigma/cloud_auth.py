@@ -1757,9 +1757,16 @@ def adopt_window_session(request: Request):
 @router.get("/status")
 def status(request: Request):
     cfg = config()
+    # --prod previews this notice on localhost without changing any hosted
+    # authentication, server origin, provider routing, or spending behavior.
+    personal_chatgpt_notice_preview = (
+        cfg.local
+        and os.environ.get("SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW", "").strip().casefold()
+        in {"1", "true", "yes"}
+    )
     personal_chatgpt_notice_enabled = (
         cfg.enabled
-        and not cfg.local
+        and (not cfg.local or personal_chatgpt_notice_preview)
         and os.environ.get("SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED", "").strip().casefold()
         in {"1", "true", "yes"}
     )
@@ -1786,6 +1793,7 @@ def status(request: Request):
             "authenticated": False,
             "user": None,
             "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
+            "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
         }
     account = None
     if principal is not None:
@@ -1818,6 +1826,7 @@ def status(request: Request):
                 "admin_contact_email": None,
                 "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
                 "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
+            "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
             }
     return {
         "enabled": cfg.enabled,
@@ -1836,6 +1845,7 @@ def status(request: Request):
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
         "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
+            "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
     }
 
 

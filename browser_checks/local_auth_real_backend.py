@@ -997,8 +997,10 @@ def main() -> None:
                 def hosted_personal_status(route):
                     response = route.fetch()
                     status = response.json()
-                    status["target"] = "hosted"
+                    # Exercise the same local-only presentation mode as ./sigma start --prod.
+                    status["target"] = "local"
                     status["personal_chatgpt_notice_enabled"] = True
+                    status["personal_chatgpt_notice_preview"] = True
                     status["account"]["model_access"]["mode"] = "personal"
                     route.fulfill(response=response, json=status)
 

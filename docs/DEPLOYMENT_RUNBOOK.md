@@ -51,3 +51,44 @@ Keep the hotpatch scoped to the requested problem; do not make speculative chang
 ## Initial setup and nonroutine recovery
 
 Host provisioning, IAM policy design, firewall inventories, billing configuration, disaster recovery drills, detailed troubleshooting, and historical snapshot/VM procedures are documented in [Operations Runbook](OPERATION_RUNBOOK.md) and [Deployment History](DEPLOYMENT_HISTORY.md). They are **not routine release gates**. Revisit them only when a real deployment failure or requested infrastructure change makes them relevant.
+
+
+## One-time built-in administrator transfer — next authorized cutover
+
+This is an exceptional, **one-time** change, not a routine deployment step.
+The intended built-in administrator is `zetacontinuation@gmail.com`. The
+persistent `bootstrap_subject` binding must be transferred from the older
+Google identity; changing only `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` does not
+update the original binding.
+
+Red must verify the verified Google subjects for both accounts, including
+`contact_admin_subject`, `identities`, `user_state`, and the existing
+`bootstrap_subject` binding, without publishing subject IDs or credentials.
+Verify a fresh root-only backup of production's *complete* persistent state
+before altering the authentication database. Enter maintenance and stop backend
+writers. Set `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL=zetacontinuation@gmail.com` in
+the **actual private** `/etc/sigma/deploy.env`, not merely a repository
+example. Ensure the backend UID 10001 executes this utility with the updated
+environment and persistent authentication volume:
+
+```sh
+python -m sigma.bootstrap_admin_transfer --from-email brian.kramer.personal@gmail.com --to-email zetacontinuation@gmail.com
+```
+
+First inspect the read-only dry-run result, especially the previous
+administrator's **independent resulting role**. Refuse any ambiguous or
+mismatched identity. With the full backup verified, while writers remain
+stopped, run the same command with `--apply --backup-verified`. The tool
+changes **only** the bootstrap subject binding, contact-admin subject binding
+if absent, source-account authorization cache, source browser sessions, and a
+new audit row. It never merges workspaces, rewrites research, transfers Google
+subjects, or copies provider tokens.
+
+After the guarded deployment, verify SQLite integrity, the built-in
+Administrator Settings identity (not just a separate administrator grant),
+the intended recipient's Google sign-in and authority, and the former
+administrator's *actual resulting role*. Ensure projects, papers, workspaces,
+accounting and existing auth credential stores are intact. A failed transfer
+requires restoring both the verified database backup **and** previous
+configuration together. Never claim this production correction was completed
+merely because tests passed or a PR merged.

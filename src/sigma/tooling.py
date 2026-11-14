@@ -178,6 +178,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/local_config.py"],
             [*python, "python", "tests/cloud_demo.py"],
             [*python, "python", "tests/cloud_auth_part1.py"],
+            [*python, "python", "tests/bootstrap_admin_transfer.py"],
             [*python, "python", "tests/cloud_auth_part2.py"],
             [*python, "python", "tests/cloud_personal.py"],
             [*python, "python", "tests/cloud_workspaces.py"],

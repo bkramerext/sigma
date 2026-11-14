@@ -37,6 +37,12 @@ class CloudAuthTests(CloudAuthFixture):
                 local = self.client.get("/api/cloud-auth/status").json()
                 self.assertEqual(local["target"], "local")
                 self.assertFalse(local["personal_chatgpt_notice_enabled"])
+                self.assertFalse(local["personal_chatgpt_notice_preview"])
+                with patch.dict(os.environ, {"SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW": "true"}):
+                    preview = self.client.get("/api/cloud-auth/status").json()
+                    self.assertEqual(preview["target"], "local")
+                    self.assertTrue(preview["personal_chatgpt_notice_enabled"])
+                    self.assertTrue(preview["personal_chatgpt_notice_preview"])
 
         with patch.dict(os.environ, {"SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": "false"}):
             disabled = self.client.get("/api/cloud-auth/status").json()

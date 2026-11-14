@@ -72,3 +72,26 @@ it to `false` and redeploy to turn it off. Production has not been changed.
   above; later safe/read-only checks continued and passed.
 - The hosted-dialog real-browser assertion is present but not yet reached in a
   passing browser run.
+
+
+## Coordinator completion notes — local preview / administrative cutover
+
+- `./sigma start --prod --signin --navigate` provides a **localhost-only**
+  hosted Personal ChatGPT notice preview. It enables
+  `SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED` and the local presentation
+  override. The URL, accounts, Google/ChatGPT OAuth and inference provider
+  remain local. To preview the notice, sign in locally and select Personal;
+  no production calls occur. Plain `./sigma start` is unchanged.
+- The targeted Invitation Welcome link buttons are styled as underlined text
+  without borders on hover/active/normal states.
+- `docs/STATUS.md` is **retired**. No further status edits belong in PRs;
+  put test results and deployment evidence in the PR, ticket or handoff.
+- The next authorized production deployment must include an operator-verified
+  built-in administrator transfer to `zetacontinuation@gmail.com`. See
+  `docs/DEPLOYMENT_RUNBOOK.md` and the dry-run-first utility
+  `python -m sigma.bootstrap_admin_transfer`. Backup + stopped writers
+  are mandatory. Source-account permissions after the transfer must be
+  checked explicitly. No live production auth data changed in this PR.
+- Run real browser acceptance for the notice and invitation link appearance
+  and validate all CI checks. This is not a claim that hosted personal
+  ChatGPT authorization has been enabled.

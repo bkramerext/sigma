@@ -19,6 +19,10 @@ def cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> None:
+    start_help = cli("start", "--help")
+    assert start_help.returncode == 0, start_help.stderr
+    assert "--prod" in start_help.stdout
+    assert "local" in start_help.stdout
     with TemporaryDirectory() as directory:
         path = str(Path(directory) / "cli.sigma")
         result = cli("init", path, "--title", "CLI question", "--problem", "Investigate")
