@@ -156,9 +156,19 @@ def _verified(port: int, pid: int, root: Path | None = None) -> Process | None:
         )
     else:
         return None
-    if not expected or _sigma_instance(port) != marker:
+    if not expected:
         return None
-    return process
+    served_marker = _sigma_instance(port)
+    if served_marker == marker:
+        return process
+    # Vite proxies /api/ui-instance to FastAPI. Once the backend is gone,
+    # the endpoint cannot confirm the instance even though the same SIGMA
+    # launcher left Vite running. Recover that orphan using the exact Vite
+    # command, checkout, UID, and per-launch environment marker already
+    # checked above, but only when there is no backend listener to mismatch.
+    if port == 5173 and served_marker is None and not _listeners(8000):
+        return process
+    return None
 
 
 def listener_details(port: int) -> list[str]:
