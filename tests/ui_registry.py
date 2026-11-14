@@ -61,8 +61,16 @@ def main() -> None:
         with patch("sigma.ui_instance.STATE_ROOT", state):
             entry = str(roots[0] / ".venv/bin/sigma")
             python = str(roots[0] / ".venv/bin/python")
-            for switches in ("", "--nav", "--prod", "--prod --signin", "--brainstorm",
-                             "--mock-auth", "--sponsored", "--future-start-switch"):
+            for switches in (
+                "",
+                "--nav",
+                "--prod",
+                "--prod --signin",
+                "--brainstorm",
+                "--mock-auth",
+                "--sponsored",
+                "--future-start-switch",
+            ):
                 command = f"{python} {entry} start {switches}".strip()
                 assert recognized_launcher(command, entry), command
             assert not recognized_launcher(f"{python} {entry} shutdown", entry)
@@ -75,9 +83,11 @@ def main() -> None:
             # Simulate registered launchers started with newer CLI switches.
             # Previously, shutdown refused these as "process identity changed"
             # even though UID, PID, birth time and command all matched.
-            for instance, switches in ((instances[0], "--prod --signin"),
-                                       (instances[1], "--brainstorm --navigate"),
-                                       (instances[2], "--mock-auth")):
+            for instance, switches in (
+                (instances[0], "--prod --signin"),
+                (instances[1], "--brainstorm --navigate"),
+                (instances[2], "--mock-auth"),
+            ):
                 record = json.loads(instance.owner_path.read_text(encoding="utf-8"))
                 record["command"] += " " + switches
                 instance.owner_path.write_text(json.dumps(record), encoding="utf-8")
