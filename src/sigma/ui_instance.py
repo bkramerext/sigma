@@ -39,7 +39,13 @@ def private_directory(path: Path) -> None:
 
 
 def recognized_launcher(command: str, entry: str) -> bool:
-    """Recognize supported launch flags without weakening process identity checks."""
+    """Recognize a UI launcher independently of newly added start switches.
+
+    Ownership is established by the private registry, matching checkout, UID,
+    process birth time, and exact recorded command. An allowlist of CLI
+    switches here made legitimate launchers unkillable whenever start gained
+    a switch (for example --prod, --brainstorm, or --mock-auth).
+    """
     try:
         args = shlex.split(command)
     except ValueError:
@@ -47,12 +53,15 @@ def recognized_launcher(command: str, entry: str) -> bool:
     if entry not in args:
         return False
     args = args[args.index(entry) + 1 :]
-    if not args or args[0] not in ("start", "ui"):
+    if args == ["ui"]:
+        return True
+    if not args or args[0] != "start":
         return False
-    return len(args) == 1 or (
-        args[0] == "start"
-        and len(args[1:]) == len(set(args[1:]))
-        and all(flag in ("--nav", "--navigate", "--signin") for flag in args[1:])
+    flags = args[1:]
+    # CLI options for start are switches. Require switch syntax and reject
+    # duplicates, but do not duplicate argparse's continually evolving list.
+    return len(flags) == len(set(flags)) and all(
+        flag.startswith("--") and len(flag) > 2 for flag in flags
     )
 
 
