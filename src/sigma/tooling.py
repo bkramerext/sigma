@@ -116,6 +116,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/research_ethos.py"],
             [*python, "python", "tests/progress_notifications.py"],
             [*python, "python", "tests/model_connection.py"],
+            [*python, "python", "tests/chat.py"],
             [*python, "python", "tests/cloud_sponsor.py"],
             [*python, "python", "tests/chatgpt.py"],
             [*python, "python", "tests/chatgpt_restart.py"],

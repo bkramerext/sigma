@@ -103,6 +103,7 @@ def ready(url: str, instance_id: str | None = None) -> bool:
 def run_ui(
     *,
     navigate: bool = False,
+    navigate_path: str = "/",
     signin: bool = False,
     mock_auth: bool = False,
     sponsored: bool = False,
@@ -233,11 +234,12 @@ def run_ui(
                             announced = True
                             instance.unlock()
                             if navigate:
+                                destination = URL + navigate_path
                                 try:
-                                    if not webbrowser.open(URL, new=2):
-                                        print(f"Open {URL} in your browser.", flush=True)
+                                    if not webbrowser.open(destination, new=2):
+                                        print(f"Open {destination} in your browser.", flush=True)
                                 except (OSError, webbrowser.Error):
-                                    print(f"Open {URL} in your browser.", flush=True)
+                                    print(f"Open {destination} in your browser.", flush=True)
                             else:
                                 print(
                                     f"Use your existing browser tab at {URL} (reload if needed).",
