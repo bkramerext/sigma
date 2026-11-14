@@ -9651,7 +9651,7 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
-    return <><Header goHome={goHome} chatPage/><ChatPage onHome={() => navigate('/')}/><FloatingTooltip/></>;
+    return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>
   }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
