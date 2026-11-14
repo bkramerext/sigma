@@ -27,6 +27,11 @@ identity. Coordinator handoff requests a safe, explicit transfer to the
 designated zeta identity and regression coverage before deployment. No
 production environment or database was changed.
 
+The earlier request to remove visible borders from “Invite Me” and “Explore as
+Guest” in the invitation welcome dialog is also in the Coordinator handoff.
+Their current `.invitation-welcome-link` style already specifies `border: 0`,
+so the rendered computed-style override still needs to be found and verified.
+
 ## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
 
 Read-only production inspection confirmed runtime pin

@@ -26,13 +26,18 @@ it to `false` and redeploy to turn it off. Production has not been changed.
 
 ## Required remaining work
 
-1. Reproduce and pass the new dialog browser assertion. The current local
+1. Resolve the invitation welcome dialog button borders requested earlier.
+   Its current `.invitation-welcome-link` rule already sets `border: 0`, so
+   inspect the rendered computed styles and identify the overriding selector;
+   verify that only “Invite Me” and “Explore as Guest” lose their visible
+   borders.
+2. Reproduce and pass the new dialog browser assertion. The current local
    browser runs stopped earlier in existing fixture assertions, before the
    hosted-dialog scenario: `local_auth_real_backend.py` expected an existing
    Google cookie to render “Sign out of Google” but saw “Sign in with Google”;
    `local_admin_sponsor_pill.py` stopped at its pre-existing personal-pill
    tooltip assertion. Fix the test setup or isolate a reliable fixture.
-2. Correct the built-in administrator identity. Production inspection found
+3. Correct the built-in administrator identity. Production inspection found
    `brian.kramer.personal@gmail.com` bound to the persisted `bootstrap_subject`;
    `zetacontinuation@gmail.com` is separately authorized as an admin. Changing
    `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` alone will not transfer bootstrap status:
@@ -41,10 +46,10 @@ it to `false` and redeploy to turn it off. Production has not been changed.
    `zetacontinuation@gmail.com`. Implement and test a safe, explicit transfer
    that preserves all projects, users, credentials, and audit/accounting data;
    do not copy credentials or silently demote the current identity.
-3. Run CI and resolve failures before merging. Local `./sigma test` failed in
+4. Run CI and resolve failures before merging. Local `./sigma test` failed in
    `project_collaboration.py` and `research_qa.py` with temporary-path symlink
    errors on macOS/Python 3.14; the focused cloud-auth tests passed.
-4. After review/merge, decide whether to set the production flag and deploy
+5. After review/merge, decide whether to set the production flag and deploy
    using the normal guarded production procedure. No production deployment was
    authorized or performed as part of this WIP request.
 
