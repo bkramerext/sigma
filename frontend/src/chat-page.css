@@ -102,24 +102,71 @@
 .brainstorm-workspace .chat-history .chat-markdown { margin-top: 5px; line-height: 1.5; }
 .brainstorm-workspace .chat-error { margin: 10px 0; color: #ffb3a6; }
 
-/* Single right-aligned header row; the last pill is the real Project component. */
+/* Match the Project header: same header component, two-row pill dimensions,
+   original pill styling, row gap and measured outer top/right insets.
+   Only the account layout changes: ChatGPT above Model/Thinking at the right. */
 .workspace-page.brainstorm-workspace .project-art-header .header-controls {
-  display: flex; flex-flow: row nowrap; align-items: center; justify-content: flex-end;
-  gap: var(--identity-pill-gap); width: auto; margin-left: auto; padding-top: 6px;
+  display: flex;
+  flex-flow: column nowrap;
+  align-items: flex-end;
+  align-self: center;
+  justify-content: center;
+  gap: 0;
+  width: max-content;
+  min-width: 0;
+  margin-left: auto;
+  padding-top: 0;
 }
-.brainstorm-workspace .chat-site-header .chat-header-center-slot {
-  position: static; display: flex; flex: 0 0 auto;
-  align-items: center; justify-content: flex-end; width: auto; transform: none;
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack {
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: max-content max-content;
+  align-items: start;
+  align-content: start;
+  justify-items: end;
+  row-gap: var(--sigma-project-pill-row-gap);
+  width: max-content;
+  min-width: 0;
 }
-/* Project reserves a second header row using an absolutely positioned pill.
-   Brainstorm has one row: keep the exact same button, but put its wrapper in
-   normal flow so it contributes its real width and cannot overlap ChatGPT. */
+.workspace-page.brainstorm-workspace .project-art-header
+.brainstorm-header-pill-stack > .api-connection {
+  position: relative;
+  contain: none;
+  box-sizing: border-box;
+  justify-self: end;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header
+.brainstorm-header-pill-stack > .api-connection > summary {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0 0 0 auto;
+}
+.workspace-page.brainstorm-workspace .project-art-header .chat-header-center-slot {
+  position: static;
+  inset: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  width: max-content;
+  min-width: 0;
+  transform: none;
+}
 .workspace-page.brainstorm-workspace .project-art-header
 .chat-header-model-controls:has(> .global-model-pill-position) {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   width: max-content;
-  min-width: max-content;
+  min-width: 0;
   max-width: none;
   padding-bottom: 0;
 }
