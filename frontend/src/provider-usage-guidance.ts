@@ -17,8 +17,8 @@ export function openAIProjectSpendLimitCopy(): {
 } {
   return {
     title: 'OpenAI API project spending limit reached',
-    description: 'OpenAI rejected reference compilation with project_spend_limit_exceeded (HTTP 429). SIGMA usage allowances do not override the API project hard limit. Saved research is intact.',
-    next: 'An OpenAI project owner should review Organization settings → the project used by SIGMA → Limits, including Monthly spend limit and Enforce a hard limit. Raise or disable the limit only if authorized, or wait for its reset. Organization limits and prepaid credit may also apply. Then resume the saved session; no Investigator or Skeptic call was dispatched.',
+    description: 'OpenAI rejected an API-billed model request with project_spend_limit_exceeded (HTTP 429). This is the provider project hard limit; SIGMA allowances cannot override it. Saved research is intact.',
+    next: 'The rejected request may have occurred during optional reference compilation or later Investigator/Skeptic work. Check the active sponsored provider and fix its routing before resuming. If API-key billing is intentionally selected, an authorized project owner can review Organization settings → the project used by SIGMA → Limits. Do not raise or disable a provider limit unless that billing change is authorized.',
   };
 }
 

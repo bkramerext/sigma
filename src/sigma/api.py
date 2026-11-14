@@ -3206,6 +3206,12 @@ async def auth_begin(body: AuthBeginRequest):
     # This route always operates on the authenticated user's personal store.
     # Sponsor maintenance has its own admin-only endpoint; email equality does
     # not change credential ownership or OAuth intent.
+    if cloud_workspaces.enabled():
+        raise HTTPException(
+            409,
+            "Hosted personal ChatGPT sign-in is unavailable. Use SIGMA-sponsored ChatGPT; "
+            "the hosted HTTPS callback is not a supported ChatGPT OAuth redirect.",
+        )
     return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
 
 
@@ -3233,6 +3239,15 @@ async def sponsor_auth_begin(request: Request):
         raise HTTPException(403, "Authenticated sponsor administrator required.")
     if principal.role != "admin":
         raise HTTPException(403, "Designated sponsor administrator required.")
+    if cloud_workspaces.enabled():
+        raise HTTPException(
+            409,
+            "Hosted ChatGPT sign-in cannot use the production HTTPS callback. Sign in locally "
+            "with the designated sponsor account, then securely transfer its protected "
+            "credential file to the VM and import it with `python -m sigma.cloud_sponsor "
+            "/absolute/path` while backend writers are stopped. SIGMA validates the account "
+            "and scopes and preserves the VM's host ID.",
+        )
     from sigma.cloud_sponsor import expected_email, sponsor_account_id
 
     try:

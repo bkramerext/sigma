@@ -610,7 +610,7 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         api_pill = page.locator(".api-connection > summary")
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
-        expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("No member cap")
+        expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("No SIGMA cap")
         assert_account_pill_geometry()
         # Enlarged provider text must grow both pills, not overflow a Google-sized column.
         api_pill.get_by_role("status").evaluate("el => el.style.fontSize = '1.5em'")
@@ -643,53 +643,29 @@ def exercise(origin: str) -> None:
         )
         api_pill.hover()
         expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
-            "no SIGMA member-level spending cap"
+            "provider limits still apply"
         )
         expect(api_pill).to_have_attribute(
-            "data-tooltip", re.compile("Click to connect the designated ChatGPT sponsor account")
+            "data-tooltip", re.compile("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
         )
-        # Browser windows have independent Google sessions. A popup navigation
-        # cannot send X-Sigma-Window as fetch does; the one-time OAuth handoff
-        # must select the initiating window's session through its query string.
-        scoped_window = "abcdef0123456789abcdef0123456789"
-        page.evaluate(
-            """identifier => {
-              sessionStorage.setItem('sigma.auth.window', identifier);
-              sessionStorage.setItem('sigma.auth.windowScoped', 'yes');
-            }""",
-            scoped_window,
+        # Hosted ChatGPT OAuth cannot use the production HTTPS callback.
+        # Clicking explains the supported local sign-in/import path and never
+        # starts a doomed browser authorization or creates a popup.
+        sponsor_auth_calls = sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
+        api_pill.get_by_role("status").click()
+        expect(page.locator(".connection-pill-message")).to_contain_text(
+            "Hosted inference is currently routed to Sponsored OpenAI API key billing"
         )
-        page.reload(wait_until="domcontentloaded")
-        dismiss_sponsor_welcome(page)
-        api_pill = page.locator(".api-connection > summary")
-        page.evaluate(
-            """() => {
-              window.__sigmaAuthHandoffs = [];
-              window.open = () => {
-                let closed = false;
-                return {
-                  opener: null,
-                  location: {
-                    replace: url => window.__sigmaAuthHandoffs.push(url),
-                  },
-                  get closed() { return closed; },
-                  close() { closed = true; },
-                };
-              };
-            }"""
+        expect(page.locator(".connection-pill-message")).to_contain_text(
+            "SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt"
         )
-        with page.expect_request("**/api/ai/sponsor-auth/begin") as api_sponsor_auth:
-            api_pill.get_by_role("status").click()
-        assert api_sponsor_auth.value.method == "POST"
-        page.wait_for_function("window.__sigmaAuthHandoffs?.length === 1")
-        handoff = page.evaluate("window.__sigmaAuthHandoffs[0]")
-        assert handoff == (
-            f"/api/ai/auth/open/sponsor-auth-fixture?sigma_window={scoped_window}"
-        ), handoff
+        assert (
+            sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
+            == sponsor_auth_calls
+        )
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
         expect(api_pill).to_have_attribute(
-            "data-tooltip",
-            re.compile("ChatGPT sponsor credentials are saved in persistent storage"),
+            "data-tooltip", re.compile("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
         )
 
         # Admin-only sponsor sign-in writes OAuth credentials directly on the
@@ -703,13 +679,12 @@ def exercise(origin: str) -> None:
         expect(sponsor_pill).to_have_attribute(
             "data-tooltip", re.compile("Sponsored model connection: disconnected\\.")
         )
+        calls_before = sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
         sponsor_pill.get_by_role("status").click()
-        page.wait_for_timeout(500)
-        assert any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), {
-            "aria_disabled": sponsor_pill.get_attribute("aria-disabled"),
-            "tooltip": sponsor_pill.get_attribute("data-tooltip"),
-            "posts": posts[-10:],
-        }
+        expect(page.locator(".connection-pill-message")).to_contain_text(
+            "Hosted ChatGPT sponsor credentials are not connected"
+        )
+        assert sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts) == calls_before
         expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
         assert not failures, failures
         if os.environ.get("SIGMA_HOSTED_CONNECTION_FOCUSED") == "1":
@@ -746,9 +721,10 @@ def exercise(origin: str) -> None:
         denied_identity_available["value"] = True
         page.goto(origin + "/?access=denied", wait_until="domcontentloaded")
         dismiss_welcome_if_present(page, timeout=10000)
+        invite = page.locator(".home-auth-pills .identity-pill-stack .project-invite-me")
         invitation_dialog = page.locator("#google-invitation-dialog")
         if not invitation_dialog.is_visible():
-            page.locator(".home-auth-pills .identity-pill-stack .project-invite-me").click()
+            invite.click()
         expect(invitation_dialog).to_be_visible()
         invitation_dialog.get_by_role("button", name="Close").click()
         invite = page.locator(".home-auth-pills .identity-pill-stack .project-invite-me")

@@ -2102,6 +2102,51 @@ async def test_portfolio_stops_after_chatgpt_usage_limit(
     )
 
 
+async def test_openai_project_hard_spend_limit_is_not_retried(path: Path):
+    """A 429 billing hard cap settles once; it is not a transient rate limit."""
+    view, strategy, credential, config = await setup(path)
+    research_sessions.save_limits(
+        str(path), {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    )
+    calls = []
+
+    async def handler(request):
+        calls.append(request)
+        return httpx.Response(
+            429,
+            json={"error": {"code": "project_spend_limit_exceeded"}},
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert len(calls) == 1
+    assert finished["status"] == "paused"
+    assert finished["calls_used"] == 1
+    failure = next(step for step in finished["steps"] if step["status"] == "failed")
+    assert failure["role"] == "investigator"
+    assert failure["failure_kind"] == "provider_limited"
+    assert failure["provider_http_status"] == 429
+    assert failure["provider_error_code"] == "project_spend_limit_exceeded"
+    assert (
+        "automatic retry" in finished["message"].lower()
+        or "no further" in finished["message"].lower()
+    )
+
+
 async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Path):
     view, strategy, credential, config = await setup(path)
     credential["mode"] = "chatgpt"

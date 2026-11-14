@@ -176,6 +176,29 @@ def test_transient_provider_failure_classes_are_bounded_and_permanent_errors_not
         streamed=False,
     )
     assert research_sessions._transient_failure_kind(account_limit) is None
+    project_hard_limit = research_sessions.ChatGPTProviderRejection(
+        "OpenAI API project hard spending limit reached",
+        state="limited",
+        code="project_spend_limit_exceeded",
+        http_status=429,
+        streamed=False,
+    )
+    assert research_sessions._provider_failure_fields(project_hard_limit) == {
+        "failure_kind": "provider_limited",
+        "provider_http_status": 429,
+        "provider_response_channel": "http",
+        "provider_error_code": "project_spend_limit_exceeded",
+    }
+    assert research_sessions._transient_failure_kind(project_hard_limit) is None
+    wrapped_project_cap = ProjectError(
+        "OpenAI API rejected request (HTTP 429; project_spend_limit_exceeded)."
+    )
+    assert research_sessions._provider_failure_fields(wrapped_project_cap) == {
+        "failure_kind": "provider_limited",
+        "provider_http_status": 429,
+        "provider_error_code": "project_spend_limit_exceeded",
+    }
+    assert research_sessions._transient_failure_kind(wrapped_project_cap) is None
     assert (
         research_sessions._transient_failure_kind(
             ProjectError(
