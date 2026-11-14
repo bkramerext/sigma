@@ -974,9 +974,10 @@ def exercise(origin: str) -> None:
         posts.clear()
         reload_button = page.get_by_role("button", name="Reload me!")
         hosted_summary = page.locator(".api-connection > summary")
-        expect(hosted_summary.get_by_role("status")).to_have_text("Personal ChatGPT unavailable")
+        expect(hosted_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(hosted_summary).to_have_class(re.compile("has-sponsored-allowance"))
         expect(hosted_summary).to_have_attribute(
-            "title", re.compile("Personal ChatGPT is unavailable")
+            "title", "SIGMA covers eligible ChatGPT model calls."
         )
         expect(page.get_by_role("button", name="Reload me!")).to_have_count(0)
         hosted_summary.click()

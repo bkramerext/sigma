@@ -6,9 +6,11 @@
 
 - Deployment flag: `SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED`, default
   `false` in Compose and `deploy/env.example`.
-- The cloud-auth status endpoint reports the flag only when cloud auth is
-  enabled, non-local, and the environment value is true. The client opens the
-  notice only for the hosted Personal ChatGPT unavailable pill when enabled.
+- The cloud-auth status endpoint reports the flag for hosted auth when enabled,
+  plus an explicit local UI-only preview when launched with `./sigma start --prod`.
+  The UI **reuses the established Sponsored ChatGPT pill shape and two-line layout**
+  rather than inventing a `Personal ChatGPT unavailable` pill. Clicking it in
+  the unavailable Personal context opens the explanatory notice when enabled.
 - Dialog copy is exactly: “Unfortunately, Open AI doesn't let us connect using
   personal accounts while using a hosted application. Installing and running
   SIGMA locally allows this.”
