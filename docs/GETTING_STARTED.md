@@ -13,6 +13,12 @@ On macOS or Linux, install Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.
 
 Open **http://127.0.0.1:5173** if the browser does not open automatically. Stop SIGMA with **Ctrl+C**, or use `./sigma shutdown` from another terminal. Running `./sigma start` again replaces a verified local instance; unrelated services using the ports are left alone.
 
+To open the two-agent chat directly, run `./sigma chat`. It uses the selected
+ChatGPT or API-key connection. Send a human message to start; AI #1 and AI #2
+then alternate until you stop the exchange or send another human message.
+Conversation text is kept in the browser session and sent to the selected
+provider for each turn; it is not saved as a SIGMA project.
+
 For an eligible Google account, normal `./sigma start` sign-in selects
 sponsored mode by default. The pill shows the remaining allowance from the
 local sponsored ledger. Sponsored inference uses SIGMA's designated

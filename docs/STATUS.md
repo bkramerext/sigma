@@ -1,3 +1,15 @@
+## Two-agent chat UI (2026-11-13)
+
+Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
+the selected SIGMA ChatGPT or API-key connection and alternates AI turns until
+the user stops or intervenes. `./sigma test` passed, including Ruff, formatting,
+Pyright (0 diagnostics), frontend typecheck, and production build. The real-Chrome
+browser check passed against deterministic chat fixtures; no provider inference
+was made. The app was launched with `./sigma chat` for manual use.
+
+GitHub Issue #458 is a separate Saved / Recent Projects index failure on macOS;
+this chat work does not fix or close it.
+
 ## PR #325 — documentation accuracy and onboarding verification (2026-10-29)
 
 README setup and local Google-auth claims were checked against `./sigma`,
@@ -8097,3 +8109,4 @@ was not independently captured and remains unverified. No paid provider calls
 were made. See [the issue handoff](../messages/issue_301_green_r4r.txt) for the
 current SHA, exact evidence, screenshots, and limitations. PR remains open and
 unmerged.
+
