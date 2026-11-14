@@ -1018,12 +1018,11 @@ def main() -> None:
                     "Personal"
                 )
                 hosted_pill.click(position={"x": 25, "y": 14})
-                hosted_notice = page.get_by_role(
-                    "dialog", name="Personal ChatGPT unavailable in hosted SIGMA"
-                )
+                hosted_notice = page.get_by_role("dialog", name="Oh, Darn.")
                 expect(hosted_notice).to_be_visible()
+                expect(hosted_notice.get_by_role("heading", name="Oh, Darn.")).to_be_visible()
                 expect(hosted_notice).to_contain_text(
-                    "Unfortunately, Open AI doesn't let us connect using personal accounts while using a hosted application. Installing and running SIGMA locally allows this."
+                    "Unfortunately, Open AI doesn't let us connect using personal accounts while using a hosted application. Installing and running SIGMA locally allows this. But you can still use SIGMA now using the ChatGPT sponsor."
                 )
                 close_notice = hosted_notice.get_by_role(
                     "button", name="Close Personal ChatGPT information"

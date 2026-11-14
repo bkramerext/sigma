@@ -271,9 +271,12 @@ function HostedPersonalChatGPTNotice({ open, onClose }: { open: boolean; onClose
   }, [open]);
   if (!open) return null;
   return <dialog ref={dialog} className="google-account-dialog hosted-personal-chatgpt-dialog"
-    aria-label="Personal ChatGPT unavailable in hosted SIGMA" onClose={onClose}>
-    <DialogDismissButton label="Close Personal ChatGPT information" onClick={onClose}/>
-    <p>Unfortunately, Open AI doesn't let us connect using personal accounts while using a hosted application. Installing and running SIGMA locally allows this.</p>
+    aria-labelledby="hosted-personal-chatgpt-heading" onClose={onClose}>
+    <div className="privacy-notice-heading">
+      <h2 id="hosted-personal-chatgpt-heading">Oh, Darn.</h2>
+      <DialogDismissButton label="Close Personal ChatGPT information" onClick={onClose}/>
+    </div>
+    <p>Unfortunately, Open AI doesn't let us connect using personal accounts while using a hosted application. Installing and running SIGMA locally allows this. But you can still use SIGMA now using the ChatGPT sponsor.</p>
   </dialog>;
 }
 
