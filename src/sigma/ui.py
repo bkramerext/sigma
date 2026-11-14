@@ -245,11 +245,9 @@ def run_ui(
                             announced = True
                             instance.unlock()
                             if navigate:
-                                destination = (
-                                    URL
-                                    if navigate_path == "/"
-                                    else URL.rstrip("/") + navigate_path
-                                )
+                                destination = URL
+                                if navigate_path != "/":
+                                    destination = URL.rstrip("/") + navigate_path
                                 try:
                                     if not webbrowser.open(destination, new=2):
                                         print(f"Open {destination} in your browser.", flush=True)
