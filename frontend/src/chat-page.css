@@ -116,7 +116,28 @@
   position: static; display: flex; flex: 0 0 auto;
   align-items: center; justify-content: flex-end; width: auto; transform: none;
 }
-.brainstorm-workspace .chat-site-header .chat-header-model-controls { display: block; }
+/* Project reserves a second header row using an absolutely positioned pill.
+   Brainstorm has one row: keep the exact same button, but put its wrapper in
+   normal flow so it contributes its real width and cannot overlap ChatGPT. */
+.workspace-page.brainstorm-workspace .project-art-header
+.chat-header-model-controls:has(> .global-model-pill-position) {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  padding-bottom: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header
+.chat-header-model-controls > .global-model-pill-position {
+  position: static;
+  inset: auto;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+}
 @media (max-width: 700px) {
   .brainstorm-workspace .chat-page { width: calc(100% - 28px); }
   .brainstorm-workspace .chat-page-header h1 { font-size: 1.55rem; }
