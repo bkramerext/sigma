@@ -1052,9 +1052,7 @@ def main() -> None:
                 expect(hosted_pill.get_by_role("status")).to_have_text(
                     "Sponsored ChatGPT", timeout=10000
                 )
-                expect(hosted_pill).to_have_class(
-                    re.compile("has-sponsored-allowance")
-                )
+                expect(hosted_pill).to_have_class(re.compile("has-sponsored-allowance"))
                 hosted_pill.click(position={"x": 25, "y": 14})
                 hosted_notice = page.get_by_role("dialog", name="Oh, Darn.")
                 expect(hosted_notice).to_be_visible()
