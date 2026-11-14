@@ -37,21 +37,28 @@ it to `false` and redeploy to turn it off. Production has not been changed.
    Google cookie to render “Sign out of Google” but saw “Sign in with Google”;
    `local_admin_sponsor_pill.py` stopped at its pre-existing personal-pill
    tooltip assertion. Fix the test setup or isolate a reliable fixture.
-3. Correct the built-in administrator identity. Production inspection found
+3. Correct the built-in administrator identity as part of the next production
+   deployment. The operator has confirmed that
+   `zetacontinuation@gmail.com` is the intended built-in administrator. Before
+   calling the deployment complete, the deployed auth database and
+   Administrator Settings must identify zeta as the built-in administrator;
+   zeta being an additional admin grant is not sufficient. Production
+   inspection found
    `brian.kramer.personal@gmail.com` bound to the persisted `bootstrap_subject`;
    `zetacontinuation@gmail.com` is separately authorized as an admin. Changing
    `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` alone will not transfer bootstrap status:
    code intentionally preserves an established subject-bound administrator.
-   The requested canonical built-in administrator is
-   `zetacontinuation@gmail.com`. Implement and test a safe, explicit transfer
-   that preserves all projects, users, credentials, and audit/accounting data;
-   do not copy credentials or silently demote the current identity.
+   Implement and test a safe, explicit transfer that preserves all projects,
+   users, credentials, and audit/accounting data. Verify Brian's resulting
+   role/access explicitly and document it; do not copy credentials.
 4. Run CI and resolve failures before merging. Local `./sigma test` failed in
    `project_collaboration.py` and `research_qa.py` with temporary-path symlink
    errors on macOS/Python 3.14; the focused cloud-auth tests passed.
-5. After review/merge, decide whether to set the production flag and deploy
-   using the normal guarded production procedure. No production deployment was
-   authorized or performed as part of this WIP request.
+5. After review/merge, include the built-in administrator transfer above and
+   set `SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED=true` in the production
+   environment if the notice is approved for launch. Deploy using the normal
+   guarded production procedure. Neither the production environment nor
+   administrator database was changed as part of this WIP request.
 
 ## Verification already run
 

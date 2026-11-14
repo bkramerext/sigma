@@ -24,8 +24,11 @@ existing production auth database binds its bootstrap administrator to Brian's
 Google subject, while `zetacontinuation@gmail.com` is a separate admin. A
 contact-email change alone intentionally preserves that bound bootstrap
 identity. Coordinator handoff requests a safe, explicit transfer to the
-designated zeta identity and regression coverage before deployment. No
-production environment or database was changed.
+designated zeta identity and regression coverage as a requirement of the next
+production deployment. Verify the deployed auth database and Administrator
+Settings identify zeta as the built-in administrator; the separate admin
+grant alone is insufficient. No production environment or database was
+changed.
 
 The earlier request to remove visible borders from “Invite Me” and “Explore as
 Guest” in the invitation welcome dialog is also in the Coordinator handoff.
