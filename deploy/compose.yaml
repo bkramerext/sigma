@@ -33,6 +33,7 @@ services:
       - invitation_smtp_password
     environment:
       SIGMA_CLOUD_AUTH_ENABLED: "true"
+      SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED: ${SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED:-false}
       SIGMA_CLOUD_AUTH_HOME: /var/lib/sigma-auth
       SIGMA_CLOUD_CHATGPT_AUTH_HOME: /var/lib/sigma-auth/chatgpt-sponsor
       SIGMA_CLOUD_INFERENCE_PROVIDER: ${SIGMA_CLOUD_INFERENCE_PROVIDER:-chatgpt}

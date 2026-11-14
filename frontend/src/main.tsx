@@ -26,7 +26,6 @@ import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRe
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
-import ChatPage from './ChatPage';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
@@ -6126,8 +6125,8 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -6196,7 +6195,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     void document.fonts.ready.then(() => { if (!disposed) measure(); });
     return () => { disposed = true; observer.disconnect(); };
   }, [projectTitle, hasActivity, projectArtwork]);
-  return <header className={`${projectArtwork ? 'site-header project-art-header' : 'site-header'}${chatPage ? ' chat-site-header' : ''}`}>
+  return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
@@ -6206,7 +6205,6 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
-    {chatPage && <div className="chat-header-center-slot" aria-label="Chat model and thinking settings"/>}
     <div ref={headerPillsRef} className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
@@ -9646,9 +9644,6 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
-  if (url.pathname === '/chat') {
-    return <><Header goHome={goHome} chatPage/><ChatPage onHome={() => navigate('/')}/><FloatingTooltip/></>;
-  }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
@@ -9688,10 +9683,10 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; mock_identity?: boolean; sponsored_test_mode?: boolean; personal_chatgpt_notice_enabled?: boolean; personal_chatgpt_notice_preview?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean; forced?: boolean }; invitation_welcome_pending?: boolean; invitation_status?: string | null } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; updated_at: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null; reload_eligible?: boolean } };
-type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
+type CloudFunding = { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled: boolean; personalChatGPTNoticePreview: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible: boolean; sponsorshipUnlimited: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void>; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
 type CloudIdentityState = CloudStatus & { deniedIdentityAvailable: boolean; deniedInvitationStatus: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -10573,7 +10568,7 @@ function CloudAuthGate() {
     if (!response.ok) throw await cloudFailure(response, 'The simulated provider connection could not be changed.');
     setProviderStatus({ status: next, guidance: 'Simulated local provider status.' });
   }, [providerStatus?.status]);
-  const funding: CloudFunding = { target: status?.target ?? 'local', authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
+  const funding: CloudFunding = { target: status?.target ?? 'local', personalChatGPTNoticeEnabled: !!status?.personal_chatgpt_notice_enabled, personalChatGPTNoticePreview: !!status?.personal_chatgpt_notice_preview, authenticationEnabled: !!status?.enabled, googleAccount: status?.user?.email ?? null, budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated, sponsorshipEligible: !!status?.account?.sponsorship.eligible, sponsorshipUnlimited: status?.user?.role === 'admin', provider: providerStatus, providerLoading, providerError, retryProvider: refreshSponsoredConnection, selectedConnection: status?.account?.model_access.mode === 'sponsored' ? 'sponsored' : 'personal', forcedSponsored: !!status?.account?.sponsorship.forced, simulatedSponsored: !!status?.sponsored_test_mode && !!status?.mock_identity, disconnectMockSponsored, selectConnection, connectionError, selectingConnection };
   useEffect(() => {
     setSponsoredUsageConnection(funding.target === 'hosted' || funding.selectedConnection === 'sponsored');
   }, [funding.target, funding.selectedConnection]);

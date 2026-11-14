@@ -257,10 +257,11 @@ def check_start_cli() -> None:
             else:
                 raise AssertionError("start did not exit")
         launch.assert_called_once_with(
-            navigate=False, signin=False, mock_auth=mock_auth, sponsored=True
+            navigate=False, signin=False, mock_auth=mock_auth, sponsored=True, prod=False
         )
+    # --prod is forwarded to the local UI launcher, not a production backend.
     with (
-        patch("sys.argv", ["sigma", "chat"]),
+        patch("sys.argv", ["sigma", "start", "--prod"]),
         patch("sigma.cli.run_ui", return_value=0) as launch,
     ):
         try:
@@ -268,8 +269,10 @@ def check_start_cli() -> None:
         except SystemExit as exc:
             assert exc.code == 0
         else:
-            raise AssertionError("chat did not exit")
-    launch.assert_called_once_with(navigate=True, navigate_path="/chat")
+            raise AssertionError("start --prod did not exit")
+    launch.assert_called_once_with(
+        navigate=False, signin=False, mock_auth=False, sponsored=False, prod=True
+    )
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
         try:
@@ -432,7 +435,7 @@ def _check_ui() -> None:
                 [backend] if outcome == "launch failure" else [backend, frontend]
             )
             if outcome == "navigate":
-                open_browser.assert_called_once_with("http://127.0.0.1:5173/", new=2)
+                open_browser.assert_called_once_with("http://127.0.0.1:5173", new=2)
             else:
                 open_browser.assert_not_called()
     child = Mock()

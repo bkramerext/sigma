@@ -160,13 +160,8 @@ COMMAND_DETAILS = {
     ),
     "start": (
         "Start or safely restart this checkout's browser UI.",
-        "./sigma start --navigate --signin",
-        "Uses SIGMA local configuration and the configured UI ports; `--navigate` opens a browser tab.",
-    ),
-    "chat": (
-        "Start or safely restart the SIGMA browser UI at the two-agent chat.",
-        "./sigma chat",
-        "Opens the chat page and reuses the selected ChatGPT or API-key connection. Stop with Ctrl+C or `./sigma shutdown`.",
+        "./sigma start --prod --signin --navigate",
+        "Uses SIGMA local configuration and the configured UI ports; `--prod` previews the hosted Personal ChatGPT notice locally without connecting to production, changing billing, or disabling local OAuth. `--navigate` opens a browser tab.",
     ),
     "shutdown": (
         "Stop identifiable local SIGMA UI servers safely.",
@@ -323,6 +318,11 @@ def main() -> None:
         help="Force sponsored presentation for eligible local Google accounts and show their configured allowance",
     )
     ui_command.add_argument(
+        "--prod",
+        action="store_true",
+        help="Preview hosted Personal ChatGPT notice locally (UI only; no live production routing)",
+    )
+    ui_command.add_argument(
         "--signin",
         action="store_true",
         help="Start with a local admin identity from SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
@@ -334,7 +334,6 @@ def main() -> None:
         action="store_true",
         help="Open SIGMA in a browser tab after startup",
     )
-    add_command(commands, "chat", help="Launch the two-agent chat UI")
     add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
     for command_parser in commands.choices.values():
         for action in command_parser._actions:
@@ -427,10 +426,9 @@ def main() -> None:
                 signin=args.signin,
                 mock_auth=args.mock_auth,
                 sponsored=args.sponsored,
+                prod=args.prod,
             )
         )
-    if args.command == "chat":
-        sys.exit(run_ui(navigate=True, navigate_path="/chat"))
     if args.command == "shutdown":
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:

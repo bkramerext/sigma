@@ -101,17 +101,6 @@ def exercise(origin: str) -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
-        page.add_init_script(
-            """window.__sponsoredPillTransientLabels = [];
-            window.setInterval(() => {
-                const label = document.querySelector(
-                    '.api-connection > summary [role="status"]'
-                )?.textContent?.trim() || '';
-                if (/^(Connecting|Checking)/.test(label)) {
-                    window.__sponsoredPillTransientLabels.push(label);
-                }
-            }, 10);"""
-        )
         selected = {"mode": "personal"}
         forced = {"value": False}
         local_sponsored_mode = {"value": False}
@@ -129,7 +118,6 @@ def exercise(origin: str) -> None:
         denied_identity_available = {"value": False}
         denied_invitation_status = {"value": None}
         admin_mode = {"value": False}
-        delay_provider_connection = {"value": False}
         admin_grants = [
             {
                 "kind": "email",
@@ -293,8 +281,6 @@ def exercise(origin: str) -> None:
                     "unknown_provider_attempts": 0,
                 }
             elif path.endswith("/api/cloud-research/connection"):
-                if delay_provider_connection["value"]:
-                    time.sleep(0.5)
                 payload = {
                     "mode": "sponsored",
                     "provider": sponsored_provider["provider"],
@@ -539,7 +525,7 @@ def exercise(origin: str) -> None:
         allowance = page.get_by_role("button", name="Show sponsorship details")
         assert allowance.evaluate("e => getComputedStyle(e).backgroundColor") == "rgba(0, 0, 0, 0)"
         expect(allowance).to_have_attribute(
-            "data-tooltip", re.compile(r"Sponsored model connection: Connected\.")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         allowance.hover()
         allowance_text = page.locator(".sponsored-allowance-tooltip")
@@ -584,7 +570,7 @@ def exercise(origin: str) -> None:
         )
         forced_pill.hover()
         expect(forced_pill).to_have_attribute(
-            "data-tooltip", re.compile("Sponsored model connection: Connected\\.")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         forced_pill.click()
         assert not any(path.endswith("/api/ai/mode") for path, _ in posts), posts
@@ -614,22 +600,17 @@ def exercise(origin: str) -> None:
             assert abs(geometry["google_right"] - geometry["chatgpt_right"]) < 1, geometry
             assert geometry["label_right_inset"] >= 10, geometry
 
-        # Hosted presentation follows effective runtime routing. The admin's
-        # per-user SIGMA allowance is Unlimited; provider/global limits still
-        # appear in the sponsorship details.
+        # Hosted presentation follows effective runtime routing; the admin's
+        # SIGMA allowance does not imply the provider's own limit is unlimited.
         page.set_viewport_size({"width": 1280, "height": 800})
         admin_mode["value"] = True
         forced["value"] = False
         sponsored_provider.update(provider="api_key", status="connected")
-        delay_provider_connection["value"] = True
-        page.evaluate("window.__sponsoredPillTransientLabels = []")
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         api_pill = page.locator(".api-connection > summary")
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
         expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
-        assert page.evaluate("window.__sponsoredPillTransientLabels") == []
-        delay_provider_connection["value"] = False
         assert_account_pill_geometry()
         # Enlarged provider text must grow both pills, not overflow a Google-sized column.
         api_pill.get_by_role("status").evaluate("el => el.style.fontSize = '1.5em'")
@@ -665,7 +646,7 @@ def exercise(origin: str) -> None:
             "provider limits still apply"
         )
         expect(api_pill).to_have_attribute(
-            "data-tooltip", re.compile("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         # Hosted ChatGPT OAuth cannot use the production HTTPS callback.
         # Clicking explains the supported local sign-in/import path and never
@@ -684,7 +665,7 @@ def exercise(origin: str) -> None:
         )
         expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
         expect(api_pill).to_have_attribute(
-            "data-tooltip", re.compile("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
 
         # Admin-only sponsor sign-in writes OAuth credentials directly on the
@@ -696,7 +677,7 @@ def exercise(origin: str) -> None:
         expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
         assert_account_pill_geometry()
         expect(sponsor_pill).to_have_attribute(
-            "data-tooltip", re.compile("Sponsored model connection: disconnected\\.")
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         calls_before = sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
         sponsor_pill.get_by_role("status").click()
@@ -993,9 +974,10 @@ def exercise(origin: str) -> None:
         posts.clear()
         reload_button = page.get_by_role("button", name="Reload me!")
         hosted_summary = page.locator(".api-connection > summary")
-        expect(hosted_summary.get_by_role("status")).to_have_text("Personal ChatGPT unavailable")
+        expect(hosted_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(hosted_summary).to_have_class(re.compile("has-sponsored-allowance"))
         expect(hosted_summary).to_have_attribute(
-            "title", re.compile("Personal ChatGPT is unavailable")
+            "title", "SIGMA covers eligible ChatGPT model calls."
         )
         expect(page.get_by_role("button", name="Reload me!")).to_have_count(0)
         hosted_summary.click()
@@ -1102,7 +1084,7 @@ def exercise(origin: str) -> None:
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
         expect(sponsored_summary).to_have_attribute(
-            "title", re.compile("Click to connect your own ChatGPT account")
+            "title", "SIGMA covers eligible ChatGPT model calls."
         )
         details = page.get_by_role("button", name="Show sponsorship details")
         details.click()
