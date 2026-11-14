@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import stat
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -245,7 +246,11 @@ def check_transcripts() -> None:
             path = directory / session["transcript_name"]
             assert path.is_file()
             assert session["transcript_name"].endswith(f"_{session['conversation_id']}.md")
-            assert len(session["transcript_name"]) > 30
+            assert re.fullmatch(
+                rf"\d{{8}}_\d{{6}}_{session['conversation_id']}\.md",
+                session["transcript_name"],
+            )
+            assert session["transcript_path"] == str(path.resolve())
             assert stat.S_IMODE(directory.stat().st_mode) == 0o700
             assert stat.S_IMODE(path.stat().st_mode) == 0o600
 

@@ -31,7 +31,7 @@ Start the local UI with `./sigma chat`, then run
 Chrome while intercepting chat configuration and turn responses with
 deterministic fixtures. It checks the Human, AI #1, and AI #2 boxes, alternating
 turn order, account-verified model and supported Thinking controls, Markdown and
-math rendering, the visible timestamped transcript filename and append-only
+math rendering, the visible full transcript path and append-only
 speaker entries, a human intervention, and stopping. AI reply panels are
 read-only. It makes no provider calls.
 

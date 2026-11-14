@@ -50,8 +50,8 @@ def _write_all(fd: int, data: bytes) -> None:
 def open_transcript() -> dict[str, str]:
     """Create a private timestamped transcript and return its session ID and name."""
     conversation_id = str(uuid4())
-    started = datetime.now(UTC)
-    name = f"{started.strftime('%Y%m%dT%H%M%S.%fZ')}_{conversation_id}.md"
+    started = datetime.now().astimezone()
+    name = f"{started.strftime('%Y%m%d_%H%M%S')}_{conversation_id}.md"
     path = _directory() / name
     header = (f"# SIGMA two-agent chat transcript\n\nStarted: {started.isoformat()}\n\n").encode()
     try:
@@ -68,7 +68,11 @@ def open_transcript() -> dict[str, str]:
             os.fsync(stream.fileno())
     except OSError as exc:
         raise ProjectError("The timestamped chat transcript could not be created.") from exc
-    return {"conversation_id": conversation_id, "transcript_name": name}
+    return {
+        "conversation_id": conversation_id,
+        "transcript_name": name,
+        "transcript_path": str(path.resolve()),
+    }
 
 
 def append_message(conversation_id: str, speaker: str, text: str) -> None:

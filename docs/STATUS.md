@@ -6,7 +6,7 @@ Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
 the selected SIGMA ChatGPT or API-key connection and alternates AI turns until
 the user stops or intervenes. AI replies and transcript entries render Markdown
 and LaTeX; AI reply panels are read-only. Each chat opens a private, timestamped
-Markdown transcript under SIGMA state, displays its filename in the chat window,
+Markdown transcript under SIGMA state, displays its full path in the chat window,
 and appends Human, AI #1, and AI #2 messages. Chat Model and Thinking pills cycle
 only through account-verified models and supported reasoning levels; each turn
 uses the selected pair. A new chat starts with the verified default model and
@@ -15,7 +15,7 @@ Low thinking.
 Verification on the follow-up branch: `tests/chat.py` passes configuration,
 model/Thinking validation, transcript mode/append/symlink checks, and API turns.
 `browser_checks/chat.py` passes in real Chrome against deterministic fixtures,
-including the visible transcript filename, all three transcript speakers,
+including the visible full transcript path, timestamp format, all three transcript speakers,
 Markdown/LaTeX display, model/Thinking selection, human intervention, and no AI
 reply editors. Frontend typecheck and production build pass. Ruff check and
 format checks pass. No provider inference was made. The full `./sigma test`

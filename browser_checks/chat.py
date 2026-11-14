@@ -36,6 +36,7 @@ with sync_playwright() as playwright:
                     {
                         "conversation_id": conversation_id,
                         "transcript_name": f"20261114T120000.{session_calls:06d}Z_{conversation_id}.md",
+                        "transcript_path": f"/tmp/sigma-state/chat-transcripts/20261114_120000_{conversation_id}.md",
                     }
                 ),
             )
@@ -117,6 +118,7 @@ with sync_playwright() as playwright:
     assert second.locator("textarea").count() == 0
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
     transcript_filename = page.locator(".chat-privacy-note code")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120000_")
     expect(transcript_filename).to_contain_text(".md")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_visible()
     model_pill = page.get_by_role("button", name="Model gpt-6.1-sol")
@@ -184,7 +186,7 @@ with sync_playwright() as playwright:
     )
     assert session_calls == 1
     page.get_by_role("button", name="Clear conversation", exact=True).click()
-    expect(transcript_filename).to_contain_text(".md")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120000_")
     assert session_calls == 2
     assert not errors, errors
     assert config_calls >= 1

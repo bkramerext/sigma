@@ -40,7 +40,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [conversationId, setConversationId] = useState('');
-  const [transcriptName, setTranscriptName] = useState('');
+  const [transcriptPath, setTranscriptPath] = useState('');
   const messagesRef = useRef<ChatMessage[]>([]);
   const runningRef = useRef(false);
   const runId = useRef(0);
@@ -91,15 +91,15 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       method: 'POST', cache: 'no-store', signal,
     });
     const value = await response.json() as {
-      conversation_id?: string; transcript_name?: string; error?: string; detail?: string;
+      conversation_id?: string; transcript_path?: string; error?: string; detail?: string;
     };
-    if (!response.ok || !value.conversation_id || !value.transcript_name) {
+    if (!response.ok || !value.conversation_id || !value.transcript_path) {
       throw new Error(value.error ?? value.detail ?? 'The chat transcript could not be opened.');
     }
     if (!signal?.aborted) {
       transcriptWrites.current = Promise.resolve();
       setConversationId(value.conversation_id);
-      setTranscriptName(value.transcript_name);
+      setTranscriptPath(value.transcript_path);
     }
     return value.conversation_id;
   }, []);
@@ -262,7 +262,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     messagesRef.current = [];
     setMessages([]);
     setConversationId('');
-    setTranscriptName('');
+    setTranscriptPath('');
     transcriptWrites.current = Promise.resolve();
     setError('');
     setNotice('');
@@ -274,6 +274,20 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   }
 
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
+  const modelControlHint = !config
+    ? error || 'Chat settings are loading.'
+    : !config.available
+      ? config.message || 'Connect an AI account to enable model selection.'
+      : running
+        ? 'Stop the exchange before changing the model.'
+        : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle through models available to this account.`;
+  const thinkingControlHint = !config
+    ? error || 'Chat settings are loading.'
+    : !config.available
+      ? config.message || 'Connect an AI account to enable Thinking selection.'
+      : running
+        ? 'Stop the exchange before changing the Thinking level.'
+        : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle through levels supported by this model.`;
   const canSend = !!config?.available && !!conversationId && !error.startsWith('The chat contains too many messages')
     && !!draft.trim() && draft.trim().length <= (config?.max_message_characters ?? 0);
 
@@ -282,10 +296,10 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       <button type="button" className="chat-home-link" onClick={onHome}>← SIGMA Home</button>
       <div className="chat-heading"><p className="chat-eyebrow">Open conversation</p><h1>Two AI chat</h1>
         <div className="chat-model-controls" aria-label="Chat model and thinking controls">
-          <button type="button" className="chat-control-pill" aria-label={`Model ${config?.model ?? 'loading'}`} data-tooltip={`${config?.model ?? 'Model'} · ${config?.models.find(item => item.id === config.model)?.label ?? 'Loading'}. Click to cycle through models available to this account.`} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleModel}>
+          <button type="button" className="chat-control-pill" aria-label={`Model ${config?.model ?? 'loading'}`} data-tooltip={modelControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleModel}>
             Model · {config?.model ?? 'Loading'}
           </button>
-          <button type="button" className="chat-control-pill" aria-label={`Thinking level ${thinkingLabels[config?.reasoning_effort ?? 'low']}`} data-tooltip="Click to cycle through Thinking levels supported by this model." disabled={!config?.available || !(config?.models.length) || running} onClick={cycleThinking}>
+          <button type="button" className="chat-control-pill" aria-label={`Thinking level ${thinkingLabels[config?.reasoning_effort ?? 'low']}`} data-tooltip={thinkingControlHint} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleThinking}>
             Thinking · {thinkingLabels[config?.reasoning_effort ?? 'low']}
           </button>
         </div>
@@ -325,6 +339,6 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     </div>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start chatting.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
-    <p className="chat-privacy-note">Messages are appended to a private transcript in SIGMA state and sent to the selected AI provider for each turn. Transcript: <code>{transcriptName || 'opening…'}</code>. It is not saved as a SIGMA project.</p>
+    <p className="chat-privacy-note">Messages are appended to a private transcript in SIGMA state and sent to the selected AI provider for each turn. Transcript file: <code>{transcriptPath || 'opening…'}</code>. It is not saved as a SIGMA project.</p>
   </main>;
 }

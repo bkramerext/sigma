@@ -107,6 +107,7 @@
 .chat-history .chat-markdown { margin-top: 5px; line-height: 1.5; }
 .chat-error { margin: 10px 0; color: #ffb3a6; }
 .chat-privacy-note { margin: 16px 0 0; color: #a69b8d; font-size: .82rem; }
+.chat-privacy-note code { overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {
   .chat-page-header { grid-template-columns: auto 1fr; }
