@@ -1,5 +1,46 @@
 # SIGMA status
 
+## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
+
+Read-only production inspection confirmed runtime pin
+`2cc08b5eae6acd661d485878f4ce84ca962786f8`, explicit
+`SIGMA_CLOUD_INFERENCE_PROVIDER=api_key`, the intended sponsor email, and an
+empty designated ChatGPT registration in the persistent sponsor store. The
+saved Maximum Regions session shows optional reference compilation fell back
+after `project_spend_limit_exceeded`; two Investigator calls were then rejected
+with the same hard cap. The UI's compiler-only terminal explanation was
+incorrect. No failed call was retried by this inspection, no spend-limit
+configuration was changed, and no production data or accounting rows were
+modified.
+
+OpenAI's current OSS SIWC guide requires the exact `127.0.0.1` loopback
+redirect through token exchange; the production HTTPS callback is unsupported.
+Its VM guide requires local sign-in and protected transfer to the VM while
+retaining the VM host ID. The hosted sponsor button now explains this path and
+does not start the invalid HTTPS OAuth flow. Hard provider spending-limit
+errors from either compiler or research agents are classified as nontransient
+provider limits, with safe error guidance and no automatic hard-cap retry.
+Hosted provider labels distinguish Sponsored OpenAI API key billing from
+ChatGPT sponsorship, and the SIGMA allowance pill says “No SIGMA cap.”
+
+The operator completed local ChatGPT connection in a dedicated private
+`SIGMA_AUTH_HOME`; a `0600` registration file was found under its opaque
+per-user subdirectory. Its contents were not read or exposed. The local SIGMA
+process was stopped to prevent a refresh race. It has not yet been transferred
+or imported on the VM. Production remains on `api_key`; the requested live
+three-minute Session has not run.
+
+Focused regressions for project hard-cap classification, no retry, hosted
+authorization blocking, provider guidance, and the hosted connection browser
+flow passed. Ruff, Ruff format, Pyright, frontend typecheck/build, and the
+provider-guidance tests passed. `./sigma test` completed with two unrelated
+macOS/Python 3.14 collaboration-fixture failures (`project_collaboration.py`
+and `research_qa.py`), which are outside this patch's changed files; the
+remaining safe checks passed. The focused hosted browser workflow passed. No
+paid inference was dispatched. Merge, guarded deployment,
+protected transfer/import, production readiness, and the one authorized live
+three-minute start/Stop remain outstanding.
+
 ## 2026-11-14 — second SIGMA v0.4.2 deployment complete
 
 The second v0.4.2 cutover deployed exact merged `main` SHA

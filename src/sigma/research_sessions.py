@@ -3615,9 +3615,16 @@ def _retain_unknown_cost_reservation(record: dict[str, Any], step: dict[str, Any
 def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     """Persist bounded response classification without storing provider bodies."""
     if isinstance(exc, ChatGPTProviderRejection):
+        project_hard_limit = exc.code in {
+            "project_spend_limit_exceeded",
+            "insufficient_quota",
+            "billing_hard_limit_reached",
+            "billing_not_active",
+        }
         kind = (
             "provider_limited"
-            if exc.state == "limited" and exc.code == "subscription_sharing_usage_limit_exceeded"
+            if project_hard_limit
+            or (exc.state == "limited" and exc.code == "subscription_sharing_usage_limit_exceeded")
             else "provider_rate_limited"
             if exc.http_status == 429
             else "provider_rejected"
@@ -3659,7 +3666,15 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     if match is None:
         return {"failure_kind": "provider_error"}
     status = int(match.group(1))
-    limited = status == 429 or "ChatGPT plan or app usage limit reached" in message
+    hard_limit_code = re.search(
+        r"\b(project_spend_limit_exceeded|insufficient_quota|billing_hard_limit_reached|billing_not_active)\b",
+        message,
+    )
+    limited = (
+        hard_limit_code is not None
+        or status == 429
+        or "ChatGPT plan or app usage limit reached" in message
+    )
     result: dict[str, Any] = {
         "failure_kind": "provider_limited"
         if limited
@@ -3668,6 +3683,8 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
         else "provider_error"
     }
     result["provider_http_status"] = status
+    if hard_limit_code is not None:
+        result["provider_error_code"] = hard_limit_code.group(1)
     retry_after_seconds = getattr(exc, "retry_after_seconds", None)
     if isinstance(retry_after_seconds, (int, float)) and 0 <= retry_after_seconds <= 3600:
         result["retry_after_seconds"] = float(retry_after_seconds)
@@ -3676,6 +3693,18 @@ def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
 
 def _transient_failure_kind(exc: Exception) -> str | None:
     """Return a bounded retry class only for failures likely to clear on retry."""
+    if isinstance(exc, ChatGPTProviderRejection) and exc.code in {
+        "project_spend_limit_exceeded",
+        "insufficient_quota",
+        "billing_hard_limit_reached",
+        "billing_not_active",
+    }:
+        return None
+    if re.search(
+        r"\b(project_spend_limit_exceeded|insufficient_quota|billing_hard_limit_reached|billing_not_active)\b",
+        str(exc),
+    ):
+        return None
     if "ChatGPT plan or app usage limit reached" in str(exc):
         return None
     if isinstance(exc, (TimeoutError, httpx.TimeoutException)):

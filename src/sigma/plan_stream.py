@@ -277,6 +277,7 @@ def failure(
         "unsupported_value",
         "model_not_found",
         "model_access_denied",
+        "project_spend_limit_exceeded",
         "insufficient_quota",
         "billing_hard_limit_reached",
     }

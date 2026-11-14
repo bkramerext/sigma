@@ -18,12 +18,13 @@ test('project hard-cap responses give project-level recovery guidance', () => {
   const copy = providerInterruptionCopy('project_spend_limit_exceeded', true);
   assert.deepEqual(copy, openAIProjectSpendLimitCopy());
   assert.match(copy.title, /OpenAI API project/);
-  assert.match(copy.next, /Monthly spend limit/);
-  assert.match(copy.next, /Enforce a hard limit/);
+  assert.match(copy.description, /API-billed model request/);
+  assert.match(copy.next, /optional reference compilation or later Investigator\/Skeptic/);
+  assert.match(copy.next, /active sponsored provider/);
+  assert.match(copy.next, /intentionally selected/);
   assert.match(copy.next, /authorized/);
-  assert.doesNotMatch(copy.next, /few hours/);
   assert.match(
     friendlyProviderError('HTTP 429 project_spend_limit_exceeded', true),
-    /SIGMA usage allowances do not override the API project hard limit/,
+    /SIGMA allowances cannot override it/,
   );
 });

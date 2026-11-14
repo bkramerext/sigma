@@ -40,12 +40,58 @@ startup logs flag missing sponsor configuration.
 
 Compose sets `SIGMA_CLOUD_CHATGPT_AUTH_HOME` to
 `/var/lib/sigma-auth/chatgpt-sponsor` on the persistent state volume. Do not
-copy local or personal credential files. A signed-in SIGMA administrator uses
-the hosted sponsored connection pill to start the dedicated sponsor ChatGPT
-authorization flow. The sponsor completes sign-in in the browser; the verified
-callback writes credentials directly to the persistent store. The existing
-API-key secret mount may remain for explicit API-key deployments, but it is
-never read or used in ChatGPT mode.
+use a hosted HTTPS OAuth callback for ChatGPT dynamic registration. OpenAI's
+published [registration guide](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+requires a `127.0.0.1` loopback callback for initial registration; a callback
+on the remote SIGMA origin is not valid. For a self-hosted VM, OpenAI's
+[documented VM procedure](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms)
+is to complete sign-in locally with the same SIGMA client and designated
+account, then transfer the selected protected registration to the VM over a
+secure channel such as SSH. Do not send the file through chat, GitHub, logs, or
+the public app. The operator must explicitly authorize this account transfer.
+
+### Operator steps
+
+The operator does not need to log in to the VM or stage a file there. First,
+create an isolated private credential directory on the trusted computer where
+SIGMA is checked out, then start local SIGMA with that directory:
+
+```sh
+mkdir -m 700 -p "$HOME/.config/sigma-sponsor-transfer"
+SIGMA_AUTH_HOME="$HOME/.config/sigma-sponsor-transfer" \
+SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt ./sigma start
+```
+
+In the local SIGMA browser, choose **Connect AI → Continue with ChatGPT**, sign
+in as the designated sponsor, and grant ChatGPT plan use. Do not connect any
+other ChatGPT account in this isolated instance. After SIGMA reports the
+connection, stop it with `./sigma shutdown`; this prevents a local refresh from
+racing the VM's refresh. Tell the deployment operator that local sign-in is
+complete. Do not send the credential file or its contents in chat. The
+`credentials.json` file is under the dedicated directory above; when local
+Google identity is enabled, SIGMA may place it below an opaque per-user
+subdirectory. The deployment operator can transfer the selected file directly
+over the existing private IAP/SSH path and run the validating import. SIGMA
+transfers only the selected registration and keeps the VM's existing host ID.
+The source directory should be removed after production connection and refresh
+are verified.
+
+Stage only the selected registration in a protected temporary file on the VM.
+Stop backend writers, then run `python -m sigma.cloud_sponsor
+/absolute/path/to/credential-file` as the backend user. The importer validates
+the signed OpenAI identity, exact designated email, issuer, scopes, expiry and
+token metadata; it imports only that registration and preserves the VM's own
+host ID. Remove the staged file after a successful import. Never overwrite the
+existing credential store with an unchecked file. Verify
+`/api/cloud-research/connection` reports provider `chatgpt` and status
+`connected`, then check `/api/cloud-research/readiness`; these checks do not
+dispatch inference.
+
+The hosted sponsored connection pill must not start an unsupported remote
+OAuth callback. It identifies the active deployment provider and gives the
+operator the supported provisioning steps. The existing API-key secret mount
+may remain for explicit API-key deployments, but it is never read or used in
+ChatGPT mode.
 
 Check `/api/cloud-research/connection` for provider `chatgpt` and status
 `connected`, then `/api/cloud-research/readiness` for a clear sponsored

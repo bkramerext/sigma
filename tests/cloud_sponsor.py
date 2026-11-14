@@ -176,7 +176,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
         from fastapi import HTTPException
         from starlette.requests import Request
 
-        from sigma import api, cloud_auth
+        from sigma import api, cloud_auth, cloud_workspaces
 
         principal = SimpleNamespace(
             role="admin", email="admin@example.test", subject="admin-subject"
@@ -186,6 +186,7 @@ class SponsorTests(IsolatedAsyncioTestCase):
         with (
             patch.object(cloud_auth, "config", return_value=cfg),
             patch.object(cloud_auth, "Principal", SimpleNamespace),
+            patch.object(cloud_workspaces, "enabled", return_value=False),
             patch.object(
                 cloud_sponsor,
                 "sponsor_account_id",
@@ -198,6 +199,18 @@ class SponsorTests(IsolatedAsyncioTestCase):
             result = await api.sponsor_auth_begin(request)
             self.assertEqual(result["id"], "attempt")
             begin.assert_awaited_once_with(account_id=None, sponsor=True)
+
+            with patch.object(cloud_workspaces, "enabled", return_value=True):
+                with self.assertRaises(HTTPException) as unsupported:
+                    await api.sponsor_auth_begin(request)
+                with self.assertRaises(HTTPException) as personal_unsupported:
+                    await api.auth_begin(api.AuthBeginRequest())
+            self.assertEqual(unsupported.exception.status_code, 409)
+            self.assertIn("securely transfer", str(unsupported.exception.detail))
+            self.assertIn("protected credential file", str(unsupported.exception.detail))
+            self.assertEqual(personal_unsupported.exception.status_code, 409)
+            self.assertIn("hosted HTTPS callback", str(personal_unsupported.exception.detail))
+            begin.assert_awaited_once()
 
             principal.role = "member"
             with self.assertRaises(HTTPException) as rejected:
