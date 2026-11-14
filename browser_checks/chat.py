@@ -107,7 +107,8 @@ with sync_playwright() as playwright:
         route.continue_()
 
     page.route("**/api/**", respond)
-    page.goto(ORIGIN + "/chat", wait_until="networkidle")
+    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
+    expect(page.locator(".chat-page-header h1")).to_have_text("Brainstorm")
     human = page.get_by_label("Human", exact=True)
     first = page.get_by_role("region", name="AI #1 latest reply")
     second = page.get_by_role("region", name="AI #2 latest reply")
