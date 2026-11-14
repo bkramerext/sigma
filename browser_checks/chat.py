@@ -109,6 +109,11 @@ with sync_playwright() as playwright:
     page.route("**/api/**", respond)
     page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
     expect(page.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(page.locator(".project-art-header .project-header-art")).to_be_visible()
+    assert page.locator(".chat-home-link").count() == 0
+    page.locator(".project-art-header .project-header-art").click()
+    expect(page).to_have_url(ORIGIN + "/")
+    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
     human = page.get_by_label("Human", exact=True)
     first = page.get_by_role("region", name="AI #1 latest reply")
     second = page.get_by_role("region", name="AI #2 latest reply")
