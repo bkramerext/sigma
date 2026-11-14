@@ -26,6 +26,9 @@ are appended to a private, timestamped Markdown file in SIGMA's state directory
 with a `YYYYMMDD_HHMMSS` timestamp and no ID in the filename. The transcript is not saved as a SIGMA
 project. These chat settings are separate from project settings and are reset
 to the account's defaults when the chat page is reopened.
+The **Repeated** field at the top of the page optionally prepends the same text
+to each AI #1 and AI #2 request. Changes apply to subsequent turns, including
+turns later in an active exchange; repeated text is not added to the transcript.
 
 ## Start a project
 

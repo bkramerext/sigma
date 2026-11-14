@@ -1,5 +1,14 @@
 # SIGMA status
 
+## Repeated prompt text in two-agent chat (2026-11-14)
+
+Added a top-of-page **Repeated** field and tip to `./sigma chat`. Its optional
+text is prepended to each AI request for both participants, and edits take
+effect on subsequent turns in an active exchange. The text is bounded to 8,000
+characters and is not written as a conversation message in the transcript.
+Implementation and documentation are updated. Tests and browser checks have
+not been run for this change.
+
 ## 2026-11-14 — issue #854 hosted sponsored hotpatch deployed
 
 PR #859 (`ff9ca956c3d7d4b97591606248da61175fc5462e`) deployed the hosted

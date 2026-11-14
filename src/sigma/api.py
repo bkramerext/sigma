@@ -3225,6 +3225,7 @@ class ChatTurnRequest(BaseModel):
     messages: list[ChatMessageRequest] = Field(min_length=1, max_length=chat.MAX_MESSAGES)
     model: str = Field(min_length=1, max_length=100)
     reasoning_effort: Literal["low", "medium", "high", "xhigh"]
+    repeated_text: str = Field(default="", max_length=chat.MAX_REPEATED_TEXT_CHARS)
 
 
 @app.post("/api/chat/session")
@@ -3271,6 +3272,7 @@ async def chat_turn_view(body: ChatTurnRequest):
                 expected_binding=body.expected_binding,
                 model=body.model,
                 reasoning_effort=body.reasoning_effort,
+                repeated_text=body.repeated_text,
             )
             yield "data: " + json.dumps({"type": "complete", "text": result}) + "\n\n"
         except asyncio.CancelledError:
