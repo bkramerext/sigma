@@ -163,10 +163,10 @@ COMMAND_DETAILS = {
         "./sigma start --navigate --signin",
         "Uses SIGMA local configuration and the configured UI ports; `--navigate` opens a browser tab.",
     ),
-    "chat": (
-        "Start or safely restart the SIGMA browser UI at the two-agent chat.",
-        "./sigma chat",
-        "Opens the chat page and reuses the selected ChatGPT or API-key connection. Stop with Ctrl+C or `./sigma shutdown`.",
+    "brainstorm": (
+        "Start or safely restart the SIGMA browser UI at Home, with Brainstorm available.",
+        "./sigma brainstorm",
+        "Opens SIGMA Home. Select Brainstorm to start a two-agent conversation using the selected ChatGPT or API-key connection. Stop with Ctrl+C or `./sigma shutdown`.",
     ),
     "shutdown": (
         "Stop identifiable local SIGMA UI servers safely.",
@@ -334,7 +334,7 @@ def main() -> None:
         action="store_true",
         help="Open SIGMA in a browser tab after startup",
     )
-    add_command(commands, "chat", help="Launch the two-agent chat UI")
+    add_command(commands, "brainstorm", help="Launch SIGMA Home with Brainstorm available")
     add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
     for command_parser in commands.choices.values():
         for action in command_parser._actions:
@@ -429,8 +429,8 @@ def main() -> None:
                 sponsored=args.sponsored,
             )
         )
-    if args.command == "chat":
-        sys.exit(run_ui(navigate=True, navigate_path="/chat"))
+    if args.command == "brainstorm":
+        sys.exit(run_ui(navigate=True, navigate_path="/"))
     if args.command == "shutdown":
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:
