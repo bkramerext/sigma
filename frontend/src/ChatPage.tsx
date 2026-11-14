@@ -18,7 +18,6 @@ type ChatConfig = {
   models: { id: string; label: string; relative_cost: string; efforts: ChatConfig['reasoning_effort'][] }[];
   reasoning_effort: 'low' | 'medium' | 'high' | 'xhigh';
   max_messages: number;
-  max_message_characters: number;
 };
 
 const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2' };
@@ -237,7 +236,7 @@ export default function ChatPage() {
   function sendHuman(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || !config?.available || !conversationId || text.length > config.max_message_characters) return;
+    if (!text || !config?.available || !conversationId) return;
     const message = { speaker: 'human', text } as const;
     addMessage(message);
     void appendTranscriptMessage(conversationId, message).catch(cause => {
@@ -302,8 +301,8 @@ export default function ChatPage() {
       : running
         ? 'Stop the exchange before changing the Thinking level.'
         : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle through levels supported by this model.`;
-  const canSend = !!config?.available && !!conversationId && !error.startsWith('The chat contains too many messages')
-    && !!draft.trim() && draft.trim().length <= (config?.max_message_characters ?? 0);
+  const canSend = !!config?.available && !!conversationId
+    && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
   const selectedModel = config?.models.find(item => item.id === config.model);
   const displayedModel = selectedModel ? modelDisplayLabel(selectedModel) : config?.model ?? 'Loading';
@@ -332,20 +331,18 @@ export default function ChatPage() {
     <section className="chat-repeated-prompt" aria-label="Repeated text">
       <div className="chat-field-heading">
         <label htmlFor="chat-repeated-text" data-tooltip="Prepended to every AI request; changes apply on the next turn.">Repeated:</label>
-        <small>{repeatedText.length}/8000 characters</small>
       </div>
       <textarea id="chat-repeated-text" rows={2} value={repeatedText}
         onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
-        placeholder="Optional text prepended to every AI turn…" maxLength={8000}/>
+        placeholder="Optional text prepended to every AI turn…"/>
     </section>
     <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
       <div className="chat-field-heading">
         <label htmlFor="chat-human-message">Human:</label>
-        <small>{draft.length}/{config?.max_message_characters ?? 8000} characters</small>
       </div>
       <textarea id="chat-human-message" aria-label="Human" rows={2} value={draft}
         onChange={event => setDraft(event.target.value)}
-        placeholder="Write a message to AI #1…" maxLength={config?.max_message_characters ?? 8000}
+        placeholder="Write a message to AI #1…"
         onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') event.currentTarget.form?.requestSubmit(); }}/>
     </form>
     <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">

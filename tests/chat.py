@@ -216,6 +216,24 @@ def check_api() -> None:
             json={"conversation_id": body["conversation_id"], "speaker": "human", "text": "Hello."},
         )
         response = client.post("/api/chat/turn", json=body)
+        long_text = "Expanded Human prompt " * 425
+        long_repeated = "Expanded Repeated instruction " * 310
+        long_record = client.post(
+            "/api/chat/message",
+            json={
+                "conversation_id": body["conversation_id"],
+                "speaker": "human",
+                "text": long_text,
+            },
+        )
+        long_turn = client.post(
+            "/api/chat/turn",
+            json={
+                **body,
+                "messages": [{"speaker": "human", "text": long_text}],
+                "repeated_text": long_repeated,
+            },
+        )
         mismatch = client.post("/api/chat/turn", json={**body, "expected_binding": "other"})
         invalid = client.post("/api/chat/turn", json={**body, "speaker": "ai_3"})
         invalid_record = client.post(
@@ -229,7 +247,11 @@ def check_api() -> None:
         unsupported = client.post("/api/chat/turn", json={**body, "model": "unreviewed-model"})
     assert opened.status_code == 200 and opened.json()["transcript_name"] == "fixture.md"
     assert recorded.status_code == 204
-    append_message.assert_called_once_with(body["conversation_id"], "human", "Hello.")
+    assert long_record.status_code == 204
+    assert long_turn.status_code == 200, long_turn.text
+    assert len(long_text) > 8000 and len(long_repeated) > 8000
+    append_message.assert_any_call(body["conversation_id"], "human", "Hello.")
+    append_message.assert_any_call(body["conversation_id"], "human", long_text)
     assert invalid_record.status_code == 422
     assert response.status_code == 200, response.text
     assert '"type":"started"' in response.text
@@ -265,7 +287,11 @@ def check_transcripts() -> None:
             ]
             for speaker, text in messages:
                 chat_transcripts.append_message(session["conversation_id"], speaker, text)
+            long_entry = "Detailed workbench evidence. " * 320
+            assert len(long_entry) > 8000
+            chat_transcripts.append_message(session["conversation_id"], "human", long_entry)
             content = path.read_text(encoding="utf-8")
+            assert long_entry in content
             assert f"Session ID: {session['conversation_id']}" in content
             assert content.index("## Human ·") < content.index("## AI #1 ·")
             assert content.index("## AI #1 ·") < content.index("## AI #2 ·")

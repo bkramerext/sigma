@@ -31,11 +31,6 @@
   min-width: 0; gap: 10px;
 }
 .brainstorm-workspace .chat-field-heading label { color: #f2c48d; font-weight: 700; }
-.brainstorm-workspace .chat-field-heading small {
-  flex: 0 0 13ch; width: 13ch; font-size: .78rem;
-  font-variant-numeric: tabular-nums; color: #a69b8d;
-  text-align: right; white-space: nowrap;
-}
 .brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea {
   box-sizing: border-box; display: block; width: 100%; min-width: 0;
   height: 74px; min-height: 74px; padding: 10px 13px;
@@ -72,7 +67,7 @@
   color: #d1c5b7; font-size: .9rem; overflow-wrap: anywhere;
 }
 .brainstorm-workspace .chat-boxes {
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
 }
 .brainstorm-workspace .chat-box {
   box-sizing: border-box; display: flex; flex-direction: column;
@@ -137,6 +132,9 @@
   width: max-content;
   max-width: none;
   margin: 0;
+}
+@media (max-width: 900px) {
+  .brainstorm-workspace .chat-boxes { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
   .brainstorm-workspace .chat-page { width: calc(100% - 28px); }

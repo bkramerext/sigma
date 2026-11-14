@@ -160,14 +160,28 @@ with sync_playwright() as playwright:
         < human_bounds["y"]
         < toolbar_bounds["y"]
         < first_bounds["y"]
-        < second_bounds["y"]
     )
     assert repeated_bounds["width"] >= page_bounds["width"] - 4
     assert human_bounds["width"] >= page_bounds["width"] - 4
-    assert first_bounds["width"] >= page_bounds["width"] - 4
-    assert second_bounds["width"] >= page_bounds["width"] - 4
+    assert abs(first_bounds["y"] - second_bounds["y"]) < 2
+    assert first_bounds["x"] < second_bounds["x"]
+    assert first_bounds["width"] >= page_bounds["width"] * 0.40
+    assert second_bounds["width"] >= page_bounds["width"] * 0.40
+    assert abs(first_bounds["x"] - page_bounds["x"]) < 3
+    assert abs(
+        (second_bounds["x"] + second_bounds["width"])
+        - (page_bounds["x"] + page_bounds["width"])
+    ) < 3
     assert repeated.get_attribute("rows") == "2"
     assert human.get_attribute("rows") == "2"
+    assert repeated.get_attribute("maxlength") is None
+    assert human.get_attribute("maxlength") is None
+    assert page.locator(".chat-field-heading small").count() == 0
+    repeated.fill("R" * 8100)
+    assert len(repeated.input_value()) == 8100
+    human.fill("H" * 8100)
+    assert len(human.input_value()) == 8100
+    human.fill("")
     repeated.fill("A")
     narrow_bounds = repeated.bounding_box()
     repeated.fill("Always challenge the assumptions.")
@@ -192,14 +206,26 @@ with sync_playwright() as playwright:
     connection_bounds = connection.bounding_box()
     model_bounds = model_pill.bounding_box()
     assert connection_bounds and model_bounds
-    assert connection_bounds["x"] + connection_bounds["width"] < model_bounds["x"]
-    assert (
-        abs(
-            (connection_bounds["y"] + connection_bounds["height"] / 2)
-            - (model_bounds["y"] + model_bounds["height"] / 2)
-        )
-        < 8
+    assert abs(
+        (connection_bounds["x"] + connection_bounds["width"])
+        - (model_bounds["x"] + model_bounds["width"])
+    ) < 3
+    assert connection_bounds["y"] + connection_bounds["height"] < model_bounds["y"]
+    assert abs(
+        model_bounds["y"] - (connection_bounds["y"] + connection_bounds["height"]) - 12
+    ) < 6
+    header_bounds = page.locator(".chat-site-header").bounding_box()
+    assert header_bounds is not None
+    right_inset = page.viewport_size["width"] - (
+        model_bounds["x"] + model_bounds["width"]
     )
+    top_inset = connection_bounds["y"] - header_bounds["y"]
+    bottom_inset = (
+        header_bounds["y"] + header_bounds["height"]
+        - model_bounds["y"] - model_bounds["height"]
+    )
+    assert abs(right_inset - top_inset) < 6
+    assert abs(bottom_inset - top_inset) < 14
 
     human.fill("Start the two-agent exchange.")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_enabled()

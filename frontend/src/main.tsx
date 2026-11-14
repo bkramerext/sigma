@@ -6211,8 +6211,12 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {close && projectView && onProjectUpdated ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
-    </> : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-    {chatPage && <div className="chat-header-center-slot" aria-label="Brainstorm model and thinking settings"/>}
+    </> : chatPage
+      ? <div className="brainstorm-header-pill-stack">
+          {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+          <div className="chat-header-center-slot" aria-label="Brainstorm model and thinking settings"/>
+        </div>
+      : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
     {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
         {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
