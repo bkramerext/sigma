@@ -24,7 +24,7 @@ const thinkingLabels: Record<ChatConfig['reasoning_effort'], string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high',
 };
 const MAX_LOCAL_MESSAGES = 500;
-const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Chat could not continue.';
+const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
 function MarkdownReply({ body }: { body: string }) {
   return <div className="chat-markdown">
@@ -55,7 +55,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     try {
       const response = await fetch('/api/chat/config', { cache: 'no-store', signal });
       const value = await response.json() as ChatConfig;
-      if (!response.ok) throw new Error((value as unknown as { error?: string }).error ?? 'Chat settings are unavailable.');
+      if (!response.ok) throw new Error((value as unknown as { error?: string }).error ?? 'Brainstorm settings are unavailable.');
       setConfig(previous => {
         if (!previous) return value;
         const retainedModel = value.models.some(item => item.id === previous.model)
@@ -98,7 +98,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       conversation_id?: string; transcript_path?: string; error?: string; detail?: string;
     };
     if (!response.ok || !value.conversation_id || !value.transcript_path) {
-      throw new Error(value.error ?? value.detail ?? 'The chat transcript could not be opened.');
+      throw new Error(value.error ?? value.detail ?? 'The Brainstorm transcript could not be opened.');
     }
     if (!signal?.aborted) {
       transcriptWrites.current = Promise.resolve();
@@ -118,7 +118,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       });
       if (!response.ok) {
         const detail = await response.json().catch(() => null) as { detail?: string; error?: string } | null;
-        throw new Error(detail?.error ?? detail?.detail ?? 'The chat transcript could not be updated.');
+        throw new Error(detail?.error ?? detail?.detail ?? 'The Brainstorm transcript could not be updated.');
       }
     });
     transcriptWrites.current = write;
@@ -170,7 +170,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       throw new Error(detail?.error ?? detail?.detail ?? `AI request failed (${response.status}).`);
     }
     if (!response.headers.get('content-type')?.includes('text/event-stream') || !response.body) {
-      throw new Error('The chat server returned an invalid response.');
+      throw new Error('The Brainstorm server returned an invalid response.');
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -189,7 +189,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       }
       if (done) break;
     }
-    throw new Error('The chat ended before the AI completed its turn.');
+    throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
   async function runConversation(id: number, settings: ChatConfig) {
@@ -288,7 +288,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
         ? 'Stop the exchange before changing the model.'
         : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle through models available to this account.`;
   const thinkingControlHint = !config
-    ? error || 'Chat settings are loading.'
+    ? error || 'Brainstorm settings are loading.'
     : !config.available
       ? config.message || 'Connect an AI account to enable Thinking selection.'
       : running
