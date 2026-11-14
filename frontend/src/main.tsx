@@ -6078,7 +6078,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       </details>
       {cloud?.enabled && cloud.ready && <details className="about-disclosure about-feedback-disclosure" data-about-section="feedback" open={aboutDisclosureState('feedback')} onToggle={event => rememberAboutDisclosure(event, 'feedback')}><summary>Send product feedback</summary><div className="about-disclosure-content"><FeedbackForm signedInEmail={cloud.authenticated ? cloud.user?.email || null : null}/></div></details>}
     </div>
-    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><button type="button" className="about-privacy-link" onClick={() => setLegalView('privacy')}>Privacy Notice</button><button type="button" className="about-privacy-link" onClick={() => setLegalView('terms')}>Terms of Service</button></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
+    <footer className="about-dialog-footer"><nav className="about-legal-links" aria-label="Legal information"><button type="button" className="about-privacy-link sigma-text-action" onClick={() => setLegalView('privacy')}>Privacy Notice</button><button type="button" className="about-privacy-link sigma-text-action" onClick={() => setLegalView('terms')}>Terms of Service</button></nav><small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small></footer>
   </>}
   </dialog></div>;
 }
@@ -10023,7 +10023,7 @@ function HomeInvitationAction() {
     />}
     {!hasOpenInvitationRequest(invitationStatus) && !recorded && <>
       <button type="button" className="project-google-signin project-invite-me" disabled={sending} aria-busy={sending} onClick={() => void requestInvitation()}>{sending ? 'Sending…' : 'Invite me!'}</button>
-      {requestError && <span role="alert">{requestError} <button type="button" className="cloud-text-button" onClick={() => void requestInvitation()}>Try again</button></span>}
+      {requestError && <span role="alert">{requestError} <button type="button" className="cloud-text-button sigma-text-action" onClick={() => void requestInvitation()}>Try again</button></span>}
     </>}
   </>;
 }

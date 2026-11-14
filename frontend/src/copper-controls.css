@@ -34,6 +34,49 @@
 }
 :is(.home-page, .workspace-page) .copper-button:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 
+/* Link-style actions are buttons for behavior, but must not inherit the
+   broad Home/Workspace filled-button presentation. Keep text links compact,
+   transparent and consistently underlined across normal/hover/focus/active. */
+:is(.home-page, .workspace-page) button.sigma-text-action {
+  appearance: none;
+  display: inline-block;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--sigma-copper-foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+:is(.home-page, .workspace-page) button.sigma-text-action:is(:hover, :focus-visible, :active):not(:disabled) {
+  background: transparent;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  text-shadow: none;
+}
+:is(.home-page, .workspace-page) button.sigma-text-action:disabled {
+  background: transparent;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  color: #929da5;
+  cursor: default;
+}
+:is(.home-page, .workspace-page) button.sigma-text-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
+
 /* About is the same compact header action on Home and in project workspaces. */
 :is(.home-page, .workspace-page) .about-action {
   display: inline-grid;
