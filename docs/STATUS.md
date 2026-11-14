@@ -1,9 +1,55 @@
 # SIGMA status
 
+## 2026-11-14 — issue #854 hosted sponsored hotpatch deployed
+
+PR #859 (`ff9ca956c3d7d4b97591606248da61175fc5462e`) deployed the hosted
+sponsored pill copy adjustment without a version bump. Its exact-tree Ruff,
+frontend build, SIGMA verification, Browser verification, and Project Types
+browser acceptance workflows all passed. The guarded release helper built and
+started backend/frontend images from the merged SHA; the existing healthy edge
+image was retained.
+
+Before cutover the effective production provider was `chatgpt`, sponsored
+inference was enabled, the configured sponsor email matched the designated
+account, and the persistent sponsor credential/model catalog passed the
+non-inference readiness check. The four saved hard-cap sessions inspected
+predated this deployment and were routed through `api_key`. No provider billing
+settings, credentials, or SIGMA spending limits were changed; no inference ran.
+
+A fresh root-only, app-consistent copy was made at
+`/var/backups/sigma-state-hotpatch-pre-ff9ca956-20261114T0550Z/state` on the
+existing boot disk. The full 228-file copy is 47 MB and is root-owned mode
+0700; its checksum/metadata comparison was clean while SIGMA writers were
+stopped. The separate read-only verifier view excluded only the preserved
+`auth/workspaces/provider-slots` directory containing four zero-byte lock
+files. Verification passed three SQLite integrity checks, 3 identities and
+workspace mappings, 23 projects, 53 research artifacts, one matching TeX/PDF
+pair, 10 terminal historical job rows, and 59 accounting calls ($6.085737
+recorded/reserved, with 16 reserved or unknown outcomes).
+
+Post-deploy, the protected release pin and both image source labels match the
+merged SHA; systemd and all three containers are healthy. The persistent state
+filesystem remains mounted at `/srv/sigma-state` with UUID
+`28ef67cb-4da8-46e7-9a8b-dce0470153a5`. Read-only live counts still show 3
+identities, 3 workspace mappings, 23 projects, 53 research assets, and the same
+job/call status counts. Credential-free backend readiness passed. Public DNS,
+private-port closure, HTTP redirect, HTTPS/TLS, SPA deep link, and hosted API
+readiness passed. A fresh Google OAuth-start request returned HTTP 302 to
+`accounts.google.com` with the configured HTTPS callback path. It did not
+complete account sign-in.
+
+This deployment does not enable hosted Personal ChatGPT account selection.
+With the existing OpenAI authorization, the documented ChatGPT plan-use flow
+requires a `127.0.0.1` callback; the current hosted HTTPS callback is rejected.
+No new OpenAI permissions were requested. A real 180-second production Session
+has not run: completing that acceptance requires an authorized Google user
+session in the production browser, which was not available during this run. No
+paid inference was dispatched.
+
 ## 2026-11-14 — issue #854 production follow-up
 
-The current production backend was read-only checked at merged SHA
-`3508d560e35043f65f507deefef7841c5a076c68`. Its effective inference provider is
+Before the #859 deployment, production was read-only checked at merged SHA
+`3508d560e35043f65f507deefef7841c5a076c68`. Its effective inference provider was
 `chatgpt`, sponsored inference is enabled, and the configured sponsor email
 matches the designated account. The dedicated persistent sponsor registration
 passed non-inference credential and model-catalog health checks. The four saved
