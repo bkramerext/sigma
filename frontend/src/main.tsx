@@ -8189,7 +8189,7 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrains
               <div className="sigma-header-secondary-row">
                 <div className="home-brainstorm-actions">
                   {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
-                  <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>
+                  {(!cloud?.enabled || cloud.target === 'local') && <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>}
                 </div>
                 <div className="sigma-header-about-model-anchor">
                   <div className="sigma-header-first-row">
@@ -9655,6 +9655,9 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
+    if (cloud?.enabled && cloud.target !== 'local') {
+      return <main className="workspace-page"><p role="status">This page is available when running SIGMA locally.</p><a href="/">Return to SIGMA</a></main>;
+    }
     return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>;
   }
   const qaBrowser = url.searchParams.get('qa_browser');

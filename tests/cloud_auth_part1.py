@@ -21,6 +21,17 @@ class FirstMetadataFailureGoogleClient(GoogleClient):
 
 
 class CloudAuthTests(CloudAuthFixture):
+    def test_hosted_brainstorm_api_is_unavailable_before_authentication(self):
+        for method, path in (
+            ("post", "/api/chat/session"),
+            ("post", "/api/chat/message"),
+            ("get", "/api/chat/config"),
+            ("post", "/api/chat/turn"),
+        ):
+            response = getattr(self.client, method)(path)
+            self.assertEqual(response.status_code, 404, (method, path, response.text))
+            self.assertIn("running SIGMA locally", response.json()["error"])
+
     def test_hosted_personal_chatgpt_notice_is_explicitly_configurable_and_local_stays_off(self):
         with patch.dict(os.environ, {"SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": "true"}):
             hosted = self.client.get("/api/cloud-auth/status").json()
