@@ -168,10 +168,13 @@ with sync_playwright() as playwright:
     assert first_bounds["width"] >= page_bounds["width"] * 0.40
     assert second_bounds["width"] >= page_bounds["width"] * 0.40
     assert abs(first_bounds["x"] - page_bounds["x"]) < 3
-    assert abs(
-        (second_bounds["x"] + second_bounds["width"])
-        - (page_bounds["x"] + page_bounds["width"])
-    ) < 3
+    assert (
+        abs(
+            (second_bounds["x"] + second_bounds["width"])
+            - (page_bounds["x"] + page_bounds["width"])
+        )
+        < 3
+    )
     assert repeated.get_attribute("rows") == "2"
     assert human.get_attribute("rows") == "2"
     assert repeated.get_attribute("maxlength") is None
@@ -203,26 +206,24 @@ with sync_playwright() as playwright:
     model_pill.click(position={"x": 12, "y": int(bounds["height"]) - 8})
     expect(model_pill).to_contain_text("Thinking · Medium")
     connection = page.locator(".chat-site-header .header-controls .api-connection")
-    connection_bounds = connection.bounding_box()
+    connection_bounds = connection.locator("summary").bounding_box()
     model_bounds = model_pill.bounding_box()
     assert connection_bounds and model_bounds
-    assert abs(
-        (connection_bounds["x"] + connection_bounds["width"])
-        - (model_bounds["x"] + model_bounds["width"])
-    ) < 3
+    assert (
+        abs(
+            (connection_bounds["x"] + connection_bounds["width"])
+            - (model_bounds["x"] + model_bounds["width"])
+        )
+        < 3
+    ), (connection_bounds, model_bounds)
     assert connection_bounds["y"] + connection_bounds["height"] < model_bounds["y"]
-    assert abs(
-        model_bounds["y"] - (connection_bounds["y"] + connection_bounds["height"]) - 12
-    ) < 6
+    assert abs(model_bounds["y"] - (connection_bounds["y"] + connection_bounds["height"]) - 12) < 6
     header_bounds = page.locator(".chat-site-header").bounding_box()
     assert header_bounds is not None
-    right_inset = page.viewport_size["width"] - (
-        model_bounds["x"] + model_bounds["width"]
-    )
+    right_inset = page.viewport_size["width"] - (model_bounds["x"] + model_bounds["width"])
     top_inset = connection_bounds["y"] - header_bounds["y"]
     bottom_inset = (
-        header_bounds["y"] + header_bounds["height"]
-        - model_bounds["y"] - model_bounds["height"]
+        header_bounds["y"] + header_bounds["height"] - model_bounds["y"] - model_bounds["height"]
     )
     assert abs(right_inset - top_inset) < 6
     assert abs(bottom_inset - top_inset) < 14
