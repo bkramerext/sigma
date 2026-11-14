@@ -1,6 +1,34 @@
 # SIGMA status
 
-## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
+## 2026-11-14 — issue #854 sponsored ChatGPT production configuration
+
+PR #855 merged as `3508d560e35043f65f507deefef7841c5a076c68` and was deployed
+with the guarded GCE release helper. The production release pin and backend
+image match the merged SHA; systemd, backend, frontend, edge, and persistent
+state mount are healthy. The protected runtime provider is now `chatgpt` and
+the designated sponsor setting was already correct. A root-only backup of
+`/etc/sigma/deploy.env` was made before the atomic provider change.
+
+The operator completed the supported local ChatGPT connect flow. Its selected
+registration was transferred over IAP, imported by SIGMA's validating importer,
+and the temporary VM transfer file was removed. The production sponsor store
+has one registration for the designated account, private permissions, and the
+VM host ID matches its pre-import backup. A refresh from the running backend
+reported the sponsor session connected; a non-inference ChatGPT catalog check
+also returned connected. The public endpoint probe passed DNS, private-port,
+HTTPS, SPA deep-link, and hosted Google-auth readiness checks. No API-key
+fallback or billing-limit change was made, and no inference was dispatched.
+
+The acceptance requirement for a new three-minute production Session remains
+blocked until an authorized SIGMA Google user session and target project are
+available. The local ChatGPT browser login is not a SIGMA production login, and
+this task does not impersonate the operator or guess a project. Once signed in
+to production, select the intended project and provide the project name; the
+already-authorized bounded Session can then be started and stopped at three
+minutes. The dedicated local transfer copy remains in the protected local
+directory because the environment rejected its recursive deletion command.
+
+## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch before deployment
 
 Read-only production inspection confirmed runtime pin
 `2cc08b5eae6acd661d485878f4ce84ca962786f8`, explicit
