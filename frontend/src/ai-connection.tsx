@@ -298,9 +298,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const visibleLabel = hostedPersonalUnavailable
     ? 'Personal ChatGPT unavailable'
     : sponsoredPill
-    ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
-      ? 'Connecting to SIGMA-sponsored API…'
-      : hostedPillLabel
+    ? hostedPillLabel
     : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = hostedPersonalUnavailable
     ? 'Personal ChatGPT is unavailable in hosted SIGMA. Click to use SIGMA-sponsored ChatGPT instead.'
@@ -344,7 +342,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const allowanceText = !sponsoredSelected
     ? 'Personal'
     : adminSponsored
-      ? 'No SIGMA cap'
+      ? 'Unlimited'
     : globalFundingExhausted
       ? 'Global limit'
     : cloudFunding?.error

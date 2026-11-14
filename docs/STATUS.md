@@ -1,5 +1,17 @@
 # SIGMA status
 
+## 2026-11-14 — hosted sponsored pill copy adjustment
+
+The sponsored status pill keeps its provider label while hosted provider checks
+or connection selection are in progress; transient progress messaging stays out
+of this compact control. Administrator sponsored allowance displays
+`Unlimited`, while the details tooltip still clarifies that provider and global
+spending limits may apply. The focused real-browser check passed with a delayed
+provider response, and the frontend build passed. `./sigma test` completed with
+two unrelated Python 3.14 fixture failures in `project_collaboration.py` and
+`research_qa.py`; other checks passed. This UI adjustment has not yet been
+merged or deployed.
+
 ## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
 
 Read-only production inspection confirmed runtime pin
