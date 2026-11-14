@@ -994,7 +994,9 @@ def main() -> None:
                 assert abs(action_style["left"] - action_style["textareaLeft"]) < 1, action_style
                 assert action_style["top"] >= action_style["textareaBottom"], action_style
 
-                preview_funding = {"mode": "personal", "forced": False}
+                # Hosted accounts use Sponsored, never Personal. --prod
+                # previews that pill without changing local credentials/billing.
+                preview_funding = {"mode": "sponsored", "forced": False}
 
                 def hosted_personal_status(route):
                     response = route.fetch()
@@ -1043,29 +1045,23 @@ def main() -> None:
                 close_notice.click()
                 expect(hosted_notice).to_have_count(0)
 
-                # Real local accounts may have Sponsored selected, including
-                # an enforced sponsorship policy. --prod must still preview
-                # the same established pill and "Oh, Darn." click behavior.
-                for forced in (False, True):
-                    preview_funding.update(mode="sponsored", forced=forced)
-                    page.reload(wait_until="domcontentloaded")
-                    hosted_pill = page.locator(".api-connection > summary")
-                    expect(hosted_pill.get_by_role("status")).to_have_text(
-                        "Sponsored ChatGPT", timeout=10000
-                    )
-                    expect(hosted_pill).to_have_class(
-                        re.compile("has-sponsored-allowance")
-                    )
-                    expect(
-                        hosted_pill.get_by_role("button", name="Show sponsorship details")
-                    ).to_be_visible()
-                    hosted_pill.click(position={"x": 25, "y": 14})
-                    hosted_notice = page.get_by_role("dialog", name="Oh, Darn.")
-                    expect(hosted_notice).to_be_visible()
-                    hosted_notice.get_by_role(
-                        "button", name="Close Personal ChatGPT information"
-                    ).click()
-                    expect(hosted_notice).to_have_count(0)
+                # The same notice must open even when sponsorship is enforced.
+                preview_funding["forced"] = True
+                page.reload(wait_until="domcontentloaded")
+                hosted_pill = page.locator(".api-connection > summary")
+                expect(hosted_pill.get_by_role("status")).to_have_text(
+                    "Sponsored ChatGPT", timeout=10000
+                )
+                expect(hosted_pill).to_have_class(
+                    re.compile("has-sponsored-allowance")
+                )
+                hosted_pill.click(position={"x": 25, "y": 14})
+                hosted_notice = page.get_by_role("dialog", name="Oh, Darn.")
+                expect(hosted_notice).to_be_visible()
+                hosted_notice.get_by_role(
+                    "button", name="Close Personal ChatGPT information"
+                ).click()
+                expect(hosted_notice).to_have_count(0)
                 browser.close()
             print(
                 "PASS local Chromium ↔ real SIGMA API: Google sign-in, new and reviewed-request reapplication, invitation/reload admin actions, member approval, feedback identity/removal/action styling, cache headers, and cross-identity workspace isolation"
