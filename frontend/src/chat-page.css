@@ -133,6 +133,7 @@
   position: relative;
   contain: none;
   box-sizing: border-box;
+  grid-area: auto; /* Project's named chatgpt grid-area must not create an implicit row. */
   justify-self: end;
   width: max-content;
   min-width: 0;
@@ -173,6 +174,7 @@
 .workspace-page.brainstorm-workspace .project-art-header
 .chat-header-model-controls > .global-model-pill-position {
   position: static;
+  grid-area: auto; /* Disable Project's named model area inside this one-column stack. */
   inset: auto;
   display: inline-flex;
   flex: 0 0 auto;
