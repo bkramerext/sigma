@@ -114,8 +114,13 @@ with sync_playwright() as playwright:
     expect(human).to_be_visible()
     expect(first).to_be_visible()
     expect(second).to_be_visible()
-    expect(page.locator(".chat-site-header .chat-header-model-controls")).to_be_visible()
+    expect(
+        page.locator(".chat-site-header .chat-header-center-slot .chat-header-model-controls")
+    ).to_be_visible()
     assert page.locator(".chat-page-header .chat-model-controls").count() == 0
+    assert (
+        page.locator(".chat-site-header .header-controls .chat-header-model-controls").count() == 0
+    )
     assert first.locator("textarea").count() == 0
     assert second.locator("textarea").count() == 0
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)

@@ -10,7 +10,7 @@ Markdown transcript under SIGMA state, displays its full path in the chat window
 and appends Human, AI #1, and AI #2 messages. Chat Model and Thinking pills cycle
 only through account-verified models and supported reasoning levels; each turn
 uses the selected pair. A new chat starts with the verified default model and
-Low thinking. The pills appear in SIGMA's top bar, and transcript filenames use
+Low thinking. The pills are centered in SIGMA's top bar, and transcript filenames use
 `YYYYMMDD_HHMMSS` plus a collision suffix only when needed; no ID appears in
 the filename.
 

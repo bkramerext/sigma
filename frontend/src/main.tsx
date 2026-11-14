@@ -6206,6 +6206,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
+    {chatPage && <div className="chat-header-center-slot" aria-label="Chat model and thinking settings"/>}
     <div ref={headerPillsRef} className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>

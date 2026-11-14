@@ -125,7 +125,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
 
   useEffect(() => {
     document.title = 'Chat · SIGMA';
-    setHeaderControlsTarget(document.querySelector<HTMLElement>('.chat-site-header .header-controls'));
+    setHeaderControlsTarget(document.querySelector<HTMLElement>('.chat-site-header .chat-header-center-slot'));
     const controller = new AbortController();
     void refreshConfig(controller.signal);
     void openTranscript(controller.signal).catch(cause => {
