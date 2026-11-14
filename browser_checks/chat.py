@@ -120,11 +120,7 @@ with sync_playwright() as playwright:
     expect(human).to_be_visible()
     expect(first).to_be_visible()
     expect(second).to_be_visible()
-    expect(
-        page.locator(
-            ".chat-site-header .header-controls .chat-header-center-slot .chat-header-model-controls"
-        )
-    ).to_be_visible()
+    expect(page.locator(".chat-header-model-controls .global-model-pill")).to_be_visible()
     assert page.locator(".chat-page-header .chat-model-controls").count() == 0
     assert page.locator(".chat-site-header .chat-header-model-controls button").count() == 1
     assert first.locator("textarea").count() == 0
@@ -180,7 +176,7 @@ with sync_playwright() as playwright:
     assert abs(narrow_bounds["width"] - filled_bounds["width"]) < 1
     assert abs(narrow_bounds["x"] - filled_bounds["x"]) < 1
     transcript_filename = page.locator(".chat-privacy-note code")
-    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120001.md")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120002.md")
     expect(transcript_filename).to_contain_text(".md")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_visible()
     model_pill = page.locator(".chat-header-model-controls .global-model-pill")
@@ -284,10 +280,10 @@ with sync_playwright() as playwright:
         and message["text"] == "Human intervention: focus on the counterexample."
         for message in transcript_messages
     )
-    assert session_calls == 1
-    page.get_by_role("button", name="Clear", exact=True).click()
-    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120002.md")
     assert session_calls == 2
+    page.get_by_role("button", name="Clear", exact=True).click()
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120003.md")
+    assert session_calls == 3
     assert not errors, errors
     assert config_calls >= 1
     browser.close()
