@@ -73,12 +73,12 @@
 .chat-box small { margin-top: 8px; color: #a69b8d; text-align: right; }
 .chat-send { align-self: flex-end; min-width: 92px; border: 1px solid #c68c4d; border-radius: 7px; padding: 9px 18px; background: #9a6530; color: #fff5e8; font: inherit; font-weight: 700; cursor: pointer; }
 .chat-send:hover:not(:disabled) { background: #ad7740; }
-.chat-send:disabled { opacity: .48; cursor: not-allowed; }
+.chat-send:disabled { opacity: .48; }
 
 .chat-controls { display: flex; align-items: center; gap: 14px; min-height: 48px; margin-top: 14px; }
 .chat-stop { border-color: #a65f55; color: #ffd0c6; }
 .chat-stop:hover { background: #442c28; }
-.chat-clear:disabled { opacity: .45; cursor: not-allowed; }
+.chat-clear:disabled { opacity: .45; }
 .chat-controls [role="status"] { color: #d1c5b7; font-size: .9rem; }
 .chat-history { display: grid; gap: 10px; margin: 20px 0 0; padding: 0; list-style: none; }
 .chat-history li { padding: 12px 15px; border-left: 3px solid #8d754f; border-radius: 0 7px 7px 0; background: #211e1a; }

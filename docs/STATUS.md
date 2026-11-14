@@ -4,15 +4,19 @@
 
 Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
 the selected SIGMA ChatGPT or API-key connection and alternates AI turns until
-the user stops or intervenes. `./sigma test` passed, including Ruff, formatting,
-Pyright (0 diagnostics), frontend typecheck, and production build. The real-Chrome
-browser check passed against deterministic chat fixtures; no provider inference
-was made. The app was launched with `./sigma chat` for manual use.
+the user stops or intervenes. The real-Chrome browser check passed against
+deterministic chat fixtures; no provider inference was made. The production
+frontend build and focused chat API tests passed. A full `./sigma test` run on
+the original implementation base passed; after moving onto current `main`, the
+full run reported failures in `tests/project_collaboration.py` and
+`tests/research_qa.py`, plus a CSS policy check. The CSS policy violation is
+fixed and its regression test passes; the other failing files are unchanged from
+current `main`. The app was launched with `./sigma chat` for manual use.
 
 GitHub Issue #458 was separately fixed by merged PR #459. Its root cause was a
 valid schema-v1 Recent Projects index with legacy `pinned` fields rejected by
 the v2 exact-key validator; the earlier permissions repair did not address
-that schema mismatch.
+that schema mismatch. `tests/recents.py` passes on current `main`.
 
 ## 2026-11-14 — issue #854 sponsored ChatGPT hotpatch in progress
 
