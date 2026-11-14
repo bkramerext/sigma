@@ -98,13 +98,9 @@ def main() -> None:
             expect(terms_dialog).to_be_visible()
             paragraphs = terms_dialog.locator(".terms-of-service-copy > p")
             expect(paragraphs).to_have_count(2)
+            assert paragraphs.first.evaluate("node => getComputedStyle(node).fontStyle") == "normal"
             assert (
-                paragraphs.first.evaluate("node => getComputedStyle(node).fontStyle")
-                == "normal"
-            )
-            assert (
-                paragraphs.nth(1).evaluate("node => getComputedStyle(node).fontStyle")
-                == "italic"
+                paragraphs.nth(1).evaluate("node => getComputedStyle(node).fontStyle") == "italic"
             )
             terms_dialog.get_by_role("button", name="Close terms of service").click()
             dialog = page.get_by_role("dialog", name="About SIGMA")
