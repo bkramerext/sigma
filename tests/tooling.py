@@ -271,8 +271,11 @@ def check_start_cli() -> None:
             else:
                 raise AssertionError("start --brainstorm did not exit")
         launch.assert_called_once_with(
-            navigate=True, navigate_path="/brainstorm", signin=False,
-            mock_auth=False, sponsored=False,
+            navigate=True,
+            navigate_path="/brainstorm",
+            signin=False,
+            mock_auth=False,
+            sponsored=False,
         )
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { modelDisplayLabel, modelDisplayName } from './model-display';
 import './global-model-pill.css';
@@ -57,6 +57,33 @@ export function ScrollingLabel({ value, direction, className, userCycleRevision 
       <span className="global-model-pill-slide-in">{active.to}</span>
     </span> : <span className="global-model-pill-slide-static">{value}</span>}
   </span>;
+}
+
+/** Same interactive two-row Model/Thinking button used by Home, Project and Brainstorm. */
+export function ModelThinkingPillButton({ buttonRef, label, thinkingLabel, tooltip, disabled,
+  modelCycleRevision, thinkingCycleRevision, onCycleModel, onCycleThinking }: {
+  buttonRef?: Ref<HTMLButtonElement>; label: string; thinkingLabel: string | null;
+  tooltip: string; disabled: boolean; modelCycleRevision: number; thinkingCycleRevision: number;
+  onCycleModel: () => void; onCycleThinking: () => void;
+}) {
+  return <button ref={buttonRef} type="button" className="global-model-pill"
+    aria-label={'Model ' + label + (thinkingLabel ? ', ' + thinkingLabel : '')}
+    data-tooltip={tooltip} disabled={disabled}
+    onClick={event => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      if (event.clientY >= rect.top + rect.height / 2) onCycleThinking();
+      else onCycleModel();
+    }}
+    onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); onCycleThinking(); } }}>
+    <span className="global-model-pill-current">
+      <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward" userCycleRevision={modelCycleRevision}/>
+      {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward" userCycleRevision={thinkingCycleRevision}/>}
+    </span>
+    <span className="global-model-pill-max-labels" aria-hidden="true">
+      <span>Model · GPT-6-Astra · $$</span>
+      <span>Thinking · Extra High</span>
+    </span>
+  </button>;
 }
 
 /** Restores the historic model cycle pill, now persisted as a per-user default. */
@@ -180,27 +207,10 @@ export default function GlobalModelPill({ enabled = true }: { enabled?: boolean 
   }
   const dismiss = () => { setPending(null); trigger.current?.focus(); };
   return <span className="global-model-pill-position">
-    <button ref={trigger} type="button" className="global-model-pill"
-      aria-label={'Model ' + label + (thinkingLabel ? ', ' + thinkingLabel : '')}
-      data-tooltip={tooltip}
-      disabled={!enabled || !ready || busy || !!pending || !settings || (!next && !nextThinking)}
-      onClick={event => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        if (event.clientY >= rect.top + rect.height / 2) cycleThinking();
-        else cycle();
-      }}
-      onKeyDown={event => {
-        if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
-      }}>
-      <span className="global-model-pill-current">
-        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${label}`} direction="forward" userCycleRevision={modelCycleRevision}/>
-        {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward" userCycleRevision={thinkingCycleRevision}/>}
-      </span>
-      <span className="global-model-pill-max-labels" aria-hidden="true">
-        <span>Model · GPT-6-Astra · $$$</span>
-        <span>Thinking · Extra High</span>
-      </span>
-    </button>
+    <ModelThinkingPillButton buttonRef={trigger} label={label} thinkingLabel={thinkingLabel}
+      tooltip={tooltip} disabled={!enabled || !ready || busy || !!pending || !settings || (!next && !nextThinking)}
+      modelCycleRevision={modelCycleRevision} thinkingCycleRevision={thinkingCycleRevision}
+      onCycleModel={cycle} onCycleThinking={cycleThinking}/>
     {settings && error && <span className="global-model-error" role="alert">{error}</span>}
     {pending && createPortal(<div className="project-model-confirm-popover global-model-confirm-popover"
       role="group" aria-label={'Confirm switch to ' + modelName(pending, pending.id)} style={popup}>

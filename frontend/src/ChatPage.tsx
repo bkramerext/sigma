@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ScrollingLabel } from './GlobalModelPill';
+import { ModelThinkingPillButton } from './GlobalModelPill';
 import { modelDisplayLabel } from './model-display';
 import './chat-page.css';
 
@@ -309,68 +309,52 @@ export default function ChatPage() {
   const displayedModel = selectedModel ? modelDisplayLabel(selectedModel) : config?.model ?? 'Loading';
   const displayedThinking = thinkingLabels[config?.reasoning_effort ?? 'low'];
   const selectionDisabled = !config?.available || !config.models.length || running;
-  const modelThinkingControls = <div className="chat-model-controls chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
-    <button type="button" className="global-model-pill chat-combined-model-pill"
-      aria-label={`Model ${displayedModel}, Thinking ${displayedThinking}`}
-      data-tooltip={`${modelControlHint} ${thinkingControlHint} Click the upper half to cycle models; click the lower half to cycle thinking levels.`}
-      disabled={selectionDisabled}
-      onClick={event => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        if (event.clientY >= rect.top + rect.height / 2) cycleThinking();
-        else cycleModel();
-      }}
-      onKeyDown={event => {
-        if (event.key === 'ArrowDown') { event.preventDefault(); cycleThinking(); }
-      }}>
-      <span className="global-model-pill-current">
-        <ScrollingLabel className="global-model-pill-primary" value={`Model · ${displayedModel}`} direction="forward" userCycleRevision={modelCycleRevision}/>
-        <ScrollingLabel className="global-model-pill-secondary" value={`Thinking · ${displayedThinking}`} direction="forward" userCycleRevision={thinkingCycleRevision}/>
-      </span>
-      <span className="global-model-pill-max-labels" aria-hidden="true">
-        <span>Model · GPT-6-Astra · $$$</span>
-        <span>Thinking · Extra High</span>
-      </span>
-    </button>
+  const modelThinkingControls = <div className="sigma-header-model-column chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
+    <span className="global-model-pill-position">
+      <ModelThinkingPillButton label={displayedModel} thinkingLabel={`Thinking · ${displayedThinking}`}
+        tooltip={`${modelControlHint} ${thinkingControlHint} Click the upper half to cycle models; click the lower half to cycle thinking levels.`}
+        disabled={selectionDisabled}
+        modelCycleRevision={modelCycleRevision} thinkingCycleRevision={thinkingCycleRevision}
+        onCycleModel={cycleModel} onCycleThinking={cycleThinking}/>
+    </span>
   </div>;
 
   return <>
   {headerControlsTarget && createPortal(modelThinkingControls, headerControlsTarget)}
   <main className="chat-page">
-    <section className="chat-session-toolbar" aria-label="Brainstorm exchange controls">
-      <div className="chat-controls">
-        {running
-          ? <button type="button" className="chat-stop" onClick={stopConversation}>Stop exchange</button>
-          : <button type="button" className="chat-clear" disabled={!messages.length} onClick={clearConversation}>Clear conversation</button>}
-        <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
-      </div>
-      <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
-    </section>
-    {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
-    {error && <p className="chat-error" role="alert">{error}</p>}
     <header className="chat-page-header">
-      <div><p className="chat-eyebrow">Open conversation</p><h1>Brainstorm</h1></div>
+      <div className="chat-title-group"><p className="chat-eyebrow">Open conversation</p><h1>Brainstorm</h1></div>
       <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
     </header>
+    <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
+    {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
+    {error && <p className="chat-error" role="alert">{error}</p>}
     <section className="chat-repeated-prompt" aria-label="Repeated text">
-      <label htmlFor="chat-repeated-text">Repeated:</label>
-      <textarea id="chat-repeated-text" value={repeatedText}
+      <div className="chat-field-heading">
+        <label htmlFor="chat-repeated-text" data-tooltip="Prepended to every AI request; changes apply on the next turn.">Repeated:</label>
+        <small>{repeatedText.length}/8000 characters</small>
+      </div>
+      <textarea id="chat-repeated-text" rows={2} value={repeatedText}
         onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
-        placeholder="Optional text to include at the start of every AI turn…"
-        maxLength={8000} />
-      <p>Tip: this text is prepended to every AI #1 and AI #2 request, including later turns after a human message.</p>
-      <small>{repeatedText.length}/8000 characters</small>
+        placeholder="Optional text prepended to every AI turn…" maxLength={8000}/>
     </section>
-    <section className="chat-boxes" aria-label="Conversation participants">
-      <form className="chat-box chat-human" onSubmit={sendHuman}>
-        <label htmlFor="chat-human-message">Human</label>
-        <div className="chat-human-entry">
-          <textarea id="chat-human-message" value={draft} onChange={event => setDraft(event.target.value)}
-            placeholder="Write a message to AI #1…" maxLength={config?.max_message_characters ?? 8000}
-            onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') event.currentTarget.form?.requestSubmit(); }}/>
-          <button type="submit" className="chat-send" disabled={!canSend}>Send</button>
-        </div>
+    <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
+      <div className="chat-field-heading">
+        <label htmlFor="chat-human-message">Human:</label>
         <small>{draft.length}/{config?.max_message_characters ?? 8000} characters</small>
-      </form>
+      </div>
+      <textarea id="chat-human-message" aria-label="Human" rows={2} value={draft}
+        onChange={event => setDraft(event.target.value)}
+        placeholder="Write a message to AI #1…" maxLength={config?.max_message_characters ?? 8000}
+        onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') event.currentTarget.form?.requestSubmit(); }}/>
+    </form>
+    <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">
+      <button type="submit" form="brainstorm-human-form" className="chat-send" disabled={!canSend}>Send</button>
+      <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
+      <button type="button" className="chat-clear" disabled={running || !messages.length} onClick={clearConversation}>Clear</button>
+      <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
+    </div>
+    <section className="chat-boxes" aria-label="AI responses">
       {(['ai_1', 'ai_2'] as const).map(who => <section key={who}
         className={`chat-box chat-agent${speaker === who ? ' is-speaking' : ''}`}
         aria-label={`${labels[who]} latest reply`}>
