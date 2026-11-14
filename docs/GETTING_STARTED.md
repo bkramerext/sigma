@@ -18,8 +18,14 @@ Open **http://127.0.0.1:5173** if needed. Press **Ctrl+C** to stop or run `./sig
 To open the two-agent chat directly, run `./sigma chat`. It uses the selected
 ChatGPT or API-key connection. Send a human message to start; AI #1 and AI #2
 then alternate until you stop the exchange or send another human message.
-Conversation text is kept in the browser session and sent to the selected
-provider for each turn; it is not saved as a SIGMA project.
+The Model and Thinking pills show the settings for this chat. They cycle through
+models verified for the selected account and the reasoning levels supported by
+the selected model. A new chat starts with the verified default model and Low
+thinking. The active transcript filename appears in the chat window; messages
+are appended to a private, timestamped Markdown file in SIGMA's state directory
+and sent to the selected provider for each turn. The transcript is not saved as
+a SIGMA project. These chat settings are separate from project settings and are
+reset to the account's defaults when the chat page is reopened.
 
 ## Start a project
 

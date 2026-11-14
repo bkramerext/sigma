@@ -26,6 +26,11 @@
 
 .chat-home-link { justify-self: start; }
 .chat-page-header > div { text-align: center; }
+.chat-model-controls { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chat-control-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 12px; border: 1px solid #73583e; border-radius: 999px; background: #091824ed; color: #e0d0c8; font: 500 11px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.chat-control-pill:hover:not(:disabled), .chat-control-pill:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
+.chat-control-pill:focus-visible { outline: 2px solid #e9bc82; outline-offset: 2px; }
+.chat-control-pill:disabled { opacity: .65; cursor: default; }
 .chat-eyebrow { margin: 0 0 5px; color: #c99a66; font-size: .78rem; letter-spacing: .1em; text-transform: uppercase; }
 .chat-page-header h1 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.2rem); }
 .chat-description { justify-self: end; max-width: 320px; margin: 0; color: #c4b9aa; font-size: .92rem; }
@@ -70,7 +75,6 @@
 
 .chat-box textarea:focus { outline: 2px solid #bd8246; outline-offset: 1px; }
 .chat-box textarea::placeholder { color: #8c8275; }
-.chat-agent textarea { cursor: text; }
 .chat-agent .chat-markdown { min-height: 0; flex: 1; overflow: auto; overflow-wrap: anywhere; line-height: 1.55; }
 .chat-agent .chat-markdown > :first-child,
 .chat-history .chat-markdown > :first-child { margin-top: 0; }
@@ -84,10 +88,6 @@
 .chat-history .chat-markdown ol { padding-left: 1.4em; }
 .chat-agent .chat-markdown pre,
 .chat-history .chat-markdown pre { overflow-x: auto; padding: 10px; border-radius: 6px; background: #131210; }
-.chat-agent .chat-source-editor { margin-top: 14px; border-top: 1px solid #403a32; padding-top: 10px; }
-.chat-source-editor summary { color: #c4b9aa; cursor: pointer; font-size: .85rem; }
-.chat-source-editor label { display: block; margin: 10px 0 6px; color: #c4b9aa; font-size: .82rem; }
-.chat-source-editor textarea { min-height: 120px; flex: none; }
 .chat-agent-placeholder { margin: 0; color: #8c8275; }
 .chat-box small { margin-top: 8px; color: #a69b8d; text-align: right; }
 .chat-send { align-self: flex-end; min-width: 92px; border: 1px solid #c68c4d; border-radius: 7px; padding: 9px 18px; background: #9a6530; color: #fff5e8; font: inherit; font-weight: 700; cursor: pointer; }

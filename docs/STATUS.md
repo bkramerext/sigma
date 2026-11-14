@@ -5,16 +5,26 @@
 Added `./sigma chat`, an ephemeral Human / AI #1 / AI #2 interface that uses
 the selected SIGMA ChatGPT or API-key connection and alternates AI turns until
 the user stops or intervenes. AI replies and transcript entries render Markdown
-and LaTeX, with reply source still editable. The real-Chrome browser check passed
-against deterministic chat fixtures; no provider inference was made. The production
-frontend build and focused chat API tests passed. A full `./sigma test` run on
-the original implementation base passed. The latest current-main run reports
-failures in `tests/project_collaboration.py` and `tests/research_qa.py`; their
-test and service files are unchanged from current `main`. Ruff, formatting,
-Pyright, frontend typecheck, focused chat tests, and the CSS policy regression
-pass. The suite skips its build step after those failures, so the production
-build was run separately and passed. The app was launched with `./sigma chat`
-for manual use.
+and LaTeX; AI reply panels are read-only. Each chat opens a private, timestamped
+Markdown transcript under SIGMA state, displays its filename in the chat window,
+and appends Human, AI #1, and AI #2 messages. Chat Model and Thinking pills cycle
+only through account-verified models and supported reasoning levels; each turn
+uses the selected pair. A new chat starts with the verified default model and
+Low thinking.
+
+Verification on the follow-up branch: `tests/chat.py` passes configuration,
+model/Thinking validation, transcript mode/append/symlink checks, and API turns.
+`browser_checks/chat.py` passes in real Chrome against deterministic fixtures,
+including the visible transcript filename, all three transcript speakers,
+Markdown/LaTeX display, model/Thinking selection, human intervention, and no AI
+reply editors. Frontend typecheck and production build pass. Ruff check and
+format checks pass. No provider inference was made. The full `./sigma test`
+completed with two pre-existing failures outside this chat change:
+`tests/project_collaboration.py` (four symlink-guard errors) and
+`tests/research_qa.py` (`Collaboration is not available for this project`).
+Because of those failures, the suite skipped its later production build; the
+build passed separately. Pyright passed with zero diagnostics. The app was
+launched with `./sigma chat` on the earlier implementation branch.
 
 GitHub Issue #458 was separately fixed by merged PR #459. Its root cause was a
 valid schema-v1 Recent Projects index with legacy `pinned` fields rejected by

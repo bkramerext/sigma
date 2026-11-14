@@ -12,12 +12,16 @@ type ChatConfig = {
   message: string;
   binding: string;
   model: string;
+  models: { id: string; label: string; relative_cost: string; efforts: ChatConfig['reasoning_effort'][] }[];
   reasoning_effort: 'low' | 'medium' | 'high' | 'xhigh';
   max_messages: number;
   max_message_characters: number;
 };
 
 const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2' };
+const thinkingLabels: Record<ChatConfig['reasoning_effort'], string> = {
+  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high',
+};
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Chat could not continue.';
 
@@ -35,28 +39,95 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [conversationId, setConversationId] = useState(() => crypto.randomUUID());
+  const [conversationId, setConversationId] = useState('');
+  const [transcriptName, setTranscriptName] = useState('');
   const messagesRef = useRef<ChatMessage[]>([]);
   const runningRef = useRef(false);
   const runId = useRef(0);
   const abort = useRef<AbortController | null>(null);
+  const transcriptWrites = useRef<Promise<void>>(Promise.resolve());
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
       const response = await fetch('/api/chat/config', { cache: 'no-store', signal });
       const value = await response.json() as ChatConfig;
       if (!response.ok) throw new Error((value as unknown as { error?: string }).error ?? 'Chat settings are unavailable.');
-      setConfig(value);
+      setConfig(previous => {
+        if (!previous) return value;
+        const retainedModel = value.models.some(item => item.id === previous.model)
+          ? previous.model : value.model;
+        const selected = value.models.find(item => item.id === retainedModel);
+        const effort = selected?.efforts.includes(previous.reasoning_effort)
+          ? previous.reasoning_effort
+          : value.reasoning_effort;
+        return { ...value, model: retainedModel, reasoning_effort: effort };
+      });
       setError('');
     } catch (cause) {
       if (!signal?.aborted) setError(errorText(cause));
     }
   }, []);
 
+  function cycleModel() {
+    if (!config || running) return;
+    const available = config.models;
+    const index = available.findIndex(item => item.id === config.model);
+    const next = available[(index + 1 + available.length) % available.length];
+    if (!next) return;
+    setConfig({ ...config, model: next.id,
+      reasoning_effort: next.efforts.includes(config.reasoning_effort) ? config.reasoning_effort : next.efforts[0] });
+  }
+
+  function cycleThinking() {
+    if (!config || running) return;
+    const efforts = config.models.find(item => item.id === config.model)?.efforts ?? [];
+    const index = efforts.indexOf(config.reasoning_effort);
+    const next = efforts[(index + 1 + efforts.length) % efforts.length];
+    if (next) setConfig({ ...config, reasoning_effort: next });
+  }
+
+  const openTranscript = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch('/api/chat/session', {
+      method: 'POST', cache: 'no-store', signal,
+    });
+    const value = await response.json() as {
+      conversation_id?: string; transcript_name?: string; error?: string; detail?: string;
+    };
+    if (!response.ok || !value.conversation_id || !value.transcript_name) {
+      throw new Error(value.error ?? value.detail ?? 'The chat transcript could not be opened.');
+    }
+    if (!signal?.aborted) {
+      transcriptWrites.current = Promise.resolve();
+      setConversationId(value.conversation_id);
+      setTranscriptName(value.transcript_name);
+    }
+    return value.conversation_id;
+  }, []);
+
+  function appendTranscriptMessage(id: string, message: ChatMessage): Promise<void> {
+    const write = transcriptWrites.current.then(async () => {
+      const response = await fetch('/api/chat/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ conversation_id: id, ...message }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null) as { detail?: string; error?: string } | null;
+        throw new Error(detail?.error ?? detail?.detail ?? 'The chat transcript could not be updated.');
+      }
+    });
+    transcriptWrites.current = write;
+    return write;
+  }
+
   useEffect(() => {
     document.title = 'Chat · SIGMA';
     const controller = new AbortController();
     void refreshConfig(controller.signal);
+    void openTranscript(controller.signal).catch(cause => {
+      if (!controller.signal.aborted) setError(errorText(cause));
+    });
     const onFocus = () => { void refreshConfig(); };
     window.addEventListener('focus', onFocus);
     return () => {
@@ -65,29 +136,13 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
       runId.current += 1;
       abort.current?.abort();
     };
-  }, [refreshConfig]);
+  }, [openTranscript, refreshConfig]);
 
   const addMessage = useCallback((message: ChatMessage) => {
     const next = [...messagesRef.current, message].slice(-MAX_LOCAL_MESSAGES);
     messagesRef.current = next;
     setMessages(next);
   }, []);
-
-  function editLatestAgent(speaker: 'ai_1' | 'ai_2', text: string) {
-    const next = [...messagesRef.current];
-    let index = -1;
-    for (let cursor = next.length - 1; cursor >= 0; cursor -= 1) {
-      if (next[cursor].speaker === speaker) { index = cursor; break; }
-    }
-    if (index >= 0) {
-      if (!text.trim()) next.splice(index, 1);
-      else next[index] = { ...next[index], text };
-    } else if (text.trim()) {
-      next.push({ speaker, text });
-    }
-    messagesRef.current = next;
-    setMessages(next);
-  }
 
   async function requestTurn(who: 'ai_1' | 'ai_2', history: ChatMessage[], controller: AbortController, settings: ChatConfig): Promise<string> {
     const response = await fetch('/api/chat/turn', {
@@ -135,13 +190,17 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     let nextSpeaker: 'ai_1' | 'ai_2' = 'ai_1';
     try {
       while (runningRef.current && id === runId.current) {
+        await transcriptWrites.current;
+        if (!runningRef.current || id !== runId.current) return;
         const who: 'ai_1' | 'ai_2' = nextSpeaker;
         const controller = new AbortController();
         abort.current = controller;
         setSpeaker(who);
         const result = await requestTurn(who, messagesRef.current, controller, settings);
         if (!runningRef.current || id !== runId.current) return;
-        addMessage({ speaker: who, text: result });
+        const reply = { speaker: who, text: result } as const;
+        addMessage(reply);
+        await appendTranscriptMessage(conversationId, reply);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
         setSpeaker(nextSpeaker);
         await new Promise(resolve => window.setTimeout(resolve, 500));
@@ -149,7 +208,7 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     } catch (cause) {
       if (id === runId.current && runningRef.current) {
         setError(errorText(cause));
-        setNotice('The AI exchange stopped. Review your selected account before retrying.');
+        setNotice('The exchange stopped. Check the message above before starting again.');
       }
     } finally {
       if (id === runId.current) {
@@ -164,8 +223,19 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
   function sendHuman(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || !config?.available || text.length > config.max_message_characters) return;
-    addMessage({ speaker: 'human', text });
+    if (!text || !config?.available || !conversationId || text.length > config.max_message_characters) return;
+    const message = { speaker: 'human', text } as const;
+    addMessage(message);
+    void appendTranscriptMessage(conversationId, message).catch(cause => {
+      if (runningRef.current) {
+        runId.current += 1;
+        runningRef.current = false;
+        abort.current?.abort();
+        setRunning(false);
+        setSpeaker(null);
+      }
+      setError(errorText(cause));
+    });
     setDraft('');
     setError('');
     setNotice('');
@@ -187,23 +257,39 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     setNotice('Stopped. A provider request in progress may have completed and used account allowance.');
   }
 
-  function clearConversation() {
+  async function clearConversation() {
     if (runningRef.current) return;
     messagesRef.current = [];
     setMessages([]);
-    setConversationId(crypto.randomUUID());
+    setConversationId('');
+    setTranscriptName('');
+    transcriptWrites.current = Promise.resolve();
     setError('');
     setNotice('');
+    try {
+      await openTranscript();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
   }
 
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
-  const canSend = !!config?.available && !error.startsWith('The chat contains too many messages')
+  const canSend = !!config?.available && !!conversationId && !error.startsWith('The chat contains too many messages')
     && !!draft.trim() && draft.trim().length <= (config?.max_message_characters ?? 0);
 
   return <main className="chat-page">
     <header className="chat-page-header">
       <button type="button" className="chat-home-link" onClick={onHome}>← SIGMA Home</button>
-      <div><p className="chat-eyebrow">Open conversation</p><h1>Two AI chat</h1></div>
+      <div className="chat-heading"><p className="chat-eyebrow">Open conversation</p><h1>Two AI chat</h1>
+        <div className="chat-model-controls" aria-label="Chat model and thinking controls">
+          <button type="button" className="chat-control-pill" aria-label={`Model ${config?.model ?? 'loading'}`} data-tooltip={`${config?.model ?? 'Model'} · ${config?.models.find(item => item.id === config.model)?.label ?? 'Loading'}. Click to cycle through models available to this account.`} disabled={!config?.available || !(config?.models.length) || running} onClick={cycleModel}>
+            Model · {config?.model ?? 'Loading'}
+          </button>
+          <button type="button" className="chat-control-pill" aria-label={`Thinking level ${thinkingLabels[config?.reasoning_effort ?? 'low']}`} data-tooltip="Click to cycle through Thinking levels supported by this model." disabled={!config?.available || !(config?.models.length) || running} onClick={cycleThinking}>
+            Thinking · {thinkingLabels[config?.reasoning_effort ?? 'low']}
+          </button>
+        </div>
+      </div>
       <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
     </header>
     <section className="chat-boxes" aria-label="Conversation participants">
@@ -224,13 +310,6 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
         {latest(who)
           ? <MarkdownReply body={latest(who)}/>
           : <p className="chat-agent-placeholder">{labels[who]}’s reply will appear here.</p>}
-        <details className="chat-source-editor">
-          <summary>Edit reply text</summary>
-          <label htmlFor={`chat-${who}`}>{labels[who]} reply source</label>
-          <textarea id={`chat-${who}`} value={latest(who)}
-            onChange={event => editLatestAgent(who, event.target.value)}
-            placeholder={`${labels[who]}’s reply will appear here.`}/>
-        </details>
       </section>)}
     </section>
     {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
@@ -246,6 +325,6 @@ export default function ChatPage({ onHome }: { onHome: () => void }) {
     </div>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start chatting.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
-    <p className="chat-privacy-note">Conversation text stays in this browser session and is sent to the selected AI provider for each turn. It is not saved as a SIGMA project.</p>
+    <p className="chat-privacy-note">Messages are appended to a private transcript in SIGMA state and sent to the selected AI provider for each turn. Transcript: <code>{transcriptName || 'opening…'}</code>. It is not saved as a SIGMA project.</p>
   </main>;
 }

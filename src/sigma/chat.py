@@ -44,6 +44,16 @@ async def configuration() -> dict[str, Any]:
     discovery = await models(context=credential)
     state = discovery["connection"]
     model = discovery["default_model"]
+    choices = [
+        {
+            "id": item["id"],
+            "label": item["label"],
+            "relative_cost": item["relative_cost"],
+            "efforts": item["efforts"],
+        }
+        for item in discovery["models"]
+        if item["availability"] == "available"
+    ]
     available = (
         state.get("status") == "connected"
         and bool(credential["token"])
@@ -59,6 +69,7 @@ async def configuration() -> dict[str, Any]:
         "message": state.get("guidance", discovery["message"]),
         "binding": credential["identity"],
         "model": model if model in CATALOG else DEFAULT_MODEL,
+        "models": choices,
         "reasoning_effort": "low",
         "max_messages": MAX_MESSAGES,
         "max_message_characters": MAX_MESSAGE_CHARS,

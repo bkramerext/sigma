@@ -30,8 +30,10 @@ Start the local UI with `./sigma chat`, then run
 `uv run --with playwright python browser_checks/chat.py`. The check uses real
 Chrome while intercepting chat configuration and turn responses with
 deterministic fixtures. It checks the Human, AI #1, and AI #2 boxes, alternating
-turn order, Markdown and math rendering, editable reply source, a human
-intervention, and stopping. It makes no provider calls.
+turn order, account-verified model and supported Thinking controls, Markdown and
+math rendering, the visible timestamped transcript filename and append-only
+speaker entries, a human intervention, and stopping. AI reply panels are
+read-only. It makes no provider calls.
 
 ## Local sponsored call limits
 
