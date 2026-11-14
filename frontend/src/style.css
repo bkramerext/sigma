@@ -650,3 +650,26 @@ body:has(.session-log-page)::before, body:has(.session-log-page)::after { displa
   line-height: 1.4;
   opacity: 0.8;
 }
+
+/* Brainstorm occupies the leftmost (third-from-right) account-pill position.
+   Admin, when available, stays above it without moving the About/Settings column. */
+.home-page .home-brainstorm-actions {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  align-items: stretch;
+  gap: var(--identity-pill-gap);
+}
+.home-page .home-brainstorm-actions > .administrator-settings-link {
+  box-sizing: border-box;
+  white-space: nowrap;
+  text-align: center;
+}
+.home-page .home-brainstorm-pill {
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .home-page:has(.home-brainstorm-actions > .administrator-settings-link:not(.home-brainstorm-pill)) {
+    --home-projects-top: max(152px, calc(var(--home-corner-gap) + 3 * var(--home-corner-pill-height) + 2 * var(--identity-pill-gap) + 24px));
+  }
+}

@@ -107,6 +107,7 @@ def run_ui(
     mock_auth: bool = False,
     sponsored: bool = False,
     prod: bool = False,
+    navigate_path: str = "/",
 ) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
@@ -122,6 +123,9 @@ def run_ui(
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
+        if navigate_path not in {"/", "/brainstorm"}:
+            print("Invalid SIGMA navigation destination.", file=sys.stderr)
+            return 2
         load_local_config()
         if warning := local_google_configuration_warning():
             print(warning, file=sys.stderr, flush=True)
@@ -241,11 +245,14 @@ def run_ui(
                             announced = True
                             instance.unlock()
                             if navigate:
+                                destination = URL
+                                if navigate_path != "/":
+                                    destination = URL.rstrip("/") + navigate_path
                                 try:
-                                    if not webbrowser.open(URL, new=2):
-                                        print(f"Open {URL} in your browser.", flush=True)
+                                    if not webbrowser.open(destination, new=2):
+                                        print(f"Open {destination} in your browser.", flush=True)
                                 except (OSError, webbrowser.Error):
-                                    print(f"Open {URL} in your browser.", flush=True)
+                                    print(f"Open {destination} in your browser.", flush=True)
                             else:
                                 print(
                                     f"Use your existing browser tab at {URL} (reload if needed).",
