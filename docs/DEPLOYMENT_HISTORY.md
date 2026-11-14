@@ -1,5 +1,55 @@
 # SIGMA Deployment History (archived)
 
+## 2026-11-14 — v0.4.2 hosted Brainstorm fence hotpatch
+
+PR #868 added a hosted-only fence for the local-only Brainstorm feature; PR
+#869 taught GCE preflight to accept and strictly validate the existing
+`SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED` boolean setting. The final
+merged `main` SHA is `c2fd32134a4cfb1d3b30a2e4f05b28005521466d`. All 14
+exact-SHA checks passed: eight SIGMA test shards, the two-creator PDF check,
+three browser groups, Ruff, and frontend build. Version remains 0.4.2.
+
+Production was healthy on `ff9ca956c3d7d4b97591606248da61175fc5462e` before
+cutover. A first guarded attempt stopped at host preflight after the notice
+flag was temporarily added: the prior preflight allowlist rejected it. The
+environment was restored from its root-only pre-deployment copy, with no
+release or service change. After PR #869 merged, a fresh complete state copy
+was made on the existing boot disk at
+`/var/backups/sigma-state-hotpatch-pre-c2fd3213-20261114T212555Z/state`.
+It contains 237 files (47 MB), is root-owned mode 0700, and its checksum and
+metadata comparison had zero differences. Read-only verification passed three
+SQLite integrity checks, 3 identities/workspaces, 23 projects, 54 research
+assets, one matching TeX/PDF pair, 70 job records, and 59 accounting calls
+($6.085737 recorded/reserved; 16 reserved or unknown outcomes).
+
+The guarded helper deployed the exact merged SHA with
+`--backup-verified --schema-compatible`. After the new preflight was active,
+the operator-authorized notice flag was set atomically to `true` in the
+root-owned mode-0600 environment file, and `sigma.service` restarted
+successfully. Backend, frontend, and edge are healthy. The backend and
+frontend image source labels match the deployed SHA; the existing healthy edge
+image was retained. Effective inference remains `chatgpt`, and the configured
+sponsor email matches the designated account. No credentials, provider
+spending limits, SIGMA allowances, or administrator identity were changed.
+
+Live post-deployment checks confirmed the same identity, workspace, project,
+artifact, job, and accounting counts as the verified backup, and direct
+read-only checks passed SQLite integrity. The public cloud-auth status is
+enabled and ready, target `hosted`, with the notice enabled. An unauthenticated
+Google login-start returned HTTP 302 to `accounts.google.com` with the HTTPS
+production callback. No Google account sign-in or paid inference was
+performed. Real Chrome showed no Brainstorm entry on Home; `/brainstorm` and
+`/chat` displayed the local-only fallback; `/api/chat/config` returned 404.
+Exact-SHA browser CI passed the hosted sponsored connection and browser
+acceptance checks. A signed-in production user's pill click and “Oh, Darn.”
+dialog were not exercised because no authenticated user session was used;
+the flag and browser UI regression are verified separately. Anonymous
+`/api/health` returned the expected 401.
+
+The local full `./sigma test` run on this workstation had unrelated failures
+in `tests/project_collaboration.py` and `tests/research_qa.py`; all exact-SHA
+SIGMA CI shards passed. No schema or research-state changes were made.
+
 ## 2026-11-14 — PR #859 hosted-sponsored-pill hotpatch
 
 PR #859 merged as `ff9ca956c3d7d4b97591606248da61175fc5462e`, with the same
