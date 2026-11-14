@@ -147,13 +147,24 @@ with sync_playwright() as playwright:
     assert all(
         bounds is not None
         for bounds in (
-            title_bounds, metadata_bounds, repeated_bounds, human_bounds,
-            toolbar_bounds, first_bounds, second_bounds, page_bounds,
+            title_bounds,
+            metadata_bounds,
+            repeated_bounds,
+            human_bounds,
+            toolbar_bounds,
+            first_bounds,
+            second_bounds,
+            page_bounds,
         )
     )
     assert (
-        title_bounds["y"] < metadata_bounds["y"] < repeated_bounds["y"]
-        < human_bounds["y"] < toolbar_bounds["y"] < first_bounds["y"] < second_bounds["y"]
+        title_bounds["y"]
+        < metadata_bounds["y"]
+        < repeated_bounds["y"]
+        < human_bounds["y"]
+        < toolbar_bounds["y"]
+        < first_bounds["y"]
+        < second_bounds["y"]
     )
     assert repeated_bounds["width"] >= page_bounds["width"] - 4
     assert human_bounds["width"] >= page_bounds["width"] - 4
@@ -221,7 +232,10 @@ with sync_playwright() as playwright:
         turn["repeated_text"] == "New instruction applies without a Human message."
         for turn in turns[before_repeated_edit:]
     )
-    assert sum(message["speaker"] == "human" for message in transcript_messages) == human_messages_before
+    assert (
+        sum(message["speaker"] == "human" for message in transcript_messages)
+        == human_messages_before
+    )
     before_intervention = len(turns)
     human.fill("Human intervention: focus on the counterexample.")
     page.get_by_role("button", name="Send", exact=True).click()

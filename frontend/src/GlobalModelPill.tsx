@@ -80,7 +80,7 @@ export function ModelThinkingPillButton({ buttonRef, label, thinkingLabel, toolt
       {thinkingLabel && <ScrollingLabel className="global-model-pill-secondary" value={thinkingLabel} direction="forward" userCycleRevision={thinkingCycleRevision}/>}
     </span>
     <span className="global-model-pill-max-labels" aria-hidden="true">
-      <span>Model · GPT-6-Astra · $$</span>
+      <span>Model · GPT-6-Astra · $$$</span>
       <span>Thinking · Extra High</span>
     </span>
   </button>;
