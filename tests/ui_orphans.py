@@ -63,6 +63,22 @@ def main() -> None:
                 assert _verified(5173, 124, other) == frontend
                 assert _verified(5173, 124, root) is None
 
+        # FastAPI has stopped, so Vite's proxied /api/ui-instance cannot
+        # answer. A SIGMA-launched Vite is still verifiable by its exact
+        # command, checkout, UID, and inherited random launch marker.
+        with (
+            patch("sigma.ui_orphans._process", return_value=frontend),
+            patch("sigma.ui_orphans._sigma_instance", return_value=None),
+            patch("sigma.ui_orphans._listeners", return_value=set()),
+        ):
+            assert _verified(5173, 124) == frontend
+        with (
+            patch("sigma.ui_orphans._process", return_value=frontend),
+            patch("sigma.ui_orphans._sigma_instance", return_value=None),
+            patch("sigma.ui_orphans._listeners", return_value={999}),
+        ):
+            assert _verified(5173, 124) is None
+
         def process_command(*args: str) -> str:
             joined = " ".join(args)
             if "uid=" in joined:
@@ -98,6 +114,18 @@ def main() -> None:
         ):
             assert recover_orphans() == []
         assert sent.call_args_list == [call(123, signal.SIGTERM), call(124, signal.SIGTERM)]
+
+        # Orphan recovery must stop Vite after its backend died, not strand
+        # port 5173 or ask the operator to inspect and kill PIDs.
+        active = {8000: set(), 5173: {124}}
+        with (
+            patch("sigma.ui_orphans._listeners", side_effect=listeners),
+            patch("sigma.ui_orphans._process", return_value=frontend),
+            patch("sigma.ui_orphans._sigma_instance", return_value=None),
+            patch("sigma.ui_orphans.os.kill", side_effect=kill) as sent,
+        ):
+            assert recover_orphans() == []
+        assert sent.call_args_list == [call(124, signal.SIGTERM)]
 
         # Same server command and port do not establish ownership without a
         # matching launch marker returned by the process environment and API.
