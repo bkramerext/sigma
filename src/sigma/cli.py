@@ -163,11 +163,6 @@ COMMAND_DETAILS = {
         "./sigma start --navigate --signin",
         "Uses SIGMA local configuration and the configured UI ports; `--navigate` opens a browser tab.",
     ),
-    "brainstorm": (
-        "Start or safely restart the SIGMA browser UI at Home, with Brainstorm available.",
-        "./sigma brainstorm",
-        "Opens SIGMA Home. Select Brainstorm to start a two-agent conversation using the selected ChatGPT or API-key connection. Stop with Ctrl+C or `./sigma shutdown`.",
-    ),
     "shutdown": (
         "Stop identifiable local SIGMA UI servers safely.",
         "./sigma shutdown",
@@ -334,7 +329,11 @@ def main() -> None:
         action="store_true",
         help="Open SIGMA in a browser tab after startup",
     )
-    add_command(commands, "brainstorm", help="Launch SIGMA Home with Brainstorm available")
+    ui_command.add_argument(
+        "--brainstorm",
+        action="store_true",
+        help="Open Brainstorm in a browser tab (implies --navigate)",
+    )
     add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
     for command_parser in commands.choices.values():
         for action in command_parser._actions:
@@ -423,14 +422,13 @@ def main() -> None:
     if args.command == "start":
         sys.exit(
             run_ui(
-                navigate=args.navigate,
+                navigate=args.navigate or args.brainstorm,
+                navigate_path="/brainstorm" if args.brainstorm else "/",
                 signin=args.signin,
                 mock_auth=args.mock_auth,
                 sponsored=args.sponsored,
             )
         )
-    if args.command == "brainstorm":
-        sys.exit(run_ui(navigate=True, navigate_path="/"))
     if args.command == "shutdown":
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:
