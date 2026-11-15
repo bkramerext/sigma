@@ -63,12 +63,28 @@ def _current_principal() -> cloud_auth.Principal:
 
 
 async def _socket(principal: cloud_auth.Principal) -> str:
+    # User -> workspace ID -> model socket comes only from the server-verified
+    # Google principal, never a user-supplied path, ID or Docker project.
     try:
-        # User -> workspace ID -> mode socket comes exclusively from SIGMA's
-        # authenticated workspace mapping, never a request body or URL.
         return await personal_browser.model_socket(principal)
     except (PermissionError, personal_browser.PersonalBrowserUnavailable) as exc:
-        raise PersonalInferenceUnavailable("Personal model worker is unavailable.") from exc
+        if not personal_browser.sign_in_preview_enabled():
+            raise PersonalInferenceUnavailable("Personal model worker is unavailable.") from exc
+        # The local launcher stops browser/worker containers at exit while
+        # keeping each user's encrypted authorization state. If this verified
+        # user has already selected Personal, lazily restart their private
+        # worker after SIGMA --prod restarts; never require reauthorization.
+        try:
+            state = await personal_browser.session(principal, action="start")
+            if state["browser_status"] == "ready":
+                return await personal_browser.model_socket(principal)
+        except (PermissionError, personal_browser.PersonalBrowserUnavailable) as restore_exc:
+            raise PersonalInferenceUnavailable(
+                "Previously authorized Personal ChatGPT could not be restored."
+            ) from restore_exc
+        raise PersonalInferenceUnavailable(
+            "Previously authorized Personal ChatGPT could not be restored."
+        ) from exc
 
 
 async def _request(
