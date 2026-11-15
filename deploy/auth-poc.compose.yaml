@@ -28,7 +28,7 @@ services:
       - auth-poc-state:/var/lib/sigma-poc-auth
     ports:
       # Never expose this interactive credential-sign-in UI beyond loopback.
-      - "127.0.0.1:16080:6080"
+      - "127.0.0.1:${SIGMA_AUTH_POC_PORT:-16080}:6080"
     restart: "no"
     healthcheck:
       test: [CMD, "/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
