@@ -44,6 +44,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
       - name: Check user-scoped Docker broker security invariants
         run: python3 tests/auth_poc_host_broker.py
       - name: Check admin-only synthetic preview isolation
