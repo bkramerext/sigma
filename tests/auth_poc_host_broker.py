@@ -80,8 +80,12 @@ def main() -> None:
             assert stat.S_IMODE(gateway_root.stat().st_mode) == 0o711
             assert broker.compose_env(A)["SIGMA_STATE_DISK_MOUNT"] == str(root / A)
             assert broker.compose_env(B)["SIGMA_STATE_DISK_MOUNT"] == str(root / B)
-            assert broker.compose_env(A)["SIGMA_DOMAIN"] == "sigma-research.duckdns.org"
-            assert broker.compose_env(A)["SIGMA_PERSONAL_LAB_EDGE_KEY"].startswith("test-edge-key-")
+            assert "SIGMA_DOMAIN" not in broker.compose_env(A)
+            with patch.dict(os.environ, {"SIGMA_AUTH_BROKER_ISOLATED_NETWORK": "1"}):
+                assert broker.compose_env(A)["SIGMA_DOMAIN"] == "sigma-research.duckdns.org"
+                assert broker.compose_env(A)["SIGMA_PERSONAL_LAB_EDGE_KEY"].startswith(
+                    "test-edge-key-"
+                )
             # An attacker cannot replace an existing account's state with a link.
             (a / "auth/auth-poc").rmdir()
             (a / "auth/auth-poc").symlink_to(b / "auth/auth-poc")

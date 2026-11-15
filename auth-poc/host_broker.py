@@ -130,22 +130,28 @@ def compose_env(workspace_id: str) -> dict[str, str]:
     release = os.environ.get("SIGMA_RELEASE", "")
     if not RELEASE.fullmatch(release):
         raise ValueError("The exact release SHA is not configured")
-    domain = os.environ.get("SIGMA_DOMAIN", "").strip().lower()
-    edge_key = os.environ.get("SIGMA_PERSONAL_LAB_EDGE_KEY", "")
-    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", domain):
-        raise ValueError("The synthetic preview host is not configured")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{40,128}", edge_key):
-        raise ValueError("The private preview edge key is not configured")
-    return {
+    environment = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": os.environ.get("HOME", "/tmp"),
         "SIGMA_RELEASE": release,
-        "SIGMA_DOMAIN": domain,
-        "SIGMA_PERSONAL_LAB_EDGE_KEY": edge_key,
         "SIGMA_STATE_DISK_MOUNT": str(state_root() / workspace_id),
         "SIGMA_AUTH_POC_WORKSPACE_ID": workspace_id,
         "SIGMA_AUTH_POC_GATEWAY_DIR": str(gateway_root() / workspace_id),
     }
+    if os.environ.get("SIGMA_AUTH_BROKER_ISOLATED_NETWORK") == "1":
+        domain = os.environ.get("SIGMA_DOMAIN", "").strip().lower()
+        edge_key = os.environ.get("SIGMA_PERSONAL_LAB_EDGE_KEY", "")
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", domain):
+            raise ValueError("The synthetic preview host is not configured")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{40,128}", edge_key):
+            raise ValueError("The private preview edge key is not configured")
+        environment.update(
+            {
+                "SIGMA_DOMAIN": domain,
+                "SIGMA_PERSONAL_LAB_EDGE_KEY": edge_key,
+            }
+        )
+    return environment
 
 
 def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
