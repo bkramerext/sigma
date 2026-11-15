@@ -242,6 +242,25 @@ class ProdLifecycleTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(marker.stat().st_mode), 0o600)
             self.assertFalse(marker.with_suffix(".next").exists())
 
+    def test_crashed_preparation_becomes_actionable_failure(self) -> None:
+        mod = self.module
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = Path(temp)
+            marker = runtime / "prepare.status"
+            mod._preparation_state(marker, "preparing")
+
+            class FinishedProcess:
+                def poll(self):
+                    return 1
+
+            class Runtime:
+                preparation = FinishedProcess()
+
+            instance = Runtime()
+            instance.runtime = runtime
+            mod.LocalPersonalRuntime.refresh_preparation(instance)
+            self.assertEqual(marker.read_text(), "failed")
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)

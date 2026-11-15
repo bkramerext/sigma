@@ -11,8 +11,8 @@ import hashlib
 import os
 import re
 import secrets
-import signal
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -322,6 +322,18 @@ class LocalPersonalRuntime:
                     broker.wait()
             shutil.rmtree(runtime)
             raise
+
+    def refresh_preparation(self) -> None:
+        """Do not leave the dialog preparing forever if its child crashes."""
+        if self.preparation.poll() is None:
+            return
+        marker = self.runtime / "prepare.status"
+        try:
+            phase = marker.read_text(encoding="ascii").strip()
+        except OSError:
+            return
+        if phase == "preparing":
+            _preparation_state(marker, "failed")
 
     def close(self, progress: Callable[[], None] | None = None) -> None:
         """Stop verified SIGMA Docker projects, without deleting OAuth state."""

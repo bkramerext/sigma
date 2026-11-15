@@ -272,6 +272,8 @@ def run_ui(
                             raise RuntimeError(
                                 f"{name} server exited (status {code}); stopping both servers."
                             )
+                    if personal_runtime is not None:
+                        personal_runtime.refresh_preparation()
                     if not announced:
                         if (
                             ready(API_URL + "/api/ui-instance", instance_id)

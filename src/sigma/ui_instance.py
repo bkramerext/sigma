@@ -352,7 +352,7 @@ class Instance:
                     # Docker cleanup may have many 45s-per-workspace operations.
                     # Keep receiving progress and never forcibly kill a verified
                     # SIGMA owner merely because graceful cleanup is slow.
-                    client.settimeout(75)
+                    client.settimeout(120)
                     try:
                         client.sendall(
                             json.dumps({"identity": self.identity, "command": "shutdown"}).encode()

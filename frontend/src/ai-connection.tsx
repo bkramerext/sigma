@@ -452,17 +452,21 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         if (controller.signal.aborted || !dialogActive.current) return;
         if (account?.status === 'verified') {
           activatingPersonal.current = true;
+          const activationSequence = browserLaunchSequence.current;
           try {
             if (selectedConnection === 'sponsored') await selectConnection?.('personal');
-            if (!dialogActive.current) {
-              // A click on X during the commit phase cancels the mode change.
-              // The worker may keep durable OAuth credentials for a later retry.
-              if (selectedConnection === 'sponsored')
+            if (!dialogActive.current || activationSequence !== browserLaunchSequence.current) {
+              // A click on X cancels the mode change. Keep any durable OAuth
+              // credentials, but do not silently select Personal.
+              if (selectedConnection === 'sponsored') {
                 await selectConnection?.('sponsored');
+                if (!dialogActive.current)
+                  await stopContainerPersonalBrowser().catch(() => undefined);
+              }
               return;
             }
             await refreshConnection('manual');
-            if (dialogActive.current) {
+            if (dialogActive.current && activationSequence === browserLaunchSequence.current) {
               dialogActive.current = false;
               setPersonalDialogState('closed');
             }
