@@ -18,5 +18,7 @@ services:
         target: /var/lib/sigma-poc-auth
   # The browser is still a different UID and has no credential mount.
   browser:
+    # Chromium counts threads against this limit. Leave room for sign-in tabs.
+    pids_limit: 512
     environment:
       SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN: "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}"
