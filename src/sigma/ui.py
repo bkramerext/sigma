@@ -200,6 +200,21 @@ def run_ui(
                     **(personal_runtime.env if personal_runtime is not None else {}),
                     "SIGMA_UI_INSTANCE_ID": instance_id,
                 }
+                if prod and personal_runtime is None:
+                    # Never accidentally fall back to host-local ChatGPT OAuth
+                    # after --prod's isolated Docker startup fails. Keep the
+                    # Personal UI available to explain the missing prerequisite.
+                    child_env.update(
+                        {
+                            "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
+                            "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
+                            "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": "/nonexistent/sigma-personal-broker.sock",
+                            "SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT": "/nonexistent/sigma-personal-gateways",
+                            "SIGMA_LOCAL_PERSONAL_STARTUP_ERROR": (
+                                "Start Docker Desktop and restart SIGMA to connect Personal ChatGPT."
+                            ),
+                        }
+                    )
                 child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
                 child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
@@ -211,18 +226,18 @@ def run_ui(
                 child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin or prod else "false"
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
-                # A presentation-only rehearsal. Authentication, credentials and inference stay local.
-                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = (
-                    "true" if prod and personal_runtime is None else "false"
-                )
-                child_env["SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED"] = (
-                    "true" if prod and personal_runtime is None else "false"
-                )
+                # --prod now exercises the real local container path, never
+                # the hosted "Oh, Darn" informational notice.
+                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "false"
+                child_env["SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED"] = "false"
                 child_env.setdefault(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )
                 if prod and personal_runtime is None:
-                    print("Personal browser unavailable; showing the hosted notice.", flush=True)
+                    print(
+                        "The Personal browser is unavailable; SIGMA remains in local Sponsored mode.",
+                        flush=True,
+                    )
                 for command in commands:
                     children.append(
                         subprocess.Popen(
