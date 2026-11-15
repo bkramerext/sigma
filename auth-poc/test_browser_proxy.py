@@ -94,7 +94,7 @@ async def main() -> None:
                 assert a.headers["cache-control"] == "no-store"
                 # Test actual window-scoped route registration and dispatch,
                 # not just the underlying asset or WebSocket proxy functions.
-                routes = {(route.path, type(route).__name__) for route in api.app.routes}
+                routes = {(route.path, type(route).__name__) for route in api.app.routes if hasattr(route, "path")}
                 assert (
                     "/api/ai/personal-browser/window/{window_id}/{path:path}",
                     "APIRoute",
