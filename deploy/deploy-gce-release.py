@@ -291,9 +291,15 @@ class Deployment:
                 or release_pin_changed
             ):
                 raise
-            # Restore the code and release pin atomically, preserving every other
-            # deploy.env byte. Existing disk state and credentials are untouched.
+            # Stop the candidate while its own checkout and Compose unit are
+            # still active; otherwise switching to an older release could omit
+            # the optional worker/browser services from ExecStop and orphan them.
+            # Existing disk state and credentials are never deleted.
             try:
+                if candidate_started:
+                    _call(self.runner, ["systemctl", "stop", "sigma.service"])
+                    service_stopped = True
+                    candidate_started = False
                 _replace_release(self.env_file, self.env_file.read_bytes(), previous, owner)
                 _call(
                     self.runner,
@@ -306,8 +312,6 @@ class Deployment:
                     _call(self.runner, ["systemctl", "disable", "sigma.service"])
                 elif service_stopped:
                     _call(self.runner, ["systemctl", "start", "sigma.service"])
-                elif candidate_started:
-                    _call(self.runner, ["systemctl", "restart", "sigma.service"])
                 if not initial and service_recovery_needed:
                     self.verify_health(previous)
                 if maintenance_enabled:
