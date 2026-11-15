@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, WebSocket
 
 from sigma import api, cloud_auth, personal_browser_proxy as proxy
 
@@ -145,6 +145,40 @@ async def main() -> None:
                     assert error.status_code == 403
                 else:
                     raise AssertionError("Guest received private browser")
+                # WebSockets do not traverse SIGMA's HTTP Google auth middleware.
+                # Verify both the immutable window selector and Origin are
+                # rejected before any worker channel is opened.
+                async def denied_ws(path: str, identifier: str, origin: str) -> None:
+                    sent: list[dict[str, object]] = []
+
+                    async def receive() -> dict[str, str]:
+                        return {"type": "websocket.connect"}
+
+                    async def send(message: dict[str, object]) -> None:
+                        sent.append(message)
+
+                    ws = WebSocket(
+                        {
+                            "type": "websocket",
+                            "scheme": "wss",
+                            "path": path,
+                            "query_string": b"",
+                            "headers": [(b"origin", origin.encode("ascii"))],
+                        },
+                        receive,
+                        send,
+                    )
+                    with patch.object(proxy.personal_browser, "enabled", return_value=True):
+                        await proxy.websocket_bridge(ws, identifier)
+                    assert sent and sent[0]["type"] == "websocket.close"
+                    assert sent[0]["code"] == 1008
+
+                ws_path = "/api/ai/personal-browser/window/" + window_id + "/ws"
+                await denied_ws(ws_path, "invalid", "https://sigma.example.test")
+                await denied_ws(ws_path, "b" * 32, "https://sigma.example.test")
+                await denied_ws(ws_path, window_id, "https://attacker.example.test")
+                with patch.object(proxy.cloud_auth, "resolve_session", return_value=None):
+                    await denied_ws(ws_path, window_id, "https://sigma.example.test")
         finally:
             for server in servers:
                 server.close()
