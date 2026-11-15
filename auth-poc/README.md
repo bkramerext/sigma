@@ -8,23 +8,17 @@ The outer browser never receives the OpenAI OAuth redirect.
 
 ## Run on a Mac with Docker Desktop
 
-From the SIGMA repository root:
+From the SIGMA repository root, with Docker Desktop running:
 
 ```sh
-docker compose -f deploy/auth-poc.compose.yaml up --build -d
+./auth-poc/start.sh
 ```
 
-Get the random VNC password printed only into this container's private tmpfs:
-
-```sh
-docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc cat /tmp/sigma-vnc-pass
-```
-
-Open `http://127.0.0.1:16080/vnc.html` in the Mac browser, click
-Connect, and enter that password. In the remote
-Chromium window, click **Open ChatGPT account chooser**, complete the OpenAI
-login, and click **Verify Personal model access**. This test only verifies the
-authentication and model-access boundary; research routing is not connected.
+This builds and launches the same Linux/amd64 image used by the cloud deployment
+POC, prints the per-container VNC password, and opens the browser-viewing page on
+macOS. Enter that password, then in the **remote** Chromium window click
+**Open ChatGPT account chooser**, complete OpenAI sign-in, and click
+**Verify Personal model access**.
 
 Stop:
 
