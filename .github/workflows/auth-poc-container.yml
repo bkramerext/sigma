@@ -21,6 +21,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and run production-architecture Linux/amd64 image
         run: docker compose -f deploy/auth-poc.compose.yaml up -d --build --wait
+      - name: Verify browser and worker are isolated
+        shell: bash
+        run: |
+          set -euo pipefail
+          worker=$(docker compose -f deploy/auth-poc.compose.yaml ps -q auth-poc)
+          browser=$(docker compose -f deploy/auth-poc.compose.yaml ps -q browser)
+          worker_mounts=$(docker inspect "$worker" --format '{{json .Mounts}}')
+          browser_mounts=$(docker inspect "$browser" --format '{{json .Mounts}}')
+          [[ "$worker_mounts" == *auth-poc-state* ]] || { echo "Worker missing credential volume"; exit 1; }
+          [[ "$browser_mounts" != *auth-poc-state* ]] || { echo "Browser can access credentials"; exit 1; }
+          [[ $(docker inspect "$browser" --format '{{.HostConfig.NetworkMode}}') == container:* ]] || { echo "Browser not sharing localhost"; exit 1; }
+          docker compose -f deploy/auth-poc.compose.yaml exec -T browser python3 -c 'import urllib.request; assert urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=3).status==200'
+          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc sh -c '! command -v chromium'
       - name: Verify synthetic OAuth loopback and PKCE inside container
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_loopback.py
       - name: Verify remote browser is accessible only over host loopback
@@ -32,14 +45,17 @@ jobs:
           [[ "$bind" == 127.0.0.1:* ]] || { echo "Unexpected noVNC bind: $bind"; exit 1; }
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import json, urllib.request; v=json.load(urllib.request.urlopen("http://127.0.0.1:8001/health")); assert v["ready"], v'
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import urllib.request; html=urllib.request.urlopen("http://127.0.0.1:8001/").read(); assert b"Open ChatGPT account chooser" in html'
+      - name: Verify browser-origin gate
+        run: |
+          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python -c 'import urllib.request,urllib.error; r=urllib.request.Request("http://127.0.0.1:8001/verify",data=b"",method="POST"); assert (lambda:None)() is None; exec("try:\\n urllib.request.urlopen(r,timeout=3)\\n raise AssertionError(\\\"request must fail\\\")\\nexcept urllib.error.HTTPError as e:\\n assert e.code == 403")'
       - name: Inspect failures (no login is performed in CI)
         if: failure()
         run: docker compose -f deploy/auth-poc.compose.yaml ps
       - name: Diagnose Chromium startup (CI only, no OpenAI sign-in)
         if: failure()
         run: |
-          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc sh -c 'timeout 8 /usr/bin/chromium --headless --disable-gpu --dump-dom about:blank 2>&1 | tail -35' || true
-          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc sh -c 'ps -ef | grep -E "chromium|Xvfb|x11vnc|websockify" | head -25' || true
+          docker compose -f deploy/auth-poc.compose.yaml exec -T browser sh -c 'timeout 8 /usr/bin/chromium --headless --disable-gpu --dump-dom about:blank 2>&1 | tail -35' || true
+          docker compose -f deploy/auth-poc.compose.yaml exec -T browser sh -c 'ps -ef | grep -E "chromium|Xvfb|x11vnc|websockify" | head -25' || true
       - name: Clean up POC containers and credentials
         if: always()
         run: docker compose -f deploy/auth-poc.compose.yaml down -v --remove-orphans
