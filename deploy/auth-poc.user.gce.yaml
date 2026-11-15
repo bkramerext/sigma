@@ -1,0 +1,17 @@
+# Dynamic, per-SIGMA-user instances; operator-controlled broker sets a verified
+# opaque workspace ID. Never publish a browser or OAuth worker port on the host.
+# All traffic from the public SIGMA site must pass an authenticated backend proxy.
+services:
+  auth-poc:
+    networks:
+      sigma-application:
+        aliases:
+          - sigma-personal-${SIGMA_AUTH_POC_WORKSPACE_ID:?workspace ID required}
+    ports: !override []
+  browser:
+    network_mode: "service:auth-poc"
+
+networks:
+  sigma-application:
+    external: true
+    name: sigma_application
