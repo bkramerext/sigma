@@ -411,7 +411,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
       : hostedPillLabel
-    : connected ? 'Connected to ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+    : connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = containerBrowserLab
     ? 'Click to attempt your Personal ChatGPT connection using a private container browser.'
     : (hostedNoticeClick || hostedPersonalUnavailable)
