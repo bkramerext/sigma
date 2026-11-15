@@ -66,6 +66,34 @@ class ReleaseImageTests(unittest.TestCase):
                 self.assertNotIn("SIGMA_BUILD_COMMIT", args)
             self.assertNotIn("uncommitted", marker)
 
+    def test_opt_in_browser_image_uses_exact_release_archive(self) -> None:
+        browser = self.repository / "auth-browser-poc"
+        browser.mkdir()
+        (browser / "Dockerfile").write_text(
+            "ARG SIGMA_RELEASE\\nFROM sigma-backend:${SIGMA_RELEASE}\\n"
+        )
+        self.git("add", ".")
+        self.git("commit", "-qm", "add optional browser image")
+        requested = self.git("rev-parse", "HEAD")
+        observed: list[tuple[list[str], str]] = []
+
+        def docker(args: list[str]) -> str:
+            observed.append(
+                (args, (Path(args[-1]) / "auth-browser-poc/Dockerfile").read_text())
+            )
+            return ""
+
+        release_image.build(
+            self.repository, requested, runner=docker, auth_browser_poc=True
+        )
+        self.assertEqual(len(observed), 3)
+        args, content = observed[2]
+        self.assertIn(f"sigma-auth-browser-poc:{requested}", args)
+        self.assertIn(f"SIGMA_RELEASE={requested}", args)
+        self.assertIn(f"org.opencontainers.image.revision={requested}", args)
+        self.assertIn("FROM sigma-backend:", content)
+        self.assertEqual(observed[0][0][6], f"sigma-backend:{requested}")
+
     def test_unresolvable_or_malformed_requested_sha_fails_before_docker(self) -> None:
         invoked = False
 
