@@ -177,6 +177,41 @@ jobs:
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import urllib.request; html=urllib.request.urlopen("http://127.0.0.1:8001/").read(); assert b"Open ChatGPT account chooser" in html'
       - name: Verify browser-origin gate
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_security.py
+      - name: Execute private GCE Compose overlay with restart-persistent state
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Same release images, no VM access and NO public browser port.
+          # The temporary state mount models /srv/sigma-state only for CI.
+          docker compose -f deploy/auth-poc.compose.yaml down --remove-orphans
+          SIGMA_AUTH_POC_PORT=16081 docker compose -p sigma-auth-user-b \
+            -f deploy/auth-poc.compose.yaml down -v --remove-orphans
+          state_dir=$(mktemp -d)
+          mkdir -p "$state_dir/auth/auth-poc"
+          sudo chown 10001:10001 "$state_dir/auth/auth-poc"
+          chmod 0700 "$state_dir/auth/auth-poc"
+          export SIGMA_RELEASE="$GITHUB_SHA"
+          export SIGMA_STATE_DISK_MOUNT="$state_dir"
+          docker tag sigma-auth-poc:local "sigma-auth-poc:$SIGMA_RELEASE"
+          docker tag sigma-auth-browser-poc:local "sigma-auth-browser-poc:$SIGMA_RELEASE"
+          gce=(docker compose -p sigma-auth-gce-ci \
+            -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml)
+          cleanup_gce() {
+            "${gce[@]}" down -v --remove-orphans || true
+            sudo rm -rf -- "$state_dir"
+          }
+          trap cleanup_gce EXIT
+          "${gce[@]}" up -d --no-build --wait
+          published=$("${gce[@]}" port auth-poc 6080 2>/dev/null || true)
+          [[ -z "$published" ]] || { echo "GCE POC exposed browser: $published"; exit 1; }
+          "${gce[@]}" exec -T auth-poc /opt/venv/bin/python -c \
+            'from pathlib import Path; Path("/var/lib/sigma-poc-auth/restart-probe").write_text("durable")'
+          # A Compose down/up cycle must keep the disk-backed worker state.
+          "${gce[@]}" down --remove-orphans
+          "${gce[@]}" up -d --no-build --wait
+          "${gce[@]}" exec -T auth-poc /opt/venv/bin/python -c \
+            'from pathlib import Path; assert Path("/var/lib/sigma-poc-auth/restart-probe").read_text()=="durable"'
+          echo "PASS: private GCE overlay uses identical images and persists state across restart"
       - name: Inspect failures (no login is performed in CI)
         if: failure()
         run: docker compose -f deploy/auth-poc.compose.yaml ps
