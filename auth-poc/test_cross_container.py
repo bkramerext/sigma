@@ -33,6 +33,14 @@ async def main() -> None:
         callback = parse_qs(urlsplit(url).query)["redirect_uri"][0]
         target = callback + "?code=invalid&state=invalid"
         completed = asyncio.Event()
+        observed_callback = asyncio.Event()
+        original_callback = chatgpt_auth.callback
+
+        async def observe_callback(*args, **kwargs) -> None:
+            try:
+                await original_callback(*args, **kwargs)
+            finally:
+                observed_callback.set()
 
         async def handle(
             reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -44,10 +52,13 @@ async def main() -> None:
                     body = target.encode("ascii")
                     status = b"200 OK"
                 elif first == b"GET /done HTTP/1.1":
-                    safe = chatgpt_auth.attempt_status(identifier)["status"] == "connecting"
-                    body = b"PASS" if safe else b"FAIL"
-                    status = b"200 OK" if safe else b"409 Conflict"
-                    completed.set()
+                    if not observed_callback.is_set():
+                        status, body = b"425 Too Early", b"WAIT"
+                    else:
+                        safe = chatgpt_auth.attempt_status(identifier)["status"] == "connecting"
+                        status = b"200 OK" if safe else b"409 Conflict"
+                        body = b"PASS" if safe else b"FAIL"
+                        completed.set()
                 else:
                     status, body = b"404 Not Found", b""
                 writer.write(
@@ -64,8 +75,12 @@ async def main() -> None:
                 writer.close()
                 await writer.wait_closed()
 
-        async with await asyncio.start_server(handle, "127.0.0.1", CONTROL_PORT):
-            await asyncio.wait_for(completed.wait(), timeout=25)
+        # Observe the existing OAuth listener itself; do not confuse a
+        # Chromium process exiting with an actual callback being received.
+        with patch.object(chatgpt_auth, "callback", new=observe_callback):
+            async with await asyncio.start_server(handle, "127.0.0.1", CONTROL_PORT):
+                await asyncio.wait_for(completed.wait(), timeout=45)
+        assert observed_callback.is_set(), "Chromium did not reach the callback"
         assert chatgpt_auth.attempt_status(identifier)["status"] == "connecting"
         print("PASS: browser container reached worker callback over shared localhost", flush=True)
     finally:
