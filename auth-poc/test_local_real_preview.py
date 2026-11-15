@@ -15,6 +15,7 @@ import httpx
 
 import server
 import model_gateway
+from sigma import cloud_auth, personal_browser, personal_inference
 
 
 async def main() -> None:
@@ -83,6 +84,52 @@ async def main() -> None:
         assert not model_gateway._valid_rpc_key(
             type("RequestStub", (), {"headers": {"x-sigma-worker-key": "0" * 64}})()
         )
+
+    # A saved local user selection must reconnect after the normal launcher
+    # stops and restarts its private Docker browser/worker containers.
+    principal = cloud_auth.Principal("test-user", "test@example.com", "admin")
+    with (
+        patch.object(personal_browser, "sign_in_preview_enabled", return_value=True),
+        patch.object(
+            personal_browser,
+            "model_socket",
+            new_callable=AsyncMock,
+            side_effect=[
+                personal_browser.PersonalBrowserUnavailable("worker stopped"),
+                "/tmp/private-restored-model.sock",
+            ],
+        ) as model_socket,
+        patch.object(
+            personal_browser,
+            "session",
+            new_callable=AsyncMock,
+            return_value={"browser_status": "ready"},
+        ) as restore,
+    ):
+        restored = await personal_inference._socket(principal)
+        assert restored == "/tmp/private-restored-model.sock"
+        assert model_socket.await_count == 2
+        restore.assert_awaited_once_with(principal, action="start")
+
+    with (
+        patch.object(personal_browser, "sign_in_preview_enabled", return_value=False),
+        patch.object(
+            personal_browser,
+            "model_socket",
+            new_callable=AsyncMock,
+            side_effect=personal_browser.PersonalBrowserUnavailable("worker stopped"),
+        ),
+        patch.object(
+            personal_browser, "session", new_callable=AsyncMock
+        ) as restore,
+    ):
+        try:
+            await personal_inference._socket(principal)
+        except personal_inference.PersonalInferenceUnavailable:
+            pass
+        else:
+            raise AssertionError("Unavailable hosted Personal worker did not fail closed")
+        restore.assert_not_awaited()
 
     with patch.dict(os.environ, {"SIGMA_AUTH_POC_REAL_SIGNIN": "0"}):
         assert not server.real_signin_enabled()
