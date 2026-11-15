@@ -306,8 +306,10 @@ def run_ui(
                     replacement = instance.replacement_request()
                     if replacement is not None:
                         replacement.sendall(
-                            (json.dumps({"identity": instance.identity, "status": "stopping"})
-                             + "\n").encode()
+                            (
+                                json.dumps({"identity": instance.identity, "status": "stopping"})
+                                + "\n"
+                            ).encode()
                         )
                         break
                     time.sleep(0.1)
@@ -326,9 +328,15 @@ def run_ui(
                             personal_runtime.close(
                                 progress=(
                                     lambda: replacement.sendall(
-                                        (json.dumps(
-                                            {"identity": instance.identity, "status": "stopping"}
-                                        ) + "\n").encode()
+                                        (
+                                            json.dumps(
+                                                {
+                                                    "identity": instance.identity,
+                                                    "status": "stopping",
+                                                }
+                                            )
+                                            + "\n"
+                                        ).encode()
                                     )
                                 )
                                 if replacement is not None

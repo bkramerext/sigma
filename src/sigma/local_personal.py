@@ -185,13 +185,9 @@ def _down_workspace(env: dict[str, str], workspace: str) -> None:
         raise LocalPersonalUnavailable("Unsafe Personal Docker project identifier.")
     compose_env = {
         **env,
-        "SIGMA_STATE_DISK_MOUNT": str(
-            Path(env["SIGMA_AUTH_BROKER_STATE_ROOT"]) / workspace
-        ),
+        "SIGMA_STATE_DISK_MOUNT": str(Path(env["SIGMA_AUTH_BROKER_STATE_ROOT"]) / workspace),
         "SIGMA_AUTH_POC_WORKSPACE_ID": workspace,
-        "SIGMA_AUTH_POC_GATEWAY_DIR": str(
-            Path(env["SIGMA_AUTH_BROKER_GATEWAY_ROOT"]) / workspace
-        ),
+        "SIGMA_AUTH_POC_GATEWAY_DIR": str(Path(env["SIGMA_AUTH_BROKER_GATEWAY_ROOT"]) / workspace),
         "SIGMA_AUTH_POC_LOCAL_UID": str(os.geteuid()),
         "SIGMA_AUTH_POC_LOCAL_GID": str(os.getegid()),
     }

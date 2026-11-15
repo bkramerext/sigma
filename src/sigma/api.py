@@ -7,10 +7,10 @@ import os
 import re
 import secrets
 import sqlite3
-from pathlib import Path
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from dataclasses import asdict, replace
+from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import quote, urlencode
@@ -3228,7 +3228,8 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
                 )
             if phase != "ready":
                 raise HTTPException(
-                    503, "Personal browser preparation failed. Check Docker Desktop and restart SIGMA."
+                    503,
+                    "Personal browser preparation failed. Check Docker Desktop and restart SIGMA.",
                 )
     try:
         snapshot = await personal_browser.session(principal, action)

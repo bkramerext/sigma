@@ -192,7 +192,6 @@ class ProdLifecycleTests(unittest.TestCase):
         api = (ROOT / "src/sigma/api.py").read_text(encoding="utf-8")
         self.assertIn('os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR")', api)
 
-
     def test_arm64_platform_selected_before_build_and_cache_revalidated(self) -> None:
         mod = self.module
         observed = []
@@ -212,9 +211,7 @@ class ProdLifecycleTests(unittest.TestCase):
             env = {"PATH": "/usr/bin"}
             self.assertEqual(mod._release_images(env), ("a" * 40, "linux/arm64"))
             self.assertEqual(env["SIGMA_AUTH_POC_BROWSER_PLATFORM"], "linux/arm64")
-            compose_build = [
-                values for args, values in observed if args[-1] == "build"
-            ]
+            compose_build = [values for args, values in observed if args[-1] == "build"]
             self.assertEqual(len(compose_build), 1)
             self.assertEqual(compose_build[0]["SIGMA_AUTH_POC_BROWSER_PLATFORM"], "linux/arm64")
             tags = [args for args, _ in observed if args[:2] == ["docker", "tag"]]

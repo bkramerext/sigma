@@ -44,6 +44,8 @@ jobs:
   docker-smoke:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      SIGMA_AUTH_POC_CHECKOUT_ID: cccccccccccccccccccccccccccccccc
     steps:
       - uses: actions/checkout@v4
       - name: Check user-scoped Docker broker security invariants

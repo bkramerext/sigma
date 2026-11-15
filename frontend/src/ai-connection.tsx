@@ -454,6 +454,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           activatingPersonal.current = true;
           try {
             if (selectedConnection === 'sponsored') await selectConnection?.('personal');
+            if (!dialogActive.current) {
+              // A click on X during the commit phase cancels the mode change.
+              // The worker may keep durable OAuth credentials for a later retry.
+              if (selectedConnection === 'sponsored')
+                await selectConnection?.('sponsored');
+              return;
+            }
             await refreshConnection('manual');
             if (dialogActive.current) {
               dialogActive.current = false;
@@ -584,7 +591,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     browserLaunchSequence.current += 1;
     const alreadyPersonal = selectedConnection === 'personal' && connected;
     const activationPending = activatingPersonal.current;
-    const wasReady = personalDialogState === 'ready';
+    const wasReady = personalDialogState === 'ready' || personalDialogState === 'error';
     setPersonalDialogState('closed');
     setPersonalDialogError('');
     // Closing a completed connection must not stop its inference worker.
@@ -630,7 +637,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         if (sequence !== browserLaunchSequence.current || !dialogActive.current) {
           // A dismissed attempt may finish while the request is in flight.
           // Do not stop a worker concurrently being adopted as Personal.
-          if (!activatingPersonal.current && selectedConnection !== 'personal')
+          if (!activatingPersonal.current && !(selectedConnection === 'personal' && connected))
             void stopContainerPersonalBrowser().catch(() => {});
           return;
         }
