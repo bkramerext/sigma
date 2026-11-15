@@ -15,6 +15,7 @@ from urllib.request import urlopen
 from uuid import uuid4
 
 from sigma.local_config import load_local_config
+from sigma.local_personal import LocalPersonalRuntime, LocalPersonalUnavailable
 from sigma.projects import ROOT
 from sigma.ui_instance import Instance, stop_registered_instances
 from sigma.ui_orphans import listener_details, recover_orphans
@@ -162,11 +163,6 @@ def run_ui(
                     # the UI children. A missing Docker Desktop never prevents
                     # sponsored SIGMA from starting or enables host-local OAuth.
                     try:
-                        from sigma.local_personal import (
-                            LocalPersonalRuntime,
-                            LocalPersonalUnavailable,
-                        )
-
                         personal_runtime = LocalPersonalRuntime.start()
                         print(
                             "Local Personal ChatGPT browser ready. Sign in through SIGMA.",
