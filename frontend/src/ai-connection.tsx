@@ -284,10 +284,11 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
       <h2 id="personal-browser-heading">Connect to ChatGPT</h2>
       <DialogDismissButton label="Close ChatGPT connection" onClick={onClose}/>
     </div>
-    <p>SIGMA runs a private browser inside an isolated container so ChatGPT's localhost
-      sign-in callback stays with that browser. The screen below is a secure,
-      same-origin view of that browser—not an iframe loading OpenAI's website.
-      SIGMA does not ask for your ChatGPT password.</p>
+    <p>ChatGPT authorization uses a localhost callback. SIGMA runs Chromium and
+      the callback worker together inside isolated containers, so the callback
+      stays with the browser. This dialog shows an authenticated, same-origin
+      view of Chromium. SIGMA relays its screen and input, while ChatGPT account
+      tokens stay with the private worker.</p>
     {state === 'starting' && <p role="status">Starting the private sign-in browser…</p>}
     {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
       <p>{error || 'The private browser could not be started.'}</p>
