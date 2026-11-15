@@ -1,0 +1,40 @@
+name: One-off POC formatter
+
+on:
+  push:
+    branches: [coordinator/portable-auth-browser-poc]
+    paths:
+      - .github/workflows/auth-browser-poc-format-once.yml
+      - src/sigma/auth_browser_poc_api.py
+      - src/sigma/auth_browser_poc_launcher.py
+      - src/sigma/auth_browser_poc_ui.py
+      - src/sigma/auth_browser_poc_worker.py
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: "!contains(github.event.head_commit.message, '[poc-autoformat]')"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: coordinator/portable-auth-browser-poc
+          persist-credentials: true
+      - uses: astral-sh/setup-uv@v6
+      - name: Format only changed POC Python files
+        run: |
+          version="$(python3 -c 'import tomllib; from pathlib import Path; x=tomllib.loads(Path("uv.lock").read_text()); print(next(p["version"] for p in x["package"] if p["name"]=="ruff"))')"
+          files="src/sigma/auth_browser_poc_api.py src/sigma/auth_browser_poc_launcher.py src/sigma/auth_browser_poc_ui.py src/sigma/auth_browser_poc_worker.py src/sigma/api.py src/sigma/ui.py deploy/release_image.py deploy/deploy-gce-release.py tests/auth_browser_poc.py"
+          uvx --from "ruff==$version" ruff check --fix --unsafe-fixes $files
+          uvx --from "ruff==$version" ruff format $files
+      - name: Commit formatting on the POC branch only
+        run: |
+          git config user.name "SIGMA POC Formatter"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/sigma/auth_browser_poc_api.py src/sigma/auth_browser_poc_launcher.py src/sigma/auth_browser_poc_ui.py src/sigma/auth_browser_poc_worker.py src/sigma/api.py src/sigma/ui.py deploy/release_image.py deploy/deploy-gce-release.py tests/auth_browser_poc.py
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "[poc-autoformat] Apply project Ruff formatting"
+          git push origin HEAD:coordinator/portable-auth-browser-poc
