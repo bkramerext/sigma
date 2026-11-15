@@ -49,6 +49,9 @@ services:
     security_opt:
       - no-new-privileges:true
       - seccomp:../auth-poc/chromium-seccomp.json
+      # Ubuntu 24.04 AppArmor userns restrictions conflict with Chromium's
+      # nested sandbox. This affects browser only; worker remains AppArmor-confined.
+      - apparmor:unconfined
     pids_limit: 192
     mem_limit: 1536m
     memswap_limit: 1536m
