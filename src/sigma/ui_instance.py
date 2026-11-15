@@ -355,8 +355,10 @@ class Instance:
                     client.settimeout(120)
                     try:
                         client.sendall(
-                            json.dumps({"identity": self.identity, "command": "shutdown"}).encode()
-                            + "\n"
+                            (
+                                json.dumps({"identity": self.identity, "command": "shutdown"})
+                                + "\n"
+                            ).encode()
                         )
                         while True:
                             status = self.receive(client)
