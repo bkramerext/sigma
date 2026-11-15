@@ -1,6 +1,12 @@
 name: Auth browser POC image smoke test
 
 on:
+  pull_request:
+    paths:
+      - "auth-browser-poc/**"
+      - "src/sigma/auth_browser_poc_worker.py"
+      - "src/sigma/auth_browser_poc_api.py"
+      - ".github/workflows/auth-browser-poc-smoke.yml"
   workflow_dispatch:
 
 jobs:
