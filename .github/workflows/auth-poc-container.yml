@@ -111,35 +111,27 @@ jobs:
               assert response.read() == b"PASS", "Invalid state was consumed"
           print("PASS: distinct Chromium container reached OAuth loopback listener")
           PY
-      - name: Diagnose Chromium namespace sandbox without credentials
+      - name: Verify Chromium sandbox under restricted namespace seccomp profile
         shell: bash
         run: |
           set -euo pipefail
-          # Diagnostics only: isolated, networkless, disposable container.
-          # No OpenAI pages, account data, volumes or host sockets.
-          for mode in default permissive-seccomp-probe; do
-            args=(--rm --network none --read-only --cap-drop ALL
-              --security-opt no-new-privileges --pids-limit 128
-              --tmpfs /tmp:rw,nosuid,size=512m,uid=11001,gid=11001)
-            if [[ "$mode" == permissive-seccomp-probe ]]; then
-              args+=(--security-opt seccomp=unconfined)
-            fi
-            set +e
-            output=$(timeout 18 docker run "${args[@]}" \
-              --entrypoint /usr/bin/chromium sigma-auth-browser-poc:local \
-              --headless --disable-gpu --disable-dev-shm-usage --no-first-run \
-              --user-data-dir=/tmp/chromium-test --dump-dom about:blank 2>&1)
-            rc=$?
-            set -e
-            if [[ $rc -eq 0 && "$output" == *"<html"* ]]; then
-              echo "SANDBOX_PROBE $mode: chromium launched without --no-sandbox"
-            else
-              echo "SANDBOX_PROBE $mode: blocked (exit=$rc)"
-              printf '%s\\n' "$output" | tail -12
-            fi
-          done
-          # This is a diagnostic experiment, not a sandbox acceptance pass.
-          # Neither probe is used for real account sign-in or the hosted app.
+          # This synthetic probe never loads external pages, networks, or tokens.
+          # Unlike the previous diagnostic, neither Chrome's sandbox nor
+          # Docker's seccomp filtering is disabled.
+          output=$(timeout 18 docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --security-opt seccomp=auth-poc/chromium-seccomp.json \
+            --pids-limit 128 \
+            --tmpfs /tmp:rw,nosuid,size=512m,uid=11001,gid=11001 \
+            --entrypoint /usr/bin/chromium sigma-auth-browser-poc:local \
+            --headless --disable-gpu --disable-dev-shm-usage --no-first-run \
+            --user-data-dir=/tmp/chromium-test --dump-dom about:blank 2>&1)
+          [[ "$output" == *"<html"* ]] || {
+            printf '%s\\n' "$output" | tail -25
+            echo "Chromium failed with namespace sandbox enabled" >&2
+            exit 1
+          }
+          echo "PASS: Chromium launched with sandbox enabled under constrained seccomp"
       - name: Verify remote browser is accessible only over host loopback
         shell: bash
         run: |
