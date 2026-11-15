@@ -27,6 +27,7 @@ PRODUCTION_FRONTEND_BODY = b"PRODUCTION_FRONTEND_UNCHANGED"
 
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    preview_upstream = False
     auth_records: ClassVar[list[tuple[str, str]]] = []
     preview_records: ClassVar[list[dict[str, str]]] = []
     production_records: ClassVar[list[str]] = []
@@ -63,7 +64,7 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             return
         elif self.path.startswith("/__personal_lab__"):
             self.preview_records.append(dict(self.headers.items()))
-            body = b"PRIVATE_PREVIEW_OK"
+            body = b"PRIVATE_PREVIEW_OK" if self.preview_upstream else PRODUCTION_FRONTEND_BODY
         else:
             body = PRODUCTION_FRONTEND_BODY
         if self.headers.get("Upgrade", "").lower() == "websocket":
@@ -89,8 +90,14 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def _fixture_server() -> tuple[http.server.ThreadingHTTPServer, threading.Thread, int]:
-    server = http.server.ThreadingHTTPServer(("0.0.0.0", 0), FixtureHandler)
+class PreviewFixtureHandler(FixtureHandler):
+    preview_upstream = True
+
+
+def _fixture_server(
+    handler: type[http.server.BaseHTTPRequestHandler] = FixtureHandler,
+) -> tuple[http.server.ThreadingHTTPServer, threading.Thread, int]:
+    server = http.server.ThreadingHTTPServer(("0.0.0.0", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread, server.server_address[1]
@@ -136,7 +143,7 @@ def main() -> None:
     FixtureHandler.preview_records = []
     FixtureHandler.production_records = []
     auth, _auth_thread, fixture_port = _fixture_server()
-    preview, _preview_thread, preview_port = _fixture_server()
+    preview, _preview_thread, preview_port = _fixture_server(PreviewFixtureHandler)
     caddy_name = "sigma-preview-fixture-" + uuid.uuid4().hex[:10]
     with tempfile.TemporaryDirectory(prefix="sigma-preview-caddy-") as directory:
         temp = Path(directory)
