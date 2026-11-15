@@ -158,6 +158,54 @@ jobs:
           [[ $(docker inspect "$browser" --format '{{.HostConfig.NetworkMode}}') == container:* ]] || { echo "Browser not sharing localhost"; exit 1; }
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser python3 -c 'import urllib.request; assert urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=3).status==200'
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc sh -c '! command -v chromium'
+      - name: Exercise local non-root broker with real Docker containers and private relays
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir=$(mktemp -d)
+          gateway_dir=$(mktemp -d)
+          chmod 0700 "$state_dir"
+          chmod 0711 "$gateway_dir"
+          workspace=$(printf 'e%.0s' {1..32})
+          export SIGMA_AUTH_BROKER_LOCAL_POC=1
+          export SIGMA_AUTH_BROKER_STATE_ROOT="$state_dir"
+          export SIGMA_AUTH_BROKER_GATEWAY_ROOT="$gateway_dir"
+          export SIGMA_RELEASE="$GITHUB_SHA"
+          docker tag sigma-auth-poc:local "sigma-auth-poc:$GITHUB_SHA"
+          docker tag sigma-auth-browser-poc:local "sigma-auth-browser-poc:$GITHUB_SHA"
+          cleanup_local() {
+            SIGMA_AUTH_POC_WORKSPACE_ID="$workspace" \\
+            SIGMA_STATE_DISK_MOUNT="$state_dir/$workspace" \\
+            SIGMA_AUTH_POC_GATEWAY_DIR="$gateway_dir/$workspace" \\
+            SIGMA_AUTH_POC_LOCAL_UID="$(id -u)" \\
+            SIGMA_AUTH_POC_LOCAL_GID="$(id -g)" \\
+              docker compose --project-name "sigma-personal-$workspace" \\
+                -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \\
+                -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \\
+                down --remove-orphans || true
+            rm -rf -- "$state_dir" "$gateway_dir"
+          }
+          trap cleanup_local EXIT
+          python3 - <<'PY'
+          import importlib.util
+          import socket
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("local_poc_broker", Path("auth-poc/host_broker.py").resolve())
+          assert spec and spec.loader
+          broker = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(broker)
+          workspace = "e" * 32
+          assert broker.operate("start", workspace)["status"] == "ready"
+          relay = broker.gateway_root() / workspace / "vnc.sock"
+          assert relay.is_socket(), "Private browser relay was not published"
+          with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+              conn.settimeout(8)
+              conn.connect(str(relay))
+              conn.sendall(b"GET /vnc.html HTTP/1.1\r\nHost: private-browser\r\nConnection: close\r\n\r\n")
+              assert b"200 OK" in conn.recv(1000), "Private browser could not stream"
+          assert broker.operate("stop", workspace)["status"] == "stopped"
+          print("PASS: host-user-owned Docker worker and private browser relay")
+          PY
       - name: Verify two isolated user-scoped stacks
         shell: bash
         run: |
