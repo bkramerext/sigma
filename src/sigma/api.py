@@ -38,6 +38,7 @@ from sigma import (
     memory_guard,
     paper_scores,
     papers,
+    personal_browser,
     project_collaboration,
     project_diagnostics,
     project_types,
@@ -3183,6 +3184,44 @@ async def connection_view(request: Request, refresh: bool = False):
 @app.get("/api/ai/models")
 async def models_view(refresh: bool = False):
     return await models(refresh)
+
+def _personal_browser_principal(request: Request) -> cloud_auth.Principal:
+    """Never accept a caller-provided workspace ID, account ID or Docker URL."""
+    principal = getattr(request.state, "cloud_principal", None)
+    if (
+        not isinstance(principal, cloud_auth.Principal)
+        or principal.role not in {"member", "admin"}
+        or principal.subject.startswith("mock:")
+    ):
+        raise HTTPException(403, "Authenticated SIGMA member required.")
+    return principal
+
+
+async def _personal_browser_action(request: Request, action: str) -> JSONResponse:
+    principal = _personal_browser_principal(request)
+    try:
+        snapshot = await personal_browser.session(principal, action)
+    except personal_browser.PersonalBrowserUnavailable as exc:
+        raise HTTPException(503, "Personal browser service is unavailable.") from exc
+    return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/ai/personal-browser/start")
+async def personal_browser_start(request: Request):
+    """Start the user's own synthetic container pair; does not start OAuth."""
+    return await _personal_browser_action(request, "start")
+
+
+@app.get("/api/ai/personal-browser/status")
+async def personal_browser_status(request: Request):
+    return await _personal_browser_action(request, "status")
+
+
+@app.post("/api/ai/personal-browser/stop")
+async def personal_browser_stop(request: Request):
+    """Pause only this user's browser; do not erase credentials or claim logout."""
+    return await _personal_browser_action(request, "stop")
+
 
 
 class AuthBeginRequest(BaseModel):
