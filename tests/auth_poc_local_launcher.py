@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import socket
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +76,103 @@ class LocalBrokerTests(unittest.TestCase):
     def test_broker_rejects_caller_workspace_path(self) -> None:
         with self.assertRaises(ValueError):
             broker.compose_args("../other-user", "ps")
+
+
+class ProdLifecycleTests(unittest.TestCase):
+    """Local --prod owns exactly the containers it starts, with no companion CLI."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "sigma_local_personal_test", ROOT / "src/sigma/local_personal.py"
+        )
+        assert spec and spec.loader
+        cls.module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.module
+        spec.loader.exec_module(cls.module)
+
+    def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
+        mod = self.module
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp) / "home"
+            home.mkdir()
+            runtime = Path(temp) / "runtime"
+            runtime.mkdir()
+            active_socket = None
+
+            class BrokerProcess:
+                stopped = False
+
+                def poll(self):
+                    return 0 if self.stopped else None
+
+                def terminate(self):
+                    self.stopped = True
+
+                def wait(self, timeout=None):
+                    return 0
+
+            fake = BrokerProcess()
+
+            def start_broker(*args, **kwargs):
+                nonlocal active_socket
+                env = kwargs["env"]
+                self.assertEqual(env["SIGMA_AUTH_POC_REAL_SIGNIN"], "0")
+                self.assertEqual(env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"], "0")
+                self.assertEqual(env["SIGMA_PERSONAL_BROWSER_LAB_ENABLED"], "1")
+                self.assertNotIn("SIGMA_AUTH_POC_RPC_SEED", env)
+                active_socket = socket.socket(socket.AF_UNIX)
+                active_socket.bind(env["SIGMA_AUTH_BROKER_SOCKET"])
+                os.chmod(env["SIGMA_AUTH_BROKER_SOCKET"], 0o600)
+                active_socket.listen()
+                return fake
+
+            commands = []
+
+            def command(args, *, env, timeout=90):
+                commands.append(args)
+                return ""
+
+            with (
+                patch.object(mod, "_docker_environment", return_value={"SIGMA_AUTH_POC_RPC_SEED": "secret"}),
+                patch.object(mod, "_release_images", return_value=("a" * 40, "linux/arm64")),
+                patch.object(mod.Path, "home", return_value=home),
+                patch.object(mod.tempfile, "mkdtemp", return_value=str(runtime)),
+                patch.object(mod.subprocess, "Popen", side_effect=start_broker),
+                patch.object(mod, "_command", side_effect=command),
+            ):
+                running = mod.LocalPersonalRuntime.start()
+                self.assertEqual(stat.S_IMODE((runtime / "broker").stat().st_mode), 0o711)
+                self.assertEqual(stat.S_IMODE((runtime / "gateways").stat().st_mode), 0o711)
+                self.assertEqual(stat.S_IMODE(running.state_root.stat().st_mode), 0o700)
+                self.assertEqual(running.env["SIGMA_AUTH_POC_BROWSER_PLATFORM"], "linux/arm64")
+                (runtime / "gateways" / ("b" * 32)).mkdir()
+                (runtime / "gateways" / "not-a-workspace").mkdir()
+                running.close()
+                self.assertEqual(len(commands), 1)
+                self.assertIn("deploy/auth-poc.user.local.yaml", commands[0])
+                self.assertIn("down", commands[0])
+                self.assertEqual(commands[0][-1], "--remove-orphans")
+                self.assertFalse(runtime.exists())
+                self.assertTrue(running.state_root.is_dir())
+                self.assertTrue(fake.stopped)
+            if active_socket is not None:
+                active_socket.close()
+
+    def test_prod_uses_no_synthetic_account_as_connected(self) -> None:
+        ui = (ROOT / "src/sigma/ui.py").read_text(encoding="utf-8")
+        self.assertIn("LocalPersonalRuntime.start()", ui)
+        self.assertIn("personal_runtime.close()", ui)
+        self.assertIn("if prod:", ui)
+        local = (ROOT / "src/sigma/local_personal.py").read_text(encoding="utf-8")
+        self.assertIn('"SIGMA_AUTH_POC_REAL_SIGNIN": "0"', local)
+        self.assertIn('"SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "0"', local)
+
+    def test_only_same_origin_can_embed_private_view(self) -> None:
+        proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
+        self.assertIn("frame-ancestors 'self'", proxy)
+        self.assertNotIn("frame-ancestors *", proxy)
+
 
 
 if __name__ == "__main__":
