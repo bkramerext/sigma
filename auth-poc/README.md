@@ -45,6 +45,11 @@ restart/refresh. To delete that POC-only data, explicitly use `down -v`.
   tmpfs, but it does not have a per-user Google identity. **NEVER reverse-proxy or publish it to the Internet as-is.**
   Per-user Google-identity-gated browser streaming, browser-session isolation,
   cookie protections, and lifecycle/cleanup are required before hosted use.
+- Chromium's nested Linux namespace sandbox cannot start under the POC's
+  default Docker seccomp and `no-new-privileges` policy. The POC uses
+  `--no-sandbox` **inside a non-root, capability-dropped, read-only Docker
+  container**. This is a laboratory-only security trade-off. Production
+  needs a reviewed Chromium sandbox policy before any real multi-user rollout.
 - The existing rootless research execution daemon uses `--network=none`.
   This authentication image deliberately needs outbound TLS and must never
   share the research executor's capability boundary.
