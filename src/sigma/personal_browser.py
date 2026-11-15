@@ -153,6 +153,25 @@ async def model_socket(principal: cloud_auth.Principal | None) -> str:
     return await _gateway_socket(principal, filename="model.sock")
 
 
+async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
+    """Read only the isolated worker's test status. Never select a billing mode."""
+    if os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") != "1":
+        return False
+    try:
+        path = await model_socket(principal)
+        transport = httpx.AsyncHTTPTransport(uds=path)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://private-personal-worker",
+            trust_env=False,
+            timeout=3,
+        ) as client:
+            response = await client.get("/v1/test-account")
+            return response.status_code == 200 and response.json() == {"verified": True}
+    except (PersonalBrowserUnavailable, httpx.HTTPError, OSError, ValueError):
+        return False
+
+
 async def browser_password(principal: cloud_auth.Principal | None) -> str:
     """Only the authenticated HTTPS view may request this ephemeral VNC secret.
 

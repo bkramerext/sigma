@@ -3251,6 +3251,13 @@ async def personal_browser_account(request: Request):
     )
 
 
+@app.get("/api/ai/personal-browser/test-account")
+async def personal_browser_test_account(request: Request):
+    principal = _personal_browser_principal(request)
+    verified = await personal_browser.test_account_verified(principal)
+    return JSONResponse({"verified": verified}, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/ai/personal-browser/view")
 async def personal_browser_view(request: Request):
     return await personal_browser_proxy.view(request)

@@ -13,6 +13,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+import synthetic_signin
+
 from sigma import chat, chatgpt_auth
 from sigma.openai_connection import connection
 
@@ -20,6 +22,7 @@ if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
     raise RuntimeError("This is a local laboratory; hosted integration is not enabled")
 
 app = FastAPI()
+app.include_router(synthetic_signin.router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
 _ATTEMPT_ID: str | None = None
 
@@ -94,9 +97,13 @@ async function poll(){
 }
 setInterval(poll,1800);
 </script></body></html>"""
-    # The default synthetic lab never presents fake account selection. Only a
-    # separately reviewed and explicitly activated real-sign-in mode may open
-    # OpenAI's actual account chooser and perform model/inference checks.
+    if synthetic_signin.enabled():
+        html = html.replace(
+            '<button id="start" disabled>Open ChatGPT account chooser (disabled)</button>',
+            '<form method="post" action="/test-signin/begin">'
+            '<button type="submit">Choose a test account</button></form>'
+            '<button id="start" hidden disabled></button>',
+        )
     if real_signin_enabled():
         html = html.replace('id="start" disabled', 'id="start"')
         html = html.replace('id="verify" disabled', 'id="verify"')

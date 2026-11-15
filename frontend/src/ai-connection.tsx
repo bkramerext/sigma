@@ -286,6 +286,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
   const openingContainerBrowser = useRef(false);
+  const [testPopup, setTestPopup] = useState<Window | null>(null);
+  const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
   const pillTrigger = useRef<HTMLElement>(null);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
@@ -301,6 +303,44 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     && !!cloudFunding.personalChatGPTNoticePreview
     && !!cloudFunding.personalChatGPTNoticeEnabled;
   const containerBrowserLab = !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled;
+  const testAccount = containerBrowserLab && cloudFunding?.target === 'local'
+    ? cloudFunding.googleAccount : null;
+  const testConnected = testAccount !== null && testAccountOwner === testAccount;
+  useEffect(() => {
+    if (!testAccount) {
+      setTestAccountOwner(null);
+      testPopup?.close();
+      if (testPopup) setTestPopup(null);
+      return;
+    }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function check() {
+      try {
+        const response = await fetch(windowAuthUrl('/api/ai/personal-browser/test-account'), {
+          signal: controller.signal,
+          headers: { 'X-Sigma-Error-Handled': 'true' },
+        });
+        const verified = response.ok && (await response.json()).verified === true;
+        if (controller.signal.aborted) return;
+        setTestAccountOwner(verified ? testAccount : null);
+        if (verified) {
+          testPopup?.close();
+          if (testPopup) setTestPopup(null);
+          return;
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+      }
+      if (testPopup?.closed) setTestPopup(null);
+      else if (testPopup) timer = setTimeout(check, 750);
+    }
+    void check();
+    return () => {
+      controller.abort();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [testAccount, testPopup]);
   const hostedNoticeClick = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticeEnabled
     && (hosted || localHostedNoticePreview) && !containerBrowserLab;
@@ -329,7 +369,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
-  const visibleLabel = sponsoredPill
+  const visibleLabel = testConnected ? 'Personal (test)' : sponsoredPill
     ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
       ? 'Connecting to SIGMA-sponsored API…'
       : hostedPillLabel
@@ -390,7 +430,26 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
   async function startContainerPersonalBrowser() {
     if (openingContainerBrowser.current) return;
+    if (testPopup && !testPopup.closed) {
+      testPopup.focus();
+      return;
+    }
     openingContainerBrowser.current = true;
+    if (testConnected) {
+      try {
+        const response = await fetch(windowAuthUrl('/api/ai/personal-browser/stop'), {
+          method: 'POST',
+          headers: { 'X-Sigma-Error-Handled': 'true' },
+        });
+        if (!response.ok) throw new Error('Could not close the test browser.');
+        setTestAccountOwner(null);
+      } catch (cause) {
+        reportRequestFailure(cause instanceof Error ? cause.message : 'Could not close the test browser.');
+      } finally {
+        openingContainerBrowser.current = false;
+      }
+      return;
+    }
     // Opening the popup must happen synchronously on the user's click.
     // No user ever has to run a Docker command or know a VNC password.
     const popup = window.open('about:blank', '_blank');
@@ -415,8 +474,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       if (data.browser_status !== 'ready')
         throw new Error('Private ChatGPT browser did not become ready.');
       popup.location.replace(windowAuthUrl('/api/ai/personal-browser/view'));
-      // Do not select Personal or show connected until real OAuth completes
-      // and provider credentials are verified for this exact SIGMA user.
+      if (testAccount) setTestPopup(popup);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Private browser unavailable.';
       popup?.close();
@@ -470,9 +528,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen}>
-    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void startContainerPersonalBrowser(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (testAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void startContainerPersonalBrowser(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
-      {sponsoredPill ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
+      {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
     {ai.connecting && !sponsoredPill && <div className="connection-pill-messages">
       <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>

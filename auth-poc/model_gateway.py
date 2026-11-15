@@ -12,6 +12,8 @@ import json
 import os
 from typing import Any
 
+import synthetic_signin
+
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -57,6 +59,13 @@ async def account_status() -> dict[str, Any]:
         "models": [],
         "account_label": None,
     }
+
+
+@app.get("/v1/test-account")
+async def test_account_status() -> dict[str, bool]:
+    if not synthetic_signin.enabled():
+        raise HTTPException(404)
+    return {"verified": synthetic_signin.verified()}
 
 
 @app.post("/v1/response")
