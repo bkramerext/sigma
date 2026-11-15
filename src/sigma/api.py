@@ -15,7 +15,7 @@ from typing import Any, Literal
 from urllib.parse import quote, urlencode
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
@@ -3230,14 +3230,17 @@ async def personal_browser_view(request: Request):
     return await personal_browser_proxy.view(request)
 
 
-@app.get("/api/ai/personal-browser/{path:path}")
-async def personal_browser_asset(request: Request, path: str):
+@app.get("/api/ai/personal-browser/window/{window_id}/{path:path}")
+async def personal_browser_asset(request: Request, window_id: str, path: str):
+    # Preserve the initiating Google window for noVNC's relative ESM imports.
+    if not personal_browser_proxy.valid_window(request, window_id):
+        raise HTTPException(404, "Private browser asset unavailable.")
     return await personal_browser_proxy.asset(request, path)
 
 
-@app.websocket("/api/ai/personal-browser/ws")
-async def personal_browser_ws(websocket):
-    await personal_browser_proxy.websocket_bridge(websocket)
+@app.websocket("/api/ai/personal-browser/window/{window_id}/ws")
+async def personal_browser_ws(websocket: WebSocket, window_id: str):
+    await personal_browser_proxy.websocket_bridge(websocket, window_id)
 
 
 class AuthBeginRequest(BaseModel):

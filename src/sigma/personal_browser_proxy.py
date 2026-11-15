@@ -24,6 +24,15 @@ from sigma import cloud_auth, personal_browser
 
 _ASSET = re.compile(r"[a-zA-Z0-9_./-]{1,240}\Z")
 _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+_WINDOW_ID = re.compile(r"[0-9a-f]{32}\Z")
+
+
+def valid_window(request: Request | WebSocket, window_id: str) -> bool:
+    """Reject malformed or foreign window paths before resolving sessions."""
+    if window_id != "unscoped" and not _WINDOW_ID.fullmatch(window_id):
+        return False
+    selected = cloud_auth._window_id(request)  # type: ignore[arg-type]
+    return selected is None if window_id == "unscoped" else selected == window_id
 
 
 def _principal(request: Request) -> cloud_auth.Principal:
@@ -213,11 +222,12 @@ async def _connect_worker(socket_path: str) -> tuple[asyncio.StreamReader, async
         raise
 
 
-async def websocket_bridge(websocket: WebSocket) -> None:
+async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
     """Explicit Google-session gate: HTTP auth middleware does not gate WS routes."""
     cfg = cloud_auth.config()
     if (
-        not personal_browser.enabled()
+        not valid_window(websocket, window_id)
+        or not personal_browser.enabled()
         or not cfg.enabled
         or not cfg.origin
         or websocket.headers.get("origin") != cfg.origin
