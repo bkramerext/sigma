@@ -169,7 +169,7 @@ def run_ui(
 
                         personal_runtime = LocalPersonalRuntime.start()
                         print(
-                            "Local Personal browser ready (synthetic authorization only).",
+                            "Local Personal ChatGPT browser ready. Sign in through SIGMA.",
                             flush=True,
                         )
                     except (LocalPersonalUnavailable, OSError, RuntimeError) as exc:
@@ -210,9 +210,11 @@ def run_ui(
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
                 # A presentation-only rehearsal. Authentication, credentials and inference stay local.
-                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "true" if prod else "false"
+                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = (
+                    "true" if prod and personal_runtime is None else "false"
+                )
                 child_env["SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED"] = (
-                    "true" if prod else "false"
+                    "true" if prod and personal_runtime is None else "false"
                 )
                 child_env.setdefault(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
@@ -240,6 +242,7 @@ def run_ui(
                                         "GOOGLE_OIDC_CLIENT_SECRET",
                                         "SIGMA_CLOUD_AUTH_HOME",
                                         "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+                                        "SIGMA_AUTH_POC_RPC_SEED",
                                     }
                                 )
                             },
