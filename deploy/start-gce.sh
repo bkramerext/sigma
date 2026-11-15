@@ -50,7 +50,7 @@ else
   python3 /opt/sigma/current/deploy/release_image.py verify "$release"
 fi
 compose() {
-  /opt/sigma/current/deploy/compose-gce.sh "$@"
+  "$(dirname "$0")/compose-gce.sh" "$@"
 }
 compose up -d --no-build
 if [ "$auth_lab" -eq 1 ]; then
