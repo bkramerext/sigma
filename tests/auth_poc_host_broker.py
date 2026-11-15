@@ -73,7 +73,7 @@ def main() -> None:
                         assert not any(part == "--privileged" for part in argv)
                         output = (
                             "d" * 64
-                            if argv[-4:] == ["ps", "-q", "browser"]
+                            if argv[-3:] == ["ps", "-q", "browser"]
                             else "healthy"
                             if argv[-2:] == ["{{.State.Health.Status}}", "d" * 64]
                             else ""
