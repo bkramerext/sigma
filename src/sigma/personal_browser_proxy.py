@@ -3,7 +3,8 @@
 Never publish noVNC directly. Static noVNC assets and binary RFB frames are
 forwarded only after SIGMA validates the current Google session. The remote
 worker name is derived from the server's private workspace mapping, not input.
-All OpenAI OAuth and inference requests remain disabled in this synthetic POC.
+Real authorization is permitted only by the explicit local preview. Hosted
+deployment remains separately gated and cannot borrow local credentials.
 """
 
 from __future__ import annotations
