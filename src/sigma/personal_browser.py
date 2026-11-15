@@ -1,11 +1,12 @@
-"""Identity-bound, fail-closed SIGMA client for the synthetic browser supervisor.
+"""Identity-bound, fail-closed SIGMA client for the isolated browser supervisor.
 
 The API never receives a Docker project, hostname, container ID, credential
 directory or OAuth token from the browser. Only the server-verified Google
 principal determines the durable workspace ID sent over the private Unix socket.
 
 This is a lifecycle protocol, not a claim that Personal ChatGPT is connected.
-No real OpenAI authorization or inference is enabled here.
+The local-only real sign-in preview may authorize a Personal account, but
+browser readiness is never sufficient proof of connection.
 """
 
 from __future__ import annotations
