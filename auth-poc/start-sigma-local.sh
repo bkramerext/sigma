@@ -4,6 +4,13 @@
 set -Eeuo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
+# Docker Desktop may install its CLI symlinks without putting its credential
+# helper on PATH in existing shells. Keep Docker's own binary directory visible
+# for image pulls rather than changing credential stores or user configuration.
+docker_desktop_bin="/Applications/Docker.app/Contents/Resources/bin"
+if [[ -x "$docker_desktop_bin/docker-credential-desktop" ]]; then
+  export PATH="$docker_desktop_bin:$PATH"
+fi
 if ! docker info >/dev/null 2>&1; then
   echo "Start Docker Desktop and retry." >&2
   exit 2
