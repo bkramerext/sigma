@@ -21,7 +21,7 @@ and mount namespaces, but deliberately share a Docker network namespace:
   Compose `network_mode: service:auth-poc`. The external desktop browser
   receives only a VNC framebuffer, not the OAuth redirect.
 
-## Local SIGMA `start --prod` experience (synthetic-only)
+## Local SIGMA `start --prod` real sign-in preview
 
 From your normal SIGMA checkout, start Docker Desktop and run:
 
