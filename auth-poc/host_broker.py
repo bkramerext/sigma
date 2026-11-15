@@ -48,6 +48,14 @@ def state_root() -> Path:
     return root
 
 
+def gateway_root() -> Path:
+    raw = os.environ.get("SIGMA_AUTH_BROKER_GATEWAY_ROOT", "")
+    root = Path(raw)
+    if not root.is_absolute() or ".." in root.parts or root == Path("/"):
+        raise ValueError("Private gateway root must be an absolute directory")
+    return root
+
+
 def _verify_directory(path: Path, *, create: bool = True) -> None:
     if create:
         path.mkdir(mode=0o700, exist_ok=True)
@@ -75,6 +83,20 @@ def prepare_state(workspace_id: str) -> Path:
     return root / workspace_id
 
 
+def prepare_gateway(workspace_id: str) -> Path:
+    """Create only this worker's private, socket-only bind mount."""
+    validate_id(workspace_id)
+    root = gateway_root()
+    _verify_directory(root)
+    child = root / workspace_id
+    _verify_directory(child)
+    if os.geteuid() == 0:
+        os.chown(child, 10001, 10001)
+    elif child.stat().st_uid != 10001:
+        raise ValueError("Browser relay ownership is unavailable")
+    return child
+
+
 def compose_args(workspace_id: str, *args: str) -> list[str]:
     validate_id(workspace_id)
     return [
@@ -95,6 +117,7 @@ def compose_env(workspace_id: str) -> dict[str, str]:
         "SIGMA_RELEASE": release,
         "SIGMA_STATE_DISK_MOUNT": str(state_root() / workspace_id),
         "SIGMA_AUTH_POC_WORKSPACE_ID": workspace_id,
+        "SIGMA_AUTH_POC_GATEWAY_DIR": str(gateway_root() / workspace_id),
     }
 
 
@@ -127,6 +150,7 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
     with _lock_for(workspace_id):
         if action == "start":
             prepare_state(workspace_id)
+            prepare_gateway(workspace_id)
             _compose(workspace_id, "up", "-d", "--no-build", "--wait")
         elif action == "stop":
             _compose(workspace_id, "stop")
@@ -146,7 +170,15 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                     timeout=10,
                     check=False,
                 )
-                status = "ready" if health.returncode == 0 and health.stdout.strip() == "healthy" else "unavailable"
+                gateway = gateway_root() / workspace_id / "vnc.sock"
+                gateway_ready = gateway.is_socket() and not gateway.is_symlink()
+                status = (
+                    "ready"
+                    if health.returncode == 0
+                    and health.stdout.strip() == "healthy"
+                    and gateway_ready
+                    else "unavailable"
+                )
         result = {"status": status, "worker": "sigma-personal-" + workspace_id}
         if action == "password":
             if status != "ready":
