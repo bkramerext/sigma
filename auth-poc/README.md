@@ -58,10 +58,14 @@ use an important account until the adversarial review is accepted.
   VNC password. A hosted integration must provide TLS and a Google-session
   checked, user-specific browser stream through SIGMA's backend, without
   publishing noVNC or relying on a password in a terminal.
-- This is a standalone Docker Compose lab: the containers are **not** in
-  SIGMA's GCE image build, attestation, health, backup, restore, and rollback
-  pipeline. Their persistent volume is not on the managed SIGMA state disk.
-- Host-side rootless Docker, macOS/ARM emulation, GCE Linux, browser lifecycle,
+- The same images are now available to SIGMA's **opt-in GCE synthetic lab**:
+  `SIGMA_AUTH_POC_LAB_ENABLED=true` makes the hands-off release builder attest
+  both images from the exact commit, starts them with no publicly exposed VNC
+  port, verifies health and image identity, and binds the isolated credential
+  volume to `/srv/sigma-state/auth/auth-poc`, covered by normal disk snapshots.
+  Default is `false`. This does **not** expose a Personal ChatGPT connection
+  to hosted users: the OAuth endpoints remain denied.
+- Local Docker Desktop vs. GCE Docker, macOS/ARM emulation, browser lifecycle,
   multiuser concurrency, and actual model generation still require relevant
   tests. The image's Debian browser packages are currently not snapshot-pinned.
 - OpenAI documents the OSS SIWC flow for locally hosted and self-hosted apps
