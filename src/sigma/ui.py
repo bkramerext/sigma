@@ -314,8 +314,16 @@ def run_ui(
                     stop_servers(list(children))
                     children.clear()
                 finally:
-                    signal.signal(signal.SIGINT, prior_int)
-                    signal.signal(signal.SIGTERM, previous)
+                    try:
+                        if personal_runtime is not None:
+                            # Complete container shutdown BEFORE confirming that
+                            # the old launcher has stopped. A replacement must
+                            # never race the prior instance's Docker cleanup.
+                            personal_runtime.close()
+                            personal_runtime = None
+                    finally:
+                        signal.signal(signal.SIGINT, prior_int)
+                        signal.signal(signal.SIGTERM, previous)
         if replacement is not None:
             replacement.sendall(
                 (json.dumps({"identity": instance.identity, "status": "stopped"}) + "\n").encode()
