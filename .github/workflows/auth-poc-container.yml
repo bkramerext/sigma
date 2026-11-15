@@ -233,6 +233,8 @@ jobs:
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_browser_proxy.py
       - name: Verify private Personal model RPC and cross-user inference routing
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_personal_inference.py
+      - name: Verify Chat and strategy dispatch never spend Sponsored billing
+        run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_personal_callpaths.py
       - name: Exercise two independent user-owned Docker projects
         shell: bash
         run: |
@@ -240,7 +242,8 @@ jobs:
           docker compose -f deploy/auth-poc.compose.yaml down --remove-orphans
           state_root=$(mktemp -d)
           gateway_root=$(mktemp -d)
-          chmod 0700 "$state_root" "$gateway_root"
+          chmod 0700 "$state_root"
+          chmod 0711 "$gateway_root"
           export SIGMA_RELEASE="$GITHUB_SHA"
           docker tag sigma-auth-poc:local "sigma-auth-poc:$SIGMA_RELEASE"
           docker tag sigma-auth-browser-poc:local "sigma-auth-browser-poc:$SIGMA_RELEASE"
@@ -283,7 +286,18 @@ jobs:
           assert pa != pb and pa.is_dir() and pb.is_dir()
           for identifier in (a, b):
               relay = broker.gateway_root() / identifier / "vnc.sock"
+              model = broker.gateway_root() / identifier / "model.sock"
               assert relay.is_socket(), "Missing per-user Unix relay"
+              assert model.is_socket(), "Missing private model socket"
+              assert broker.gateway_root().stat().st_mode & 0o777 == 0o711
+              with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as rpc:
+                  rpc.settimeout(4)
+                  rpc.connect(str(model))
+                  rpc.sendall(
+                      b"GET /v1/account HTTP/1.1\r\n"
+                      b"Host: private-worker\r\nConnection: close\r\n\r\n"
+                  )
+                  assert b"200 OK" in rpc.recv(1024)
               with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
                   client.settimeout(4)
                   client.connect(str(relay))
