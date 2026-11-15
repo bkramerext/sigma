@@ -12,7 +12,8 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, Request, WebSocket
 
-from sigma import api, cloud_auth, personal_browser_proxy as proxy
+from sigma import api, cloud_auth
+from sigma import personal_browser_proxy as proxy
 
 A = cloud_auth.Principal("subject-a", "a@example.test", "member")
 B = cloud_auth.Principal("subject-b", "b@example.test", "member")
@@ -28,8 +29,10 @@ def request(principal: cloud_auth.Principal, path: str = "/") -> Request:
 
 async def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-browser-relay-") as directory:
-        sockets = {A.subject: str(Path(directory) / "a.sock"),
-                   B.subject: str(Path(directory) / "b.sock")}
+        sockets = {
+            A.subject: str(Path(directory) / "a.sock"),
+            B.subject: str(Path(directory) / "b.sock"),
+        }
         servers = []
 
         async def start(subject: str) -> None:
@@ -52,12 +55,18 @@ async def main() -> None:
                             b"\x82\x03yes"
                         )
                     else:
-                        assert req.startswith(b"GET /app/rfb.js HTTP/1.1")
-                        body = ("// only " + subject).encode()
+                        request_line = req.split(b"\r\n", 1)[0]
+                        assert request_line in {
+                            b"GET /app/rfb.js HTTP/1.1",
+                            b"GET /core/rfb.js HTTP/1.1",
+                        }
+                        body = ("// only " + subject + " " + request_line.decode()).encode()
                         writer.write(
                             b"HTTP/1.1 200 OK\r\nContent-Type: text/javascript\r\n"
-                            + b"Content-Length: " + str(len(body)).encode()
-                            + b"\r\nConnection: close\r\n\r\n" + body
+                            + b"Content-Length: "
+                            + str(len(body)).encode()
+                            + b"\r\nConnection: close\r\n\r\n"
+                            + body
                         )
                     await writer.drain()
                 finally:
@@ -69,6 +78,7 @@ async def main() -> None:
         await start(A.subject)
         await start(B.subject)
         try:
+
             def identity(principal: cloud_auth.Principal) -> str:
                 return sockets[principal.subject]
 
@@ -80,21 +90,34 @@ async def main() -> None:
 
             with (
                 patch.object(
-                    proxy.personal_browser, "session",
+                    proxy.personal_browser,
+                    "session",
                     new=AsyncMock(return_value={"browser_status": "ready"}),
                 ),
                 patch.object(proxy.personal_browser, "browser_socket", new=browser_socket),
                 patch.object(proxy.personal_browser, "browser_password", new=browser_password),
-                patch.object(proxy.cloud_auth, "config", return_value=SimpleNamespace(enabled=True, local=False, origin="https://sigma.example.test")),
+                patch.object(
+                    proxy.cloud_auth,
+                    "config",
+                    return_value=SimpleNamespace(
+                        enabled=True, local=False, origin="https://sigma.example.test"
+                    ),
+                ),
             ):
                 a = await proxy.asset(request(A), "app/rfb.js")
                 b = await proxy.asset(request(B), "app/rfb.js")
-                assert a.body == b"// only subject-a"
-                assert b.body == b"// only subject-b"
+                assert a.body == b"// only subject-a GET /app/rfb.js HTTP/1.1"
+                assert b.body == b"// only subject-b GET /app/rfb.js HTTP/1.1"
                 assert a.headers["cache-control"] == "no-store"
+                core = await proxy.asset(request(A), "core/rfb.js")
+                assert core.body == b"// only subject-a GET /core/rfb.js HTTP/1.1"
                 # Test actual window-scoped route registration and dispatch,
                 # not just the underlying asset or WebSocket proxy functions.
-                routes = {(route.path, type(route).__name__) for route in api.app.routes if hasattr(route, "path")}
+                routes = {
+                    (route.path, type(route).__name__)
+                    for route in api.app.routes
+                    if hasattr(route, "path")
+                }
                 assert (
                     "/api/ai/personal-browser/window/{window_id}/{path:path}",
                     "APIRoute",
@@ -109,7 +132,7 @@ async def main() -> None:
                 routed = await api.personal_browser_asset(
                     request(A, qualified), window_id=window_id, path="app/rfb.js"
                 )
-                assert routed.body == b"// only subject-a"
+                assert routed.body == b"// only subject-a GET /app/rfb.js HTTP/1.1"
                 assert not proxy.valid_window(request(A, qualified), "b" * 32)
                 try:
                     await api.personal_browser_asset(
@@ -145,6 +168,7 @@ async def main() -> None:
                     assert error.status_code == 403
                 else:
                     raise AssertionError("Guest received private browser")
+
                 # WebSockets do not traverse SIGMA's HTTP Google auth middleware.
                 # Verify both the immutable window selector and Origin are
                 # rejected before any worker channel is opened.

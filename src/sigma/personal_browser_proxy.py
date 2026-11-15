@@ -126,7 +126,7 @@ async def asset(request: Request, path: str) -> Response:
     if (
         not _ASSET.fullmatch(path)
         or ".." in path.split("/")
-        or not path.startswith(("app/", "vendor/", "images/"))
+        or not path.startswith(("app/", "core/", "vendor/", "images/"))
     ):
         raise HTTPException(404, "Browser asset unavailable.")
     try:

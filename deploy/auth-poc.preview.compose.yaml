@@ -1,0 +1,73 @@
+# Standalone preview app. It has no Docker socket, public port or production
+# application/billing routes. Only Caddy joins its dedicated internal network.
+services:
+  preview:
+    container_name: sigma-personal-lab-preview
+    image: sigma-auth-poc:${SIGMA_RELEASE:?set exact release SHA}
+    command:
+      - /opt/venv/bin/uvicorn
+      - preview_server:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8002"
+      - --no-access-log
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=10001,gid=10001,mode=0700
+    environment:
+      SIGMA_AUTH_POC_PREVIEW_ENABLED: "1"
+      SIGMA_AUTH_POC_REAL_SIGNIN: "0"
+      SIGMA_PERSONAL_LAB_HOST: ${SIGMA_DOMAIN:?set preview host}
+      SIGMA_PERSONAL_LAB_EDGE_KEY: ${SIGMA_PERSONAL_LAB_EDGE_KEY:?set private Caddy edge key}
+      SIGMA_PERSONAL_LAB_SUBJECT: auth-poc-synthetic-admin
+      SIGMA_PERSONAL_LAB_ADMIN_EMAIL: preview-admin@example.invalid
+      SIGMA_CLOUD_AUTH_ENABLED: "true"
+      SIGMA_CLOUD_PUBLIC_ORIGIN: https://${SIGMA_DOMAIN:?set preview host}
+      SIGMA_CLOUD_AUTH_HOME: /var/lib/sigma-preview-auth
+      SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-preview-workspaces
+      SIGMA_PERSONAL_BROWSER_LAB_ENABLED: "1"
+      SIGMA_PERSONAL_BROWSER_BROKER_SOCKET: /run/sigma-personal-broker/broker.sock
+      SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT: /run/sigma-personal-gateways
+    volumes:
+      - type: bind
+        source: /run/sigma-personal-broker
+        target: /run/sigma-personal-broker
+        read_only: true
+      - type: bind
+        source: /run/sigma-personal-gateways
+        target: /run/sigma-personal-gateways
+        read_only: true
+      - type: bind
+        source: /srv/sigma-state/auth/personal-lab/app/workspaces
+        target: /var/lib/sigma-preview-workspaces
+    networks: [personal-lab]
+    healthcheck:
+      test:
+        - CMD
+        - /opt/venv/bin/python
+        - -c
+        - >-
+          import os,urllib.request;
+          request=urllib.request.Request(
+          'http://127.0.0.1:8002/__personal_lab__/api/status',
+          headers={'Host':os.environ['SIGMA_PERSONAL_LAB_HOST'],
+          'X-Sigma-Personal-Lab-Edge':os.environ['SIGMA_PERSONAL_LAB_EDGE_KEY']});
+          urllib.request.urlopen(request, timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 4
+
+networks:
+  personal-lab:
+    external: true
+    name: sigma_personal_lab

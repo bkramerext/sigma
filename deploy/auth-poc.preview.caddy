@@ -1,0 +1,20 @@
+# Imported only for the time-boxed synthetic acceptance preview. The caller is
+# authorized against production Google sessions before this upstream is used.
+@personal_lab path /__personal_lab__ /__personal_lab__/*
+handle @personal_lab {
+	forward_auth backend:8000 {
+		uri /api/cloud-auth/admin/grants
+	}
+	reverse_proxy sigma-personal-lab-preview:8002 {
+		header_up -Cookie
+		header_up -Authorization
+		header_up -Proxy-Authorization
+		header_up -X-Forwarded-Authorization
+		header_up -X-Api-Key
+		header_up -X-OpenAI-Api-Key
+		header_up -X-Sigma-Personal-Lab-Edge
+		header_up X-Sigma-Personal-Lab-Edge {$SIGMA_PERSONAL_LAB_EDGE_KEY}
+		header_down -Set-Cookie
+		stream_timeout 60s
+	}
+}

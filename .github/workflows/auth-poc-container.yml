@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - coordinator/containerized-chatgpt-auth-poc
+      - red/issue-874-preview
     paths:
       - 'auth-poc/**'
       - 'deploy/auth-poc.compose.yaml'
       - 'deploy/auth-poc.gce.yaml'
       - 'deploy/auth-poc.user.gce.yaml'
       - 'deploy/auth-poc.backend-lab.gce.yaml'
+      - 'deploy/auth-poc.preview*'
+      - 'deploy/auth-poc.preview.worker.gce.yaml'
+      - 'deploy/auth-poc-preview-*'
       - 'src/sigma/personal_browser.py'
       - 'src/sigma/personal_inference.py'
       - 'src/sigma/cloud_personal.py'
@@ -17,6 +21,9 @@ on:
       - 'src/sigma/chat.py'
       - 'src/sigma/agentic.py'
       - 'tests/auth_poc_host_broker.py'
+      - 'tests/auth_poc_preview.py'
+      - 'tests/auth_poc_caddy_forward_auth.py'
+      - 'src/sigma/tooling.py'
       - 'deploy/release_image.py'
       - 'deploy/start-gce.sh'
       - 'deploy/deploy-gce-release.py'
@@ -35,6 +42,27 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check user-scoped Docker broker security invariants
         run: python3 tests/auth_poc_host_broker.py
+      - name: Check admin-only synthetic preview isolation
+        run: uv run --locked python tests/auth_poc_preview.py
+      - name: Validate Caddy forward-auth preview route syntax
+        shell: bash
+        env:
+          SIGMA_PERSONAL_LAB_EDGE_KEY: ci-only-edge-key-not-a-credential
+        run: |
+          set -euo pipefail
+          cat > /tmp/auth-poc-preview.Caddyfile <<'EOF'
+          :443 {
+            import /workspace/deploy/auth-poc.preview.caddy
+          }
+          EOF
+          docker run --rm \
+            -e SIGMA_PERSONAL_LAB_EDGE_KEY \
+            -v "$PWD:/workspace:ro" \
+            -v /tmp/auth-poc-preview.Caddyfile:/tmp/Caddyfile:ro \
+            caddy:2.9.1-alpine \
+            caddy adapt --adapter caddyfile --config /tmp/Caddyfile --pretty >/tmp/auth-poc-preview.json
+      - name: Exercise Caddy forward-auth and preview credential boundary
+        run: python3 tests/auth_poc_caddy_forward_auth.py
       - name: Verify GCE Compose overlay remains nonpublic and persistent
         shell: bash
         run: |
@@ -93,6 +121,55 @@ jobs:
           assert not any("docker.sock" in m["target"] for m in backend["volumes"]
                          if m["target"] != "/run/sigma-sandbox/docker.sock")
           print("PASS optional HTTPS broker overlay is private and real OAuth remains disabled")
+          PY
+      - name: Validate isolated preview Compose has no production or public mounts
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIGMA_RELEASE="$GITHUB_SHA" \
+          SIGMA_DOMAIN="sigma.example.invalid" \
+          SIGMA_PERSONAL_LAB_EDGE_KEY="ci-only-edge-key-not-a-credential" \
+          docker compose -f deploy/auth-poc.preview.compose.yaml config --format json \
+            > /tmp/auth-poc-preview-compose.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("/tmp/auth-poc-preview-compose.json").read_text())
+          service = cfg["services"]["preview"]
+          assert service["image"] == "sigma-auth-poc:" + __import__("os").environ["GITHUB_SHA"]
+          assert not service.get("ports"), service.get("ports")
+          assert service["read_only"] is True
+          assert service["user"] == "10001:10001"
+          assert service["environment"]["SIGMA_AUTH_POC_REAL_SIGNIN"] == "0"
+          assert service["networks"] == ["personal-lab"]
+          mounts = {mount["target"]: mount for mount in service["volumes"]}
+          assert mounts["/run/sigma-personal-broker"]["read_only"] is True
+          assert mounts["/run/sigma-personal-gateways"]["read_only"] is True
+          assert not any("docker.sock" in mount["target"] for mount in service["volumes"])
+          print("PASS private edge-only preview service and read-only broker IPC mounts")
+          PY
+      - name: Verify worker/browser network has no external route
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIGMA_RELEASE="$GITHUB_SHA" \
+          SIGMA_STATE_DISK_MOUNT="/srv/sigma-state/auth/personal-lab/workers/test-workspace" \
+          SIGMA_AUTH_POC_GATEWAY_DIR="/run/sigma-personal-gateways/test-workspace" \
+          SIGMA_AUTH_BROKER_ISOLATED_NETWORK=1 \
+          docker compose --project-name sigma-personal-test \
+            -f deploy/auth-poc.compose.yaml \
+            -f deploy/auth-poc.gce.yaml \
+            -f deploy/auth-poc.user.gce.yaml \
+            -f deploy/auth-poc.preview.worker.gce.yaml config --format json \
+            > /tmp/auth-poc-preview-worker.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("/tmp/auth-poc-preview-worker.json").read_text())
+          assert cfg["networks"]["default"]["internal"] is True
+          assert not cfg["services"]["auth-poc"].get("ports")
+          assert not cfg["services"]["browser"].get("ports")
+          print("PASS synthetic worker/browser network is internal and has no published ports")
           PY
       - name: Assert GCE browser seccomp and capability parity
         run: |

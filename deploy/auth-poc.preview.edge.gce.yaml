@@ -1,0 +1,10 @@
+# Attach only the existing Caddy edge and the private synthetic preview network.
+services:
+  edge:
+    networks:
+      personal-lab: {}
+
+networks:
+  personal-lab:
+    external: true
+    name: sigma_personal_lab

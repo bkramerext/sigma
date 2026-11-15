@@ -187,6 +187,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/cloud_research_api.py"],
             [*python, "python", "tests/cloud_research_windows.py"],
             [*python, "python", "tests/cloud_research_sponsored_api.py"],
+            [*python, "python", "tests/auth_poc_preview.py"],
             [*python, "python", "tests/deployment_package.py"],
             [*python, "python", "tests/deployment_automation.py"],
             [*python, "python", "tests/test_maintenance_switch.py"],

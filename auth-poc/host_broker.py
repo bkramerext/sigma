@@ -6,6 +6,7 @@ server-generated workspace ID via a private Unix socket. The broker can start,
 query and stop a fixed pair of release-pinned images; it cannot execute arbitrary
 commands, select other volumes/images, or accept caller-provided paths.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,6 +31,7 @@ FILES = (
     ROOT / "deploy/auth-poc.gce.yaml",
     ROOT / "deploy/auth-poc.user.gce.yaml",
 )
+PREVIEW_NETWORK_FILE = ROOT / "deploy/auth-poc.preview.worker.gce.yaml"
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCK = threading.Lock()
 
@@ -110,9 +112,15 @@ def prepare_gateway(workspace_id: str) -> Path:
 
 def compose_args(workspace_id: str, *args: str) -> list[str]:
     validate_id(workspace_id)
+    files = FILES
+    if os.environ.get("SIGMA_AUTH_BROKER_ISOLATED_NETWORK") == "1":
+        files = (*files, PREVIEW_NETWORK_FILE)
     return [
-        "docker", "compose", "--project-name", "sigma-personal-" + workspace_id,
-        *(item for path in FILES for item in ("-f", str(path))),
+        "docker",
+        "compose",
+        "--project-name",
+        "sigma-personal-" + workspace_id,
+        *(item for path in files for item in ("-f", str(path))),
         *args,
     ]
 
@@ -122,10 +130,18 @@ def compose_env(workspace_id: str) -> dict[str, str]:
     release = os.environ.get("SIGMA_RELEASE", "")
     if not RELEASE.fullmatch(release):
         raise ValueError("The exact release SHA is not configured")
+    domain = os.environ.get("SIGMA_DOMAIN", "").strip().lower()
+    edge_key = os.environ.get("SIGMA_PERSONAL_LAB_EDGE_KEY", "")
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", domain):
+        raise ValueError("The synthetic preview host is not configured")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{40,128}", edge_key):
+        raise ValueError("The private preview edge key is not configured")
     return {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": os.environ.get("HOME", "/tmp"),
         "SIGMA_RELEASE": release,
+        "SIGMA_DOMAIN": domain,
+        "SIGMA_PERSONAL_LAB_EDGE_KEY": edge_key,
         "SIGMA_STATE_DISK_MOUNT": str(state_root() / workspace_id),
         "SIGMA_AUTH_POC_WORKSPACE_ID": workspace_id,
         "SIGMA_AUTH_POC_GATEWAY_DIR": str(gateway_root() / workspace_id),
@@ -148,6 +164,23 @@ def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
     return result.stdout.strip()
 
 
+def verify_pinned_images(workspace_id: str) -> None:
+    """Require both locally built images before compose can attempt a pull."""
+    environment = compose_env(workspace_id)
+    release = environment["SIGMA_RELEASE"]
+    for image in (f"sigma-auth-poc:{release}", f"sigma-auth-browser-poc:{release}"):
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            env=environment,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode:
+            raise RuntimeError("Exact synthetic worker images are not installed locally")
+
+
 def _lock_for(workspace_id: str) -> threading.Lock:
     with _LOCK:
         return _LOCKS.setdefault(workspace_id, threading.Lock())
@@ -160,6 +193,7 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
         raise ValueError("Unsupported broker action")
     with _lock_for(workspace_id):
         if action == "start":
+            verify_pinned_images(workspace_id)
             prepare_state(workspace_id)
             prepare_gateway(workspace_id)
             _compose(workspace_id, "up", "-d", "--no-build", "--wait")
@@ -198,7 +232,12 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
             if status != "ready":
                 raise RuntimeError("Browser session is not ready")
             password = _compose(
-                workspace_id, "exec", "-T", "browser", "cat", "/tmp/sigma-vnc-pass",
+                workspace_id,
+                "exec",
+                "-T",
+                "browser",
+                "cat",
+                "/tmp/sigma-vnc-pass",
                 timeout=10,
             )
             if not re.fullmatch(r"[A-Za-z0-9_-]{8}", password):
@@ -210,7 +249,7 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, _format: str, *args: object) -> None:
+    def log_message(self, format: str, *args: object) -> None:
         # Never log session identifiers, HTTP targets or credentials.
         pass
 
@@ -226,8 +265,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _authorized_peer(self) -> bool:
         expected = int(os.environ.get("SIGMA_AUTH_BROKER_CLIENT_UID", "10001"))
-        if hasattr(socket, "SO_PEERCRED"):
-            raw = self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+        peercred = getattr(socket, "SO_PEERCRED", None)
+        if peercred is not None:
+            raw = self.connection.getsockopt(socket.SOL_SOCKET, peercred, 12)
             _pid, uid, _gid = struct.unpack("3i", raw)
             return uid == expected
         # macOS lacks SO_PEERCRED; the private, mode 0600 Unix socket grants
@@ -265,7 +305,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._dispatch("status")
 
     def do_POST(self) -> None:
-        action = {"/v1/start": "start", "/v1/stop": "stop", "/v1/password": "password"}.get(self.path)
+        action = {"/v1/start": "start", "/v1/stop": "stop", "/v1/password": "password"}.get(
+            self.path
+        )
         if action is None:
             self._send(404, {"error": "Not found"})
         else:

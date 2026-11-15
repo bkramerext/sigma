@@ -1,0 +1,5 @@
+# Synthetic acceptance worker/browser have no internet access. Their shared
+# loopback listener remains available inside the per-workspace network namespace.
+networks:
+  default:
+    internal: true
