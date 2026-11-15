@@ -148,7 +148,7 @@ async def main() -> None:
                 # WebSockets do not traverse SIGMA's HTTP Google auth middleware.
                 # Verify both the immutable window selector and Origin are
                 # rejected before any worker channel is opened.
-                async def denied_ws(path: str, identifier: str, origin: str) -> None:
+                async def denied_ws(path: str, identifier: str, origin: str, *, through_app: bool = False) -> None:
                     sent: list[dict[str, object]] = []
 
                     async def receive() -> dict[str, str]:
@@ -157,19 +157,18 @@ async def main() -> None:
                     async def send(message: dict[str, object]) -> None:
                         sent.append(message)
 
-                    ws = WebSocket(
-                        {
-                            "type": "websocket",
-                            "scheme": "wss",
-                            "path": path,
-                            "query_string": b"",
-                            "headers": [(b"origin", origin.encode("ascii"))],
-                        },
-                        receive,
-                        send,
-                    )
+                    scope = {
+                        "type": "websocket",
+                        "scheme": "wss",
+                        "path": path,
+                        "query_string": b"",
+                        "headers": [(b"host", b"testserver"), (b"origin", origin.encode("ascii"))],
+                    }
                     with patch.object(proxy.personal_browser, "enabled", return_value=True):
-                        await proxy.websocket_bridge(ws, identifier)
+                        if through_app:
+                            await api.app(scope, receive, send)
+                        else:
+                            await proxy.websocket_bridge(WebSocket(scope, receive, send), identifier)
                     assert sent and sent[0]["type"] == "websocket.close"
                     assert sent[0]["code"] == 1008
 
@@ -178,7 +177,7 @@ async def main() -> None:
                 await denied_ws(ws_path, "b" * 32, "https://sigma.example.test")
                 await denied_ws(ws_path, window_id, "https://attacker.example.test")
                 with patch.object(proxy.cloud_auth, "resolve_session", return_value=None):
-                    await denied_ws(ws_path, window_id, "https://sigma.example.test")
+                    await denied_ws(ws_path, window_id, "https://sigma.example.test", through_app=True)
         finally:
             for server in servers:
                 server.close()

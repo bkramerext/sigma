@@ -26,6 +26,7 @@ from fastapi.responses import (
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.requests import HTTPConnection
 
 from sigma import (
     chat,
@@ -89,8 +90,14 @@ from sigma.text_conversion import convert_text
 from sigma.text_views import inspect_text, save_source
 
 
-async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
+async def cloud_workspace_scope(request: HTTPConnection) -> AsyncIterator[None]:
     """Bind each protected cloud request to its verified subject's durable root."""
+    if request.scope["type"] == "websocket":
+        # The personal browser bridge verifies its window session and resolves
+        # its workspace before it opens the private socket.
+        yield
+        return
+    method = request.scope["method"]
     guest_workspace = getattr(request.state, "cloud_guest_workspace", None)
     if isinstance(guest_workspace, cloud_workspaces.Workspace):
         token = cloud_workspaces.bind_workspace(guest_workspace)
@@ -104,11 +111,11 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
         or request.url.path == "/api/ui-instance"
         or (
             request.url.path == "/api/local-runtime/build"
-            and request.method == "GET"
+            and method == "GET"
             and cloud_auth.config().local
         )
         or request.url.path == "/api/projects/samples"
-        or cloud_auth.public_sample_paper_path(request.method, request.url.path)
+        or cloud_auth.public_sample_paper_path(method, request.url.path)
         or request.url.path.startswith("/api/cloud-auth/")
         or request.url.path.startswith("/api/ai/auth/callback/")
     ):
@@ -117,7 +124,7 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
     principal = getattr(request.state, "cloud_principal", None)
     if (
         request.url.path == "/api/project-types"
-        and request.method == "GET"
+        and method == "GET"
         and (not isinstance(principal, cloud_auth.Principal) or principal.role == "guest")
     ):
         yield
