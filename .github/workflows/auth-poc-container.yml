@@ -27,6 +27,11 @@ on:
       - 'auth-poc/**'
       - 'deploy/auth-poc*.yaml'
       - 'frontend/src/ai-connection.tsx'
+      - 'frontend/src/ai-connection.css'
+      - 'src/sigma/ui.py'
+      - 'src/sigma/cli.py'
+      - 'src/sigma/local_personal.py'
+      - 'src/sigma/personal_browser_proxy.py'
       - 'src/sigma/personal_browser.py'
       - 'tests/auth_poc_local_launcher.py'
       - '.github/workflows/auth-poc-container.yml'
@@ -43,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check user-scoped Docker broker security invariants
         run: python3 tests/auth_poc_host_broker.py
-      - name: Verify opt-in local pill launcher and broker UID separation
+      - name: Verify local --prod lifecycle, embedded viewer and broker UID separation
         shell: bash
         run: |
           set -euo pipefail
