@@ -214,7 +214,14 @@ def main() -> None:
         deployment = module.Deployment(repo, env_file, root / "preflight.py", service_runner, True)
         deployment.sync_service_unit()
         assert installed[0][:8] == [
-            "install", "-o", "root", "-g", "root", "-m", "0644", str(unit_path),
+            "install",
+            "-o",
+            "root",
+            "-g",
+            "root",
+            "-m",
+            "0644",
+            str(unit_path),
         ]
         assert installed[0][-1] == "/etc/systemd/system/sigma.service"
         assert installed[1] == ["systemctl", "daemon-reload"]
@@ -241,8 +248,9 @@ def main() -> None:
                         "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
                         "SIGMA_DEPLOY_ENV_FILE": str(env_file),
                     },
-                    check=True,
+                    check=False,
                 )
+                assert result.returncode == 0, (result.stdout, result.stderr)
                 args = result.stdout.splitlines()
                 assert "stop" == args[-1]
                 assert ("deploy/auth-poc.compose.yaml" in args) == (lab == "true")
