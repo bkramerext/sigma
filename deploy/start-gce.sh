@@ -63,6 +63,7 @@ python3 /opt/sigma/current/deploy/release_image.py record "$release" \
     (umask 077; python3 -c 'import secrets; print(secrets.token_hex(32))' > "$key")
   fi
   [ -f "$key" ] || { echo "Authentication experiment key unavailable." >&2; exit 1; }
+  chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$key"
   chmod 0600 "$key"
 fi
 release=$(sed -n 's/^SIGMA_RELEASE=//p' "$env_file")

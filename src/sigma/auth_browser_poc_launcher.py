@@ -45,8 +45,11 @@ def _key_file() -> Path:
         fd = os.open(secret, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w", encoding="ascii") as output:
             output.write(secrets.token_hex(32) + "\n")
-    if secret.is_symlink() or secret.stat().st_uid != os.getuid() or secret.stat().st_mode & 0o077:
+    if secret.is_symlink() or secret.stat().st_uid != os.getuid():
         raise RuntimeError("Unsafe local auth-browser key file")
+    # Docker Desktop bind mounts do not remap host file ownership to UID 10001.
+    # Local-only file permission is relaxed inside an owner-only (0700) folder.
+    os.chmod(secret, 0o644)
     return secret
 
 

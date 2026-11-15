@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-import io
-import os
+ import os
 import subprocess
 import tempfile
 from pathlib import Path
