@@ -63,6 +63,7 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         body = b"PRIVATE_PREVIEW_OK"
         self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Set-Cookie", "synthetic=private; Secure; HttpOnly")
         self.end_headers()
         self.wfile.write(body)
 
@@ -74,7 +75,13 @@ def _fixture_server() -> tuple[http.server.ThreadingHTTPServer, threading.Thread
     return server, thread, server.server_address[1]
 
 
-def _assert_http(url: str, *, headers: dict[str, str] | None = None, expected: int) -> bytes:
+def _assert_http(
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    expected: int,
+    no_set_cookie: bool = False,
+) -> bytes:
     request = urllib.request.Request(url, headers=headers or {})
     try:
         response = urllib.request.urlopen(request, timeout=4)
@@ -83,6 +90,8 @@ def _assert_http(url: str, *, headers: dict[str, str] | None = None, expected: i
         return error.read()
     with response:
         assert response.status == expected, response.status
+        if no_set_cookie:
+            assert not response.headers.get_all("Set-Cookie"), response.headers
         return response.read()
 
 
@@ -166,6 +175,7 @@ def main() -> None:
                         "X-Sigma-Personal-Lab-Edge": "attacker-supplied",
                     },
                     expected=200,
+                    no_set_cookie=True,
                 )
                 == b"PRIVATE_PREVIEW_OK"
             )
