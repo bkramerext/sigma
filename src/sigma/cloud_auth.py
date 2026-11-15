@@ -1775,6 +1775,13 @@ def status(request: Request):
         and os.environ.get("SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED", "").strip().casefold()
         in {"1", "true", "yes"}
     )
+    personal_browser_lab_configured = (
+        cfg.enabled
+        and not cfg.error
+        and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
+        and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET", ""))
+        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
+    )
     local_setup_missing = []
     if not cfg.enabled or cfg.local:
         local_setup_missing = [
@@ -1851,6 +1858,12 @@ def status(request: Request):
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
         "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
         "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
+        "personal_browser_lab_enabled": bool(
+            personal_browser_lab_configured
+            and principal is not None
+            and principal.role in {"admin", "member"}
+            and not principal.subject.startswith("mock:")
+        ),
     }
 
 
