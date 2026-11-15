@@ -86,6 +86,18 @@ def _assert_http(url: str, *, headers: dict[str, str] | None = None, expected: i
         return response.read()
 
 
+def _caddy_failure(container: str, message: str) -> AssertionError:
+    result = subprocess.run(
+        ["docker", "logs", "--tail", "40", container],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    logs = (result.stdout + result.stderr).replace(EDGE, "[redacted]")[-6000:]
+    return AssertionError(f"{message}; Caddy logs:\n{logs}")
+
+
 def main() -> None:
     FixtureHandler.auth_records = []
     FixtureHandler.preview_records = []
@@ -144,7 +156,10 @@ def main() -> None:
             else:
                 raise AssertionError("Caddy fixture did not become ready")
 
-            _assert_http(base + "/__personal_lab__/", expected=401)
+            try:
+                _assert_http(base + "/__personal_lab__/", expected=401)
+            except (AssertionError, OSError) as exc:
+                raise _caddy_failure(caddy_name, "Anonymous preview request failed") from exc
             assert not FixtureHandler.preview_records, "Unauthenticated request reached preview"
             assert (
                 _assert_http(
