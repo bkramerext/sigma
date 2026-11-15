@@ -263,6 +263,46 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
   </div>;
 }
 
+
+function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
+  state: 'closed' | 'starting' | 'ready' | 'error';
+  error: string;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (state === 'closed' || !dialog.current) return;
+    if (!dialog.current.open) dialog.current.showModal();
+    return () => { if (dialog.current?.open) dialog.current.close(); };
+  }, [state === 'closed']);
+  if (state === 'closed') return null;
+  return <dialog ref={dialog} className="google-account-dialog personal-chatgpt-connect-dialog"
+    aria-labelledby="personal-browser-heading"
+    onCancel={event => { event.preventDefault(); onClose(); }}>
+    <div className="privacy-notice-heading">
+      <h2 id="personal-browser-heading">Connect to ChatGPT</h2>
+      <DialogDismissButton label="Close ChatGPT connection" onClick={onClose}/>
+    </div>
+    <p>SIGMA runs a private browser inside an isolated container so ChatGPT's localhost
+      sign-in callback stays with that browser. The screen below is a secure,
+      same-origin view of that browser—not an iframe loading OpenAI's website.
+      SIGMA does not ask for your ChatGPT password.</p>
+    {state === 'starting' && <p role="status">Starting the private sign-in browser…</p>}
+    {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
+      <p>{error || 'The private browser could not be started.'}</p>
+      <button className="text-view-link" type="button" onClick={onRetry}>Retry</button>
+    </div>}
+    {state === 'ready' && <iframe
+      className="personal-chatgpt-browser-frame"
+      title="Private ChatGPT sign-in browser"
+      src={windowAuthUrl('/api/ai/personal-browser/view')}/>}
+    <p className="personal-chatgpt-preview-note">This local browser integration is a prototype.
+      A running browser does not mean a ChatGPT account is authorized; real
+      authorization and model calls remain disabled until their separate acceptance gates pass.</p>
+  </dialog>;
+}
+
 function HostedPersonalChatGPTNotice({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -287,8 +327,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
   const openingContainerBrowser = useRef(false);
-  const openingPopup = useRef<Window | null>(null);
-  const [personalPopup, setPersonalPopup] = useState<Window | null>(null);
+  const browserLaunchSequence = useRef(0);
+  const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'starting' | 'ready' | 'error'>('closed');
+  const [personalDialogError, setPersonalDialogError] = useState('');
   const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
   const [authorizedPreviewOwner, setAuthorizedPreviewOwner] = useState<string | null>(null);
   const pillTrigger = useRef<HTMLElement>(null);
@@ -362,8 +403,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     if (!localLabAccount) {
       setTestAccountOwner(null);
       setAuthorizedPreviewOwner(null);
-      personalPopup?.close();
-      if (personalPopup) setPersonalPopup(null);
+      setPersonalDialogState('closed');
       return;
     }
     const controller = new AbortController();
@@ -388,37 +428,33 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         const verified = test.value?.verified === true;
         setTestAccountOwner(verified ? localLabAccount : null);
         if (verified) {
-          personalPopup?.close();
-          if (personalPopup) setPersonalPopup(null);
+          setPersonalDialogState('closed');
           return;
         }
       }
-      if (!personalPopup) return;
+      if (personalDialogState === 'closed' || personalDialogState === 'error') return;
       if (preview.status === 'fulfilled' && preview.value?.phase === 'connected' && personalSelectionAllowed) {
         if (selectingConnection) {
           timer = setTimeout(check, 750);
           return;
         }
-        setPersonalPopup(null);
+        setPersonalDialogState('closed');
         try {
           if (selectedConnection === 'sponsored') await selectConnection?.('personal');
           await refreshConnection('manual');
         } catch {
           // The connection selector reports activation failures in SIGMA.
-        } finally {
-          personalPopup.close();
         }
         return;
       }
-      if (personalPopup.closed) setPersonalPopup(null);
-      else timer = setTimeout(check, 750);
+      timer = setTimeout(check, 750);
     }
     void check();
     return () => {
       controller.abort();
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [localLabAccount, personalPopup, personalSelectionAllowed, refreshConnection,
+  }, [localLabAccount, personalDialogState, personalSelectionAllowed, refreshConnection,
     selectConnection, selectedConnection, selectingConnection]);
   const hostedNoticeClick = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticeEnabled
@@ -515,52 +551,36 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     if (!response.ok) throw new Error('Could not stop the private browser.');
   }
 
-  async function startContainerPersonalBrowser() {
-    if (openingContainerBrowser.current && !openingPopup.current?.closed) return;
-    if (personalPopup && !personalPopup.closed) {
-      personalPopup.focus();
-      return;
+  async function closePersonalBrowserDialog() {
+    browserLaunchSequence.current += 1;
+    setPersonalDialogState('closed');
+    setPersonalDialogError('');
+    try {
+      await stopContainerPersonalBrowser();
+    } catch (cause) {
+      reportRequestFailure(cause instanceof Error ? cause.message : 'Could not stop the private browser.');
     }
-    openingContainerBrowser.current = true;
+  }
+
+  async function startContainerPersonalBrowser() {
+    if (openingContainerBrowser.current || personalDialogState === 'ready' || personalDialogState === 'starting') return;
     if (testConnected) {
       try {
         await stopContainerPersonalBrowser();
         setTestAccountOwner(null);
       } catch (cause) {
         reportRequestFailure(cause instanceof Error ? cause.message : 'Could not close the test browser.');
-      } finally {
-        openingContainerBrowser.current = false;
       }
       return;
     }
-    // Opening the popup must happen synchronously on the user's click.
-    // No user ever has to run a Docker command or know a VNC password.
-    const popup = window.open('about:blank', '_blank');
-    openingPopup.current = popup;
-    if (popup) {
-      popup.opener = null;
-      const doc = popup.document;
-      doc.title = 'Connect ChatGPT';
-      doc.body.style.cssText = 'background:#171b20;color:white;font:16px system-ui;margin:32px;line-height:1.5';
-      const heading = doc.createElement('h1');
-      heading.textContent = 'Connect ChatGPT';
-      const message = doc.createElement('p');
-      message.textContent = 'SIGMA is starting the browser for ChatGPT sign-in. Startup can take about 20 seconds.';
-      const cancel = doc.createElement('button');
-      cancel.type = 'button';
-      cancel.textContent = 'Cancel';
-      cancel.addEventListener('click', () => {
-        popup.close();
-        if (openingPopup.current === popup) {
-          openingPopup.current = null;
-          openingContainerBrowser.current = false;
-        }
-      });
-      doc.body.replaceChildren(heading, message, cancel);
-    }
+    // The user remains in SIGMA. The iframe embeds SIGMA's authenticated VNC
+    // viewer; OpenAI itself is never framed or deprived of its CSP protections.
+    const sequence = ++browserLaunchSequence.current;
+    openingContainerBrowser.current = true;
+    setPersonalDialogError('');
+    setPersonalDialogState('starting');
     try {
-      if (!popup) throw new Error('Browser popup blocked. Allow popups for SIGMA and retry.');
-      const response = await fetch('/api/ai/personal-browser/start', {
+      const response = await fetch(windowAuthUrl('/api/ai/personal-browser/start'), {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: '{}',
@@ -568,23 +588,22 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       const data = await response.json().catch(() => ({})) as {
         browser_status?: string; detail?: string; error?: string;
       };
-      if (popup.closed || openingPopup.current !== popup) return;
+      if (sequence !== browserLaunchSequence.current) {
+        void stopContainerPersonalBrowser().catch(() => {});
+        return;
+      }
       if (!response.ok)
         throw new Error(data.detail ?? data.error ??
           `Private ChatGPT browser startup returned HTTP ${response.status}.`);
       if (data.browser_status !== 'ready')
         throw new Error('Private ChatGPT browser did not become ready.');
-      popup.location.replace(windowAuthUrl('/api/ai/personal-browser/view'));
-      if (localLabAccount) setPersonalPopup(popup);
+      setPersonalDialogState('ready');
     } catch (cause) {
-      if (popup?.closed || openingPopup.current !== popup) return;
-      popup?.close();
-      reportRequestFailure(cause instanceof Error ? cause.message : 'Private browser unavailable.');
+      if (sequence !== browserLaunchSequence.current) return;
+      setPersonalDialogError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
+      setPersonalDialogState('error');
     } finally {
-      if (openingPopup.current === popup) {
-        openingPopup.current = null;
-        openingContainerBrowser.current = false;
-      }
+      openingContainerBrowser.current = false;
     }
   }
 
@@ -616,8 +635,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     if (previewAuthorized && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
       try {
         await cloudFunding.selectConnection?.('personal');
-        personalPopup?.close();
-        setPersonalPopup(null);
+        setPersonalDialogState('closed');
         await ai.refresh('manual');
       } catch {
         // The connection selector reports the error in the SIGMA window.
@@ -704,6 +722,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           onClick={closeDisconnectPopup}>Cancel</button>
       </div>
     </div>, document.body)}
+  <PersonalBrowserDialog state={personalDialogState} error={personalDialogError}
+    onClose={() => void closePersonalBrowserDialog()}
+    onRetry={() => void startContainerPersonalBrowser()}/>
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
     setPersonalHostedNoticeOpen(false);
     window.requestAnimationFrame(() => pillTrigger.current?.focus());
