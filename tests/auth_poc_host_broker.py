@@ -8,6 +8,7 @@ import stat
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,7 +76,7 @@ def main() -> None:
             ):
                 calls: list[list[str]] = []
 
-                def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
                     calls.append(argv)
                     assert kwargs["env"]["SIGMA_AUTH_POC_WORKSPACE_ID"] in (A, B)
                     assert kwargs["env"]["SIGMA_RELEASE"] == RELEASE
