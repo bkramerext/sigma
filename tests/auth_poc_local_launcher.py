@@ -62,6 +62,7 @@ class LocalBrokerTests(unittest.TestCase):
                 "SIGMA_AUTH_BROKER_LOCAL_POC": "0",
                 "SIGMA_RELEASE": "c" * 40,
                 "SIGMA_AUTH_BROKER_STATE_ROOT": "/tmp/sigma-test-state",
+                "SIGMA_AUTH_BROKER_GATEWAY_ROOT": "/tmp/sigma-test-gateways",
             },
         ):
             self.assertNotIn(
