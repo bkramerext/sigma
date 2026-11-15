@@ -8066,8 +8066,9 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   </dialog>;
 }
 
-function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrainstorm, cacheScope }: {
+function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrainstorm, showBrainstorm, cacheScope }: {
   initialPath: string;
+  showBrainstorm: boolean;
   onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
@@ -8189,7 +8190,7 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrains
               <div className="sigma-header-secondary-row">
                 <div className="home-brainstorm-actions">
                   {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
-                  {(!cloud?.enabled || cloud.target === 'local') && <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>}
+                  {showBrainstorm && <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>}
                 </div>
                 <div className="sigma-header-about-model-anchor">
                   <div className="sigma-header-first-row">
@@ -9528,6 +9529,23 @@ function App() {
     recentProjectViewCache.get(projectViewCacheKey(cacheScope, path)), [cacheScope]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const route = new URL(location, window.location.origin);
+  // Visiting the hidden hosted route enables only Home discoverability in
+  // this tab for the current Google account; it never grants API access.
+  const [brainstormUnlockedFor, setBrainstormUnlockedFor] = useState<string | null>(() => {
+    try { return window.sessionStorage.getItem('sigma.brainstorm.unlockedFor'); }
+    catch { return null; }
+  });
+  const hostedBrainstormMember = !!cloud?.enabled && cloud.target === 'hosted'
+    && cloud.authenticated && !!cloud.user?.email && cloud.user.role !== 'guest';
+  useEffect(() => {
+    if (!hostedBrainstormMember || !['/brainstorm', '/chat'].includes(route.pathname)) return;
+    const email = cloud!.user!.email.toLowerCase();
+    try { window.sessionStorage.setItem('sigma.brainstorm.unlockedFor', email); }
+    catch { /* Keep this navigation's discoverability in memory. */ }
+    setBrainstormUnlockedFor(email);
+  }, [hostedBrainstormMember, route.pathname, cloud?.user?.email]);
+  const showBrainstorm = !cloud?.enabled || cloud.target === 'local'
+    || (hostedBrainstormMember && brainstormUnlockedFor === cloud.user!.email.toLowerCase());
   useEffect(() => {
     if (route.pathname !== '/project') return;
     let cancelled = false;
@@ -9655,15 +9673,15 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
-    if (cloud?.enabled && cloud.target !== 'local') {
-      return <main className="workspace-page"><p role="status">This page is available when running SIGMA locally.</p><a href="/">Return to SIGMA</a></main>;
+    if (cloud?.enabled && cloud.target === 'hosted' && !hostedBrainstormMember) {
+      return <main className="workspace-page"><p role="status">Brainstorm requires a signed-in SIGMA member account.</p><a href="/api/cloud-auth/login?return_to=%2Fbrainstorm">Sign in with Google</a><a href="/">Return to SIGMA</a></main>;
     }
     return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>;
   }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onBrainstorm={() => navigate('/brainstorm')} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} showBrainstorm={showBrainstorm} onBrainstorm={() => navigate('/brainstorm')} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
       await preloadProjectArtwork();
       setArtworkDecoded(true);
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
