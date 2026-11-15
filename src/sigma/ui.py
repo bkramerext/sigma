@@ -117,6 +117,7 @@ def run_ui(
         return 2
     children: list[subprocess.Popen[bytes]] = []
     replacement: socket.socket | None = None
+    auth_poc_started = False
 
     def interrupted(signum: int, frame: object) -> None:
         raise KeyboardInterrupt
@@ -191,7 +192,17 @@ def run_ui(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )
                 if prod:
-                    print("Previewing hosted Personal ChatGPT notice (local UI only).", flush=True)
+                    if mock_auth:
+                        raise RuntimeError("The real OpenAI authentication experiment cannot use mock Google identities.")
+                    from sigma.auth_browser_poc_launcher import PORT, start_local
+
+                    print("Preparing the containerized OpenAI authentication experiment...", flush=True)
+                    _, key_file = start_local()
+                    auth_poc_started = True
+                    child_env["SIGMA_AUTH_BROWSER_POC_ENABLED"] = "true"
+                    child_env["SIGMA_AUTH_BROWSER_POC_ORIGIN"] = f"http://127.0.0.1:{PORT}"
+                    child_env["SIGMA_AUTH_BROWSER_POC_KEY_FILE"] = str(key_file)
+                    print(f"Auth-browser experiment: {URL}/api/auth-browser-poc/ui", flush=True)
                 for command in commands:
                     children.append(
                         subprocess.Popen(
@@ -293,6 +304,10 @@ def run_ui(
             if children:
                 stop_servers(children)
         finally:
+            if auth_poc_started:
+                from sigma.auth_browser_poc_launcher import stop_local
+
+                stop_local()
             signal.signal(signal.SIGINT, prior_int)
             signal.signal(signal.SIGTERM, previous)
 
