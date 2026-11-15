@@ -43,14 +43,24 @@ closes the viewer and stops its browser without discarding durable state.
 If Docker Desktop is unavailable, SIGMA continues with Sponsored, and does not
 silently use pre-existing Mac-local personal tokens.
 
-**No real OpenAI sign-in or model inference is enabled yet.** A running
-container is not proof of authorization. The browser loopback and streaming
-paths are currently a safe local integration prototype. Testing actual
-provider authorization remains a separate, explicit security and provider
-eligibility decision. Hosted production is unchanged.
+**Local --prod enables the existing real sign-in preview.** The isolated
+browser can open the genuine ChatGPT account chooser, and the user may
+authorize a personal account for local-only model requests. A running browser
+is not proof of authorization; SIGMA must receive the worker's verified
+account binding before switching from Sponsored to Personal.
+
+The prior custom-script `--real-signin-preview` experiment stored account
+state in `~/.sigma/personal-signin-preview-state`. Standard `start --prod`
+reuses that directory and keeps worker credentials separate from SIGMA.
+
+The provider-eligibility and security review for **hosted multi-user
+production** remains a separate gate. No hosted production changes are made
+by this local integration PR.
 
 The historical `bash auth-poc/start-sigma-local.sh` only forwards to
 `./sigma start --prod` for compatibility and is not a separate launcher.
+The old `--real-signin-preview` switch is no longer necessary: local
+`start --prod` includes that capability automatically.
 A one-time `./sigma setup` may still be required for a new checkout.
 
 Actual macOS Docker Desktop and browser acceptance still require local testing.
