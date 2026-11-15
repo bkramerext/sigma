@@ -77,5 +77,5 @@ done
 echo "Open SIGMA, then click its existing ChatGPT pill while in Sponsored mode."
 echo "This POC runs real Docker browser/worker containers but does not yet enable OpenAI sign-in."
 exec_status=0
-./sigma start --signin --navigate "$@" || exec_status=$?
+./sigma start --signin --sponsored --navigate "$@" || exec_status=$?
 exit "$exec_status"
