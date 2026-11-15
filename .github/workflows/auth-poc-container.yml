@@ -188,8 +188,9 @@ jobs:
             -f deploy/auth-poc.compose.yaml down -v --remove-orphans
           state_dir=$(mktemp -d)
           mkdir -p "$state_dir/auth/auth-poc"
-          sudo chown 10001:10001 "$state_dir/auth/auth-poc"
+          # Secure the directory before transferring ownership to worker UID.
           chmod 0700 "$state_dir/auth/auth-poc"
+          sudo chown 10001:10001 "$state_dir/auth/auth-poc"
           export SIGMA_RELEASE="$GITHUB_SHA"
           export SIGMA_STATE_DISK_MOUNT="$state_dir"
           docker tag sigma-auth-poc:local "sigma-auth-poc:$SIGMA_RELEASE"
