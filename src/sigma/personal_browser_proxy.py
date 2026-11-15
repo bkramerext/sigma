@@ -14,7 +14,6 @@ import json
 import os
 import re
 import secrets
-from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException, Request, WebSocket
@@ -42,7 +41,7 @@ async def _ready(principal: cloud_auth.Principal) -> str:
         state = await personal_browser.session(principal)
         if state["browser_status"] != "ready":
             raise personal_browser.PersonalBrowserUnavailable("Browser is not running")
-        return await personal_browser.browser_address(principal)
+        return await personal_browser.browser_socket(principal)
     except personal_browser.PersonalBrowserUnavailable as exc:
         raise HTTPException(503, "Private browser is unavailable.") from exc
 
@@ -94,8 +93,7 @@ rfb.addEventListener('disconnect', () => {
         "<div id='screen'></div></main>"
         f"<script type='module' nonce='{nonce}'>{script}</script></body></html>"
     )
-    origin = cloud_auth.config().origin
-    connect = " 'self'" if origin is not None else " 'self'"
+    connect = " 'self' ws: wss:"
     return HTMLResponse(
         html,
         headers={
@@ -116,7 +114,7 @@ rfb.addEventListener('disconnect', () => {
 async def asset(request: Request, path: str) -> Response:
     """Forward only necessary static noVNC code; never proxy OAuth/API routes."""
     principal = _principal(request)
-    base = await _ready(principal)
+    socket_path = await _ready(principal)
     if (
         not _ASSET.fullmatch(path)
         or ".." in path.split("/")
@@ -124,8 +122,12 @@ async def asset(request: Request, path: str) -> Response:
     ):
         raise HTTPException(404, "Browser asset unavailable.")
     try:
-        async with httpx.AsyncClient(timeout=6, follow_redirects=False) as client:
-            response = await client.get(base + "/" + path)
+        transport = httpx.AsyncHTTPTransport(uds=socket_path)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://private-browser", timeout=6,
+            follow_redirects=False,
+        ) as client:
+            response = await client.get("/" + path)
         if response.status_code != 200 or len(response.content) > 2_000_000:
             raise ValueError("Invalid browser asset")
     except (httpx.HTTPError, OSError, ValueError) as exc:
@@ -177,18 +179,17 @@ async def _remote_frame(reader: asyncio.StreamReader) -> tuple[bool, int, bytes]
     return fin, opcode, data
 
 
-async def _connect_worker(base: str) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-    target = urlsplit(base)
-    if target.scheme != "http" or not target.hostname or target.port != 6080:
-        raise ValueError("Unsafe browser service location")
+async def _connect_worker(socket_path: str) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    if not socket_path.startswith("/") or ".." in socket_path.split("/"):
+        raise ValueError("Unsafe browser socket")
     reader, writer = await asyncio.wait_for(
-        asyncio.open_connection(target.hostname, target.port), timeout=5
+        asyncio.open_unix_connection(socket_path), timeout=5
     )
     key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
     writer.write(
         (
             "GET /websockify HTTP/1.1\r\n"
-            f"Host: {target.hostname}:6080\r\n"
+            "Host: private-browser\r\n"
             "Upgrade: websocket\r\nConnection: Upgrade\r\n"
             f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
             "Sec-WebSocket-Protocol: binary\r\n\r\n"
@@ -237,8 +238,8 @@ async def websocket_bridge(websocket: WebSocket) -> None:
         return
     writer: asyncio.StreamWriter | None = None
     try:
-        base = await _ready(principal)
-        reader, writer = await _connect_worker(base)
+        socket_path = await _ready(principal)
+        reader, writer = await _connect_worker(socket_path)
         selected_protocol = (
             "binary"
             if "binary" in (websocket.headers.get("sec-websocket-protocol") or "").split(",")
