@@ -40,8 +40,7 @@ def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
             cwd=ROOT,
             env=env,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=timeout,
             check=False,
         )
@@ -61,7 +60,9 @@ def _docker_environment() -> dict[str, str]:
     if (desktop / "docker-credential-desktop").is_file():
         env["PATH"] = str(desktop) + os.pathsep + env.get("PATH", "")
     if shutil.which("docker", path=env.get("PATH")) is None:
-        raise LocalPersonalUnavailable("Install and start Docker Desktop to use local Personal ChatGPT.")
+        raise LocalPersonalUnavailable(
+            "Install and start Docker Desktop to use local Personal ChatGPT."
+        )
     return env
 
 
@@ -80,26 +81,41 @@ def _release_images(env: dict[str, str]) -> tuple[str, str]:
     release = _command(["git", "rev-parse", "--verify", "HEAD"], env=env, timeout=10)
     if not RELEASE.fullmatch(release):
         raise LocalPersonalUnavailable("Unable to identify a pinned SIGMA release.")
-    architecture = _command(["docker", "info", "--format", "{{.Architecture}}"], env=env, timeout=15)
+    architecture = _command(
+        ["docker", "info", "--format", "{{.Architecture}}"], env=env, timeout=15
+    )
     platform = {
-        "arm64": "linux/arm64", "aarch64": "linux/arm64",
-        "amd64": "linux/amd64", "x86_64": "linux/amd64",
+        "arm64": "linux/arm64",
+        "aarch64": "linux/arm64",
+        "amd64": "linux/amd64",
+        "x86_64": "linux/amd64",
     }.get(architecture)
     if platform is None:
         raise LocalPersonalUnavailable("Docker Desktop architecture is unsupported.")
     # Reuse the exact current checkout's images on subsequent starts.
     tags = ("sigma-auth-poc:" + release, "sigma-auth-browser-poc:" + release)
-    if any(subprocess.run(
-        ["docker", "image", "inspect", tag], cwd=ROOT, env=env,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False,
-    ).returncode != 0 for tag in tags):
+    if any(
+        subprocess.run(
+            ["docker", "image", "inspect", tag],
+            cwd=ROOT,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        ).returncode
+        != 0
+        for tag in tags
+    ):
         print("Preparing isolated Personal ChatGPT containers…", flush=True)
         _command(
             ["docker", "compose", "-f", "deploy/auth-poc.compose.yaml", "build"],
             env=env,
             timeout=900,
         )
-        for image, tag in zip(("sigma-auth-poc:local", "sigma-auth-browser-poc:local"), tags, strict=True):
+        for image, tag in zip(
+            ("sigma-auth-poc:local", "sigma-auth-browser-poc:local"), tags, strict=True
+        ):
             _command(["docker", "tag", image, tag], env=env, timeout=15)
     return release, platform
 
@@ -124,20 +140,22 @@ class LocalPersonalRuntime:
         try:
             _private_directory(runtime / "broker", 0o711)
             _private_directory(runtime / "gateways", 0o711)
-            env.update({
-                "SIGMA_RELEASE": release,
-                "SIGMA_AUTH_BROKER_LOCAL_POC": "1",
-                "SIGMA_AUTH_BROKER_STATE_ROOT": str(state_root),
-                "SIGMA_AUTH_BROKER_GATEWAY_ROOT": str(runtime / "gateways"),
-                "SIGMA_AUTH_BROKER_SOCKET": str(runtime / "broker" / "broker.sock"),
-                "SIGMA_AUTH_BROKER_CLIENT_UID": str(os.geteuid()),
-                "SIGMA_AUTH_POC_BROWSER_PLATFORM": platform,
-                "SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "0",
-                "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
-                "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
-                "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": str(runtime / "broker" / "broker.sock"),
-                "SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT": str(runtime / "gateways"),
-            })
+            env.update(
+                {
+                    "SIGMA_RELEASE": release,
+                    "SIGMA_AUTH_BROKER_LOCAL_POC": "1",
+                    "SIGMA_AUTH_BROKER_STATE_ROOT": str(state_root),
+                    "SIGMA_AUTH_BROKER_GATEWAY_ROOT": str(runtime / "gateways"),
+                    "SIGMA_AUTH_BROKER_SOCKET": str(runtime / "broker" / "broker.sock"),
+                    "SIGMA_AUTH_BROKER_CLIENT_UID": str(os.geteuid()),
+                    "SIGMA_AUTH_POC_BROWSER_PLATFORM": platform,
+                    "SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "0",
+                    "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
+                    "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
+                    "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": str(runtime / "broker" / "broker.sock"),
+                    "SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT": str(runtime / "gateways"),
+                }
+            )
             env.pop("SIGMA_AUTH_POC_RPC_SEED", None)
             broker = subprocess.Popen(
                 [sys.executable, str(ROOT / "auth-poc" / "host_broker.py")],
@@ -153,9 +171,13 @@ class LocalPersonalRuntime:
                     info = socket_path.lstat()
                     if info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o600:
                         return cls(runtime, state_root, env, broker)
-                    raise LocalPersonalUnavailable("Private Personal broker permissions are unsafe.")
+                    raise LocalPersonalUnavailable(
+                        "Private Personal broker permissions are unsafe."
+                    )
                 time.sleep(0.1)
-            raise LocalPersonalUnavailable("Private Personal container broker did not become ready.")
+            raise LocalPersonalUnavailable(
+                "Private Personal container broker did not become ready."
+            )
         except BaseException:
             if broker is not None:
                 broker.terminate()
@@ -173,7 +195,11 @@ class LocalPersonalRuntime:
             gateway_root = self.runtime / "gateways"
             if gateway_root.is_dir():
                 for gateway in gateway_root.iterdir():
-                    if not WORKSPACE.fullmatch(gateway.name) or not gateway.is_dir() or gateway.is_symlink():
+                    if (
+                        not WORKSPACE.fullmatch(gateway.name)
+                        or not gateway.is_dir()
+                        or gateway.is_symlink()
+                    ):
                         continue
                     workspace = gateway.name
                     env = {
@@ -186,13 +212,23 @@ class LocalPersonalRuntime:
                     }
                     try:
                         _command(
-                            ["docker", "compose", "--project-name", "sigma-personal-" + workspace,
-                             *(part for filename in COMPOSE_FILES for part in ("-f", filename)),
-                             "down", "--remove-orphans"],
-                            env=env, timeout=45,
+                            [
+                                "docker",
+                                "compose",
+                                "--project-name",
+                                "sigma-personal-" + workspace,
+                                *(part for filename in COMPOSE_FILES for part in ("-f", filename)),
+                                "down",
+                                "--remove-orphans",
+                            ],
+                            env=env,
+                            timeout=45,
                         )
                     except LocalPersonalUnavailable:
-                        print("Warning: a Personal browser container could not be stopped.", file=sys.stderr)
+                        print(
+                            "Warning: a Personal browser container could not be stopped.",
+                            file=sys.stderr,
+                        )
         finally:
             if self.broker.poll() is None:
                 self.broker.terminate()
