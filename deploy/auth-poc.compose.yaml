@@ -1,0 +1,40 @@
+# Local POC. The same image may run on GCE, but never publish the interactive
+# noVNC endpoint to the Internet. The service is NOT wired into SIGMA yet.
+# Start: docker compose -f deploy/auth-poc.compose.yaml up --build -d
+services:
+  auth-poc:
+    platform: linux/amd64
+    build:
+      context: ..
+      dockerfile: auth-poc/Dockerfile
+    image: sigma-auth-poc:local
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2.0
+    environment:
+      SIGMA_AUTH_HOME: /var/lib/sigma-poc-auth
+      SIGMA_CLOUD_AUTH_ENABLED: "false"
+      SIGMA_CLOUD_AUTH_LOCAL: "false"
+      SIGMA_STORAGE_BACKEND: local
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m,uid=10001,gid=10001,mode=0700
+    volumes:
+      - auth-poc-state:/var/lib/sigma-poc-auth
+    ports:
+      # Deliberately NEVER bind to 0.0.0.0; this is an interactive login screen.
+      - "127.0.0.1:16080:6080"
+    restart: "no"
+    healthcheck:
+      test: [CMD, "/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  auth-poc-state:
