@@ -19,6 +19,7 @@ services:
     environment:
       SIGMA_AUTH_HOME: /var/lib/sigma-poc-auth
       SIGMA_AUTH_POC_LAB: "1"
+      SIGMA_AUTH_POC_REAL_SIGNIN: "0"
       SIGMA_CLOUD_AUTH_ENABLED: "false"
       SIGMA_CLOUD_AUTH_LOCAL: "false"
       SIGMA_STORAGE_BACKEND: local
@@ -46,11 +47,7 @@ services:
     read_only: true
     user: "11001:11001"
     cap_drop: [ALL]
-    security_opt:
-      - seccomp:../auth-poc/chromium-seccomp.json
-      # Ubuntu 24.04 AppArmor userns restrictions conflict with Chromium's
-      # nested sandbox. This affects browser only; worker remains AppArmor-confined.
-      - apparmor:unconfined
+    security_opt: [no-new-privileges:true]
     pids_limit: 192
     mem_limit: 1536m
     memswap_limit: 1536m
