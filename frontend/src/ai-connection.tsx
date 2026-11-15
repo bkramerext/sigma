@@ -286,6 +286,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
   const [hostedBrowserError, setHostedBrowserError] = useState('');
+  const openingContainerBrowser = useRef(false);
   const pillTrigger = useRef<HTMLElement>(null);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
@@ -335,7 +336,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       : hostedPillLabel
     : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
   const connectionTooltip = containerBrowserLab
-    ? 'Choose Sponsored ChatGPT or connect your own ChatGPT account in a private browser.'
+    ? 'Click to attempt your Personal ChatGPT connection using a private container browser.'
     : (hostedNoticeClick || hostedPersonalUnavailable)
     ? cloudFunding?.personalChatGPTNoticeEnabled
       ? 'Click to learn why personal ChatGPT is unavailable in hosted SIGMA.'
@@ -389,10 +390,16 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `Allocation: $${cloudFunding.budget.remaining_usd.toFixed(2)}`
     : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
   async function startContainerPersonalBrowser() {
+    if (openingContainerBrowser.current) return;
+    openingContainerBrowser.current = true;
     // Opening the popup must happen synchronously on the user's click.
     // No user ever has to run a Docker command or know a VNC password.
     const popup = window.open('about:blank', '_blank');
-    if (popup) popup.opener = null;
+    if (popup) {
+      popup.opener = null;
+      popup.document.title = 'Connect ChatGPT';
+      popup.document.body.textContent = 'Opening your private browser…';
+    }
     setHostedBrowserError('');
     try {
       if (!popup) throw new Error('Browser popup blocked. Allow popups for SIGMA and retry.');
@@ -410,6 +417,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     } catch (cause) {
       popup?.close();
       setHostedBrowserError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
+    } finally {
+      openingContainerBrowser.current = false;
     }
   }
   async function connect() {
@@ -457,7 +466,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen || !!hostedBrowserError}>
-    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab && sponsoredPill) { void startContainerPersonalBrowser(); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void startContainerPersonalBrowser(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
