@@ -118,9 +118,10 @@ class ProdLifecycleTests(unittest.TestCase):
                 nonlocal active_socket
                 env = kwargs["env"]
                 self.assertEqual(env["SIGMA_AUTH_POC_REAL_SIGNIN"], "0")
-                self.assertEqual(env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"], "0")
+                self.assertEqual(env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"], "1")
                 self.assertEqual(env["SIGMA_PERSONAL_BROWSER_LAB_ENABLED"], "1")
-                self.assertNotIn("SIGMA_AUTH_POC_RPC_SEED", env)
+                self.assertRegex(env["SIGMA_AUTH_POC_RPC_SEED"], r"[0-9a-f]{64}\\Z")
+                self.assertNotEqual(env["SIGMA_AUTH_POC_RPC_SEED"], "secret")
                 active_socket = socket.socket(socket.AF_UNIX)
                 active_socket.bind(env["SIGMA_AUTH_BROKER_SOCKET"])
                 os.chmod(env["SIGMA_AUTH_BROKER_SOCKET"], 0o600)
@@ -157,18 +158,22 @@ class ProdLifecycleTests(unittest.TestCase):
                 self.assertEqual(commands[0][-1], "--remove-orphans")
                 self.assertFalse(runtime.exists())
                 self.assertTrue(running.state_root.is_dir())
+                self.assertEqual(running.state_root.name, "personal-signin-preview-state")
                 self.assertTrue(fake.stopped)
             if active_socket is not None:
                 active_socket.close()
 
-    def test_prod_uses_no_synthetic_account_as_connected(self) -> None:
+    def test_prod_retains_local_real_authorization_but_never_bypasses_worker(self) -> None:
         ui = (ROOT / "src/sigma/ui.py").read_text(encoding="utf-8")
         self.assertIn("LocalPersonalRuntime.start()", ui)
         self.assertIn("personal_runtime.close()", ui)
         self.assertIn("if prod:", ui)
         local = (ROOT / "src/sigma/local_personal.py").read_text(encoding="utf-8")
         self.assertIn('"SIGMA_AUTH_POC_REAL_SIGNIN": "0"', local)
-        self.assertIn('"SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "0"', local)
+        self.assertIn('"SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "1"', local)
+        self.assertIn('"SIGMA_AUTH_POC_RPC_SEED": secrets.token_hex(32)', local)
+        self.assertIn('"SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = (', ui)
+        self.assertIn('"SIGMA_AUTH_POC_RPC_SEED",', ui)
 
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
