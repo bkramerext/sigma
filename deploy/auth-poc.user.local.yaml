@@ -3,6 +3,8 @@
 # This file is appended AFTER the private GCE per-user overlay by host_broker.
 services:
   auth-poc:
+    environment:
+      SIGMA_AUTH_POC_LOCAL_DOCKER: "1"
     user: "${SIGMA_AUTH_POC_LOCAL_UID:?local POC UID required}:${SIGMA_AUTH_POC_LOCAL_GID:?local POC GID required}"
     tmpfs:
       - /tmp:rw,nosuid,size=64m,uid=${SIGMA_AUTH_POC_LOCAL_UID},gid=${SIGMA_AUTH_POC_LOCAL_GID},mode=0700

@@ -204,6 +204,14 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                     (gateway / name).is_socket() and not (gateway / name).is_symlink()
                     for name in ("vnc.sock", "model.sock")
                 )
+                if gateway_ready and local_poc():
+                    # Normalize socket modes from macOS itself. Docker Desktop's
+                    # Linux VM cannot chmod Unix sockets on its host bind mount.
+                    for name in ("vnc.sock", "model.sock"):
+                        socket_path = gateway / name
+                        os.chmod(socket_path, 0o600)
+                        if stat.S_IMODE(socket_path.lstat().st_mode) != 0o600:
+                            gateway_ready = False
                 status = (
                     "ready"
                     if health.returncode == 0

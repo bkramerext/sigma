@@ -19,7 +19,13 @@ if path.exists() or path.is_symlink():
     path.unlink()
 PY
   /opt/venv/bin/python /opt/sigma/auth-poc/unix_proxy.py &
-  /opt/venv/bin/uvicorn model_gateway:app --uds /run/sigma-personal/model.sock --no-access-log &
+  if [ "${SIGMA_AUTH_POC_LOCAL_DOCKER:-0}" = "1" ]; then
+    # Docker Desktop's shared Mac bind mount rejects chmod(2) on socket nodes.
+    # Pre-bind the model UDS so Uvicorn does not chmod the mounted socket.
+    /opt/venv/bin/python /opt/sigma/auth-poc/local_uds_uvicorn.py &
+  else
+    /opt/venv/bin/uvicorn model_gateway:app --uds /run/sigma-personal/model.sock --no-access-log &
+  fi
   i=0
   while [ ! -S /run/sigma-personal/vnc.sock ] || [ ! -S /run/sigma-personal/model.sock ]; do
     i=$((i+1))

@@ -64,6 +64,7 @@ jobs:
           config = json.load(open("/tmp/sigma-poc-local-compose.json"))
           worker, browser = config["services"]["auth-poc"], config["services"]["browser"]
           assert worker["user"] == f'{os.getuid()}:{os.getgid()}'
+          assert worker["environment"]["SIGMA_AUTH_POC_LOCAL_DOCKER"] == "1"
           assert not worker.get("ports"), worker.get("ports")
           assert not browser.get("ports"), browser.get("ports")
           mounts = {m["target"]: m for m in worker["volumes"]}
@@ -189,6 +190,7 @@ jobs:
           python3 - <<'PY'
           import importlib.util
           import socket
+          import stat
           from pathlib import Path
           spec = importlib.util.spec_from_file_location("local_poc_broker", Path("auth-poc/host_broker.py").resolve())
           assert spec and spec.loader
@@ -198,6 +200,10 @@ jobs:
           assert broker.operate("start", workspace)["status"] == "ready"
           relay = broker.gateway_root() / workspace / "vnc.sock"
           assert relay.is_socket(), "Private browser relay was not published"
+          model = broker.gateway_root() / workspace / "model.sock"
+          assert model.is_socket(), "Private model relay was not published"
+          assert stat.S_IMODE(relay.stat().st_mode) == 0o600
+          assert stat.S_IMODE(model.stat().st_mode) == 0o600
           with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
               conn.settimeout(8)
               conn.connect(str(relay))

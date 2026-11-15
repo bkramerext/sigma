@@ -77,7 +77,11 @@ async def main() -> None:
             raise RuntimeError("Unsafe existing browser IPC socket")
         SOCKET.unlink()
     async with await asyncio.start_unix_server(forward, path=str(SOCKET)) as server:
-        SOCKET.chmod(0o600)
+        # Docker Desktop's Mac bind mount returns EINVAL when chmod is applied
+        # to a Unix socket from inside Linux. The host broker applies mode 0600
+        # after startup; the containing directory is already private (0700).
+        if os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") != "1":
+            SOCKET.chmod(0o600)
         await server.serve_forever()
 
 
