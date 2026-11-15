@@ -40,6 +40,7 @@ from sigma import (
     papers,
     personal_browser,
     personal_browser_proxy,
+    personal_inference,
     project_collaboration,
     project_diagnostics,
     project_types,
@@ -3223,6 +3224,24 @@ async def personal_browser_status(request: Request):
 async def personal_browser_stop(request: Request):
     """Pause only this user's browser; do not erase credentials or claim logout."""
     return await _personal_browser_action(request, "stop")
+
+
+@app.get("/api/ai/personal-browser/account")
+async def personal_browser_account(request: Request):
+    """Credential-free, Google-user-scoped account summary; never a bearer token."""
+    principal = _personal_browser_principal(request)
+    try:
+        state = await personal_inference.account(principal)
+    except personal_inference.PersonalInferenceUnavailable as exc:
+        raise HTTPException(503, "Personal account status is unavailable.") from exc
+    return JSONResponse(
+        {
+            "status": state["status"],
+            "account_label": state["account_label"],
+            "models": state["models"],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/api/ai/personal-browser/view")

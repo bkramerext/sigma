@@ -106,6 +106,31 @@ verified identity, and per-user inference routing remain **unproven**.
 - The lab guard `SIGMA_AUTH_POC_LAB=1` must not become a production bypass.
   Production must fail closed until all previous gates are resolved.
 
+## Private Personal inference channel (synthetic milestone)
+
+Each per-user credential worker now creates a **second protected Unix socket**
+(`model.sock`) next to `vnc.sock`. SIGMA's backend derives its path solely
+from the signed-in Google principal and private workspace mapping. All model
+requests contain only a reviewed Responses payload, an opaque 64-character
+account binding and a request ID. They never contain a bearer token, OAuth
+code, arbitrary URL, headers, or a caller-chosen container path.
+
+The model worker currently replies `disabled` to account discovery and **403**
+to every inference request. The routing tests substitute an in-process synthetic
+Unix server, demonstrate independent User A/User B results, reject stale account
+bindings, reject sponsored-mode access, and verify that no credentials traverse
+the backend channel. SIGMA's chat and strategy-provider paths now have a
+separate Personal worker branch; the sponsored provider branch and its billing
+ledger remain unchanged. A real account is never treated as connected merely
+because a browser container is healthy.
+
+For deployment permissions, the two private IPC roots are **mode 0711**
+(searchable, not listable), while each user-specific gateway is **mode 0700**
+and each socket is **mode 0600** under the dedicated worker/backend UID 10001.
+The backend only receives read-only gateway mounts. The broker fails closed if
+an IPC root is not mode 0711. These controls are verified on Linux CI, not yet
+on macOS Docker Desktop or the actual GCE host.
+
 ## Hosted eligibility decision gate
 
 Provider authorization and architecture acceptance are tracked in

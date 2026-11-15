@@ -83,11 +83,22 @@ def prepare_state(workspace_id: str) -> Path:
     return root / workspace_id
 
 
+def _verify_traversable_root(path: Path) -> None:
+    """The backend may traverse, but not enumerate, private IPC directory roots."""
+    details = path.lstat()
+    if (
+        not stat.S_ISDIR(details.st_mode)
+        or stat.S_ISLNK(details.st_mode)
+        or stat.S_IMODE(details.st_mode) != 0o711
+    ):
+        raise ValueError("Private IPC root must be mode 0711")
+
+
 def prepare_gateway(workspace_id: str) -> Path:
     """Create only this worker's private, socket-only bind mount."""
     validate_id(workspace_id)
     root = gateway_root()
-    _verify_directory(root)
+    _verify_traversable_root(root)
     child = root / workspace_id
     _verify_directory(child)
     if os.geteuid() == 0:
@@ -170,8 +181,11 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                     timeout=10,
                     check=False,
                 )
-                gateway = gateway_root() / workspace_id / "vnc.sock"
-                gateway_ready = gateway.is_socket() and not gateway.is_symlink()
+                gateway = gateway_root() / workspace_id
+                gateway_ready = all(
+                    (gateway / name).is_socket() and not (gateway / name).is_symlink()
+                    for name in ("vnc.sock", "model.sock")
+                )
                 status = (
                     "ready"
                     if health.returncode == 0
@@ -269,7 +283,7 @@ def serve() -> None:
     path = Path(os.environ["SIGMA_AUTH_BROKER_SOCKET"])
     if not path.is_absolute() or path.exists() or path.is_symlink():
         raise RuntimeError("Broker socket path is not safe or already in use")
-    _verify_directory(path.parent, create=False)
+    _verify_traversable_root(path.parent)
     with _Server(str(path), _Handler) as server:
         try:
             os.chmod(path, 0o600)

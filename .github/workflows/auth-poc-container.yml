@@ -11,6 +11,11 @@ on:
       - 'deploy/auth-poc.user.gce.yaml'
       - 'deploy/auth-poc.backend-lab.gce.yaml'
       - 'src/sigma/personal_browser.py'
+      - 'src/sigma/personal_inference.py'
+      - 'src/sigma/cloud_personal.py'
+      - 'src/sigma/openai_connection.py'
+      - 'src/sigma/chat.py'
+      - 'src/sigma/agentic.py'
       - 'tests/auth_poc_host_broker.py'
       - 'deploy/release_image.py'
       - 'deploy/start-gce.sh'
@@ -226,6 +231,8 @@ jobs:
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_broker_client.py
       - name: Verify identity-bound HTTPS browser proxy without any credentials
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_browser_proxy.py
+      - name: Verify private Personal model RPC and cross-user inference routing
+        run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_personal_inference.py
       - name: Exercise two independent user-owned Docker projects
         shell: bash
         run: |

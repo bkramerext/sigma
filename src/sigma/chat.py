@@ -5,10 +5,11 @@ import hashlib
 import json
 from collections.abc import Mapping
 from typing import Any, Literal
+from uuid import uuid4
 
 import httpx
 
-from sigma import cloud_research, cloud_workspaces
+from sigma import cloud_research, cloud_workspaces, personal_inference
 from sigma.model_catalog import CATALOG, DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, cloud_credential, models
 from sigma.plan_stream import completed, failure
@@ -55,11 +56,15 @@ async def configuration() -> dict[str, Any]:
     ]
     available = (
         state.get("status") == "connected"
-        and bool(credential["token"])
+        and (bool(credential["token"]) or credential.get("transport") == "personal_worker")
         and discovery.get("default_verified") is True
         and model in CATALOG
     )
-    if cloud_workspaces.enabled() and not cloud_credential(credential):
+    if (
+        cloud_workspaces.enabled()
+        and credential.get("transport") != "personal_worker"
+        and not cloud_credential(credential)
+    ):
         available = False
     return {
         "available": available,
@@ -147,7 +152,8 @@ async def respond(
         raise ProjectError("Repeated text must be a string.")
 
     credential = await auth_context()
-    if not credential["token"] or credential["status"] != "connected":
+    is_personal = credential.get("transport") == "personal_worker"
+    if (not credential["token"] and not is_personal) or credential["status"] != "connected":
         raise ProjectError("Connect ChatGPT or select API-key billing before starting a chat.")
     if credential["identity"] != expected_binding:
         raise ProjectError("The selected AI account changed. Review the connection and retry.")
@@ -164,7 +170,7 @@ async def respond(
         item["id"] == model and item["availability"] == "available" for item in discovery["models"]
     ):
         raise ProjectError("The selected model is unavailable to this AI account.")
-    if cloud_workspaces.enabled() and not cloud_credential(credential):
+    if cloud_workspaces.enabled() and not is_personal and not cloud_credential(credential):
         raise ProjectError("Sponsored chat is not configured for this account.")
 
     transcript = _transcript(messages)
@@ -192,7 +198,7 @@ async def respond(
     attempt = None
     response_data: Mapping[str, Any] | None = None
     try:
-        if cloud_research.billing_enabled():
+        if cloud_research.billing_enabled() and not is_personal:
             workspace = cloud_research._ledger_workspace()
             if workspace is None:
                 raise ProjectError("The sponsored chat workspace is unavailable.")
@@ -205,40 +211,49 @@ async def respond(
             )
         if attempt is not None:
             attempt.dispatched = True
-        async with (
-            asyncio.timeout(TIMEOUT_SECONDS),
-            httpx.AsyncClient(
-                timeout=TIMEOUT_SECONDS,
-                follow_redirects=False,
-                trust_env=False,
-            ) as client,
-            client.stream(
-                "POST",
-                "https://api.openai.com/v1/responses",
-                headers={
-                    "Authorization": "Bearer " + credential["token"],
-                    **({"Accept": "text/event-stream"} if credential["mode"] == "chatgpt" else {}),
-                },
-                json=payload,
-            ) as response,
-        ):
-            if credential["mode"] == "chatgpt" and response.status_code == 200:
-                raw = await completed(response, guard)
-            else:
-                data = bytearray()
-                async for chunk in response.aiter_bytes():
-                    data.extend(chunk)
-                    if len(data) > MAX_RESPONSE_BYTES:
-                        raise ProjectError("The AI response exceeded the size limit.")
-                try:
-                    raw = json.loads(data)
-                except (ValueError, UnicodeDecodeError):
-                    raw = {}
-                if response.status_code != 200:
-                    failure(response.status_code, raw, credential["mode"], guard)
-            if isinstance(raw, dict):
-                response_data = raw
+        if is_personal:
+            raw = await personal_inference.respond(
+                payload,
+                expected_binding=credential["worker_binding"],
+                request_id=uuid4().hex,
+            )
+            response_data = raw
             text = _response_text(raw, model)
+        else:
+            async with (
+                asyncio.timeout(TIMEOUT_SECONDS),
+                httpx.AsyncClient(
+                    timeout=TIMEOUT_SECONDS,
+                    follow_redirects=False,
+                    trust_env=False,
+                ) as client,
+                client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                    headers={
+                        "Authorization": "Bearer " + credential["token"],
+                        **({"Accept": "text/event-stream"} if credential["mode"] == "chatgpt" else {}),
+                    },
+                    json=payload,
+                ) as response,
+            ):
+                if credential["mode"] == "chatgpt" and response.status_code == 200:
+                    raw = await completed(response, guard)
+                else:
+                    data = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        data.extend(chunk)
+                        if len(data) > MAX_RESPONSE_BYTES:
+                            raise ProjectError("The AI response exceeded the size limit.")
+                    try:
+                        raw = json.loads(data)
+                    except (ValueError, UnicodeDecodeError):
+                        raw = {}
+                    if response.status_code != 200:
+                        failure(response.status_code, raw, credential["mode"], guard)
+                if isinstance(raw, dict):
+                    response_data = raw
+                text = _response_text(raw, model)
         cloud_research.settle_provider_attempt(attempt, response_data)
         return text
     except asyncio.CancelledError:

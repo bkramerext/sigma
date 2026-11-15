@@ -113,28 +113,46 @@ async def session(
     }
 
 
-async def browser_socket(principal: cloud_auth.Principal | None) -> str:
-    """Only this verified user's private Unix relay; never a Docker hostname."""
+async def _gateway_socket(
+    principal: cloud_auth.Principal | None, *, filename: str
+) -> str:
+    """Resolve only the verified user's protected Unix socket, never a hostname."""
+    if filename not in {"vnc.sock", "model.sock"}:
+        raise ValueError("Unsupported private channel")
     trusted = _principal(principal)
-    _socket()  # Disabled or unsafe lab configuration fails closed.
+    _socket()  # Lab disabled or unsafe broker must fail closed.
     workspace_id = await _workspace_id(trusted)
     raw = os.environ.get("SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT", "")
     root = Path(raw)
     if not root.is_absolute() or ".." in root.parts or root == Path("/"):
         raise PersonalBrowserUnavailable("Private browser gateway is unavailable.")
-    path = root / workspace_id / "vnc.sock"
+    directory = root / workspace_id
+    path = directory / filename
     try:
+        parent_info = directory.lstat()
         info = path.lstat()
     except OSError as exc:
         raise PersonalBrowserUnavailable("Private browser gateway is unavailable.") from exc
     if (
-        not stat.S_ISSOCK(info.st_mode)
+        not stat.S_ISDIR(parent_info.st_mode)
+        or directory.is_symlink()
+        or stat.S_IMODE(parent_info.st_mode) != 0o700
+        or parent_info.st_uid != os.geteuid()
+        or not stat.S_ISSOCK(info.st_mode)
         or path.is_symlink()
-        or info.st_uid not in {0, os.geteuid()}
+        or info.st_uid != os.geteuid()
         or info.st_mode & 0o077
     ):
         raise PersonalBrowserUnavailable("Private browser gateway is unavailable.")
     return str(path)
+
+
+async def browser_socket(principal: cloud_auth.Principal | None) -> str:
+    return await _gateway_socket(principal, filename="vnc.sock")
+
+
+async def model_socket(principal: cloud_auth.Principal | None) -> str:
+    return await _gateway_socket(principal, filename="model.sock")
 
 
 async def browser_password(principal: cloud_auth.Principal | None) -> str:

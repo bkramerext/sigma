@@ -13,7 +13,7 @@ from uuid import uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research, cloud_workspaces, research_sessions
+from sigma import cloud_research, cloud_workspaces, personal_inference, research_sessions
 from sigma.agentic_evidence import now as evidence_now
 from sigma.agentic_evidence import save as save_evidence
 from sigma.openai_connection import auth_context, cloud_credential
@@ -303,7 +303,8 @@ async def _invoke(
             }
         },
     }
-    headers = {"Authorization": "Bearer " + binding["token"]}
+    is_personal = binding.get("transport") == "personal_worker"
+    headers = {} if is_personal else {"Authorization": "Bearer " + binding["token"]}
     if binding["mode"] == "chatgpt":
         del payload["max_output_tokens"]
         payload["stream"] = True
@@ -312,7 +313,7 @@ async def _invoke(
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
     attempt = None
     try:
-        if cloud_workspaces.enabled():
+        if cloud_workspaces.enabled() and not is_personal:
             if not cloud_credential(binding):
                 raise ProjectError("Sponsored cloud inference is not configured.")
             attempt = cloud_research.start_provider_attempt(
@@ -324,34 +325,41 @@ async def _invoke(
             )
         if attempt is not None:
             attempt.dispatched = True
-        async with (
-            asyncio.timeout(CALL_SECONDS),
-            httpx.AsyncClient(
-                timeout=CALL_SECONDS, follow_redirects=False, trust_env=False
-            ) as client,
-            client.stream(
-                "POST",
-                "https://api.openai.com/v1/responses",
-                headers=headers,
-                json=payload,
-            ) as response,
-        ):
-            if binding["mode"] == "chatgpt" and response.status_code == 200:
-                raw = await completed(response, guard)
-            else:
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    body.extend(chunk)
-                    if len(body) > MAX_RESPONSE:
-                        raise ProjectError(
-                            "Provider response exceeded the limit; no strategy was saved."
-                        )
-                try:
-                    raw = json.loads(body)
-                except ValueError:
-                    raw = {}
-                if response.status_code != 200:
-                    failure(response.status_code, raw, binding["mode"], guard)
+        if is_personal:
+            raw = await personal_inference.respond(
+                payload,
+                expected_binding=binding["worker_binding"],
+                request_id=uuid4().hex,
+            )
+        else:
+            async with (
+                asyncio.timeout(CALL_SECONDS),
+                httpx.AsyncClient(
+                    timeout=CALL_SECONDS, follow_redirects=False, trust_env=False
+                ) as client,
+                client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                    headers=headers,
+                    json=payload,
+                ) as response,
+            ):
+                if binding["mode"] == "chatgpt" and response.status_code == 200:
+                    raw = await completed(response, guard)
+                else:
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        body.extend(chunk)
+                        if len(body) > MAX_RESPONSE:
+                            raise ProjectError(
+                                "Provider response exceeded the limit; no strategy was saved."
+                            )
+                    try:
+                        raw = json.loads(body)
+                    except ValueError:
+                        raw = {}
+                    if response.status_code != 200:
+                        failure(response.status_code, raw, binding["mode"], guard)
         cloud_research.settle_provider_attempt(attempt, raw)
         if not isinstance(raw, dict) or raw.get("status") != "completed":
             raise ProjectError("Provider did not complete a research step; no strategy was saved.")

@@ -39,7 +39,7 @@ def main() -> None:
         root = Path(temporary)
         root.chmod(0o700)
         gateway_root = root / "gateway"
-        gateway_root.mkdir(mode=0o700)
+        gateway_root.mkdir(mode=0o711)
         with patch.dict(
             os.environ,
             {
@@ -58,6 +58,7 @@ def main() -> None:
                 assert a / "auth/auth-poc" != b / "auth/auth-poc"
                 assert stat.S_IMODE((a / "auth/auth-poc").stat().st_mode) == 0o700
                 assert chown.call_count == 2
+            assert stat.S_IMODE(gateway_root.stat().st_mode) == 0o711
             assert broker.compose_env(A)["SIGMA_STATE_DISK_MOUNT"] == str(root / A)
             assert broker.compose_env(B)["SIGMA_STATE_DISK_MOUNT"] == str(root / B)
             # An attacker cannot replace an existing account's state with a link.

@@ -11,12 +11,37 @@ async def auth_context(subject_hash: str | None) -> AuthContext:
     """Load the current local user's own credentials; never use these on hosted services."""
     from sigma import chatgpt_auth, cloud_auth
 
-    if subject_hash is None or not cloud_auth.config().local:
+    if subject_hash is None:
         return AuthContext(
             token="",
             mode="chatgpt",
             status="unavailable",
-            identity="cloud_personal_unavailable:" + (subject_hash or "unbound"),
+            identity="cloud_personal_unavailable:unbound",
+        )
+    if not cloud_auth.config().local:
+        from sigma import personal_browser, personal_inference
+
+        if personal_browser.enabled():
+            try:
+                state = await personal_inference.account()
+                if state["status"] == "verified":
+                    binding = state["binding"]
+                    return AuthContext(
+                        token="",
+                        mode="chatgpt",
+                        status="connected",
+                        identity=f"cloud_personal_worker:{subject_hash}:{binding}",
+                        account_label=state["account_label"],
+                        transport="personal_worker",
+                        worker_binding=binding,
+                    )
+            except personal_inference.PersonalInferenceUnavailable:
+                pass
+        return AuthContext(
+            token="",
+            mode="chatgpt",
+            status="unavailable",
+            identity="cloud_personal_unavailable:" + subject_hash,
         )
     selected = await chatgpt_auth.session()
     mode = selected.get("mode", "chatgpt")
