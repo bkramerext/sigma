@@ -32,7 +32,7 @@ services:
       - "127.0.0.1:${SIGMA_AUTH_POC_PORT:-16080}:6080"
     restart: "no"
     healthcheck:
-      test: [CMD, "/opt/venv/bin/python", "-c", "import os,stat,urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3); p='/run/sigma-personal'; assert not os.path.isdir(p) or all(stat.S_ISSOCK(os.lstat(os.path.join(p,n)).st_mode) for n in ('vnc.sock','model.sock'))"]
+      test: [CMD, "/opt/venv/bin/python", "/opt/sigma/auth-poc/healthcheck.py"]
       interval: 10s
       timeout: 5s
       retries: 6

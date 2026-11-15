@@ -166,6 +166,22 @@ def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
     return result.stdout.strip()
 
 
+def _socket_http_ready(path: Path, target: str) -> bool:
+    """Check that a private Unix relay accepts HTTP, not just that its inode exists."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.settimeout(3)
+            conn.connect(str(path))
+            request = (
+                f"GET {target} HTTP/1.1\r\nHost: private-relay\r\n"
+                "Connection: close\r\n\r\n"
+            )
+            conn.sendall(request.encode("ascii"))
+            return conn.recv(128).startswith(b"HTTP/1.1 200 ")
+    except OSError:
+        return False
+
+
 def _lock_for(workspace_id: str) -> threading.Lock:
     with _LOCK:
         return _LOCKS.setdefault(workspace_id, threading.Lock())
@@ -204,6 +220,11 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                     (gateway / name).is_socket() and not (gateway / name).is_symlink()
                     for name in ("vnc.sock", "model.sock")
                 )
+                if gateway_ready:
+                    gateway_ready = (
+                        _socket_http_ready(gateway / "vnc.sock", "/vnc.html")
+                        and _socket_http_ready(gateway / "model.sock", "/v1/account")
+                    )
                 if gateway_ready and local_poc():
                     # Normalize socket modes from macOS itself. Docker Desktop's
                     # Linux VM cannot chmod Unix sockets on its host bind mount.
