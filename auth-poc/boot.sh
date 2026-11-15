@@ -15,8 +15,7 @@ while [ ! -S /tmp/.X11-unix/X99 ]; do
 done
 x11vnc -display :99 -localhost -forever -shared -passwdfile /tmp/sigma-vnc-pass -quiet >/dev/null 2>&1 &
 websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/dev/null 2>&1 &
-# Sandbox flag is still a laboratory limitation; process no longer shares
-# mount namespace or credential files with the separate OAuth worker.
+# Chromium's own user-namespace sandbox is required; do not bypass it.
 exec /usr/bin/chromium --no-first-run --no-default-browser-check \
-  --disable-dev-shm-usage --no-sandbox --disable-extensions --password-store=basic \
+  --disable-dev-shm-usage --disable-extensions --password-store=basic \
   --user-data-dir=/tmp/chromium --window-size=1280,800 --app=http://127.0.0.1:8001/
