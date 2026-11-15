@@ -46,14 +46,14 @@ cleanup() {
     [[ -d "$gateway" ]] || continue
     workspace=${gateway##*/}
     [[ "$workspace" =~ ^[a-f0-9]{32}$ ]] || continue
-    SIGMA_AUTH_POC_WORKSPACE_ID="$workspace" \\
-    SIGMA_STATE_DISK_MOUNT="$state_root/$workspace" \\
-    SIGMA_AUTH_POC_GATEWAY_DIR="$gateway" \\
-    SIGMA_AUTH_POC_LOCAL_UID="$(id -u)" \\
-    SIGMA_AUTH_POC_LOCAL_GID="$(id -g)" \\
-      docker compose --project-name "sigma-personal-$workspace" \\
-        -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \\
-        -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \\
+    SIGMA_AUTH_POC_WORKSPACE_ID="$workspace" \
+    SIGMA_STATE_DISK_MOUNT="$state_root/$workspace" \
+    SIGMA_AUTH_POC_GATEWAY_DIR="$gateway" \
+    SIGMA_AUTH_POC_LOCAL_UID="$(id -u)" \
+    SIGMA_AUTH_POC_LOCAL_GID="$(id -g)" \
+      docker compose --project-name "sigma-personal-$workspace" \
+        -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+        -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \
         down --remove-orphans >/dev/null 2>&1 || true
   done
   if [[ -n "${broker_pid:-}" ]]; then
