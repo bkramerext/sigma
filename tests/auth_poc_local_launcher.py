@@ -189,6 +189,7 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn('"true" if signin or legacy_local_admin else "false"', ui)
         self.assertIn('not os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip()', ui)
         self.assertIn('not os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip()', ui)
+        self.assertIn('not os.environ.get("GOOGLE_OIDC_CLIENT_SECRET_FILE", "").strip()', ui)
         self.assertNotIn('"true" if signin or prod else "false"', ui)
         self.assertIn('"SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"', ui)
         self.assertIn('"SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1"', ui)

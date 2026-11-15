@@ -225,6 +225,7 @@ def run_ui(
                     and bool(admin_email)
                     and not os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip()
                     and not os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip()
+                    and not os.environ.get("GOOGLE_OIDC_CLIENT_SECRET_FILE", "").strip()
                 )
                 child_env["SIGMA_LOCAL_AUTO_ADMIN"] = (
                     "true" if signin or legacy_local_admin else "false"
