@@ -60,6 +60,7 @@ jobs:
           export SIGMA_AUTH_POC_GATEWAY_DIR="/tmp/sigma-poc-local-gateway"
           export SIGMA_AUTH_POC_LOCAL_UID="$(id -u)"
           export SIGMA_AUTH_POC_LOCAL_GID="$(id -g)"
+          export SIGMA_AUTH_POC_CHECKOUT_ID="$(printf 'c%.0s' {1..32})"
           docker compose --project-name sigma-poc-config-check \
             -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
             -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \
@@ -69,6 +70,8 @@ jobs:
           config = json.load(open("/tmp/sigma-poc-local-compose.json"))
           worker, browser = config["services"]["auth-poc"], config["services"]["browser"]
           assert worker["user"] == f'{os.getuid()}:{os.getgid()}'
+          assert worker["labels"]["io.sigma.personal.checkout"] == os.environ["SIGMA_AUTH_POC_CHECKOUT_ID"]
+          assert browser["labels"]["io.sigma.personal.owner"] == str(os.getuid())
           assert worker["environment"]["SIGMA_AUTH_POC_LOCAL_DOCKER"] == "1"
           ports = worker.get("ports", [])
           assert {port["target"] for port in ports} == {6080, 8002}, ports
@@ -78,6 +81,15 @@ jobs:
           assert mounts["/var/lib/sigma-poc-auth"]["type"] == "bind"
           assert "/run/sigma-personal" not in mounts
           assert not browser.get("volumes"), browser.get("volumes")
+          PY
+          # The Apple Silicon path must select arm64 BEFORE image build,
+          # while the pinned auth worker remains amd64.
+          SIGMA_AUTH_POC_BROWSER_PLATFORM=linux/arm64 docker compose             --project-name sigma-arm64-config-check             -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml             -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml             config --format json > /tmp/sigma-poc-arm64-compose.json
+          python3 - <<'PY'
+          import json
+          services = json.load(open("/tmp/sigma-poc-arm64-compose.json"))["services"]
+          assert services["browser"]["platform"] == "linux/arm64"
+          assert services["auth-poc"]["platform"] == "linux/amd64"
           PY
       - name: Verify GCE Compose overlay remains nonpublic and persistent
         shell: bash

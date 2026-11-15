@@ -265,7 +265,7 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
 
 
 function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
-  state: 'closed' | 'starting' | 'ready' | 'error';
+  state: 'closed' | 'preparing' | 'starting' | 'ready' | 'error';
   error: string;
   onClose: () => void;
   onRetry: () => void;
@@ -289,6 +289,7 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
       stays with the browser. This dialog shows an authenticated, same-origin
       view of Chromium. SIGMA relays its screen and input, while ChatGPT account
       tokens stay with the private worker.</p>
+    {state === 'preparing' && <p role="status">Preparing the isolated browser images. SIGMA remains available in Sponsored mode during first-time setup…</p>}
     {state === 'starting' && <p role="status">Starting the private sign-in browser…</p>}
     {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
       <p>{error || 'The private browser could not be started.'}</p>
@@ -330,7 +331,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
   const openingContainerBrowser = useRef(false);
   const browserLaunchSequence = useRef(0);
-  const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'starting' | 'ready' | 'error'>('closed');
+  const dialogActive = useRef(false);
+  const activatingPersonal = useRef(false);
+  const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'preparing' | 'starting' | 'ready' | 'error'>('closed');
   const [personalDialogError, setPersonalDialogError] = useState('');
   const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
   const [authorizedPreviewOwner, setAuthorizedPreviewOwner] = useState<string | null>(null);
@@ -403,6 +406,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const refreshConnection = ai.refresh;
   useEffect(() => {
     if (!localLabAccount) {
+      dialogActive.current = false;
+      browserLaunchSequence.current += 1;
       setTestAccountOwner(null);
       setAuthorizedPreviewOwner(null);
       setPersonalDialogState('closed');
@@ -434,20 +439,41 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           return;
         }
       }
-      if (personalDialogState === 'closed' || personalDialogState === 'error') return;
-      if (preview.status === 'fulfilled' && preview.value?.phase === 'connected' && personalSelectionAllowed) {
+      if (!dialogActive.current || personalDialogState === 'error') return;
+      if (preview.status === 'fulfilled' && preview.value?.phase === 'connected'
+          && personalSelectionAllowed && !activatingPersonal.current) {
         if (selectingConnection) {
           timer = setTimeout(check, 750);
           return;
         }
-        setPersonalDialogState('closed');
-        try {
-          if (selectedConnection === 'sponsored') await selectConnection?.('personal');
-          await refreshConnection('manual');
-        } catch {
-          // The connection selector reports activation failures in SIGMA.
+        // OAuth completion alone is not proof of an eligible plan or model.
+        // Keep Chromium open until the private worker verifies this account.
+        const account = await readStatus('account').catch(() => null);
+        if (controller.signal.aborted || !dialogActive.current) return;
+        if (account?.status === 'verified') {
+          activatingPersonal.current = true;
+          try {
+            if (selectedConnection === 'sponsored') await selectConnection?.('personal');
+            await refreshConnection('manual');
+            if (dialogActive.current) {
+              dialogActive.current = false;
+              setPersonalDialogState('closed');
+            }
+          } catch (cause) {
+            if (dialogActive.current) {
+              setPersonalDialogError(cause instanceof Error ? cause.message
+                : 'SIGMA could not activate Personal ChatGPT.');
+              setPersonalDialogState('error');
+            } else if (selectedConnection === 'sponsored') {
+              // The user closed the dialog while activation was completing.
+              // Do not switch a cancelled connection behind their back.
+              await selectConnection?.('sponsored').catch(() => undefined);
+            }
+          } finally {
+            activatingPersonal.current = false;
+          }
+          return;
         }
-        return;
       }
       timer = setTimeout(check, 750);
     }
@@ -554,9 +580,17 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   }
 
   async function closePersonalBrowserDialog() {
+    dialogActive.current = false;
     browserLaunchSequence.current += 1;
+    const alreadyPersonal = selectedConnection === 'personal' && connected;
+    const activationPending = activatingPersonal.current;
+    const wasReady = personalDialogState === 'ready';
     setPersonalDialogState('closed');
     setPersonalDialogError('');
+    // Closing a completed connection must not stop its inference worker.
+    // If activation is in flight, let it finish before touching the worker.
+    // Image preparation and the Sponsored SIGMA application keep running.
+    if (!wasReady || alreadyPersonal || activationPending) return;
     try {
       await stopContainerPersonalBrowser();
     } catch (cause) {
@@ -565,7 +599,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   }
 
   async function startContainerPersonalBrowser() {
-    if (openingContainerBrowser.current || personalDialogState === 'ready' || personalDialogState === 'starting') return;
+    if (openingContainerBrowser.current || personalDialogState === 'ready'
+        || personalDialogState === 'starting' || personalDialogState === 'preparing') return;
     if (testConnected) {
       try {
         await stopContainerPersonalBrowser();
@@ -578,30 +613,42 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     // The user remains in SIGMA. The iframe embeds SIGMA's authenticated VNC
     // viewer; OpenAI itself is never framed or deprived of its CSP protections.
     const sequence = ++browserLaunchSequence.current;
+    dialogActive.current = true;
     openingContainerBrowser.current = true;
     setPersonalDialogError('');
     setPersonalDialogState('starting');
     try {
-      const response = await fetch(windowAuthUrl('/api/ai/personal-browser/start'), {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: '{}',
-      });
-      const data = await response.json().catch(() => ({})) as {
-        browser_status?: string; detail?: string; error?: string;
-      };
-      if (sequence !== browserLaunchSequence.current) {
-        void stopContainerPersonalBrowser().catch(() => {});
+      while (sequence === browserLaunchSequence.current && dialogActive.current) {
+        const response = await fetch(windowAuthUrl('/api/ai/personal-browser/start'), {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: '{}',
+        });
+        const data = await response.json().catch(() => ({})) as {
+          browser_status?: string; detail?: string; error?: string;
+        };
+        if (sequence !== browserLaunchSequence.current || !dialogActive.current) {
+          // A dismissed attempt may finish while the request is in flight.
+          // Do not stop a worker concurrently being adopted as Personal.
+          if (!activatingPersonal.current && selectedConnection !== 'personal')
+            void stopContainerPersonalBrowser().catch(() => {});
+          return;
+        }
+        if (response.status === 202 && data.browser_status === 'preparing') {
+          setPersonalDialogState('preparing');
+          await new Promise<void>(resolve => window.setTimeout(resolve, 1500));
+          continue;
+        }
+        if (!response.ok)
+          throw new Error(data.detail ?? data.error ??
+            `Private ChatGPT browser startup returned HTTP ${response.status}.`);
+        if (data.browser_status !== 'ready')
+          throw new Error('Private ChatGPT browser did not become ready.');
+        setPersonalDialogState('ready');
         return;
       }
-      if (!response.ok)
-        throw new Error(data.detail ?? data.error ??
-          `Private ChatGPT browser startup returned HTTP ${response.status}.`);
-      if (data.browser_status !== 'ready')
-        throw new Error('Private ChatGPT browser did not become ready.');
-      setPersonalDialogState('ready');
     } catch (cause) {
-      if (sequence !== browserLaunchSequence.current) return;
+      if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
       setPersonalDialogError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
       setPersonalDialogState('error');
     } finally {
@@ -637,6 +684,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     if (previewAuthorized && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
       try {
         await cloudFunding.selectConnection?.('personal');
+        dialogActive.current = false;
         setPersonalDialogState('closed');
         await ai.refresh('manual');
       } catch {

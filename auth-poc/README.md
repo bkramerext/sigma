@@ -29,10 +29,13 @@ From your normal SIGMA checkout, start Docker Desktop and run:
 ./sigma start --prod
 ```
 
-The standard SIGMA launcher now prepares release-tagged isolated worker/browser
-images if needed, creates private local Unix-socket gateways, starts the
-UID-scoped broker, and launches SIGMA's existing backend and frontend.
-It also stops the broker and its containers when SIGMA exits or restarts,
+The standard SIGMA launcher starts the UID-scoped broker and SIGMA's
+existing backend and frontend promptly. It prepares architecture-matched,
+release-tagged Docker images in a supervised subprocess; the connection
+dialog displays preparation progress while Sponsored SIGMA remains usable.
+The broker creates private local Unix-socket gateways when needed.
+It reconciles orphaned Docker projects labeled for this local checkout after
+abnormal exits, and stops the broker and its containers when SIGMA exits or restarts,
 without deleting the separate user-scoped authentication state. No companion,
 custom startup script, VNC password, or Docker command is required.
 

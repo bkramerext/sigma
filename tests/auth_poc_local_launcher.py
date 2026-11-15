@@ -40,6 +40,7 @@ class LocalBrokerTests(unittest.TestCase):
                     "SIGMA_AUTH_BROKER_STATE_ROOT": str(state),
                     "SIGMA_AUTH_BROKER_GATEWAY_ROOT": str(gateway),
                     "SIGMA_RELEASE": "b" * 40,
+                    "SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32,
                 },
             ):
                 prepared_state = broker.prepare_state(workspace)
@@ -52,6 +53,7 @@ class LocalBrokerTests(unittest.TestCase):
                 self.assertEqual(env["SIGMA_AUTH_POC_LOCAL_UID"], str(os.geteuid()))
                 self.assertEqual(env["SIGMA_AUTH_POC_LOCAL_GID"], str(os.getegid()))
                 self.assertEqual(env["SIGMA_RELEASE"], "b" * 40)
+                self.assertEqual(env["SIGMA_AUTH_POC_CHECKOUT_ID"], "c" * 32)
                 args = broker.compose_args(workspace, "ps")
                 self.assertIn(str(ROOT / "deploy/auth-poc.user.local.yaml"), args)
                 self.assertEqual(args[-1], "ps")
@@ -113,10 +115,17 @@ class ProdLifecycleTests(unittest.TestCase):
                     return 0
 
             fake = BrokerProcess()
+            preparer = BrokerProcess()
+            preparer.stopped = True
 
-            def start_broker(*args, **kwargs):
+            def start_broker(args, **kwargs):
                 nonlocal active_socket
                 env = kwargs["env"]
+                if "--prepare" in args:
+                    self.assertEqual(env["SIGMA_AUTH_POC_BROWSER_PLATFORM"], "linux/arm64")
+                    self.assertNotIn("SIGMA_AUTH_POC_RPC_SEED", env)
+                    self.assertTrue(kwargs["start_new_session"])
+                    return preparer
                 self.assertEqual(env["SIGMA_AUTH_POC_REAL_SIGNIN"], "0")
                 self.assertEqual(env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"], "1")
                 self.assertEqual(env["SIGMA_PERSONAL_BROWSER_LAB_ENABLED"], "1")
@@ -139,6 +148,7 @@ class ProdLifecycleTests(unittest.TestCase):
                     mod, "_docker_environment", return_value={"SIGMA_AUTH_POC_RPC_SEED": "secret"}
                 ),
                 patch.object(mod, "_release_images", return_value=("a" * 40, "linux/arm64")),
+                patch.object(mod, "_owned_workspaces", return_value=set()),
                 patch.object(mod.Path, "home", return_value=home),
                 patch.object(mod.tempfile, "mkdtemp", return_value=str(runtime)),
                 patch.object(mod.subprocess, "Popen", side_effect=start_broker),
@@ -149,6 +159,7 @@ class ProdLifecycleTests(unittest.TestCase):
                 self.assertEqual(stat.S_IMODE((runtime / "gateways").stat().st_mode), 0o711)
                 self.assertEqual(stat.S_IMODE(running.state_root.stat().st_mode), 0o700)
                 self.assertEqual(running.env["SIGMA_AUTH_POC_BROWSER_PLATFORM"], "linux/arm64")
+                self.assertEqual((runtime / "prepare.status").read_text(), "preparing")
                 (runtime / "gateways" / ("b" * 32)).mkdir()
                 (runtime / "gateways" / "not-a-workspace").mkdir()
                 running.close()
@@ -174,10 +185,65 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn('"SIGMA_AUTH_POC_RPC_SEED": secrets.token_hex(32)', local)
         self.assertIn('"SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "false"', ui)
         self.assertIn('"SIGMA_AUTH_POC_RPC_SEED",', ui)
+        self.assertIn('"true" if signin else "false"', ui)
+        self.assertNotIn('"true" if signin or prod else "false"', ui)
         self.assertIn('"SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"', ui)
         self.assertIn('"SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1"', ui)
         api = (ROOT / "src/sigma/api.py").read_text(encoding="utf-8")
         self.assertIn('os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR")', api)
+
+
+    def test_arm64_platform_selected_before_build_and_cache_revalidated(self) -> None:
+        mod = self.module
+        observed = []
+
+        def run(args, *, env, timeout=90):
+            observed.append((list(args), dict(env)))
+            if args[:2] == ["git", "rev-parse"]:
+                return "a" * 40
+            if args[:2] == ["docker", "info"]:
+                return "aarch64"
+            return ""
+
+        with (
+            patch.object(mod, "_command", side_effect=run),
+            patch.object(mod, "_images_compatible", side_effect=[False, True]),
+        ):
+            env = {"PATH": "/usr/bin"}
+            self.assertEqual(mod._release_images(env), ("a" * 40, "linux/arm64"))
+            self.assertEqual(env["SIGMA_AUTH_POC_BROWSER_PLATFORM"], "linux/arm64")
+            compose_build = [
+                values for args, values in observed if args[-1] == "build"
+            ]
+            self.assertEqual(len(compose_build), 1)
+            self.assertEqual(compose_build[0]["SIGMA_AUTH_POC_BROWSER_PLATFORM"], "linux/arm64")
+            tags = [args for args, _ in observed if args[:2] == ["docker", "tag"]]
+            self.assertEqual(len(tags), 2)
+
+    def test_orphans_require_verified_local_owner_and_checkout(self) -> None:
+        mod = self.module
+        observed = []
+
+        def run(args, *, env, timeout=90):
+            observed.append(args)
+            return "sigma-personal-" + "a" * 32 + "\nforeign\nsigma-personal-" + "b" * 32
+
+        env = {"SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32}
+        with patch.object(mod, "_command", side_effect=run):
+            self.assertEqual(mod._owned_workspaces(env), {"a" * 32, "b" * 32})
+        self.assertIn("label=io.sigma.personal.checkout=" + "c" * 32, observed[0])
+        self.assertIn("label=io.sigma.personal.owner=" + str(os.geteuid()), observed[0])
+
+    def test_preparation_status_is_private_and_atomic(self) -> None:
+        mod = self.module
+        with tempfile.TemporaryDirectory() as temp:
+            marker = Path(temp) / "prepare.status"
+            mod._preparation_state(marker, "preparing")
+            self.assertEqual(marker.read_text(), "preparing")
+            mod._preparation_state(marker, "ready")
+            self.assertEqual(marker.read_text(), "ready")
+            self.assertEqual(stat.S_IMODE(marker.stat().st_mode), 0o600)
+            self.assertFalse(marker.with_suffix(".next").exists())
 
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
