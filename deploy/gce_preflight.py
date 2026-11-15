@@ -741,6 +741,14 @@ class Preflight:
             "--format",
             "json",
         ]
+        auth_lab = self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true"
+        if auth_lab:
+            argv[9:9] = [
+                "-f",
+                str(self.repository / "deploy/auth-poc.compose.yaml"),
+                "-f",
+                str(self.repository / "deploy/auth-poc.gce.yaml"),
+            ]
         try:
             result = self.command(
                 argv,
@@ -795,6 +803,27 @@ class Preflight:
                 and all(
                     edge_dependencies[name].get("condition") == "service_healthy"
                     for name in ("backend", "frontend")
+                )
+                and (
+                    not auth_lab
+                    or (
+                        {"auth-poc", "browser"}.issubset(services)
+                        and not services["auth-poc"].get("ports")
+                        and not services["browser"].get("ports")
+                        and not services["browser"].get("volumes")
+                        and services["auth-poc"].get("read_only") is True
+                        and services["browser"].get("read_only") is True
+                        and services["auth-poc"].get("environment", {}).get(
+                            "SIGMA_AUTH_POC_REAL_SIGNIN"
+                        ) == "0"
+                        and volumes["auth-poc-state"]["driver_opts"]["device"]
+                        == "/srv/sigma-state/auth/auth-poc"
+                        and services["browser"].get("network_mode") == "service:auth-poc"
+                        and all(
+                            bool(services[name].get("healthcheck", {}).get("test"))
+                            for name in ("auth-poc", "browser")
+                        )
+                    )
                 )
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
