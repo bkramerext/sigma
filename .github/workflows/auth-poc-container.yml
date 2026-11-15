@@ -146,7 +146,7 @@ jobs:
           assert service["read_only"] is True
           assert service["user"] == "10001:10001"
           assert service["environment"]["SIGMA_AUTH_POC_REAL_SIGNIN"] == "0"
-          assert service["networks"] == ["personal-lab"]
+          assert set(service["networks"]) == {"personal-lab"}
           mounts = {mount["target"]: mount for mount in service["volumes"]}
           assert mounts["/run/sigma-personal-broker"]["read_only"] is True
           assert mounts["/run/sigma-personal-gateways"]["read_only"] is True
