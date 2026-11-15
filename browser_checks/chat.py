@@ -107,7 +107,12 @@ with sync_playwright() as playwright:
         route.continue_()
 
     page.route("**/api/**", respond)
-    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
+    page.goto(ORIGIN + "/", wait_until="networkidle")
+    expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
+    page.goto(ORIGIN + "/?brainstorm=1", wait_until="networkidle")
+    expect(page).to_have_url(ORIGIN + "/")
+    page.get_by_role("button", name="Brainstorm", exact=True).click()
+    expect(page).to_have_url(ORIGIN + "/brainstorm")
     expect(page.locator(".chat-page-header h1")).to_have_text("Brainstorm")
     expect(page.locator(".project-art-header .project-header-art")).to_be_visible()
     assert page.locator(".chat-home-link").count() == 0

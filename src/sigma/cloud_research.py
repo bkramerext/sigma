@@ -993,11 +993,11 @@ def provider_request_input_bytes(payload: Any) -> int:
     """Return a conservative UTF-8 bound for all billable structured input."""
     if not isinstance(payload, dict):
         raise CloudResearchUnavailable("Cloud inference request is invalid.")
-    # Responses charges for instructions, input, and structured-output format
-    # content. Keep all three in the same deterministic encoding used by the
-    # request; transport and sampling metadata are not prompt input.
+    # Responses charges for instructions, input, and optional text-format
+    # content. Count every supplied billable field in the same deterministic
+    # encoding as the request; transport and sampling metadata are not prompt input.
     billable = {key: payload[key] for key in ("instructions", "input", "text") if key in payload}
-    if not all(key in billable for key in ("instructions", "input", "text")):
+    if not all(key in billable for key in ("instructions", "input")):
         raise CloudResearchUnavailable("Cloud inference request is incomplete.")
     try:
         encoded = json.dumps(billable, ensure_ascii=False, separators=(",", ":")).encode("utf-8")

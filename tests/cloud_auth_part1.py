@@ -21,16 +21,88 @@ class FirstMetadataFailureGoogleClient(GoogleClient):
 
 
 class CloudAuthTests(CloudAuthFixture):
-    def test_hosted_brainstorm_api_is_unavailable_before_authentication(self):
+    def test_hosted_brainstorm_api_requires_member_and_preserves_origin_guard(self):
+        """The hidden UI route is discovery, not API authorization."""
+        self.client.base_url = "https://127.0.0.1"
         for method, path in (
             ("post", "/api/chat/session"),
             ("post", "/api/chat/message"),
             ("get", "/api/chat/config"),
             ("post", "/api/chat/turn"),
         ):
-            response = getattr(self.client, method)(path)
-            self.assertEqual(response.status_code, 404, (method, path, response.text))
-            self.assertIn("running SIGMA locally", response.json()["error"])
+            response = getattr(self.client, method)(path, headers={"Origin": ORIGIN})
+            self.assertEqual(response.status_code, 401, (method, path, response.text))
+
+        self.assertEqual(self.finish().status_code, 303)
+        unauthenticated_origin = self.client.post("/api/chat/session")
+        self.assertEqual(unauthenticated_origin.status_code, 403)
+
+        configuration = {
+            "available": True,
+            "message": "Ready.",
+            "binding": "fixture-sponsored",
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "low",
+            "models": [{"id": "gpt-6.1-sol", "efforts": ["low"]}],
+        }
+        conversation_id = str(uuid4())
+        turn_body = {
+            "conversation_id": conversation_id,
+            "expected_binding": "fixture-sponsored",
+            "speaker": "ai_1",
+            "messages": [{"speaker": "human", "text": "Find a new approach."}],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "low",
+        }
+        with (
+            patch("sigma.chat.configuration", new=AsyncMock(return_value=configuration)),
+            patch(
+                "sigma.chat_transcripts.open_transcript",
+                return_value={"conversation_id": conversation_id, "transcript_path": "/fixture.md"},
+            ),
+            patch("sigma.chat_transcripts.append_message") as append,
+            patch("sigma.chat.respond", new=AsyncMock(return_value="AI #1 reply.")) as respond,
+        ):
+            config = self.client.get("/api/chat/config")
+            session = self.client.post("/api/chat/session", headers={"Origin": ORIGIN})
+            message = self.client.post(
+                "/api/chat/message",
+                json={"conversation_id": conversation_id, "speaker": "human", "text": "Hello."},
+                headers={"Origin": ORIGIN},
+            )
+            turn = self.client.post("/api/chat/turn", json=turn_body, headers={"Origin": ORIGIN})
+        self.assertEqual(config.status_code, 200, config.text)
+        self.assertTrue(config.json()["available"])
+        self.assertEqual(session.status_code, 200, session.text)
+        self.assertEqual(session.json()["conversation_id"], conversation_id)
+        self.assertEqual(message.status_code, 204, message.text)
+        append.assert_called_once_with(conversation_id, "human", "Hello.")
+        self.assertEqual(turn.status_code, 200, turn.text)
+        self.assertIn('"type": "complete"', turn.text)
+        self.assertIn("AI #1 reply.", turn.text)
+        respond.assert_awaited_once()
+        call = respond.await_args
+        assert call is not None
+        self.assertEqual(call.kwargs["speaker"], "ai_1")
+        self.assertEqual(call.kwargs["expected_binding"], "fixture-sponsored")
+
+    def test_hosted_brainstorm_uninvited_user_cannot_use_inference_or_transcripts(self):
+        self.client.base_url = "https://127.0.0.1"
+        login = self.finish(email="guest@example.org", subject="guest-subject")
+        self.assertEqual(login.status_code, 303)
+        # Hosted SIGMA denies uninvited identities instead of issuing a guest
+        # member session. A redirect/denied identity is not AI authorization.
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, login.cookies)
+        status = self.client.get("/api/cloud-auth/status").json()
+        self.assertFalse(status["authenticated"])
+        for method, path in (
+            ("get", "/api/chat/config"),
+            ("post", "/api/chat/session"),
+            ("post", "/api/chat/message"),
+            ("post", "/api/chat/turn"),
+        ):
+            result = getattr(self.client, method)(path, headers={"Origin": ORIGIN})
+            self.assertEqual(result.status_code, 401, (method, path, result.text))
 
     def test_hosted_personal_chatgpt_notice_is_explicitly_configurable_and_local_stays_off(self):
         with patch.dict(os.environ, {"SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": "true"}):

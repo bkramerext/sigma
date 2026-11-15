@@ -1190,13 +1190,6 @@ async def middleware(request: Request, call_next):
     if not cfg.enabled:
         return await call_next(request)
     path = request.url.path
-    # Brainstorm is a local-only feature. Reject every API method before
-    # authentication so hosted members, guests, and anonymous callers cannot
-    # reach the local transcript service through a direct API request.
-    if not cfg.local and path.startswith("/api/chat/"):
-        return JSONResponse(
-            {"error": "Brainstorm is available when running SIGMA locally."}, status_code=404
-        )
     if public_sample_paper_path(request.method, path):
         return await call_next(request)
     public = (
@@ -1408,7 +1401,7 @@ async def middleware(request: Request, call_next):
             safe_evidence_mutation = evidence_enabled_path
         elif request.method == "DELETE":
             safe_evidence_mutation = evidence_id_path
-        if path.startswith(("/api/ai/", "/api/cloud-research/")) or (
+        if path.startswith(("/api/ai/", "/api/chat/", "/api/cloud-research/")) or (
             project_write
             and path not in safe_project_writes
             and not mock_session_control
