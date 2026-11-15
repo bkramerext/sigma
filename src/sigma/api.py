@@ -181,12 +181,6 @@ def _cleanup_research_qa_task(key: tuple[str, str], task: asyncio.Task[dict[str,
 # admin endpoints do not access workspace data.
 app.router.dependencies.append(Depends(cloud_workspace_scope))
 
-# Explicitly opt-in, administrator-only remote browser experiment.
-# Its routes are covered by the same cloud authentication middleware.
-from sigma.auth_browser_poc_api import router as auth_browser_poc_router
-
-app.include_router(auth_browser_poc_router)
-
 
 class ProjectTypeBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -3568,3 +3562,8 @@ def forget_recent_view(body: ForgetRecentRequest, path: str | None = None):
 
 
 app.include_router(cloud_auth.router)
+
+# Attach the opt-in browser POC after all normal API routes are registered.
+from sigma.auth_browser_poc_api import router as auth_browser_poc_router
+
+app.include_router(auth_browser_poc_router)
