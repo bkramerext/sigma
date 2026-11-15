@@ -18,7 +18,7 @@ password=$(docker compose -f deploy/auth-poc.compose.yaml exec -T browser cat /t
 printf '\nSIGMA containerized ChatGPT POC is ready.\n'
 printf 'Open http://127.0.0.1:${port}/vnc.html\n'
 printf 'Remote browser password: %s\n' "$password"
-printf 'In the remote Chromium, click Open ChatGPT account chooser.\n'
+printf 'Synthetic lab only: real OpenAI sign-in is disabled pending security review.\n'
 printf 'Stop with: docker compose -f deploy/auth-poc.compose.yaml down\n'
 if command -v open >/dev/null 2>&1; then
   open "http://127.0.0.1:16080/vnc.html"
