@@ -120,7 +120,7 @@ class ProdLifecycleTests(unittest.TestCase):
                 self.assertEqual(env["SIGMA_AUTH_POC_REAL_SIGNIN"], "0")
                 self.assertEqual(env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"], "1")
                 self.assertEqual(env["SIGMA_PERSONAL_BROWSER_LAB_ENABLED"], "1")
-                self.assertRegex(env["SIGMA_AUTH_POC_RPC_SEED"], r"[0-9a-f]{64}\\Z")
+                self.assertRegex(env["SIGMA_AUTH_POC_RPC_SEED"], r"[0-9a-f]{64}\Z")
                 self.assertNotEqual(env["SIGMA_AUTH_POC_RPC_SEED"], "secret")
                 active_socket = socket.socket(socket.AF_UNIX)
                 active_socket.bind(env["SIGMA_AUTH_BROKER_SOCKET"])
