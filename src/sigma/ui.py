@@ -168,7 +168,10 @@ def run_ui(
                         )
 
                         personal_runtime = LocalPersonalRuntime.start()
-                        print("Local Personal browser ready (synthetic authorization only).", flush=True)
+                        print(
+                            "Local Personal browser ready (synthetic authorization only).",
+                            flush=True,
+                        )
                     except (LocalPersonalUnavailable, OSError, RuntimeError) as exc:
                         print(
                             f"Personal container unavailable: {exc} "
