@@ -206,7 +206,9 @@ def run_ui(
                 # This launcher owns its API process. Never let a shell-level
                 # Vite proxy override route browser sign-ins to another backend.
                 child_env["SIGMA_API_TARGET"] = "http://127.0.0.1:8000"
-                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
+                # Preserve the local Google admin session behavior of the former
+                # real-signin-preview launcher without requiring --signin.
+                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin or prod else "false"
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
                 # A presentation-only rehearsal. Authentication, credentials and inference stay local.
