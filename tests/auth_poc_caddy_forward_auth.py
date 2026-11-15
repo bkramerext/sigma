@@ -165,7 +165,11 @@ def main() -> None:
             assert (
                 _assert_http(
                     base + "/__personal_lab__/",
-                    headers={"Cookie": "sigma_admin=ok", "Authorization": "Bearer private"},
+                    headers={
+                        "Cookie": "sigma_admin=ok",
+                        "Authorization": "Bearer private",
+                        "X-Sigma-Personal-Lab-Edge": "attacker-supplied",
+                    },
                     expected=200,
                 )
                 == b"PRIVATE_PREVIEW_OK"

@@ -12,7 +12,6 @@ handle @personal_lab {
 		header_up -X-Forwarded-Authorization
 		header_up -X-Api-Key
 		header_up -X-OpenAI-Api-Key
-		header_up -X-Sigma-Personal-Lab-Edge
 		header_up X-Sigma-Personal-Lab-Edge {$SIGMA_PERSONAL_LAB_EDGE_KEY}
 		header_down -Set-Cookie
 		stream_timeout 60s
