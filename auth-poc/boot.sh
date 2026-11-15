@@ -9,9 +9,20 @@ export XDG_CACHE_HOME=/tmp/sigma-cache
 export SIGMA_CLOUD_AUTH_ENABLED=false
 export SIGMA_CLOUD_AUTH_LOCAL=false
 export SIGMA_STORAGE_BACKEND=local
+# A browser tab on the host must not be able to attach to another tab's VNC
+# session without an explicit, random per-container password.
+umask 077
+/opt/venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(9)[:12])' > /tmp/sigma-vnc-pass
 Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
 xvfb_pid=$!
-x11vnc -display :99 -localhost -forever -shared -nopw -quiet >/dev/null 2>&1 &
+# Wait for the X socket before connecting VNC to Xvfb.
+i=0
+while [ ! -S /tmp/.X11-unix/X99 ]; do
+    i=$((i+1))
+    if [ "$i" -ge 60 ]; then echo "Xvfb did not initialize" >&2; exit 1; fi
+    sleep 0.1
+done
+x11vnc -display :99 -localhost -forever -shared -passwdfile /tmp/sigma-vnc-pass -quiet >/dev/null 2>&1 &
 vnc_pid=$!
 websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/dev/null 2>&1 &
 web_pid=$!
