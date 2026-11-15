@@ -9,7 +9,7 @@ if ! docker info >/dev/null 2>&1; then
   exit 2
 fi
 docker compose -f deploy/auth-poc.compose.yaml up -d --build --wait
-password=$(docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc cat /tmp/sigma-vnc-pass | tr -d '\r')
+password=$(docker compose -f deploy/auth-poc.compose.yaml exec -T browser cat /tmp/sigma-vnc-pass | tr -d '\r')
 printf '\nSIGMA containerized ChatGPT POC is ready.\n'
 printf 'Open http://127.0.0.1:16080/vnc.html\n'
 printf 'Remote browser password: %s\n' "$password"
