@@ -135,8 +135,9 @@ def main() -> None:
             base = f"http://127.0.0.1:{port}"
             for _ in range(80):
                 try:
-                    _assert_http(base + "/not-found", expected=404)
-                except (OSError, AssertionError):
+                    with socket.create_connection(("127.0.0.1", port), timeout=1):
+                        pass
+                except OSError:
                     time.sleep(0.25)
                 else:
                     break
