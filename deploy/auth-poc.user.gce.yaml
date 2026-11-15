@@ -1,17 +1,12 @@
-# Dynamic, per-SIGMA-user instances; operator-controlled broker sets a verified
-# opaque workspace ID. Never publish a browser or OAuth worker port on the host.
-# All traffic from the public SIGMA site must pass an authenticated backend proxy.
+# Per-user containers remain on their own Compose-private Docker bridge.
+# NO shared sigma_application attachment and NO published browser ports.
+# The backend reaches the browser exclusively through its per-user Unix socket.
 services:
   auth-poc:
-    networks:
-      sigma-application:
-        aliases:
-          - sigma-personal-${SIGMA_AUTH_POC_WORKSPACE_ID:?workspace ID required}
     ports: !override []
+    volumes:
+      - type: bind
+        source: ${SIGMA_AUTH_POC_GATEWAY_DIR:?private per-user IPC directory required}
+        target: /run/sigma-personal
   browser:
     network_mode: "service:auth-poc"
-
-networks:
-  sigma-application:
-    external: true
-    name: sigma_application
