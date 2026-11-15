@@ -27,6 +27,44 @@ if [ -L "$env_file" ] || [ ! -f "$env_file" ]; then
   echo "Deployment environment file is missing or unsafe." >&2
   exit 1
 fi
+poc_enabled=0
+if grep -Eq '^SIGMA_AUTH_BROWSER_POC_ENABLED=(true|1|yes)
+release_count=$(grep -c '^SIGMA_RELEASE=' "$env_file" || true)
+if [ "$release_count" -ne 1 ]; then
+  echo "SIGMA_RELEASE must be set exactly once; refusing to start." >&2
+  exit 1
+fi
+python3 /opt/sigma/current/deploy/release_image.py verify "$release"
+if [ "$poc_enabled" -eq 1 ]; then
+  docker image inspect "sigma-auth-browser-poc:$release" >/dev/null
+fi
+compose() {
+  if grep -q '^SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=.' "$env_file"; then
+    set -- -f deploy/compose.gmail.yaml "$@"
+  fi
+  if [ "$poc_enabled" -eq 1 ]; then
+    set -- -f deploy/compose.auth-browser-poc.yaml "$@"
+  fi
+  docker compose --project-name sigma --env-file "$env_file" \
+    -f deploy/compose.yaml -f deploy/compose.gce.yaml "$@"
+}
+compose up -d --no-build
+python3 /opt/sigma/current/deploy/release_image.py record "$release" \
+  --backend-container "$(compose ps -q backend)" \
+  --frontend-container "$(compose ps -q frontend)"
+ "$env_file"; then
+  poc_enabled=1
+  key="$disk/auth/auth-browser-poc.key"
+  if [ -L "$key" ]; then
+    echo "Authentication experiment key path is unsafe." >&2
+    exit 1
+  fi
+  if [ ! -f "$key" ]; then
+    (umask 077; python3 -c 'import secrets; print(secrets.token_hex(32))' > "$key")
+  fi
+  [ -f "$key" ] || { echo "Authentication experiment key unavailable." >&2; exit 1; }
+  chmod 0600 "$key"
+fi
 release=$(sed -n 's/^SIGMA_RELEASE=//p' "$env_file")
 release_count=$(grep -c '^SIGMA_RELEASE=' "$env_file" || true)
 if [ "$release_count" -ne 1 ]; then
