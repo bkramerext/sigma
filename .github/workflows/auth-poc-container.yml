@@ -189,9 +189,9 @@ jobs:
         run: |
           set -euo pipefail
           docker compose -f deploy/auth-poc.compose.yaml down --remove-orphans
-          docker network create sigma_application
           state_root=$(mktemp -d)
-          chmod 0700 "$state_root"
+          gateway_root=$(mktemp -d)
+          chmod 0700 "$state_root" "$gateway_root"
           export SIGMA_RELEASE="$GITHUB_SHA"
           docker tag sigma-auth-poc:local "sigma-auth-poc:$SIGMA_RELEASE"
           docker tag sigma-auth-browser-poc:local "sigma-auth-browser-poc:$SIGMA_RELEASE"
@@ -199,20 +199,22 @@ jobs:
             for workspace in "$(printf 'a%.0s' {1..32})" "$(printf 'b%.0s' {1..32})"; do
               SIGMA_AUTH_POC_WORKSPACE_ID="$workspace" \
               SIGMA_STATE_DISK_MOUNT="$state_root/$workspace" \
+              SIGMA_AUTH_POC_GATEWAY_DIR="$gateway_root/$workspace" \
               docker compose --project-name "sigma-personal-$workspace" \
                 -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
                 -f deploy/auth-poc.user.gce.yaml down -v --remove-orphans || true
             done
-            docker network rm sigma_application || true
-            sudo rm -rf -- "$state_root"
+            sudo rm -rf -- "$state_root" "$gateway_root"
           }
           trap cleanup_broker EXIT
           sudo env \
             PATH="$PATH" \
             SIGMA_RELEASE="$SIGMA_RELEASE" \
             SIGMA_AUTH_BROKER_STATE_ROOT="$state_root" \
+            SIGMA_AUTH_BROKER_GATEWAY_ROOT="$gateway_root" \
             python3 - <<'PY'
           import importlib.util
+          import socket
           from pathlib import Path
 
           spec = importlib.util.spec_from_file_location(
@@ -230,11 +232,20 @@ jobs:
           pa = broker.state_root() / a / "auth/auth-poc"
           pb = broker.state_root() / b / "auth/auth-poc"
           assert pa != pb and pa.is_dir() and pb.is_dir()
-          print("PASS separate user Compose projects, credential volumes and restart")
+          for identifier in (a, b):
+              relay = broker.gateway_root() / identifier / "vnc.sock"
+              assert relay.is_socket(), "Missing per-user Unix relay"
+              with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                  client.settimeout(4)
+                  client.connect(str(relay))
+                  client.sendall(b"GET /vnc.html HTTP/1.1\r\nHost: private-browser\r\n\r\n")
+                  assert b"200 OK" in client.recv(512)
+          print("PASS isolated per-user Unix browser relay, state and restart")
           PY
           for workspace in "$(printf 'a%.0s' {1..32})" "$(printf 'b%.0s' {1..32})"; do
             worker=$(SIGMA_AUTH_POC_WORKSPACE_ID="$workspace" \
               SIGMA_STATE_DISK_MOUNT="$state_root/$workspace" \
+              SIGMA_AUTH_POC_GATEWAY_DIR="$gateway_root/$workspace" \
               docker compose --project-name "sigma-personal-$workspace" \
               -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
               -f deploy/auth-poc.user.gce.yaml ps -q auth-poc)
@@ -242,7 +253,21 @@ jobs:
             [[ -z $(docker port "$worker" 6080 2>/dev/null) ]] || {
               echo "Per-user browser unexpectedly published"; exit 1;
             }
+            if [[ "$workspace" == "$(printf 'a%.0s' {1..32})" ]]; then
+              worker_a="$worker"
+            else
+              worker_b="$worker"
+            fi
           done
+          docker inspect "$worker_a" "$worker_b" > /tmp/personal-worker-inspect.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open("/tmp/personal-worker-inspect.json"))
+          a = set(data[0]["NetworkSettings"]["Networks"])
+          b = set(data[1]["NetworkSettings"]["Networks"])
+          assert a and b and a.isdisjoint(b), "Users share a Docker network"
+          print("PASS: user browser pairs have disjoint networks and no host ports")
+          PY
       - name: Execute private GCE Compose overlay with restart-persistent state
         shell: bash
         run: |
