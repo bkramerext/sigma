@@ -870,6 +870,8 @@ class Preflight:
             "/opt/sigma/current/deploy/start-gce.sh",
             "gce_preflight.py",
         )
+        if self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true":
+            required += ("/opt/sigma/current/deploy/compose-gce.sh",)
         if all(item in content for item in required):
             self.add(
                 "SIGMA systemd service",
