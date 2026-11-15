@@ -116,7 +116,6 @@ class ReleaseImageTests(unittest.TestCase):
         self.assertEqual(document["source_commit"], self.first)
         self.assertIn("repo_digests", document["images"]["frontend"])
 
-
     def test_optional_auth_lab_images_are_built_and_attested_by_exact_commit(self) -> None:
         (self.repository / "auth-poc").mkdir()
         (self.repository / "auth-poc/Dockerfile").write_text("FROM scratch\nCOPY marker /marker\n")
