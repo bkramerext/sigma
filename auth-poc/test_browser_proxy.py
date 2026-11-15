@@ -52,7 +52,7 @@ async def main() -> None:
                             b"\x82\x03yes"
                         )
                     else:
-                        assert req.startswith(b"GET /app/rfb.js HTTP/1.1")
+                        assert req.startswith(b"GET /core/rfb.js HTTP/1.1")
                         body = ("// only " + subject).encode()
                         writer.write(
                             b"HTTP/1.1 200 OK\r\nContent-Type: text/javascript\r\n"
@@ -87,8 +87,8 @@ async def main() -> None:
                 patch.object(proxy.personal_browser, "browser_password", new=browser_password),
                 patch.object(proxy.cloud_auth, "config", return_value=SimpleNamespace(enabled=True, local=False, origin="https://sigma.example.test")),
             ):
-                a = await proxy.asset(request(A), "app/rfb.js")
-                b = await proxy.asset(request(B), "app/rfb.js")
+                a = await proxy.asset(request(A), "core/rfb.js")
+                b = await proxy.asset(request(B), "core/rfb.js")
                 assert a.body == b"// only subject-a"
                 assert b.body == b"// only subject-b"
                 assert a.headers["cache-control"] == "no-store"
@@ -104,16 +104,16 @@ async def main() -> None:
                     "APIWebSocketRoute",
                 ) in routes
                 window_id = "a" * 32
-                qualified = "/api/ai/personal-browser/window/" + window_id + "/app/rfb.js"
+                qualified = "/api/ai/personal-browser/window/" + window_id + "/core/rfb.js"
                 assert proxy.valid_window(request(A, qualified), window_id)
                 routed = await api.personal_browser_asset(
-                    request(A, qualified), window_id=window_id, path="app/rfb.js"
+                    request(A, qualified), window_id=window_id, path="core/rfb.js"
                 )
                 assert routed.body == b"// only subject-a"
                 assert not proxy.valid_window(request(A, qualified), "b" * 32)
                 try:
                     await api.personal_browser_asset(
-                        request(A, qualified), window_id="invalid", path="app/rfb.js"
+                        request(A, qualified), window_id="invalid", path="core/rfb.js"
                     )
                 except HTTPException as error:
                     assert error.status_code == 404

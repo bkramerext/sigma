@@ -69,21 +69,25 @@ async def view(request: Request) -> HTMLResponse:
     prefix = "/api/ai/personal-browser/window/" + (window_id or "unscoped")
     nonce = secrets.token_urlsafe(20)
     script = """
-import RFB from '__BASE__/app/rfb.js';
-const target = document.querySelector('#screen');
 const status = document.querySelector('#connection-status');
-const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const rfb = new RFB(
-  target,
-  scheme + '//' + location.host + '__BASE__/ws',
-  {credentials: {password: __PASSWORD__}}
-);
-rfb.scaleViewport = true;
-rfb.resizeSession = true;
-rfb.addEventListener('connect', () => { status.textContent = 'Browser ready'; });
-rfb.addEventListener('disconnect', () => {
-  status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
-});
+try {
+  const {default: RFB} = await import('__BASE__/core/rfb.js');
+  const target = document.querySelector('#screen');
+  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const rfb = new RFB(
+    target,
+    scheme + '//' + location.host + '__BASE__/ws',
+    {credentials: {password: __PASSWORD__}}
+  );
+  rfb.scaleViewport = true;
+  rfb.resizeSession = true;
+  rfb.addEventListener('connect', () => { status.textContent = 'Browser ready'; });
+  rfb.addEventListener('disconnect', () => {
+    status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
+  });
+} catch {
+  status.textContent = 'Could not load the private browser. Close this window and reconnect from SIGMA.';
+}
 """
     script = script.replace("__BASE__", prefix).replace("__PASSWORD__", json.dumps(password))
     html = (
@@ -126,7 +130,7 @@ async def asset(request: Request, path: str) -> Response:
     if (
         not _ASSET.fullmatch(path)
         or ".." in path.split("/")
-        or not path.startswith(("app/", "vendor/", "images/"))
+        or not path.startswith(("app/", "core/", "vendor/", "images/"))
     ):
         raise HTTPException(404, "Browser asset unavailable.")
     try:
