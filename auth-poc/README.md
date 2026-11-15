@@ -1,66 +1,69 @@
-# Portable, containerized Personal ChatGPT OAuth experiment
+# SIGMA containerized Personal ChatGPT authentication experiment
 
-**Status: local technical POC, NOT production-authorized or deployable to end users.**
-The image demonstrates the same loopback OAuth logic in a Linux/amd64 container,
-with both Chromium and SIGMA's temporary callback listener in the same network
-namespace. The Mac browser only displays a remote framebuffer using noVNC.
-The outer browser never receives the OpenAI OAuth redirect.
+**Not production-authorized. Do not expose this lab to the public Internet.**
+This experiment specifically tests OpenAI's documented loopback callback with
+a browser that actually runs inside Linux on a remote-capable Docker host.
 
-## Run on a Mac with Docker Desktop
+## Portable architecture
 
-From the SIGMA repository root, with Docker Desktop running:
+Two independent Linux/amd64 containers have different UIDs, PID namespaces
+and mount namespaces, but deliberately share a Docker network namespace:
+
+- **auth-poc worker**: FastAPI, SIGMA's existing PKCE/OIDC/token validation and
+  protected, persistent `auth-poc-state` volume. Its HTTP service binds
+  `127.0.0.1:8001` within the shared namespace. No Chromium installed.
+- **browser**: Chromium, Xvfb, x11vnc and noVNC. It has *no auth volume* and
+  no SIGMA source or Docker socket. The container uses an explicit Playwright
+  seccomp policy supporting Chromium's user-namespace sandbox.
+- The browser's `127.0.0.1` points at the worker's listener because of
+  Compose `network_mode: service:auth-poc`. The external desktop browser
+  receives only a VNC framebuffer, not the OAuth redirect.
+
+## Local reproduction
+
+Use a separate worktree on PR #872; from that worktree root with Docker running:
 
 ```sh
 ./auth-poc/start.sh
 ```
 
-This builds and launches the same Linux/amd64 image used by the cloud deployment
-POC, prints the per-container VNC password, and opens the browser-viewing page on
-macOS. Enter that password, then in the **remote** Chromium window click
-**Open ChatGPT account chooser**, complete OpenAI sign-in, and click
-**Verify Personal model access**.
+The wrapper builds both images and opens
+`http://127.0.0.1:16080/vnc.html` on macOS. Enter the temporary VNC password
+printed by the launcher, then use **the remote Chromium** to open OpenAI's
+account chooser. The **Verify model catalog** button checks the authorized
+account's models; **Test one real model response** performs a bounded
+Responses API request.
 
-Stop:
+The previous one-container experiment and its `--no-sandbox` flag must not
+be used for a real-account test. This revision requires a working Chromium
+sandbox. CI performs no OpenAI login or billable provider request.
+
+Stop and retain the test credentials only for controlled restart testing:
 
 ```sh
 docker compose -f deploy/auth-poc.compose.yaml down
 ```
 
-This deliberately leaves the named volume with private credentials, to test
-restart/refresh. To delete that POC-only data, explicitly use `down -v`.
+To explicitly discard the POC credentials: run `down -v` instead. Do not
+use an important account until the adversarial review is accepted.
 
-## Production portability requirements
+## Production acceptance gates (unmet)
 
-- The same Linux/amd64 Dockerfile, image dependencies, and loopback callback
-  run inside the Google Cloud VM. There is **no macOS localhost callback** and
-  no `uv run` or app installation for an end user.
-- NoVNC is bound ONLY to host `127.0.0.1:16080` and is unencrypted.
-  Its VNC stream is guarded by a random password kept in private container
-  tmpfs, but it does not have a per-user Google identity. **NEVER reverse-proxy or publish it to the Internet as-is.**
-  Per-user Google-identity-gated browser streaming, browser-session isolation,
-  cookie protections, and lifecycle/cleanup are required before hosted use.
-- Chromium's nested Linux namespace sandbox cannot start under the POC's
-  default Docker seccomp and `no-new-privileges` policy. The POC uses
-  `--no-sandbox` **inside a non-root, capability-dropped, read-only Docker
-  container**. This is a laboratory-only security trade-off. Production
-  needs a reviewed Chromium sandbox policy before any real multi-user rollout.
-- The existing rootless research execution daemon uses `--network=none`.
-  This authentication image deliberately needs outbound TLS and must never
-  share the research executor's capability boundary.
-- The current Compose file is a portable local profile, not yet integrated into
-  SIGMA's pinned GCE image builder, state backup, or rollout service. Those are
-  explicit remaining acceptance gates, not manual production steps.
-- A technically successful login does NOT establish that OpenAI allows an
-  interactive browser inside a multi-user hosted service to use the OSS client.
-  Do not enable in public SIGMA without resolving provider eligibility.
-
-## What constitutes a successful *local* technical POC?
-
-The OpenAI chooser appears in the container-owned Chromium window, its
-`127.0.0.1` callback reaches SIGMA's listener inside the container, and
-`Verify Personal model access` returns connected. Docker image restarts
-must not require any hand-created dependencies.
-
-This POC does not claim remote-browser production integration, model inference,
-or an OpenAI-approved hosted OAuth flow. It deliberately does not alter the
-existing production sign-in pill or cloud authentication policy.
+- The current lab is **single-user**. Google identity must bind a unique worker
+  and browser session per SIGMA user, including lifecycle and revocation.
+- noVNC is visible only on the host loopback, using HTTP plus a temporary
+  VNC password. A hosted integration must provide TLS and a Google-session
+  checked, user-specific browser stream through SIGMA's backend, without
+  publishing noVNC or relying on a password in a terminal.
+- This is a standalone Docker Compose lab: the containers are **not** in
+  SIGMA's GCE image build, attestation, health, backup, restore, and rollback
+  pipeline. Their persistent volume is not on the managed SIGMA state disk.
+- Host-side rootless Docker, macOS/ARM emulation, GCE Linux, browser lifecycle,
+  multiuser concurrency, and actual model generation still require relevant
+  tests. The image's Debian browser packages are currently not snapshot-pinned.
+- OpenAI documents the OSS SIWC flow for locally hosted and self-hosted apps
+  and directs developers interested in remotely hosted apps to its interest
+  form. Passing localhost OAuth in a container does NOT establish that this
+  arrangement is authorized for SIGMA's multi-user hosted service.
+- The lab guard `SIGMA_AUTH_POC_LAB=1` must not become a production bypass.
+  Production must fail closed until all previous gates are resolved.
