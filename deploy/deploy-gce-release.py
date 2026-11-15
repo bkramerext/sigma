@@ -314,12 +314,14 @@ class Deployment:
         ]
         services = ["backend", "frontend", "edge"]
         if self.auth_lab_enabled():
-            compose.extend([
-                "-f",
-                str(self.repository / "deploy/auth-poc.compose.yaml"),
-                "-f",
-                str(self.repository / "deploy/auth-poc.gce.yaml"),
-            ])
+            compose.extend(
+                [
+                    "-f",
+                    str(self.repository / "deploy/auth-poc.compose.yaml"),
+                    "-f",
+                    str(self.repository / "deploy/auth-poc.gce.yaml"),
+                ]
+            )
             services.extend(["auth-poc", "browser"])
         deadline = time.monotonic() + 180
         while True:
