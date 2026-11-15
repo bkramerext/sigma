@@ -158,6 +158,20 @@ class Deployment:
             summary = "; ".join(safe_failures[:8]) or "no safe check summary available"
             raise DeployFailure(f"host preflight failed (exit {result.returncode}): {summary}")
 
+    def _auth_poc_enabled(self) -> bool:
+        try:
+            lines = self.env_file.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError):
+            return False
+        return any(
+            line in {
+                "SIGMA_AUTH_BROWSER_POC_ENABLED=true",
+                "SIGMA_AUTH_BROWSER_POC_ENABLED=1",
+                "SIGMA_AUTH_BROWSER_POC_ENABLED=yes",
+            }
+            for line in lines
+        )
+
     def deploy(
         self, sha: str, backup_verified: bool, schema_compatible: bool, initial: bool = False
     ) -> str:
@@ -220,16 +234,13 @@ class Deployment:
             candidate_checkout_changed = True
             self.sync_preflight()
             self.check_preflight()
-            _call(
-                self.runner,
-                [
-                    "python3",
-                    str(self.repository / "deploy/release_image.py"),
-                    "build",
-                    str(self.repository),
-                    sha,
-                ],
-            )
+            build_cmd = [
+                "python3", str(self.repository / "deploy/release_image.py"),
+                "build", str(self.repository), sha,
+            ]
+            if self._auth_poc_enabled():
+                build_cmd.append("--auth-browser-poc")
+            _call(self.runner, build_cmd)
             if not initial and maintenance_switch.is_file():
                 _call(self.runner, ["python3", str(maintenance_switch), "on"])
                 maintenance_enabled = True
@@ -305,10 +316,15 @@ class Deployment:
             "-f",
             str(self.repository / "deploy/compose.gce.yaml"),
         ]
+        poc_enabled = self._auth_poc_enabled()
+        if poc_enabled:
+            compose.extend(["-f", str(self.repository / "deploy/compose.auth-browser-poc.yaml")])
         deadline = time.monotonic() + 180
         while True:
             waiting_for: list[str] = []
-            for service in ("backend", "frontend", "edge"):
+            for service in ("backend", "frontend", "edge") + (
+                ("auth-browser-poc",) if poc_enabled else ()
+            ):
                 container = _call(self.runner, compose + ["ps", "-q", service])
                 if not container:
                     waiting_for.append(service)
