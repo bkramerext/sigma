@@ -23,8 +23,6 @@ class FirstMetadataFailureGoogleClient(GoogleClient):
 class CloudAuthTests(CloudAuthFixture):
     def test_hosted_brainstorm_api_requires_member_and_preserves_origin_guard(self):
         """The hidden UI route is discovery, not API authorization."""
-        from sigma import chat
-
         self.client.base_url = "https://127.0.0.1"
         for method, path in (
             ("post", "/api/chat/session"),
@@ -72,9 +70,7 @@ class CloudAuthTests(CloudAuthFixture):
                 json={"conversation_id": conversation_id, "speaker": "human", "text": "Hello."},
                 headers={"Origin": ORIGIN},
             )
-            turn = self.client.post(
-                "/api/chat/turn", json=turn_body, headers={"Origin": ORIGIN}
-            )
+            turn = self.client.post("/api/chat/turn", json=turn_body, headers={"Origin": ORIGIN})
         self.assertEqual(config.status_code, 200, config.text)
         self.assertTrue(config.json()["available"])
         self.assertEqual(session.status_code, 200, session.text)
@@ -85,14 +81,16 @@ class CloudAuthTests(CloudAuthFixture):
         self.assertIn('"type": "complete"', turn.text)
         self.assertIn("AI #1 reply.", turn.text)
         respond.assert_awaited_once()
-        self.assertEqual(respond.await_args.kwargs["speaker"], "ai_1")
-        self.assertEqual(respond.await_args.kwargs["expected_binding"], "fixture-sponsored")
+        call = respond.await_args
+        assert call is not None
+        self.assertEqual(call.kwargs["speaker"], "ai_1")
+        self.assertEqual(call.kwargs["expected_binding"], "fixture-sponsored")
 
     def test_hosted_brainstorm_guest_cannot_use_inference_or_transcripts(self):
         self.client.base_url = "https://127.0.0.1"
-        self.assertEqual(
-            self.finish(email="guest@example.org", subject="guest-subject").status_code, 303
-        )
+        login = self.finish(email="guest@example.org", subject="guest-subject")
+        self.assertEqual(login.status_code, 303)
+        self.client.cookies.set("sigma_session", login.cookies["sigma_session"])
         status = self.client.get("/api/cloud-auth/status").json()
         self.assertEqual(status["user"]["role"], "guest")
         self.assertEqual(self.client.get("/api/chat/config").status_code, 403)

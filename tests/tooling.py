@@ -290,6 +290,7 @@ def check_start_cli() -> None:
                 raise AssertionError("start --brainstorm did not exit")
         launch.assert_called_once_with(
             navigate=True,
+            navigate_path="/?brainstorm=1",
             signin=False,
             mock_auth=False,
             sponsored=False,

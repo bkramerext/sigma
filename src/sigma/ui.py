@@ -123,7 +123,7 @@ def run_ui(
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
-        if navigate_path not in {"/", "/brainstorm"}:
+        if navigate_path not in {"/", "/?brainstorm=1"}:
             print("Invalid SIGMA navigation destination.", file=sys.stderr)
             return 2
         load_local_config()

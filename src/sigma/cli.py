@@ -432,6 +432,7 @@ def main() -> None:
                 mock_auth=args.mock_auth,
                 sponsored=args.sponsored,
                 prod=args.prod,
+                **({"navigate_path": "/?brainstorm=1"} if args.brainstorm else {}),
             )
         )
     if args.command == "shutdown":

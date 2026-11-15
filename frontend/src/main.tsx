@@ -9529,23 +9529,33 @@ function App() {
     recentProjectViewCache.get(projectViewCacheKey(cacheScope, path)), [cacheScope]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const route = new URL(location, window.location.origin);
-  // Visiting the hidden hosted route enables only Home discoverability in
-  // this tab for the current Google account; it never grants API access.
+  // Brainstorm is deliberately hidden on Home until someone opens its route.
+  // Local --brainstorm starts on Home with a tab-only opt-in; neither form
+  // grants API permissions or changes the selected AI account.
   const [brainstormUnlockedFor, setBrainstormUnlockedFor] = useState<string | null>(() => {
     try { return window.sessionStorage.getItem('sigma.brainstorm.unlockedFor'); }
     catch { return null; }
   });
   const hostedBrainstormMember = !!cloud?.enabled && cloud.target === 'hosted'
     && cloud.authenticated && !!cloud.user?.email && cloud.user.role !== 'guest';
+  const brainstormScope = cloud?.enabled && cloud.target === 'hosted'
+    ? (hostedBrainstormMember ? `hosted:${cloud!.user!.email.toLowerCase()}` : null)
+    : 'local';
+  const cliHomeOptIn = brainstormScope === 'local' && route.pathname === '/'
+    && route.searchParams.get('brainstorm') === '1';
   useEffect(() => {
-    if (!hostedBrainstormMember || !['/brainstorm', '/chat'].includes(route.pathname)) return;
-    const email = cloud!.user!.email.toLowerCase();
-    try { window.sessionStorage.setItem('sigma.brainstorm.unlockedFor', email); }
+    if (!brainstormScope) return;
+    if (!['/brainstorm', '/chat'].includes(route.pathname) && !cliHomeOptIn) return;
+    try { window.sessionStorage.setItem('sigma.brainstorm.unlockedFor', brainstormScope); }
     catch { /* Keep this navigation's discoverability in memory. */ }
-    setBrainstormUnlockedFor(email);
-  }, [hostedBrainstormMember, route.pathname, cloud?.user?.email]);
-  const showBrainstorm = !cloud?.enabled || cloud.target === 'local'
-    || (hostedBrainstormMember && brainstormUnlockedFor === cloud.user!.email.toLowerCase());
+    setBrainstormUnlockedFor(brainstormScope);
+    if (cliHomeOptIn) {
+      // The CLI flag opens Home, not a special URL or a new conversation.
+      window.history.replaceState(window.history.state, '', '/');
+      setLocation('/');
+    }
+  }, [brainstormScope, route.pathname, cliHomeOptIn]);
+  const showBrainstorm = !!brainstormScope && brainstormUnlockedFor === brainstormScope;
   useEffect(() => {
     if (route.pathname !== '/project') return;
     let cancelled = false;
