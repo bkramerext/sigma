@@ -14,7 +14,14 @@ From the SIGMA repository root:
 docker compose -f deploy/auth-poc.compose.yaml up --build -d
 ```
 
-Open `http://127.0.0.1:16080/vnc.html` in the Mac browser. In the remote
+Get the random VNC password printed only into this container's private tmpfs:
+
+```sh
+docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc cat /tmp/sigma-vnc-pass
+```
+
+Open `http://127.0.0.1:16080/vnc.html` in the Mac browser, click
+Connect, and enter that password. In the remote
 Chromium window, click **Open ChatGPT account chooser**, complete the OpenAI
 login, and click **Verify Personal model access**. This test only verifies the
 authentication and model-access boundary; research routing is not connected.
@@ -33,8 +40,9 @@ restart/refresh. To delete that POC-only data, explicitly use `down -v`.
 - The same Linux/amd64 Dockerfile, image dependencies, and loopback callback
   run inside the Google Cloud VM. There is **no macOS localhost callback** and
   no `uv run` or app installation for an end user.
-- NoVNC is bound ONLY to host `127.0.0.1:16080` and is unencrypted and
-  unauthenticated. **NEVER reverse-proxy or publish it to the Internet as-is.**
+- NoVNC is bound ONLY to host `127.0.0.1:16080` and is unencrypted.
+  Its VNC stream is guarded by a random password kept in private container
+  tmpfs, but it does not have a per-user Google identity. **NEVER reverse-proxy or publish it to the Internet as-is.**
   Per-user Google-identity-gated browser streaming, browser-session isolation,
   cookie protections, and lifecycle/cleanup are required before hosted use.
 - The existing rootless research execution daemon uses `--network=none`.
