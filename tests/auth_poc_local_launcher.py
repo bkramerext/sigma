@@ -172,8 +172,12 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn('"SIGMA_AUTH_POC_REAL_SIGNIN": "0"', local)
         self.assertIn('"SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "1"', local)
         self.assertIn('"SIGMA_AUTH_POC_RPC_SEED": secrets.token_hex(32)', local)
-        self.assertIn('"SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = (', ui)
+        self.assertIn('"SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "false"', ui)
         self.assertIn('"SIGMA_AUTH_POC_RPC_SEED",', ui)
+        self.assertIn('"SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"', ui)
+        self.assertIn('"SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1"', ui)
+        api = (ROOT / "src/sigma/api.py").read_text(encoding="utf-8")
+        self.assertIn('os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR")', api)
 
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
