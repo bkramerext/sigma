@@ -57,16 +57,16 @@ async def view(request: Request) -> HTMLResponse:
         raise HTTPException(503, "Private browser is unavailable.") from exc
 
     window_id = cloud_auth._window_id(request)
-    search = "?sigma_window=" + window_id if window_id else ""
+    prefix = "/api/ai/personal-browser/window/" + (window_id or "unscoped")
     nonce = secrets.token_urlsafe(20)
     script = """
-import RFB from '/api/ai/personal-browser/app/rfb.js';
+import RFB from '__BASE__/app/rfb.js';
 const target = document.querySelector('#screen');
 const status = document.querySelector('#connection-status');
 const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const rfb = new RFB(
   target,
-  scheme + '//' + location.host + '/api/ai/personal-browser/ws' + __SEARCH__,
+  scheme + '//' + location.host + '__BASE__/ws',
   {credentials: {password: __PASSWORD__}}
 );
 rfb.scaleViewport = true;
@@ -76,9 +76,7 @@ rfb.addEventListener('disconnect', () => {
   status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
 });
 """
-    script = script.replace("__PASSWORD__", json.dumps(password)).replace(
-        "__SEARCH__", json.dumps(search)
-    )
+    script = script.replace("__BASE__", prefix).replace("__PASSWORD__", json.dumps(password))
     html = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
