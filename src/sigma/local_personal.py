@@ -1,7 +1,7 @@
 """Local --prod supervisor for SIGMA's isolated Personal browser experiment.
 
-Only the developer's local SIGMA launcher starts this broker. It never enables
-real OpenAI authorization, never publishes a browser port, and never applies
+Only the developer's local SIGMA launcher starts this broker. It enables real local authorization only in the explicitly local --prod
+workflow, never publishes a browser port, and never applies
 the local Docker UID overlay on hosted infrastructure.
 """
 
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import shutil
 import stat
 import subprocess
@@ -133,7 +134,9 @@ class LocalPersonalRuntime:
     def start(cls) -> LocalPersonalRuntime:
         env = _docker_environment()
         release, platform = _release_images(env)
-        state_root = Path.home() / ".sigma" / "personal-poc-state"
+        # Use the established real local preview state. SIGMA --prod must
+        # preserve the account already authorized through the old launcher.
+        state_root = Path.home() / ".sigma" / "personal-signin-preview-state"
         _private_directory(state_root, 0o700)
         runtime = Path(tempfile.mkdtemp(prefix="sigma-personal-local-"))
         broker: subprocess.Popen[bytes] | None = None
@@ -149,14 +152,17 @@ class LocalPersonalRuntime:
                     "SIGMA_AUTH_BROKER_SOCKET": str(runtime / "broker" / "broker.sock"),
                     "SIGMA_AUTH_BROKER_CLIENT_UID": str(os.geteuid()),
                     "SIGMA_AUTH_POC_BROWSER_PLATFORM": platform,
-                    "SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "0",
+                    "SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "1",
                     "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
                     "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
                     "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": str(runtime / "broker" / "broker.sock"),
                     "SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT": str(runtime / "gateways"),
+                    # Broker derives a separate HMAC key per Google workspace.
+                    # SIGMA forwards only authorized, bounded Personal RPCs.
+                    "SIGMA_AUTH_POC_RPC_SEED": secrets.token_hex(32),
                 }
             )
-            env.pop("SIGMA_AUTH_POC_RPC_SEED", None)
+            # The RPC seed is intentionally short lived: rederived per launch.
             broker = subprocess.Popen(
                 [sys.executable, str(ROOT / "auth-poc" / "host_broker.py")],
                 cwd=ROOT,
