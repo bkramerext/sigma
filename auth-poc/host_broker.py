@@ -34,6 +34,15 @@ _LOCKS: dict[str, threading.Lock] = {}
 _LOCK = threading.Lock()
 
 
+def local_poc() -> bool:
+    """Explicit single-machine POC: host user owns the private relay mounts.
+
+    Production uses worker UID 10001; macOS Docker Desktop needs the launching
+    user's mapped UID on bind mounts. The browser remains a separate UID.
+    """
+    return os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
+
+
 def validate_id(workspace_id: str) -> str:
     if not isinstance(workspace_id, str) or not WORKSPACE_ID.fullmatch(workspace_id):
         raise ValueError("Invalid workspace identity")
@@ -76,9 +85,11 @@ def prepare_state(workspace_id: str) -> Path:
         current = current / part
         _verify_directory(current)
     # The worker needs access to its isolated state, not to sibling workspaces.
+    worker_uid = os.geteuid() if local_poc() else 10001
+    worker_gid = os.getegid() if local_poc() else 10001
     if os.geteuid() == 0:
-        os.chown(current, 10001, 10001)
-    elif current.stat().st_uid != 10001:
+        os.chown(current, worker_uid, worker_gid)
+    elif current.stat().st_uid != worker_uid:
         raise ValueError("Browser worker volume ownership is unavailable")
     return root / workspace_id
 
@@ -101,18 +112,21 @@ def prepare_gateway(workspace_id: str) -> Path:
     _verify_traversable_root(root)
     child = root / workspace_id
     _verify_directory(child)
+    worker_uid = os.geteuid() if local_poc() else 10001
+    worker_gid = os.getegid() if local_poc() else 10001
     if os.geteuid() == 0:
-        os.chown(child, 10001, 10001)
-    elif child.stat().st_uid != 10001:
+        os.chown(child, worker_uid, worker_gid)
+    elif child.stat().st_uid != worker_uid:
         raise ValueError("Browser relay ownership is unavailable")
     return child
 
 
 def compose_args(workspace_id: str, *args: str) -> list[str]:
     validate_id(workspace_id)
+    files = FILES + ((ROOT / "deploy/auth-poc.user.local.yaml",) if local_poc() else ())
     return [
         "docker", "compose", "--project-name", "sigma-personal-" + workspace_id,
-        *(item for path in FILES for item in ("-f", str(path))),
+        *(item for path in files for item in ("-f", str(path))),
         *args,
     ]
 
@@ -122,7 +136,7 @@ def compose_env(workspace_id: str) -> dict[str, str]:
     release = os.environ.get("SIGMA_RELEASE", "")
     if not RELEASE.fullmatch(release):
         raise ValueError("The exact release SHA is not configured")
-    return {
+    env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": os.environ.get("HOME", "/tmp"),
         "SIGMA_RELEASE": release,
@@ -130,6 +144,10 @@ def compose_env(workspace_id: str) -> dict[str, str]:
         "SIGMA_AUTH_POC_WORKSPACE_ID": workspace_id,
         "SIGMA_AUTH_POC_GATEWAY_DIR": str(gateway_root() / workspace_id),
     }
+    if local_poc():
+        env["SIGMA_AUTH_POC_LOCAL_UID"] = str(os.geteuid())
+        env["SIGMA_AUTH_POC_LOCAL_GID"] = str(os.getegid())
+    return env
 
 
 def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
