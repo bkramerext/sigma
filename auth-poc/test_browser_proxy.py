@@ -85,7 +85,7 @@ async def main() -> None:
                 ),
                 patch.object(proxy.personal_browser, "browser_socket", new=browser_socket),
                 patch.object(proxy.personal_browser, "browser_password", new=browser_password),
-                patch.object(proxy.cloud_auth, "config", return_value=SimpleNamespace(enabled=True, origin="https://sigma.example.test")),
+                patch.object(proxy.cloud_auth, "config", return_value=SimpleNamespace(enabled=True, local=False, origin="https://sigma.example.test")),
             ):
                 a = await proxy.asset(request(A), "app/rfb.js")
                 b = await proxy.asset(request(B), "app/rfb.js")
