@@ -151,11 +151,18 @@ jobs:
           finally:
               # Chromium may stay resident after a successful navigation.
               # Stop its entire disposable test process group.
-              os.killpg(browser.pid, signal.SIGTERM)
+              if browser.poll() is None:
+                  try:
+                      os.killpg(browser.pid, signal.SIGTERM)
+                  except ProcessLookupError:
+                      pass
               try:
                   browser.wait(timeout=5)
               except subprocess.TimeoutExpired:
-                  os.killpg(browser.pid, signal.SIGKILL)
+                  try:
+                      os.killpg(browser.pid, signal.SIGKILL)
+                  except ProcessLookupError:
+                      pass
                   browser.wait(timeout=5)
           print("PASS: sandboxed Chromium invoked worker's OAuth callback")
           PY
