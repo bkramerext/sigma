@@ -220,16 +220,16 @@ class Deployment:
             candidate_checkout_changed = True
             self.sync_preflight()
             self.check_preflight()
-            _call(
-                self.runner,
-                [
-                    "python3",
-                    str(self.repository / "deploy/release_image.py"),
-                    "build",
-                    str(self.repository),
-                    sha,
-                ],
-            )
+            build_command = [
+                "python3",
+                str(self.repository / "deploy/release_image.py"),
+                "build",
+                str(self.repository),
+                sha,
+            ]
+            if self.auth_lab_enabled():
+                build_command.append("--auth-poc")
+            _call(self.runner, build_command)
             if not initial and maintenance_switch.is_file():
                 _call(self.runner, ["python3", str(maintenance_switch), "on"])
                 maintenance_enabled = True
@@ -292,6 +292,13 @@ class Deployment:
         )
         return "deployed"
 
+    def auth_lab_enabled(self) -> bool:
+        """Only the deliberately configured, nonpublic synthetic lab is deployed."""
+        try:
+            return b"SIGMA_AUTH_POC_LAB_ENABLED=true" in self.env_file.read_bytes().splitlines()
+        except OSError as exc:
+            raise DeployFailure("cannot read reviewed auth-lab deployment setting") from exc
+
     def verify_health(self, sha: str) -> None:
         compose = [
             "docker",
@@ -305,10 +312,19 @@ class Deployment:
             "-f",
             str(self.repository / "deploy/compose.gce.yaml"),
         ]
+        services = ["backend", "frontend", "edge"]
+        if self.auth_lab_enabled():
+            compose.extend([
+                "-f",
+                str(self.repository / "deploy/auth-poc.compose.yaml"),
+                "-f",
+                str(self.repository / "deploy/auth-poc.gce.yaml"),
+            ])
+            services.extend(["auth-poc", "browser"])
         deadline = time.monotonic() + 180
         while True:
             waiting_for: list[str] = []
-            for service in ("backend", "frontend", "edge"):
+            for service in services:
                 container = _call(self.runner, compose + ["ps", "-q", service])
                 if not container:
                     waiting_for.append(service)
@@ -324,7 +340,8 @@ class Deployment:
                     self.runner,
                     ["docker", "inspect", "--format", "{{.Config.Image}}", container],
                 )
-                expected_image = f"sigma-{service}:{sha}" if service != "edge" else None
+                image_name = "auth-browser-poc" if service == "browser" else service
+                expected_image = f"sigma-{image_name}:{sha}" if service != "edge" else None
                 if expected_image and image != expected_image:
                     raise DeployFailure(
                         f"{service} container image does not match selected release"
