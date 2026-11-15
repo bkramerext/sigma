@@ -50,10 +50,12 @@ def build(repository: Path, requested: str, runner=_run, *, auth_poc: bool = Fal
             ("frontend", "deploy/frontend.Dockerfile"),
         ]
         if auth_poc:
-            specifications.extend([
-                ("auth-poc", "auth-poc/Dockerfile"),
-                ("auth-browser-poc", "auth-poc/browser.Dockerfile"),
-            ])
+            specifications.extend(
+                [
+                    ("auth-poc", "auth-poc/Dockerfile"),
+                    ("auth-browser-poc", "auth-poc/browser.Dockerfile"),
+                ]
+            )
         for name, dockerfile in specifications:
             args = [
                 "docker",
@@ -98,10 +100,11 @@ def record(
     if set(containers) not in (mandatory, mandatory | optional) or any(
         not value for value in containers.values()
     ):
-        raise ValueError("recording requires the backend/frontend and both optional auth POC containers")
+        raise ValueError(
+            "recording requires the backend/frontend and both optional auth POC containers"
+        )
     images = {
-        name: image_info(f"sigma-{name}:{requested}", requested, runner)
-        for name in containers
+        name: image_info(f"sigma-{name}:{requested}", requested, runner) for name in containers
     }
     for name, container_id in containers.items():
         container = json.loads(
@@ -134,10 +137,7 @@ def verify(requested: str, runner=_run, *, auth_poc: bool = False) -> dict[str, 
     names = ["backend", "frontend"]
     if auth_poc:
         names.extend(["auth-poc", "auth-browser-poc"])
-    return {
-        name: image_info(f"sigma-{name}:{requested}", requested, runner)
-        for name in names
-    }
+    return {name: image_info(f"sigma-{name}:{requested}", requested, runner) for name in names}
 
 
 def main() -> None:
@@ -166,10 +166,12 @@ def main() -> None:
         if args.auth_poc_container or args.auth_browser_poc_container:
             if not args.auth_poc_container or not args.auth_browser_poc_container:
                 parser.error("both auth POC container IDs are required")
-            containers.update({
-                "auth-poc": args.auth_poc_container,
-                "auth-browser-poc": args.auth_browser_poc_container,
-            })
+            containers.update(
+                {
+                    "auth-poc": args.auth_poc_container,
+                    "auth-browser-poc": args.auth_browser_poc_container,
+                }
+            )
         path = record(args.sha, args.directory, containers)
         print(f"PASS: verified image source labels and recorded image IDs at {path}")
     else:
