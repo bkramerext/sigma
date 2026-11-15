@@ -184,6 +184,8 @@ jobs:
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_security.py
       - name: Verify backend user binding through real Unix socket
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_broker_client.py
+      - name: Verify identity-bound HTTPS browser proxy without any credentials
+        run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_browser_proxy.py
       - name: Exercise two independent user-owned Docker projects
         shell: bash
         run: |
