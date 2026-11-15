@@ -15,6 +15,7 @@ import socket
 import socketserver
 import stat
 import struct
+import sys
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler
@@ -226,13 +227,33 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                         and _socket_http_ready(gateway / "model.sock", "/v1/account")
                     )
                 if gateway_ready and local_poc():
-                    # Normalize socket modes from macOS itself. Docker Desktop's
-                    # Linux VM cannot chmod Unix sockets on its host bind mount.
-                    for name in ("vnc.sock", "model.sock"):
-                        socket_path = gateway / name
-                        os.chmod(socket_path, 0o600)
-                        if stat.S_IMODE(socket_path.lstat().st_mode) != 0o600:
-                            gateway_ready = False
+                    if sys.platform == "darwin":
+                        # Docker Desktop exposes socket nodes as 0755 and ignores
+                        # chmod. The 0700 owner-only parent directory is the MAC:
+                        # require it, and require each socket to belong to this user.
+                        parent = gateway.lstat()
+                        gateway_ready = (
+                            stat.S_ISDIR(parent.st_mode)
+                            and not gateway.is_symlink()
+                            and stat.S_IMODE(parent.st_mode) == 0o700
+                            and parent.st_uid == os.geteuid()
+                        )
+                        for name in ("vnc.sock", "model.sock"):
+                            socket_path = gateway / name
+                            info = socket_path.lstat()
+                            gateway_ready = gateway_ready and (
+                                stat.S_ISSOCK(info.st_mode)
+                                and not socket_path.is_symlink()
+                                and info.st_uid == os.geteuid()
+                                and bool(info.st_mode & stat.S_IRUSR)
+                                and bool(info.st_mode & stat.S_IWUSR)
+                            )
+                    else:
+                        for name in ("vnc.sock", "model.sock"):
+                            socket_path = gateway / name
+                            os.chmod(socket_path, 0o600)
+                            if stat.S_IMODE(socket_path.lstat().st_mode) != 0o600:
+                                gateway_ready = False
                 status = (
                     "ready"
                     if health.returncode == 0
