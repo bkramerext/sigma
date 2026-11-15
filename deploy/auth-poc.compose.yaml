@@ -46,7 +46,9 @@ services:
     read_only: true
     user: "11001:11001"
     cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:../auth-poc/chromium-seccomp.json
     pids_limit: 192
     mem_limit: 1536m
     memswap_limit: 1536m
