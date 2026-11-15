@@ -34,6 +34,20 @@ jobs:
           [[ $(docker inspect "$browser" --format '{{.HostConfig.NetworkMode}}') == container:* ]] || { echo "Browser not sharing localhost"; exit 1; }
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser python3 -c 'import urllib.request; assert urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=3).status==200'
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc sh -c '! command -v chromium'
+      - name: Verify two isolated user-scoped stacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SIGMA_AUTH_POC_PORT=16081
+          docker compose -p sigma-auth-user-b -f deploy/auth-poc.compose.yaml up -d --no-build --wait auth-poc
+          unset SIGMA_AUTH_POC_PORT
+          a=$(docker compose -f deploy/auth-poc.compose.yaml ps -q auth-poc)
+          b=$(SIGMA_AUTH_POC_PORT=16081 docker compose -p sigma-auth-user-b -f deploy/auth-poc.compose.yaml ps -q auth-poc)
+          [[ "$a" != "$b" ]] || exit 1
+          a_vol=$(docker inspect "$a" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/sigma-poc-auth"}}{{.Name}}{{end}}{{end}}')
+          b_vol=$(docker inspect "$b" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/sigma-poc-auth"}}{{.Name}}{{end}}{{end}}')
+          [[ -n "$a_vol" && -n "$b_vol" && "$a_vol" != "$b_vol" ]] || { echo "Auth volume collision across users"; exit 1; }
+          SIGMA_AUTH_POC_PORT=16081 docker compose -p sigma-auth-user-b -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_loopback.py
       - name: Verify synthetic OAuth loopback and PKCE inside container
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_loopback.py
       - name: Verify remote browser is accessible only over host loopback
@@ -58,4 +72,6 @@ jobs:
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser sh -c 'ps -ef | grep -E "chromium|Xvfb|x11vnc|websockify" | head -25' || true
       - name: Clean up POC containers and credentials
         if: always()
-        run: docker compose -f deploy/auth-poc.compose.yaml down -v --remove-orphans
+        run: |
+          SIGMA_AUTH_POC_PORT=16081 docker compose -p sigma-auth-user-b -f deploy/auth-poc.compose.yaml down -v --remove-orphans || true
+          docker compose -f deploy/auth-poc.compose.yaml down -v --remove-orphans
