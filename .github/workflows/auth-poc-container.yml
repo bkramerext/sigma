@@ -75,6 +75,71 @@ jobs:
           SIGMA_AUTH_POC_PORT=16081 docker compose -p sigma-auth-user-b -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_loopback.py
       - name: Verify synthetic OAuth loopback and PKCE inside container
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_loopback.py
+      - name: Prove browser-to-worker callback over shared localhost
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The test helper runs only on the credential worker and exposes only
+          # an invalid-state callback target, never real OAuth material.
+          docker compose -f deploy/auth-poc.compose.yaml exec -d auth-poc \
+            /opt/venv/bin/python /opt/sigma/auth-poc/test_cross_container.py
+          docker compose -f deploy/auth-poc.compose.yaml exec -T browser python3 - <<'PY'
+          import time
+          import urllib.error
+          import urllib.request
+
+          base = "http://127.0.0.1:19091"
+          for _ in range(80):
+              try:
+                  with urllib.request.urlopen(base + "/target", timeout=1) as response:
+                      callback_url = response.read().decode("ascii")
+                  break
+              except (urllib.error.URLError, TimeoutError):
+                  time.sleep(0.1)
+          else:
+              raise AssertionError("OAuth test worker never started")
+
+          # The request originates in the distinct browser container,
+          # traverses Docker's shared network namespace, and reaches the
+          # existing ephemeral loopback callback listener.
+          with urllib.request.urlopen(callback_url, timeout=5) as response:
+              body = response.read()
+              assert response.status == 200  # Neutral callback, even on rejection.
+              assert b"Return to SIGMA" in body
+
+          with urllib.request.urlopen(base + "/done", timeout=3) as response:
+              assert response.read() == b"PASS", "Invalid state was consumed"
+          print("PASS: distinct Chromium container reached OAuth loopback listener")
+          PY
+      - name: Diagnose Chromium namespace sandbox without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Diagnostics only: isolated, networkless, disposable container.
+          # No OpenAI pages, account data, volumes or host sockets.
+          for mode in default permissive-seccomp-probe; do
+            args=(--rm --network none --read-only --cap-drop ALL
+              --security-opt no-new-privileges --pids-limit 128
+              --tmpfs /tmp:rw,nosuid,size=512m,uid=11001,gid=11001)
+            if [[ "$mode" == permissive-seccomp-probe ]]; then
+              args+=(--security-opt seccomp=unconfined)
+            fi
+            set +e
+            output=$(timeout 18 docker run "${args[@]}" \
+              --entrypoint /usr/bin/chromium sigma-auth-browser-poc:local \
+              --headless --disable-gpu --disable-dev-shm-usage --no-first-run \
+              --user-data-dir=/tmp/chromium-test --dump-dom about:blank 2>&1)
+            rc=$?
+            set -e
+            if [[ $rc -eq 0 && "$output" == *"<html"* ]]; then
+              echo "SANDBOX_PROBE $mode: chromium launched without --no-sandbox"
+            else
+              echo "SANDBOX_PROBE $mode: blocked (exit=$rc)"
+              printf '%s\\n' "$output" | tail -12
+            fi
+          done
+          # This is a diagnostic experiment, not a sandbox acceptance pass.
+          # Neither probe is used for real account sign-in or the hosted app.
       - name: Verify remote browser is accessible only over host loopback
         shell: bash
         run: |
