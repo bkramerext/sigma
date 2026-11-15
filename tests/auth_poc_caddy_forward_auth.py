@@ -95,7 +95,10 @@ def _caddy_failure(container: str, message: str) -> AssertionError:
         timeout=10,
     )
     logs = (result.stdout + result.stderr).replace(EDGE, "[redacted]")[-6000:]
-    return AssertionError(f"{message}; Caddy logs:\n{logs}")
+    return AssertionError(
+        f"{message}; auth fixture records={FixtureHandler.auth_records!r}; "
+        f"preview fixture records={FixtureHandler.preview_records!r}; Caddy logs:\n{logs}"
+    )
 
 
 def main() -> None:
@@ -110,12 +113,13 @@ def main() -> None:
         placeholder = "{$SIGMA_PERSONAL_LAB_EDGE_KEY}"
         assert snippet.count(placeholder) == 1
         snippet = snippet.replace(placeholder, EDGE)
-        snippet = snippet.replace("backend:8000", f"host.docker.internal:{fixture_port}")
-        snippet = snippet.replace(
-            "sigma-personal-lab-preview:8002", f"host.docker.internal:{preview_port}"
-        )
+        snippet = snippet.replace("backend:8000", f"127.0.0.1:{fixture_port}")
+        snippet = snippet.replace("sigma-personal-lab-preview:8002", f"127.0.0.1:{preview_port}")
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            caddy_port = listener.getsockname()[1]
         (temp / "Caddyfile").write_text(
-            ":8080 {\n"
+            f"http://127.0.0.1:{caddy_port} {{\n"
             + snippet
             + "\n@api path /api /api/*\nhandle @api {\nrespond production-api 200\n}\n}\n",
             encoding="utf-8",
@@ -127,24 +131,15 @@ def main() -> None:
             "--rm",
             "--name",
             caddy_name,
-            "--publish",
-            "127.0.0.1::8080",
-            "--add-host",
-            "host.docker.internal:host-gateway",
+            "--network",
+            "host",
             "--volume",
             f"{temp / 'Caddyfile'}:/etc/caddy/Caddyfile:ro",
             "caddy:2.9.1-alpine",
         ]
         try:
             subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
-            mapping = subprocess.run(
-                ["docker", "port", caddy_name, "8080/tcp"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            ).stdout.strip()
-            port = int(mapping.rsplit(":", 1)[1])
+            port = caddy_port
             base = f"http://127.0.0.1:{port}"
             for _ in range(80):
                 try:
