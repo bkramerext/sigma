@@ -103,7 +103,7 @@ done
 [[ -S "$SIGMA_AUTH_BROKER_SOCKET" ]] || { echo "Private Docker broker unavailable." >&2; exit 1; }
 echo "Open SIGMA, then click its existing ChatGPT pill while in Sponsored mode."
 if [[ "$SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN" == "1" ]]; then
-  echo "Local ChatGPT authorization preview. Inference is disabled."
+  echo "Local ChatGPT connection preview. You can run one explicit test request."
 else
   echo "Synthetic ChatGPT sign-in only."
 fi
