@@ -92,9 +92,7 @@ async def session(
             if action == "status":
                 response = await client.get("/v1/status", params={"workspace_id": workspace_id})
             else:
-                response = await client.post(
-                    "/v1/" + action, json={"workspace_id": workspace_id}
-                )
+                response = await client.post("/v1/" + action, json={"workspace_id": workspace_id})
             response.raise_for_status()
             payload = response.json()
     except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
