@@ -11,10 +11,15 @@ docker_desktop_bin="/Applications/Docker.app/Contents/Resources/bin"
 if [[ -x "$docker_desktop_bin/docker-credential-desktop" ]]; then
   export PATH="$docker_desktop_bin:$PATH"
 fi
-if ! docker info >/dev/null 2>&1; then
+if ! docker_arch=$(docker info --format '{{.Architecture}}' 2>/dev/null); then
   echo "Start Docker Desktop and retry." >&2
   exit 2
 fi
+case "$docker_arch" in
+  arm64|aarch64) export SIGMA_AUTH_POC_BROWSER_PLATFORM=linux/arm64 ;;
+  amd64|x86_64) export SIGMA_AUTH_POC_BROWSER_PLATFORM=linux/amd64 ;;
+  *) echo "Unsupported Docker architecture: $docker_arch" >&2; exit 2 ;;
+esac
 if ! command -v git >/dev/null || ! command -v python3 >/dev/null; then
   echo "Git and Python 3 are required for the local container POC." >&2
   exit 2
@@ -29,8 +34,8 @@ if [[ ! -d frontend/node_modules/vite || ! -d .venv ]]; then
   ./sigma setup
 fi
 
-# Build the same two images used by the hosted broker, without ever opening
-# the standalone noVNC port or allowing the Mac-local OpenAI OAuth fallback.
+# Build the isolated worker and browser images without starting them.
+# Use native Chromium on Apple Silicon so it does not depend on x86 emulation.
 echo "Preparing isolated SIGMA Personal ChatGPT containers…"
 docker compose -f deploy/auth-poc.compose.yaml build
 docker tag sigma-auth-poc:local "sigma-auth-poc:$release"

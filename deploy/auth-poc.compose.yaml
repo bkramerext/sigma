@@ -38,7 +38,7 @@ services:
       retries: 6
 
   browser:
-    platform: linux/amd64
+    platform: ${SIGMA_AUTH_POC_BROWSER_PLATFORM:-linux/amd64}
     build:
       context: ..
       dockerfile: auth-poc/browser.Dockerfile
