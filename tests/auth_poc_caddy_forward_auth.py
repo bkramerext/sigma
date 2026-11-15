@@ -107,6 +107,9 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-preview-caddy-") as directory:
         temp = Path(directory)
         snippet = (ROOT / "deploy/auth-poc.preview.caddy").read_text(encoding="utf-8")
+        placeholder = "{$SIGMA_PERSONAL_LAB_EDGE_KEY}"
+        assert snippet.count(placeholder) == 1
+        snippet = snippet.replace(placeholder, EDGE)
         snippet = snippet.replace("backend:8000", f"host.docker.internal:{fixture_port}")
         snippet = snippet.replace(
             "sigma-personal-lab-preview:8002", f"host.docker.internal:{preview_port}"
@@ -128,8 +131,6 @@ def main() -> None:
             "127.0.0.1::8080",
             "--add-host",
             "host.docker.internal:host-gateway",
-            "--env",
-            "SIGMA_PERSONAL_LAB_EDGE_KEY=" + EDGE,
             "--volume",
             f"{temp / 'Caddyfile'}:/etc/caddy/Caddyfile:ro",
             "caddy:2.9.1-alpine",
