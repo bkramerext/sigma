@@ -5,6 +5,7 @@ forwarded only after SIGMA validates the current Google session. The remote
 worker name is derived from the server's private workspace mapping, not input.
 All OpenAI OAuth and inference requests remain disabled in this synthetic POC.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -124,7 +125,9 @@ async def asset(request: Request, path: str) -> Response:
     try:
         transport = httpx.AsyncHTTPTransport(uds=socket_path)
         async with httpx.AsyncClient(
-            transport=transport, base_url="http://private-browser", timeout=6,
+            transport=transport,
+            base_url="http://private-browser",
+            timeout=6,
             follow_redirects=False,
         ) as client:
             response = await client.get("/" + path)
@@ -182,9 +185,7 @@ async def _remote_frame(reader: asyncio.StreamReader) -> tuple[bool, int, bytes]
 async def _connect_worker(socket_path: str) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
     if not socket_path.startswith("/") or ".." in socket_path.split("/"):
         raise ValueError("Unsafe browser socket")
-    reader, writer = await asyncio.wait_for(
-        asyncio.open_unix_connection(socket_path), timeout=5
-    )
+    reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(socket_path), timeout=5)
     key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
     writer.write(
         (
@@ -305,8 +306,16 @@ async def websocket_bridge(websocket: WebSocket) -> None:
             for task in tasks:
                 if not task.done():
                     task.cancel()
-    except (OSError, ValueError, UnicodeError, TimeoutError, asyncio.IncompleteReadError,
-            asyncio.LimitOverrunError, HTTPException, personal_browser.PersonalBrowserUnavailable):
+    except (
+        OSError,
+        ValueError,
+        UnicodeError,
+        TimeoutError,
+        asyncio.IncompleteReadError,
+        asyncio.LimitOverrunError,
+        HTTPException,
+        personal_browser.PersonalBrowserUnavailable,
+    ):
         pass
     finally:
         if writer is not None:
