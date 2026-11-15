@@ -408,9 +408,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: '{}',
       });
-      const data = await response.json() as { browser_status?: string; detail?: string };
-      if (!response.ok || data.browser_status !== 'ready')
-        throw new Error(data.detail ?? 'Private ChatGPT browser could not start.');
+      const data = await response.json().catch(() => ({})) as {
+        browser_status?: string; detail?: string; error?: string;
+      };
+      if (!response.ok)
+        throw new Error(data.detail ?? data.error ??
+          `Private ChatGPT browser startup returned HTTP ${response.status}.`);
+      if (data.browser_status !== 'ready')
+        throw new Error('Private ChatGPT browser did not become ready.');
       popup.location.replace(windowAuthUrl('/api/ai/personal-browser/view'));
       // Do not select Personal or show connected until real OAuth completes
       // and provider credentials are verified for this exact SIGMA user.
