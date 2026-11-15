@@ -338,6 +338,7 @@ def main() -> None:
                 "caddy:2.9.1-alpine",
             ]
             subprocess.run(rollback_command, check=True, capture_output=True, text=True, timeout=30)
+            rollback_error = "Caddy rollback route has not responded yet"
             for _ in range(80):
                 try:
                     if (
@@ -345,10 +346,19 @@ def main() -> None:
                         == PRODUCTION_FRONTEND_BODY
                     ):
                         break
-                except (AssertionError, OSError):
+                    rollback_error = (
+                        "Production frontend body did not match the saved baseline fixture"
+                    )
+                    time.sleep(0.25)
+                except (AssertionError, OSError) as exc:
+                    rollback_error = repr(exc)
                     time.sleep(0.25)
             else:
-                raise AssertionError("Caddy rollback did not restore the production frontend route")
+                raise _caddy_failure(
+                    caddy_name,
+                    "Caddy rollback did not restore the production frontend route: "
+                    + rollback_error,
+                )
             print(
                 "PASS live Caddy auth/WS boundary, route restart, unchanged production API, and exact-config rollback"
             )
