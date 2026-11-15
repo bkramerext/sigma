@@ -188,7 +188,6 @@ from sigma.auth_browser_poc_api import router as auth_browser_poc_router
 app.include_router(auth_browser_poc_router)
 
 
-
 class ProjectTypeBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str | None = Field(default=None, max_length=100)

@@ -3,6 +3,7 @@
 Both modes build the same Dockerfile. Localhost is only a transport for SIGMA's
 backend -> container API; it is not the OpenAI callback in the user's browser.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,8 +20,11 @@ PORT = 18765
 def _docker(*args: str, timeout: int = 1200) -> str:
     try:
         process = subprocess.run(
-            ["docker", *args], cwd=ROOT, text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout,
+            ["docker", *args],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -59,25 +63,59 @@ def start_local() -> tuple[str, Path]:
     image = f"sigma-auth-browser-poc:{sha}"
     if not _has_image(backend_image):
         print("Building SIGMA backend Docker image for the portable OAuth POC...", flush=True)
-        _docker("build", "--platform", "linux/amd64", "-t", backend_image,
-                "-f", "Dockerfile", ".", timeout=1800)
+        _docker(
+            "build",
+            "--platform",
+            "linux/amd64",
+            "-t",
+            backend_image,
+            "-f",
+            "Dockerfile",
+            ".",
+            timeout=1800,
+        )
     if not _has_image(image):
         print("Building Chromium/OAuth Docker image (first run only)...", flush=True)
-        _docker("build", "--platform", "linux/amd64", "--build-arg",
-                f"SIGMA_RELEASE={sha}", "-t", image, "-f",
-                "auth-browser-poc/Dockerfile", ".", timeout=1800)
+        _docker(
+            "build",
+            "--platform",
+            "linux/amd64",
+            "--build-arg",
+            f"SIGMA_RELEASE={sha}",
+            "-t",
+            image,
+            "-f",
+            "auth-browser-poc/Dockerfile",
+            ".",
+            timeout=1800,
+        )
     key = _key_file()
     stop_local()
     _docker(
-        "run", "--detach", "--rm", "--init",
-        "--name", CONTAINER, "--platform", "linux/amd64",
-        "--publish", f"127.0.0.1:{PORT}:8765",
-        "--mount", f"type=bind,source={key},target=/run/secrets/auth_browser_poc_key,readonly",
-        "--mount", "type=volume,source=sigma-auth-browser-poc-state,target=/var/lib/sigma-auth",
-        "--env", "SIGMA_AUTH_BROWSER_POC_KEY_FILE=/run/secrets/auth_browser_poc_key",
-        "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-        "--memory=1500m", "--cpus=2", "--pids-limit=256",
-        "--tmpfs", "/tmp:rw,nosuid,size=512m",
+        "run",
+        "--detach",
+        "--rm",
+        "--init",
+        "--name",
+        CONTAINER,
+        "--platform",
+        "linux/amd64",
+        "--publish",
+        f"127.0.0.1:{PORT}:8765",
+        "--mount",
+        f"type=bind,source={key},target=/run/secrets/auth_browser_poc_key,readonly",
+        "--mount",
+        "type=volume,source=sigma-auth-browser-poc-state,target=/var/lib/sigma-auth",
+        "--env",
+        "SIGMA_AUTH_BROWSER_POC_KEY_FILE=/run/secrets/auth_browser_poc_key",
+        "--read-only",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--memory=1500m",
+        "--cpus=2",
+        "--pids-limit=256",
+        "--tmpfs",
+        "/tmp:rw,nosuid,size=512m",
         image,
     )
     return CONTAINER, key
@@ -95,17 +133,24 @@ def _docker_git_commit() -> str:
 
 def _has_image(image: str) -> bool:
     try:
-        return subprocess.run(
-            ["docker", "image", "inspect", image], cwd=ROOT,
-            capture_output=True, timeout=15, check=False,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                ["docker", "image", "inspect", image],
+                cwd=ROOT,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            ).returncode
+            == 0
+        )
     except (OSError, subprocess.TimeoutExpired):
         return False
 
 
 def stop_local() -> None:
     try:
-        subprocess.run(["docker", "rm", "-f", CONTAINER], capture_output=True,
-                       timeout=20, check=False)
+        subprocess.run(
+            ["docker", "rm", "-f", CONTAINER], capture_output=True, timeout=20, check=False
+        )
     except (OSError, subprocess.TimeoutExpired):
         pass

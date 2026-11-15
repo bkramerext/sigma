@@ -31,9 +31,7 @@ def resolve_commit(repository: Path, requested: str) -> str:
     return resolved
 
 
-def build(
-    repository: Path, requested: str, runner=_run, *, auth_browser_poc: bool = False
-) -> None:
+def build(repository: Path, requested: str, runner=_run, *, auth_browser_poc: bool = False) -> None:
     commit = resolve_commit(repository, requested)
     with tempfile.TemporaryDirectory(prefix="sigma-release-") as directory:
         context = Path(directory)
@@ -70,11 +68,18 @@ def build(
         if auth_browser_poc:
             runner(
                 [
-                    "docker", "build", "--platform", "linux/amd64",
-                    "--label", f"{LABEL}={commit}",
-                    "--tag", f"sigma-auth-browser-poc:{commit}",
-                    "--build-arg", f"SIGMA_RELEASE={commit}",
-                    "--file", str(context / "auth-browser-poc/Dockerfile"),
+                    "docker",
+                    "build",
+                    "--platform",
+                    "linux/amd64",
+                    "--label",
+                    f"{LABEL}={commit}",
+                    "--tag",
+                    f"sigma-auth-browser-poc:{commit}",
+                    "--build-arg",
+                    f"SIGMA_RELEASE={commit}",
+                    "--file",
+                    str(context / "auth-browser-poc/Dockerfile"),
                     str(context),
                 ]
             )
@@ -159,8 +164,10 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "build":
         build(args.repository.resolve(), args.sha, auth_browser_poc=args.auth_browser_poc)
-        print(f"PASS: built backend and frontend from {args.sha}" +
-              (" including auth-browser POC" if args.auth_browser_poc else ""))
+        print(
+            f"PASS: built backend and frontend from {args.sha}"
+            + (" including auth-browser POC" if args.auth_browser_poc else "")
+        )
     elif args.command == "record":
         path = record(
             args.sha,

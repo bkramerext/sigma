@@ -3,6 +3,7 @@
 This is an explicitly opt-in research POC, not a supported hosted ChatGPT
 authorization mechanism. It never returns OAuth codes or tokens to callers.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,8 +39,9 @@ def _require_key(header: str | None) -> None:
 
 def _exec(*args: str) -> None:
     try:
-        subprocess.run(args, check=True, timeout=8, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL)
+        subprocess.run(
+            args, check=True, timeout=8, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
     except (OSError, subprocess.SubprocessError):
         raise HTTPException(503, "Remote display input is unavailable") from None
 
@@ -79,14 +81,22 @@ async def begin(x_sigma_poc_key: str | None = Header(default=None)):
         try:
             _chrome = await asyncio.create_subprocess_exec(
                 *[
-                    "/usr/bin/chromium", "--no-first-run", "--no-default-browser-check",
-                    "--disable-dev-shm-usage", "--disable-gpu", "--no-sandbox",
+                    "/usr/bin/chromium",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--no-sandbox",
                     "--user-data-dir=/tmp/sigma-auth-browser-profile",
-                    "--window-size=1280,800", "--window-position=0,0",
-                    "--new-window", destination,
+                    "--window-size=1280,800",
+                    "--window-position=0,0",
+                    "--new-window",
+                    destination,
                 ],
-                env=environment, stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL, start_new_session=True,
+                env=environment,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                start_new_session=True,
             )
         except OSError:
             chatgpt_auth.cancel(attempt_id)
@@ -128,8 +138,11 @@ async def frame(x_sigma_poc_key: str | None = Header(default=None)):
         data = Path(path).read_bytes()
         if not data.startswith(b"\x89PNG\r\n\x1a\n") or len(data) > 4_000_000:
             raise HTTPException(503, "Remote display frame unavailable")
-        return Response(data, media_type="image/png",
-                        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+        return Response(
+            data,
+            media_type="image/png",
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
     except OSError:
         raise HTTPException(503, "Remote display frame unavailable") from None
     finally:
@@ -139,17 +152,26 @@ async def frame(x_sigma_poc_key: str | None = Header(default=None)):
 
 @app.post("/input")
 async def input_event(
-    action: Pointer, x_sigma_poc_key: str | None = Header(default=None),
+    action: Pointer,
+    x_sigma_poc_key: str | None = Header(default=None),
 ):
     _require_key(x_sigma_poc_key)
     if action.kind == "click":
         _exec("/usr/bin/xdotool", "mousemove", str(action.x), str(action.y), "click", "1")
     elif action.kind == "text" and action.value:
-        _exec("/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "10", "--",
-              action.value)
+        _exec("/usr/bin/xdotool", "type", "--clearmodifiers", "--delay", "10", "--", action.value)
     elif action.kind == "key" and action.value in {
-        "Return", "BackSpace", "Tab", "Escape", "Left", "Right", "Up", "Down",
-        "Delete", "Home", "End",
+        "Return",
+        "BackSpace",
+        "Tab",
+        "Escape",
+        "Left",
+        "Right",
+        "Up",
+        "Down",
+        "Delete",
+        "Home",
+        "End",
     }:
         _exec("/usr/bin/xdotool", "key", "--clearmodifiers", action.value)
     else:
@@ -175,5 +197,4 @@ async def test_turn(x_sigma_poc_key: str | None = Header(default=None)):
             )
         except ProjectError:
             raise HTTPException(502, "OpenAI test call failed") from None
-        return {"status": "completed", "response": message[:400],
-                "model": configuration["model"]}
+        return {"status": "completed", "response": message[:400], "model": configuration["model"]}

@@ -164,7 +164,8 @@ class Deployment:
         except (OSError, UnicodeError):
             return False
         return any(
-            line in {
+            line
+            in {
                 "SIGMA_AUTH_BROWSER_POC_ENABLED=true",
                 "SIGMA_AUTH_BROWSER_POC_ENABLED=1",
                 "SIGMA_AUTH_BROWSER_POC_ENABLED=yes",
@@ -235,8 +236,11 @@ class Deployment:
             self.sync_preflight()
             self.check_preflight()
             build_cmd = [
-                "python3", str(self.repository / "deploy/release_image.py"),
-                "build", str(self.repository), sha,
+                "python3",
+                str(self.repository / "deploy/release_image.py"),
+                "build",
+                str(self.repository),
+                sha,
             ]
             if self._auth_poc_enabled():
                 build_cmd.append("--auth-browser-poc")

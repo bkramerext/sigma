@@ -1,5 +1,6 @@
 """Self-contained, dependency-free authenticated browser viewer for the POC."""
-HTML = r'''<!doctype html>
+
+HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SIGMA | Containerized ChatGPT connection POC</title>
@@ -102,4 +103,4 @@ async function refresh(){
  }catch(e){/* Worker may still be starting. Never show authentication data as errors. */}
 }
 refresh();setInterval(refresh,1200);
-</script></body></html>'''
+</script></body></html>"""

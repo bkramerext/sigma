@@ -193,10 +193,15 @@ def run_ui(
                 )
                 if prod:
                     if mock_auth:
-                        raise RuntimeError("The real OpenAI authentication experiment cannot use mock Google identities.")
+                        raise RuntimeError(
+                            "The real OpenAI authentication experiment cannot use mock Google identities."
+                        )
                     from sigma.auth_browser_poc_launcher import PORT, start_local
 
-                    print("Preparing the containerized OpenAI authentication experiment...", flush=True)
+                    print(
+                        "Preparing the containerized OpenAI authentication experiment...",
+                        flush=True,
+                    )
                     _, key_file = start_local()
                     auth_poc_started = True
                     child_env["SIGMA_AUTH_BROWSER_POC_ENABLED"] = "true"

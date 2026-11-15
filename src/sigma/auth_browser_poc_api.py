@@ -4,6 +4,7 @@ All browser control goes through SIGMA's existing Google authentication
 middleware. The worker is private to the Docker network (or local loopback).
 This deliberately does not enable Personal inference for ordinary users.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,21 +21,32 @@ router = APIRouter(prefix="/api/auth-browser-poc")
 
 def _authorize(request: Request) -> None:
     if os.getenv("SIGMA_AUTH_BROWSER_POC_ENABLED", "").casefold() not in {
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     }:
         raise HTTPException(404, "Authentication experiment is disabled")
     principal = getattr(request.state, "cloud_principal", None)
     if principal is None or principal.role != "admin" or principal.subject.startswith("mock:"):
-        raise HTTPException(403, "Only the authenticated SIGMA administrator may run this experiment")
+        raise HTTPException(
+            403, "Only the authenticated SIGMA administrator may run this experiment"
+        )
 
 
 def _upstream() -> tuple[str, str]:
     origin = os.environ.get("SIGMA_AUTH_BROWSER_POC_ORIGIN", "").strip().rstrip("/")
     parsed = urlsplit(origin)
     # Never accept caller-selected URLs or arbitrary network destinations.
-    if (parsed.scheme != "http" or parsed.hostname not in
-        {"127.0.0.1", "auth-browser-poc"} or parsed.path or parsed.query or parsed.fragment
-        or parsed.username or parsed.password or parsed.port not in {8765, 18765}):
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "auth-browser-poc"}
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+        or parsed.port not in {8765, 18765}
+    ):
         raise HTTPException(503, "Authentication experiment worker is not configured")
     filename = os.environ.get("SIGMA_AUTH_BROWSER_POC_KEY_FILE", "")
     try:
@@ -51,8 +63,10 @@ async def _send(method: str, path: str, data: dict | None = None) -> httpx.Respo
     try:
         async with httpx.AsyncClient(timeout=70, trust_env=False, follow_redirects=False) as client:
             response = await client.request(
-                method, origin + path,
-                headers={"X-Sigma-Poc-Key": secret}, json=data,
+                method,
+                origin + path,
+                headers={"X-Sigma-Poc-Key": secret},
+                json=data,
             )
     except (httpx.HTTPError, TimeoutError):
         raise HTTPException(503, "Authentication browser container is unavailable") from None
@@ -80,7 +94,7 @@ async def ui(request: Request):
 @router.post("/begin")
 async def begin(request: Request):
     _authorize(request)
-    return (_send_json(await _send("POST", "/begin")))
+    return _send_json(await _send("POST", "/begin"))
 
 
 @router.get("/status")
@@ -95,9 +109,14 @@ async def frame(request: Request):
     response = await _send("GET", "/frame")
     if response.headers.get("content-type", "").split(";")[0] != "image/png":
         raise HTTPException(502, "Authentication browser returned an invalid frame")
-    return Response(response.content, media_type="image/png", headers={
-        "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
-    })
+    return Response(
+        response.content,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
 
 
 @router.post("/input")
