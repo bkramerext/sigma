@@ -319,11 +319,12 @@ with sync_playwright() as playwright:
         for message in transcript_messages
     )
     assert session_calls == 2
-    page.goto(ORIGIN + "/", wait_until="networkidle")
-    expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120003.md")
     assert session_calls == 3
+    # A new normal page load must not inherit the earlier local opt-in.
+    page.goto(ORIGIN + "/", wait_until="networkidle")
+    expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
     assert not errors, errors
     assert config_calls >= 1
     browser.close()
