@@ -17,4 +17,4 @@ RUN mkdir -p /var/lib/sigma-poc-auth && chmod 0700 /var/lib/sigma-poc-auth \
 USER 10001:10001
 # Intentionally NOT published: browser shares only our network namespace.
 EXPOSE 8001
-ENTRYPOINT ["/opt/venv/bin/uvicorn", "server:app", "--host", "127.0.0.1", "--port", "8001", "--no-access-log"]
+ENTRYPOINT ["/bin/sh", "/opt/sigma/auth-poc/worker_boot.sh"]
