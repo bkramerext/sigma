@@ -1,0 +1,38 @@
+name: Container-local ChatGPT OAuth POC
+
+on:
+  push:
+    branches:
+      - coordinator/containerized-chatgpt-auth-poc
+    paths:
+      - 'auth-poc/**'
+      - 'deploy/auth-poc.compose.yaml'
+      - '.github/workflows/auth-poc-container.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run production-architecture Linux/amd64 image
+        run: docker compose -f deploy/auth-poc.compose.yaml up -d --build --wait
+      - name: Verify remote browser is accessible only over host loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error http://127.0.0.1:16080/vnc.html >/dev/null
+          bind=$(docker compose -f deploy/auth-poc.compose.yaml port auth-poc 6080)
+          [[ "$bind" == 127.0.0.1:* ]] || { echo "Unexpected noVNC bind: $bind"; exit 1; }
+          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import json, urllib.request; v=json.load(urllib.request.urlopen("http://127.0.0.1:8001/health")); assert v["ready"], v'
+          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import urllib.request; html=urllib.request.urlopen("http://127.0.0.1:8001/").read(); assert b"Open ChatGPT account chooser" in html'
+      - name: Inspect failures (no login is performed in CI)
+        if: failure()
+        run: docker compose -f deploy/auth-poc.compose.yaml ps
+      - name: Clean up POC containers and credentials
+        if: always()
+        run: docker compose -f deploy/auth-poc.compose.yaml down -v --remove-orphans
