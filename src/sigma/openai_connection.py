@@ -331,6 +331,24 @@ async def auth_context() -> AuthContext:
     ):
         workspace = cloud_workspaces.workspace_for_subject(local_principal.subject)
         return await _cloud_sponsored_context(workspace.subject_hash)
+    from sigma import personal_browser
+
+    if personal_browser.enabled():
+        # Local Docker POC must exercise the same per-user worker as production.
+        # Never permit a pre-existing Mac-local ChatGPT token or API key to
+        # masquerade as a successful container connection.
+        from sigma import cloud_personal
+
+        workspace = cloud_workspaces.current()
+        if (
+            local_google_principal is None
+            or workspace is None
+            or workspace.verified_subject != local_google_principal.subject
+        ):
+            return AuthContext(
+                token="", mode="chatgpt", status="unavailable", identity="local_docker_unbound"
+            )
+        return await cloud_personal.auth_context(workspace.subject_hash)
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
     if mode == "api_key":
