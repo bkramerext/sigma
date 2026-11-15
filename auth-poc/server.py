@@ -6,6 +6,7 @@ This service is intentionally not a hosted multi-user authorization broker.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from urllib.parse import urlsplit
@@ -121,6 +122,7 @@ async function poll(){
   const preview=await fetch('/preview-state',{cache:'no-store'});
   const state=preview.ok?await preview.json():null;
   if(!testRunning)infer.disabled=state?.phase!=='connected';
+  if(!r.attempt&&state?.phase==='connected')status.textContent='Using your saved ChatGPT authorization.';
  }
  }catch{}
 }
@@ -282,15 +284,24 @@ async def test_personal_inference(request: Request) -> dict[str, str]:
                         headers={"Authorization": "Bearer " + token, "Accept": "text/event-stream"},
                         json={
                             "model": model,
-                            "input": "Reply with the single word OK.",
-                            "reasoning": {"effort": "low"},
+                            "input": [{"role": "user", "content": "Reply with the single word OK."}],
                             "store": False,
                             "stream": True,
                         },
                     ) as response,
                 ):
                     if response.status_code != 200:
-                        plan_stream.failure(response.status_code, {}, "chatgpt")
+                        error_body = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            if len(error_body) + len(chunk) > 8192:
+                                error_body.clear()
+                                break
+                            error_body.extend(chunk)
+                        try:
+                            error = json.loads(error_body)
+                        except ValueError:
+                            error = None
+                        plan_stream.failure(response.status_code, error, "chatgpt")
                     result = await plan_stream.completed(response, max_text_bytes=1024)
                 chat._response_text(result, model)
                 return {"model": model}
