@@ -13,9 +13,10 @@ and mount namespaces, but deliberately share a Docker network namespace:
   protected, persistent `auth-poc-state` volume. Its HTTP service binds
   `127.0.0.1:8001` within the shared namespace. No Chromium installed.
 - **browser**: Chromium, Xvfb, x11vnc and noVNC. It has *no auth volume* and
-  no SIGMA source or Docker socket. Chromium's own namespace sandbox cannot
-  start under the tested Docker restrictions; its browser-only container
-  currently uses `--no-sandbox` solely for synthetic startup verification.
+  no SIGMA source or Docker socket. The container now runs Chromium without
+  `--no-sandbox`, using a restricted Docker seccomp profile that allows
+  Chromium to create internal user namespaces. It fails closed if the host
+  cannot support this sandbox; the remote browser never receives real credentials.
 - The browser's `127.0.0.1` points at the worker's listener because of
   Compose `network_mode: service:auth-poc`. The external desktop browser
   receives only a VNC framebuffer, not the OAuth redirect.
@@ -38,9 +39,15 @@ the worker fails closed with HTTP 403. Synthetic tests exercise the localhost
 callback and rejected invalid PKCE state without contacting OpenAI.
 
 The previous one-container implementation allowed Chromium to share a mount
-namespace with the credential holder. The new split fixes that specific flaw,
-but Chromium's own sandbox still requires a production-safe solution. The
-server refuses all real OpenAI calls while that work is unresolved.
+namespace with the credential holder. The new split addresses that flaw.
+The earlier isolated CI probe showed Chromium could launch with its internal
+sandbox if Docker seccomp did not block namespace syscalls. The current
+`auth-poc/chromium-seccomp.json` is based on Microsoft's Playwright
+[Docker sandbox profile](https://github.com/microsoft/playwright/blob/main/utils/docker/seccomp_profile.json),
+which retains a syscall allowlist and grants the three namespace syscalls
+(`clone`, `setns`, `unshare`). This is narrower than disabling seccomp.
+The constrained profile must pass CI and the GCE host before this sandbox
+work is considered finished. Real OpenAI calls remain disabled regardless.
 
 Stop and retain the test credentials only for controlled restart testing:
 
