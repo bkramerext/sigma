@@ -13,8 +13,9 @@ and mount namespaces, but deliberately share a Docker network namespace:
   protected, persistent `auth-poc-state` volume. Its HTTP service binds
   `127.0.0.1:8001` within the shared namespace. No Chromium installed.
 - **browser**: Chromium, Xvfb, x11vnc and noVNC. It has *no auth volume* and
-  no SIGMA source or Docker socket. The container uses an explicit Playwright
-  seccomp policy supporting Chromium's user-namespace sandbox.
+  no SIGMA source or Docker socket. Chromium's own namespace sandbox cannot
+  start under the tested Docker restrictions; its browser-only container
+  currently uses `--no-sandbox` solely for synthetic startup verification.
 - The browser's `127.0.0.1` points at the worker's listener because of
   Compose `network_mode: service:auth-poc`. The external desktop browser
   receives only a VNC framebuffer, not the OAuth redirect.
@@ -34,9 +35,10 @@ account chooser. The **Verify model catalog** button checks the authorized
 account's models; **Test one real model response** performs a bounded
 Responses API request.
 
-The previous one-container experiment and its `--no-sandbox` flag must not
-be used for a real-account test. This revision requires a working Chromium
-sandbox. CI performs no OpenAI login or billable provider request.
+The previous one-container implementation allowed Chromium to share a mount
+namespace with the credential holder. The new split fixes that specific flaw,
+but Chromium's own sandbox still requires a production-safe solution. The
+server refuses all real OpenAI calls while that work is unresolved.
 
 Stop and retain the test credentials only for controlled restart testing:
 
@@ -49,7 +51,8 @@ use an important account until the adversarial review is accepted.
 
 ## Production acceptance gates (unmet)
 
-- The current lab is **single-user**. Google identity must bind a unique worker
+- The current lab is **single-user**, though CI also checks two independently
+  named Compose stacks have distinct credential volumes. Google identity must bind a unique worker
   and browser session per SIGMA user, including lifecycle and revocation.
 - noVNC is visible only on the host loopback, using HTTP plus a temporary
   VNC password. A hosted integration must provide TLS and a Google-session
