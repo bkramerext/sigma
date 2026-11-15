@@ -50,25 +50,7 @@ else
   python3 /opt/sigma/current/deploy/release_image.py verify "$release"
 fi
 compose() {
-  if [ "$auth_lab" -eq 1 ]; then
-    if grep -q '^SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=.' "$env_file"; then
-      docker compose --project-name sigma --env-file "$env_file" \
-        -f deploy/compose.yaml -f deploy/compose.gce.yaml \
-        -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
-        -f deploy/compose.gmail.yaml "$@"
-    else
-      docker compose --project-name sigma --env-file "$env_file" \
-        -f deploy/compose.yaml -f deploy/compose.gce.yaml \
-        -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml "$@"
-    fi
-  elif grep -q '^SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=.' "$env_file"; then
-    docker compose --project-name sigma --env-file "$env_file" \
-      -f deploy/compose.yaml -f deploy/compose.gce.yaml \
-      -f deploy/compose.gmail.yaml "$@"
-  else
-    docker compose --project-name sigma --env-file "$env_file" \
-      -f deploy/compose.yaml -f deploy/compose.gce.yaml "$@"
-  fi
+  /opt/sigma/current/deploy/compose-gce.sh "$@"
 }
 compose up -d --no-build
 if [ "$auth_lab" -eq 1 ]; then
