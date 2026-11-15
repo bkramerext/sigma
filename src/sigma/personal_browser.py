@@ -113,3 +113,41 @@ async def session(
         "personal_chatgpt_connected": False,
         "account": None,
     }
+
+
+async def browser_address(principal: cloud_auth.Principal | None) -> str:
+    """Fixed Docker-network name derived solely from the verified workspace ID."""
+    trusted = _principal(principal)
+    _socket()  # Disabled or unsafe lab configuration fails closed.
+    workspace_id = await _workspace_id(trusted)
+    return "http://sigma-personal-" + workspace_id + ":6080"
+
+
+async def browser_password(principal: cloud_auth.Principal | None) -> str:
+    """Only the authenticated HTTPS view may request this ephemeral VNC secret.
+
+    It is not an OpenAI credential; it grants control of this user's graphical
+    browser and must never be logged, cached, or sent to a different principal.
+    """
+    trusted = _principal(principal)
+    path = _socket()
+    workspace_id = await _workspace_id(trusted)
+    transport = httpx.AsyncHTTPTransport(uds=path)
+    try:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://sigma-personal-broker", timeout=15
+        ) as client:
+            response = await client.post("/v1/password", json={"workspace_id": workspace_id})
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, TypeError, ValueError, OSError) as exc:
+        raise PersonalBrowserUnavailable("Private browser authorization is unavailable.") from exc
+    if (
+        not isinstance(data, dict)
+        or data.get("status") != "ready"
+        or data.get("worker") != "sigma-personal-" + workspace_id
+        or not isinstance(data.get("password"), str)
+        or len(data["password"]) != 8
+    ):
+        raise PersonalBrowserUnavailable("Private browser authorization is unavailable.")
+    return data["password"]
