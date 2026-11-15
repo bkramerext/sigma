@@ -33,9 +33,35 @@ if [ "$release_count" -ne 1 ]; then
   echo "SIGMA_RELEASE must be set exactly once; refusing to start." >&2
   exit 1
 fi
-python3 /opt/sigma/current/deploy/release_image.py verify "$release"
+# The optional auth lab is synthetic, internal-only and disabled by default.
+auth_lab=0
+if grep -qx 'SIGMA_AUTH_POC_LAB_ENABLED=true' "$env_file"; then
+  auth_lab=1
+  auth_dir="$disk/auth/auth-poc"
+  if [ -L "$auth_dir" ]; then
+    echo "Unsafe synthetic auth-lab state directory." >&2
+    exit 1
+  fi
+  mkdir -p "$auth_dir"
+  chown 10001:10001 "$auth_dir"
+  chmod 0700 "$auth_dir"
+  python3 /opt/sigma/current/deploy/release_image.py verify "$release" --auth-poc
+else
+  python3 /opt/sigma/current/deploy/release_image.py verify "$release"
+fi
 compose() {
-  if grep -q '^SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=.' "$env_file"; then
+  if [ "$auth_lab" -eq 1 ]; then
+    if grep -q '^SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=.' "$env_file"; then
+      docker compose --project-name sigma --env-file "$env_file" \
+        -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+        -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+        -f deploy/compose.gmail.yaml "$@"
+    else
+      docker compose --project-name sigma --env-file "$env_file" \
+        -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+        -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml "$@"
+    fi
+  elif grep -q '^SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=.' "$env_file"; then
     docker compose --project-name sigma --env-file "$env_file" \
       -f deploy/compose.yaml -f deploy/compose.gce.yaml \
       -f deploy/compose.gmail.yaml "$@"
@@ -45,6 +71,14 @@ compose() {
   fi
 }
 compose up -d --no-build
-python3 /opt/sigma/current/deploy/release_image.py record "$release" \
-  --backend-container "$(compose ps -q backend)" \
-  --frontend-container "$(compose ps -q frontend)"
+if [ "$auth_lab" -eq 1 ]; then
+  python3 /opt/sigma/current/deploy/release_image.py record "$release" \
+    --backend-container "$(compose ps -q backend)" \
+    --frontend-container "$(compose ps -q frontend)" \
+    --auth-poc-container "$(compose ps -q auth-poc)" \
+    --auth-browser-poc-container "$(compose ps -q browser)"
+else
+  python3 /opt/sigma/current/deploy/release_image.py record "$release" \
+    --backend-container "$(compose ps -q backend)" \
+    --frontend-container "$(compose ps -q frontend)"
+fi
