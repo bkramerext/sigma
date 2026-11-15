@@ -6,15 +6,17 @@ This service is intentionally not a hosted multi-user authorization broker.
 from __future__ import annotations
 
 import os
+import time
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import synthetic_signin
 
-from sigma import chatgpt_auth
+from sigma import ai_store, chatgpt_auth
 from sigma.projects import ProjectError
 
 if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
@@ -136,12 +138,29 @@ async def lab_painted(request: Request) -> dict[str, bool]:
     return {"ready": True}
 
 
+def _saved_preview_is_authorized() -> bool:
+    """Expose only the result of validation, never the stored account record."""
+    try:
+        state = ai_store.read(ai_store.directory() / "credentials.json")
+        account = state["accounts"].get(state["active"]) if state["mode"] == "chatgpt" else None
+        return (
+            isinstance(account, dict)
+            and account.get("plan_authorized") is True
+            and bool(account.get("access_token"))
+            and float(account.get("expires_at", 0)) > time.time()
+        )
+    except (OSError, ValueError, TypeError, KeyError, ProjectError):
+        return False
+
+
 @app.get("/preview-state")
 async def preview_state() -> dict[str, str]:
     require_real_signin()
     attempt = (await status())["attempt"]
     if attempt is not None:
         return {"phase": attempt}
+    if await run_in_threadpool(_saved_preview_is_authorized):
+        return {"phase": "connected"}
     return {"phase": "ready" if _LAB_PAINTED else "rendering"}
 
 
