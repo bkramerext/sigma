@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import tempfile
@@ -195,6 +196,59 @@ def main() -> None:
             and argv[2:] == ["build", str(repo), NEW]
         )
         assert checkout_index < build_index
+
+        # The exact same Compose dispatcher handles systemd start and stop,
+        # including the optional, private laboratory services and Gmail.
+        unit_path = repo / "deploy/systemd/sigma.service"
+        unit_path.parent.mkdir(parents=True, exist_ok=True)
+        unit_path.write_text(
+            "[Unit]\\nDescription=SIGMA test\\n[Service]\\nExecStop=compose-gce.sh stop\\n",
+            encoding="utf-8",
+        )
+        installed: list[list[str]] = []
+
+        def service_runner(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            installed.append(argv)
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        deployment = module.Deployment(repo, env_file, root / "preflight.py", service_runner, True)
+        deployment.sync_service_unit()
+        assert installed[0][:8] == [
+            "install", "-o", "root", "-g", "root", "-m", "0644", str(unit_path),
+        ]
+        assert installed[0][-1] == "/etc/systemd/system/sigma.service"
+        assert installed[1] == ["systemctl", "daemon-reload"]
+
+        bin_dir = root / "test-bin"
+        bin_dir.mkdir()
+        docker = bin_dir / "docker"
+        docker.write_text("#!/bin/sh\\nprintf '%s\\\\n' \"$@\"\\n", encoding="utf-8")
+        docker.chmod(0o755)
+        helper = ROOT / "deploy/compose-gce.sh"
+        for lab in ("true", "false"):
+            for gmail in (False, True):
+                config = f"SIGMA_RELEASE={OLD}\\nSIGMA_AUTH_POC_LAB_ENABLED={lab}\\n"
+                if gmail:
+                    config += "SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=/tmp/gmail\\n"
+                env_file.write_text(config, encoding="utf-8")
+                result = subprocess.run(
+                    ["sh", str(helper), "stop"],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    env={
+                        **os.environ,
+                        "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}",
+                        "SIGMA_DEPLOY_ENV_FILE": str(env_file),
+                    },
+                    check=True,
+                )
+                args = result.stdout.splitlines()
+                assert "stop" == args[-1]
+                assert ("deploy/auth-poc.compose.yaml" in args) == (lab == "true")
+                assert ("deploy/auth-poc.gce.yaml" in args) == (lab == "true")
+                assert ("deploy/compose.gmail.yaml" in args) == gmail
+                assert args.count("-f") == (4 if lab == "true" else 2) + int(gmail)
 
         print(
             "GCE release automation idempotency, missing config, startup rollback, and state preservation passed."
