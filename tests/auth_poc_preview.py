@@ -109,6 +109,23 @@ class PreviewTests(unittest.TestCase):
             self.assertEqual(principal.role, "admin")
             self.assertEqual(action, "start")
 
+    def test_lifecycle_rejects_request_bodies_before_broker_dispatch(self) -> None:
+        with patch.object(preview.personal_browser, "session", new=AsyncMock()) as session:
+            body = self.client.post(
+                PREFIX + "/api/start",
+                content=b"{}",
+                headers=EDGE_HEADERS | {"Origin": "https://" + HOST},
+            )
+            chunked = self.client.post(
+                PREFIX + "/api/stop",
+                content=b"{}",
+                headers=EDGE_HEADERS
+                | {"Origin": "https://" + HOST, "Transfer-Encoding": "chunked"},
+            )
+            self.assertEqual(body.status_code, 400)
+            self.assertEqual(chunked.status_code, 400)
+            session.assert_not_awaited()
+
     def test_window_and_assets_stay_inside_preview_prefix(self) -> None:
         with (
             patch.object(

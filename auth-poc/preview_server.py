@@ -171,7 +171,10 @@ close.addEventListener('click',async()=>{{close.disabled=true;frame.src='about:b
 async def start(request: Request) -> dict[str, str | bool | None]:
     _require_preview_path(request)
     _origin_allowed(request)
-    if request.headers.get("content-length", "0") not in {"", "0"}:
+    if (
+        request.headers.get("content-length", "0") not in {"", "0"}
+        or request.headers.get("transfer-encoding") is not None
+    ):
         raise HTTPException(400, "Invalid preview request.")
     try:
         return await personal_browser.session(request.state.cloud_principal, "start")
@@ -192,7 +195,10 @@ async def status(request: Request) -> dict[str, str | bool | None]:
 async def stop(request: Request) -> dict[str, str | bool | None]:
     _require_preview_path(request)
     _origin_allowed(request)
-    if request.headers.get("content-length", "0") not in {"", "0"}:
+    if (
+        request.headers.get("content-length", "0") not in {"", "0"}
+        or request.headers.get("transfer-encoding") is not None
+    ):
         raise HTTPException(400, "Invalid preview request.")
     try:
         return await personal_browser.session(request.state.cloud_principal, "stop")
