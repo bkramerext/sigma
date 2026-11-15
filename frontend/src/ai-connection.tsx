@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import './ai-connection.css';
 import { windowAuthUrl } from './window-auth';
 import { sponsoredProviderLabel, type SponsoredInferenceProvider } from './provider-usage-guidance';
@@ -291,9 +292,49 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
   const [authorizedPreviewOwner, setAuthorizedPreviewOwner] = useState<string | null>(null);
   const pillTrigger = useRef<HTMLElement>(null);
-  const disconnectDialog = useRef<HTMLDialogElement>(null);
+  const disconnectPopup = useRef<HTMLDivElement>(null);
+  const disconnectCancel = useRef<HTMLButtonElement>(null);
   const disconnectPromptId = useId();
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectPlacement, setDisconnectPlacement] = useState<{ left: number; top: number }>();
+  const closeDisconnectPopup = useCallback(() => {
+    setDisconnectOpen(false);
+    setDisconnectPlacement(undefined);
+    window.requestAnimationFrame(() => pillTrigger.current?.focus());
+  }, []);
+  useLayoutEffect(() => {
+    const anchor = pillTrigger.current;
+    const popup = disconnectPopup.current;
+    if (!disconnectOpen || !anchor || !popup) return;
+    const place = () => {
+      const rect = anchor.getBoundingClientRect();
+      const { offsetWidth: width, offsetHeight: height } = popup;
+      const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+      const top = Math.max(12, Math.min(
+        window.innerHeight - rect.bottom >= height + 18 ? rect.bottom + 6 : rect.top - height - 6,
+        window.innerHeight - height - 12,
+      ));
+      setDisconnectPlacement({ left, top });
+    };
+    function escape(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || disconnecting) return;
+      event.preventDefault();
+      closeDisconnectPopup();
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [disconnectOpen, disconnecting, closeDisconnectPopup]);
+  useEffect(() => {
+    if (disconnectOpen && !disconnecting) disconnectCancel.current?.focus();
+  }, [disconnectOpen, disconnecting]);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const dotActive = !projectHeader && status === 'connected' && providerActive;
@@ -552,11 +593,12 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     try {
       const response = await fetch(windowAuthUrl('/api/ai/personal-browser/disconnect'), {
         method: 'POST',
-        headers: { 'X-Sigma-Error-Handled': 'true' },
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: '{}',
       });
       if (!response.ok) throw new Error('Could not disconnect Personal ChatGPT. Try again.');
       setAuthorizedPreviewOwner(null);
-      disconnectDialog.current?.close();
+      closeDisconnectPopup();
       window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
       await ai.refresh('manual');
     } catch (cause) {
@@ -568,7 +610,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
 
   async function selectContainerConnection() {
     if (localLabAccount && !testConnected && selectedConnection === 'personal' && (previewAuthorized || connected)) {
-      disconnectDialog.current?.showModal();
+      setDisconnectOpen(true);
       return;
     }
     if (previewAuthorized && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
@@ -641,19 +683,20 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       <button type="button" className="connection-text-action" onClick={() => setSponsorProvisioningHelpOpen(false)}>Dismiss</button>
     </div>}
   </details>
-  {localLabAccount && <dialog ref={disconnectDialog} className="google-account-dialog hosted-personal-chatgpt-dialog"
-    aria-labelledby={disconnectPromptId} onCancel={event => { if (disconnecting) event.preventDefault(); }}
-    onClose={() => window.requestAnimationFrame(() => pillTrigger.current?.focus())}>
-    <p id={disconnectPromptId}>{ai.info?.account_label
-      ? `Disconnect from personal ChatGPT account ${ai.info.account_label}?`
-      : 'Disconnect from your personal ChatGPT account?'}</p>
-    <div className="session-remove-confirm-actions">
-      <button type="button" className="text-view-link" disabled={disconnecting}
-        onClick={() => void disconnectContainerConnection()}>Confirm</button>
-      <button type="button" className="text-view-link" disabled={disconnecting} autoFocus
-        onClick={() => disconnectDialog.current?.close()}>Cancel</button>
-    </div>
-  </dialog>}
+  {localLabAccount && disconnectOpen && createPortal(
+    <div ref={disconnectPopup} className="paper-step-restart-popup chatgpt-disconnect-popup"
+      role="dialog" aria-modal="false" aria-labelledby={disconnectPromptId} aria-busy={disconnecting}
+      style={disconnectPlacement ?? { left: 12, top: 12, visibility: 'hidden' }}>
+      <p id={disconnectPromptId}>{ai.info?.account_label
+        ? `Disconnect from personal ChatGPT account ${ai.info.account_label}?`
+        : 'Disconnect from your personal ChatGPT account?'}</p>
+      <div className="session-remove-confirm-actions">
+        <button type="button" className="text-view-link" disabled={disconnecting}
+          onClick={() => void disconnectContainerConnection()}>Confirm</button>
+        <button ref={disconnectCancel} type="button" className="text-view-link" disabled={disconnecting}
+          onClick={closeDisconnectPopup}>Cancel</button>
+      </div>
+    </div>, document.body)}
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
     setPersonalHostedNoticeOpen(false);
     window.requestAnimationFrame(() => pillTrigger.current?.focus());
