@@ -15,6 +15,13 @@ fi
 release=$(git rev-parse --verify HEAD)
 [[ "$release" =~ ^[[:xdigit:]]{40}$ ]] || { echo "No pinned SIGMA commit found" >&2; exit 2; }
 
+# New worktrees have their own untracked .venv and node_modules. Prepare
+# them once without adding a second user-facing setup procedure.
+if [[ ! -d frontend/node_modules/vite || ! -d .venv ]]; then
+  echo "Preparing local SIGMA dependencies…"
+  ./sigma setup
+fi
+
 # Build the same two images used by the hosted broker, without ever opening
 # the standalone noVNC port or allowing the Mac-local OpenAI OAuth fallback.
 echo "Preparing isolated SIGMA Personal ChatGPT containers…"
