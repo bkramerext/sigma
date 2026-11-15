@@ -97,6 +97,7 @@ jobs:
           docker compose -f deploy/auth-poc.compose.yaml exec -d auth-poc \
             /opt/venv/bin/python /opt/sigma/auth-poc/test_cross_container.py
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser python3 - <<'PY'
+          import subprocess
           import time
           import urllib.error
           import urllib.request
@@ -112,17 +113,32 @@ jobs:
           else:
               raise AssertionError("OAuth test worker never started")
 
-          # The request originates in the distinct browser container,
-          # traverses Docker's shared network namespace, and reaches the
-          # existing ephemeral loopback callback listener.
-          with urllib.request.urlopen(callback_url, timeout=5) as response:
-              body = response.read()
-              assert response.status == 200  # Neutral callback, even on rejection.
-              assert b"Return to SIGMA" in body
+          # Use REAL sandboxed Chromium (not a Python HTTP client) to navigate
+          # through the ephemeral localhost callback from another container.
+          # There is no OpenAI page, account, code, verifier, or valid state.
+          assert callback_url.startswith("http://127.0.0.1:")
+          browser = subprocess.run(
+              [
+                  "/usr/bin/chromium",
+                  "--headless",
+                  "--disable-gpu",
+                  "--disable-dev-shm-usage",
+                  "--no-first-run",
+                  "--user-data-dir=/tmp/callback-chrome",
+                  "--dump-dom",
+                  callback_url,
+              ],
+              capture_output=True,
+              text=True,
+              timeout=20,
+              check=False,
+          )
+          assert browser.returncode == 0, browser.stderr[-2000:]
+          assert "Return to SIGMA" in browser.stdout, browser.stdout[-2000:]
 
           with urllib.request.urlopen(base + "/done", timeout=3) as response:
               assert response.read() == b"PASS", "Invalid state was consumed"
-          print("PASS: distinct Chromium container reached OAuth loopback listener")
+          print("PASS: sandboxed Chromium navigated to worker's OAuth callback")
           PY
       - name: Verify Chromium sandbox under restricted namespace seccomp profile
         shell: bash
