@@ -47,6 +47,9 @@ services:
     read_only: true
     user: "11001:11001"
     cap_drop: [ALL]
+    # Chromium's zygote sandbox performs chroot("/proc/self/fdinfo/").
+    # Retain only this capability in the isolated browser namespace.
+    cap_add: [SYS_CHROOT]
     security_opt:
       - no-new-privileges:true
       # Retains Docker's syscall restrictions but allows Chromium's namespace
