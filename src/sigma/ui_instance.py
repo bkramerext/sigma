@@ -349,6 +349,11 @@ class Instance:
                             "Previous instance identity mismatch; refusing takeover."
                         )
                     print("Stopping existing SIGMA instance…", flush=True)
+                    # The old --prod owner must stop both UI children and its
+                    # isolated Docker worker before acknowledging takeover.
+                    # Keep that operation bounded while avoiding a race where
+                    # new startup reuses a Docker project still being torn down.
+                    client.settimeout(45)
                     try:
                         client.sendall(
                             json.dumps({"identity": self.identity, "command": "shutdown"}).encode()
