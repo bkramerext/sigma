@@ -45,8 +45,7 @@ def same_origin(request: Request) -> None:
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
-    return HTMLResponse(
-        """<!doctype html><html lang="en"><head><meta charset="utf-8">
+    html = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>SIGMA · Container OAuth laboratory</title>
 <style>body{font:16px system-ui;margin:3rem auto;max-width:43rem;background:#171b20;
 color:#f1f1f1;line-height:1.6;padding:0 1rem}button{padding:.6rem 1rem;margin-right:.5rem}
@@ -94,7 +93,16 @@ async function poll(){
  }catch{}
 }
 setInterval(poll,1800);
-</script></body></html>""",
+</script></body></html>"""
+    # The default synthetic lab never presents fake account selection. Only a
+    # separately reviewed and explicitly activated real-sign-in mode may open
+    # OpenAI's actual account chooser and perform model/inference checks.
+    if real_signin_enabled():
+        html = html.replace('id="start" disabled', 'id="start"')
+        html = html.replace('id="verify" disabled', 'id="verify"')
+        html = html.replace('id="infer" disabled', 'id="infer"')
+    return HTMLResponse(
+        html,
         headers={
             "Cache-Control": "no-store",
             "Content-Security-Policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
