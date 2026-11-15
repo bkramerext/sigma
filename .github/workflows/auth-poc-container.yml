@@ -53,7 +53,7 @@ jobs:
       - name: Validate Caddy forward-auth preview route syntax
         shell: bash
         env:
-          SIGMA_PERSONAL_LAB_EDGE_KEY: ci-only-edge-key-not-a-credential
+          SIGMA_PERSONAL_LAB_EDGE_KEY: ci-only-edge-key-not-a-credential-0123456789
           SIGMA_CADDY_SCHEME: https
           SIGMA_DOMAIN: sigma.example.invalid
           SIGMA_TLS_EMAIL: admin@example.invalid
@@ -80,7 +80,7 @@ jobs:
           spec.loader.exec_module(module)
           current = Path("deploy/Caddyfile").read_bytes()
           snippet = Path("deploy/auth-poc.preview.caddy").read_bytes()
-          output = module.render(current, snippet, "ci-only-edge-key-not-a-credential")
+          output = module.render(current, snippet, "ci-only-edge-key-not-a-credential-0123456789")
           Path("/tmp/auth-poc-runtime.Caddyfile").write_bytes(output)
           PY
           docker run --rm \
@@ -184,7 +184,7 @@ jobs:
       - name: Verify preview Caddy overlay preserves the production release checkout
         shell: bash
         env:
-          SIGMA_PERSONAL_LAB_EDGE_KEY: ci-only-edge-key-not-a-credential
+          SIGMA_PERSONAL_LAB_EDGE_KEY: ci-only-edge-key-not-a-credential-0123456789
         run: |
           set -euo pipefail
           SIGMA_RELEASE="$GITHUB_SHA" \
@@ -207,7 +207,7 @@ jobs:
           from pathlib import Path
           cfg = json.loads(Path("/tmp/auth-poc-preview-edge-compose.json").read_text())
           edge = cfg["services"]["edge"]
-          assert edge["environment"]["SIGMA_PERSONAL_LAB_EDGE_KEY"] == "ci-only-edge-key-not-a-credential"
+          assert edge["environment"]["SIGMA_PERSONAL_LAB_EDGE_KEY"] == "ci-only-edge-key-not-a-credential-0123456789"
           mounts = [mount for mount in edge["volumes"] if mount["target"] == "/etc/caddy/Caddyfile"]
           assert len(mounts) == 1, mounts
           assert mounts[0]["source"] == "/var/lib/sigma-personal-lab/runtime/Caddyfile", mounts
