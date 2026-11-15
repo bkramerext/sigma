@@ -146,6 +146,27 @@ def check_service() -> None:
         "Always challenge the assumptions.\n\nHuman:"
     )
 
+    # Chat omits the optional Responses text format. Sponsored billing must
+    # still admit and account for its request before provider dispatch.
+    assert "text" not in captured["payload"]
+    billable_bytes = chat.cloud_research.provider_request_input_bytes(captured["payload"])
+    assert billable_bytes > 0
+    assert (
+        chat.cloud_research.provider_request_input_bytes(
+            {**captured["payload"], "text": {"format": {"type": "text"}}}
+        )
+        > billable_bytes
+    )
+    for required in ("instructions", "input"):
+        missing = dict(captured["payload"])
+        del missing[required]
+        try:
+            chat.cloud_research.provider_request_input_bytes(missing)
+        except chat.cloud_research.CloudResearchUnavailable as exc:
+            assert "incomplete" in str(exc)
+        else:
+            raise AssertionError(f"Sponsored ledger accepted request without {required}")
+
     with patch(
         "sigma.chat.auth_context", new=AsyncMock(return_value={**credential, "identity": "changed"})
     ):
