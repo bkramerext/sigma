@@ -134,7 +134,9 @@ class ProdLifecycleTests(unittest.TestCase):
                 return ""
 
             with (
-                patch.object(mod, "_docker_environment", return_value={"SIGMA_AUTH_POC_RPC_SEED": "secret"}),
+                patch.object(
+                    mod, "_docker_environment", return_value={"SIGMA_AUTH_POC_RPC_SEED": "secret"}
+                ),
                 patch.object(mod, "_release_images", return_value=("a" * 40, "linux/arm64")),
                 patch.object(mod.Path, "home", return_value=home),
                 patch.object(mod.tempfile, "mkdtemp", return_value=str(runtime)),
@@ -172,7 +174,6 @@ class ProdLifecycleTests(unittest.TestCase):
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)
         self.assertNotIn("frame-ancestors *", proxy)
-
 
 
 if __name__ == "__main__":
