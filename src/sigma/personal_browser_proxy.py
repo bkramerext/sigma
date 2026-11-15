@@ -143,7 +143,10 @@ try {
         script.replace("__BASE__", prefix)
         .replace("__PASSWORD__", json.dumps(password))
         .replace("__STOP_URL__", json.dumps(stop_url))
-        .replace("__PREVIEW_URL__", json.dumps(preview_url if personal_browser.sign_in_preview_enabled() else None))
+        .replace(
+            "__PREVIEW_URL__",
+            json.dumps(preview_url if personal_browser.sign_in_preview_enabled() else None),
+        )
     )
     html = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
