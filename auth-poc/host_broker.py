@@ -122,7 +122,7 @@ def _lock_for(workspace_id: str) -> threading.Lock:
 def operate(action: str, workspace_id: str) -> dict[str, str]:
     """No destructive delete operation: credentials survive an ordinary stop."""
     workspace_id = validate_id(workspace_id)
-    if action not in {"start", "status", "stop"}:
+    if action not in {"start", "status", "stop", "password"}:
         raise ValueError("Unsupported broker action")
     with _lock_for(workspace_id):
         if action == "start":
@@ -147,7 +147,18 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                     check=False,
                 )
                 status = "ready" if health.returncode == 0 and health.stdout.strip() == "healthy" else "unavailable"
-        return {"status": status, "worker": "sigma-personal-" + workspace_id}
+        result = {"status": status, "worker": "sigma-personal-" + workspace_id}
+        if action == "password":
+            if status != "ready":
+                raise RuntimeError("Browser session is not ready")
+            password = _compose(
+                workspace_id, "exec", "-T", "browser", "cat", "/tmp/sigma-vnc-pass",
+                timeout=10,
+            )
+            if not re.fullmatch(r"[A-Za-z0-9_-]{8}", password):
+                raise RuntimeError("Browser credential is unavailable")
+            result["password"] = password
+        return result
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -208,7 +219,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._dispatch("status")
 
     def do_POST(self) -> None:
-        action = {"/v1/start": "start", "/v1/stop": "stop"}.get(self.path)
+        action = {"/v1/start": "start", "/v1/stop": "stop", "/v1/password": "password"}.get(self.path)
         if action is None:
             self._send(404, {"error": "Not found"})
         else:
