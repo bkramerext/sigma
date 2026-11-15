@@ -285,7 +285,6 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
-  const [hostedBrowserError, setHostedBrowserError] = useState('');
   const openingContainerBrowser = useRef(false);
   const pillTrigger = useRef<HTMLElement>(null);
   const providerActive = useProviderActivity();
@@ -400,7 +399,6 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       popup.document.title = 'Connect ChatGPT';
       popup.document.body.textContent = 'Opening your private browser…';
     }
-    setHostedBrowserError('');
     try {
       if (!popup) throw new Error('Browser popup blocked. Allow popups for SIGMA and retry.');
       const response = await fetch('/api/ai/personal-browser/start', {
@@ -421,23 +419,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       // and provider credentials are verified for this exact SIGMA user.
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Private browser unavailable.';
-      setHostedBrowserError(message);
-      // Do not silently close the popup on failure. The original window has
-      // no visible diagnostic because the pill's <details> remains collapsed.
-      // Keep the same window open with a useful error, without changing the
-      // Sponsored/Personal selection or retrying Mac-local OAuth.
-      if (popup && !popup.closed) {
-        try {
-          popup.document.title = 'ChatGPT connection unavailable';
-          popup.document.body.style.cssText =
-            'font:16px system-ui;padding:32px;max-width:600px;line-height:1.5';
-          popup.document.body.textContent =
-            'The private Docker browser could not open. ' + message
-            + ' SIGMA remains in Sponsored mode.';
-        } catch {
-          // Browser may have been closed or navigated by the user.
-        }
-      }
+      popup?.close();
+      reportRequestFailure(message);
     } finally {
       openingContainerBrowser.current = false;
     }
@@ -486,7 +469,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   }
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
-  <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen || !!hostedBrowserError}>
+  <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen}>
     <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void startContainerPersonalBrowser(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
@@ -497,9 +480,6 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     {sponsorProvisioningHelpOpen && <div className="connection-pill-messages">
       <p className="connection-pill-message" role="status">{sponsorProvisioningGuidance}</p>
       <button type="button" className="connection-text-action" onClick={() => setSponsorProvisioningHelpOpen(false)}>Dismiss</button>
-    </div>}
-    {containerBrowserLab && hostedBrowserError && <div className="connection-pill-messages">
-      <p className="connection-pill-message" role="alert">{hostedBrowserError}</p>
     </div>}
   </details>
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
