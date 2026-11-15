@@ -21,36 +21,41 @@ and mount namespaces, but deliberately share a Docker network namespace:
   Compose `network_mode: service:auth-poc`. The external desktop browser
   receives only a VNC framebuffer, not the OAuth redirect.
 
-## SIGMA pill POC on a developer machine (synthetic-only)
+## Local SIGMA `start --prod` experience (synthetic-only)
 
-Check out this branch in a separate worktree and start Docker Desktop. Then run:
+From your normal SIGMA checkout, start Docker Desktop and run:
 
 ```sh
-bash auth-poc/start-sigma-local.sh
+./sigma start --prod
 ```
 
-This builds the **unchanged production-architecture browser and credential-worker
-images** and launches local SIGMA with its existing Google sign-in and **existing
-ChatGPT pill toggle**. When the current selection is Sponsored, click the pill:
-the containerized Chromium screen opens in the usual sign-in browser window,
-without a new SIGMA menu, a VNC password, or any separate Docker command.
-The local launcher runs the same protected Unix-socket broker/proxy used in
-hosted SIGMA. The only local overlay maps the credential-worker UID and its
-private bind mounts to the current desktop user for Docker Desktop.
-All Docker/browser ports are unpublished for these user-scoped containers.
+The standard SIGMA launcher now prepares release-tagged isolated worker/browser
+images if needed, creates private local Unix-socket gateways, starts the
+UID-scoped broker, and launches SIGMA's existing backend and frontend.
+It also stops the broker and its containers when SIGMA exits or restarts,
+without deleting the separate user-scoped authentication state. No companion,
+custom startup script, VNC password, or Docker command is required.
 
-**No real OpenAI sign-in or inference is enabled yet.** This is a human test
-of the application pill → Docker broker → isolated browser → private stream.
-The screen is a synthetic lab and cannot connect a real account; SIGMA remains
-in Sponsored mode on cancellation, failure, or synthetic completion. It never
-falls back to the old macOS-local OAuth path. Closing the launcher stops its
-Docker browser/worker projects but does not delete their isolated stored state.
-The existing local Google sign-in configuration is required for identity binding.
+Click the SIGMA ChatGPT pill to open a standard dialog with an embedded
+**same-origin SIGMA private browser viewer**. OpenAI's login site itself is
+displayed inside isolated Chromium, not embedded in an iframe. The standard X
+closes the viewer and stops its browser without discarding durable state.
+If Docker Desktop is unavailable, SIGMA continues with Sponsored, and does not
+silently use pre-existing Mac-local personal tokens.
 
-A successful Linux CI run does **not** establish Docker Desktop/macOS Unix
-socket bind-mount compatibility. Before declaring Mac acceptance, verify the
-private browser actually streams in the user's local SIGMA tab. If the gateway
-is unavailable, show a failure and leave the existing funding mode unchanged.
+**No real OpenAI sign-in or model inference is enabled yet.** A running
+container is not proof of authorization. The browser loopback and streaming
+paths are currently a safe local integration prototype. Testing actual
+provider authorization remains a separate, explicit security and provider
+eligibility decision. Hosted production is unchanged.
+
+The historical `bash auth-poc/start-sigma-local.sh` only forwards to
+`./sigma start --prod` for compatibility and is not a separate launcher.
+A one-time `./sigma setup` may still be required for a new checkout.
+
+Actual macOS Docker Desktop and browser acceptance still require local testing.
+CI exercises Linux containers, broker isolation, and the integration contract,
+but cannot establish that macOS Docker Desktop works on a particular machine.
 
 ## Standalone Docker laboratory (developer diagnostic)
 
