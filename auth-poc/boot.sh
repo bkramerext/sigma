@@ -12,7 +12,7 @@ export SIGMA_STORAGE_BACKEND=local
 # A browser tab on the host must not be able to attach to another tab's VNC
 # session without an explicit, random per-container password.
 umask 077
-/opt/venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(9)[:12])' > /tmp/sigma-vnc-pass
+/opt/venv/bin/python -c 'import secrets; print(secrets.token_urlsafe(9)[:8])' > /tmp/sigma-vnc-pass
 Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
 xvfb_pid=$!
 # Wait for the X socket before connecting VNC to Xvfb.
