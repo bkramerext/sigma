@@ -3186,6 +3186,7 @@ async def connection_view(request: Request, refresh: bool = False):
 async def models_view(refresh: bool = False):
     return await models(refresh)
 
+
 def _personal_browser_principal(request: Request) -> cloud_auth.Principal:
     """Never accept a caller-provided workspace ID, account ID or Docker URL."""
     principal = getattr(request.state, "cloud_principal", None)
@@ -3237,7 +3238,6 @@ async def personal_browser_asset(request: Request, path: str):
 @app.websocket("/api/ai/personal-browser/ws")
 async def personal_browser_ws(websocket):
     await personal_browser_proxy.websocket_bridge(websocket)
-
 
 
 class AuthBeginRequest(BaseModel):
