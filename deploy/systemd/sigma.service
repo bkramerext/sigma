@@ -12,7 +12,7 @@ Environment=SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env
 Environment=SIGMA_STATE_DISK_MOUNT=/srv/sigma-state
 ExecStartPre=/usr/bin/python3 /usr/local/libexec/sigma/gce_preflight.py --repository /opt/sigma/current
 ExecStart=/opt/sigma/current/deploy/start-gce.sh
-ExecStop=/usr/bin/docker compose --project-name sigma --env-file /etc/sigma/deploy.env -f /opt/sigma/current/deploy/compose.yaml -f /opt/sigma/current/deploy/compose.gce.yaml stop
+ExecStop=/opt/sigma/current/deploy/compose-gce.sh stop
 TimeoutStartSec=0
 TimeoutStopSec=90
 Restart=on-failure
