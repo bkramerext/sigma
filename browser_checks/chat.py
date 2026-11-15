@@ -109,6 +109,10 @@ with sync_playwright() as playwright:
     page.route("**/api/**", respond)
     page.goto(ORIGIN + "/", wait_until="networkidle")
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
+    # A stale direct-route tab from a previous launch must return to Home.
+    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
+    expect(page).to_have_url(ORIGIN + "/")
+    expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
     page.goto(ORIGIN + "/?brainstorm=1", wait_until="networkidle")
     expect(page).to_have_url(ORIGIN + "/")
     page.get_by_role("button", name="Brainstorm", exact=True).click()
@@ -118,7 +122,9 @@ with sync_playwright() as playwright:
     assert page.locator(".chat-home-link").count() == 0
     page.locator(".project-art-header .project-header-art").click()
     expect(page).to_have_url(ORIGIN + "/")
-    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
+    expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Brainstorm", exact=True).click()
+    expect(page).to_have_url(ORIGIN + "/brainstorm")
     human = page.get_by_label("Human", exact=True)
     first = page.get_by_role("region", name="AI #1 latest reply")
     second = page.get_by_role("region", name="AI #2 latest reply")
@@ -316,6 +322,9 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120003.md")
     assert session_calls == 3
+    # A new normal page load must not inherit the earlier local opt-in.
+    page.goto(ORIGIN + "/", wait_until="networkidle")
+    expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
     assert not errors, errors
     assert config_calls >= 1
     browser.close()
