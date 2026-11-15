@@ -624,14 +624,16 @@ async def models(refresh: bool = False, context: Mapping[str, Any] | None = None
             {
                 "id": identifier,
                 **capability,
-                "availability": (
-                    "available" if identifier in known else "unavailable"
-                ) if verified else "unverified",
+                "availability": ("available" if identifier in known else "unavailable")
+                if verified
+                else "unverified",
             }
             for identifier, capability in CATALOG.items()
         ]
-        default = DEFAULT_MODEL if DEFAULT_MODEL in known or not known else next(
-            identifier for identifier in CATALOG if identifier in known
+        default = (
+            DEFAULT_MODEL
+            if DEFAULT_MODEL in known or not known
+            else next(identifier for identifier in CATALOG if identifier in known)
         )
         return {
             "models": choices,

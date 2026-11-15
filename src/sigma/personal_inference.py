@@ -148,7 +148,9 @@ async def respond(
         or account_state["binding"] != expected_binding
         or payload["model"] not in account_state["models"]
     ):
-        raise PersonalInferenceUnavailable("The selected ChatGPT account changed or is unavailable.")
+        raise PersonalInferenceUnavailable(
+            "The selected ChatGPT account changed or is unavailable."
+        )
     result = await _request(
         principal,
         "POST",

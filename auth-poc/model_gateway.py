@@ -19,7 +19,6 @@ if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
     raise RuntimeError("Worker model transport is not enabled outside the POC")
 
 MAX_RPC_BYTES = 256_000
-BINDING = re.compile(r"[0-9a-f]{64}\Z")
 
 app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
 

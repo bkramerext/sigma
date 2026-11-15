@@ -232,7 +232,11 @@ async def respond(
                     "https://api.openai.com/v1/responses",
                     headers={
                         "Authorization": "Bearer " + credential["token"],
-                        **({"Accept": "text/event-stream"} if credential["mode"] == "chatgpt" else {}),
+                        **(
+                            {"Accept": "text/event-stream"}
+                            if credential["mode"] == "chatgpt"
+                            else {}
+                        ),
                     },
                     json=payload,
                 ) as response,

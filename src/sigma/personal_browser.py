@@ -113,9 +113,7 @@ async def session(
     }
 
 
-async def _gateway_socket(
-    principal: cloud_auth.Principal | None, *, filename: str
-) -> str:
+async def _gateway_socket(principal: cloud_auth.Principal | None, *, filename: str) -> str:
     """Resolve only the verified user's protected Unix socket, never a hostname."""
     if filename not in {"vnc.sock", "model.sock"}:
         raise ValueError("Unsupported private channel")
