@@ -71,11 +71,6 @@ async def view(request: Request) -> HTMLResponse:
     nonce = secrets.token_urlsafe(20)
     script = """
 const status = document.querySelector('#connection-status');
-const cancel = document.querySelector('#cancel-connection');
-cancel.addEventListener('click', () => {
-  void fetch(__STOP_URL__, {method: 'POST', keepalive: true}).catch(() => {});
-  window.close();
-});
 const previewUrl = __PREVIEW_URL__;
 const messages = {
   ready: 'Ready to sign in. Click Continue with ChatGPT in the browser below.',
@@ -119,31 +114,24 @@ try {
   rfb.scaleViewport = true;
   rfb.resizeSession = true;
   rfb.addEventListener('connect', () => {
-    cancel.hidden = true;
     displayConnected = true;
     if (previewUrl) void watchPreview();
     else status.textContent = 'Browser ready';
   });
   rfb.addEventListener('disconnect', () => {
     displayConnected = false;
-    cancel.hidden = true;
     status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
   });
 } catch {
-  cancel.hidden = true;
   status.textContent = 'Could not load the private browser. Close this window and reconnect from SIGMA.';
 }
 """
-    stop_url = "/api/ai/personal-browser/stop"
     preview_url = "/api/ai/personal-browser/preview-state"
     if window_id:
-        suffix = "?sigma_window=" + window_id
-        stop_url += suffix
-        preview_url += suffix
+        preview_url += "?sigma_window=" + window_id
     script = (
         script.replace("__BASE__", prefix)
         .replace("__PASSWORD__", json.dumps(password))
-        .replace("__STOP_URL__", json.dumps(stop_url))
         .replace(
             "__PREVIEW_URL__",
             json.dumps(preview_url if personal_browser.sign_in_preview_enabled() else None),
@@ -161,7 +149,7 @@ try {
         "</style></head><body><main>"
         "<header><strong>Connect ChatGPT</strong><span id='connection-status'>"
         "Connecting to the ChatGPT sign-in browser…</span>"
-        "<button id='cancel-connection' type='button'>Cancel</button></header>"
+        "</header>"
         "<div id='screen'></div></main>"
         f"<script type='module' nonce='{nonce}'>{script}</script></body></html>"
     )
