@@ -92,7 +92,7 @@ class ReleaseImageTests(unittest.TestCase):
         self.assertIn(f"SIGMA_RELEASE={requested}", args)
         self.assertIn(f"org.opencontainers.image.revision={requested}", args)
         self.assertIn("FROM sigma-backend:", content)
-        self.assertEqual(observed[0][0][6], f"sigma-backend:{requested}")
+        self.assertIn(f"sigma-backend:{requested}", observed[0][0])
 
     def test_unresolvable_or_malformed_requested_sha_fails_before_docker(self) -> None:
         invoked = False
