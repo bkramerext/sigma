@@ -173,7 +173,7 @@ try {
                 "default-src 'none'; "
                 f"script-src 'self' 'nonce-{nonce}'; "
                 f"style-src 'nonce-{nonce}'; connect-src{connect}; "
-                "img-src 'self' data:; font-src 'self'; frame-ancestors 'none'"
+                "img-src 'self' data:; font-src 'self'; frame-ancestors 'self'"
             ),
         },
     )
