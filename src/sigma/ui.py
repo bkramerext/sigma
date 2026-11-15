@@ -175,6 +175,11 @@ def run_ui(
                 child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
                 child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
                 child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
+                # Scope local Brainstorm to the current launcher, not browser storage.
+                # Override inherited shell variables on every start.
+                child_env["VITE_SIGMA_LOCAL_BRAINSTORM"] = (
+                    "true" if navigate_path == "/?brainstorm=1" else "false"
+                )
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
                 # This launcher owns its API process. Never let a shell-level
                 # Vite proxy override route browser sign-ins to another backend.
