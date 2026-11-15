@@ -85,8 +85,11 @@ def main() -> None:
             continue
         raise AssertionError("Unbounded remote browser action was accepted")
     routes = {getattr(route, "path", "") for route in app.routes}
+    worker_routes = {getattr(route, "path", "") for route in proxy.router.routes}
     for suffix in ("/ui", "/begin", "/status", "/frame", "/input", "/test"):
-        assert "/api/auth-browser-poc" + suffix in routes
+        expected = "/api/auth-browser-poc" + suffix
+        assert expected in worker_routes, ("router", expected, sorted(worker_routes))
+        assert expected in routes, ("application", expected, sorted(routes))
     root = Path(__file__).resolve().parents[1]
     overlay = (root / "deploy/compose.auth-browser-poc.yaml").read_text()
     assert "ports:" not in overlay
