@@ -55,9 +55,9 @@ code{color:#d7b58e}</style></head>
 <p>Chromium runs in a disposable browser container. An isolated OAuth worker
 holds credentials in another container. They share a localhost network only.
 <strong>Real ChatGPT sign-in is disabled for this synthetic test.</strong></p>
-<button id="start">Open ChatGPT account chooser</button>
-<button id="verify">Verify model catalog</button>
-<button id="infer">Test one real model response</button>
+<button id="start" disabled>Open ChatGPT account chooser (disabled)</button>
+<button id="verify" disabled>Verify model catalog (disabled)</button>
+<button id="infer" disabled>Test one real model response (disabled)</button>
 <p id="status" role="status">No sign-in started.</p>
 <script>
 const status=document.getElementById('status');
