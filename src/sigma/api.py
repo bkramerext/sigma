@@ -3259,7 +3259,12 @@ async def personal_browser_disconnect(request: Request):
     try:
         await personal_inference.disconnect(principal)
         await run_in_threadpool(cloud_auth.clear_personal_authorization, principal.subject)
-    except (personal_inference.PersonalInferenceUnavailable, OSError, RuntimeError, ValueError) as exc:
+    except (
+        personal_inference.PersonalInferenceUnavailable,
+        OSError,
+        RuntimeError,
+        ValueError,
+    ) as exc:
         raise HTTPException(503, "Could not disconnect Personal ChatGPT. Try again.") from exc
     return JSONResponse({"disconnected": True}, headers={"Cache-Control": "no-store"})
 
@@ -3536,13 +3541,17 @@ async def auth_mode(body: AuthModeRequest, request: Request):
                     )
                 await run_in_threadpool(cloud_auth.record_personal_authorization, principal.subject)
             except (personal_inference.PersonalInferenceUnavailable, PermissionError) as exc:
-                raise HTTPException(403, "Connect your ChatGPT plan before switching to Personal.") from exc
+                raise HTTPException(
+                    403, "Connect your ChatGPT plan before switching to Personal."
+                ) from exc
             except (OSError, RuntimeError, ValueError) as exc:
                 raise HTTPException(503, "Personal authorization could not be saved.") from exc
         try:
             cloud_auth.set_model_access(principal.subject, body.mode)
         except PermissionError as exc:
-            raise HTTPException(403, "This account cannot select the requested connection.") from exc
+            raise HTTPException(
+                403, "This account cannot select the requested connection."
+            ) from exc
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(503, "Connection choice could not be saved.") from exc
         return connection_view_state(await connection(refresh=True), request)
