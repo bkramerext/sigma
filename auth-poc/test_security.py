@@ -31,6 +31,35 @@ if __name__ == "__main__":
         ),
         403,
     )
+    # Even a trusted-origin browser is forbidden to trigger REAL OpenAI calls
+    # until the POC's security and provider-eligibility review is complete.
+    assert_denied(
+        urllib.request.Request(
+            "http://127.0.0.1:8001/begin",
+            data=b"",
+            method="POST",
+            headers={"Origin": "http://127.0.0.1:8001"},
+        ),
+        403,
+    )
+    assert_denied(
+        urllib.request.Request(
+            "http://127.0.0.1:8001/verify",
+            data=b"",
+            method="POST",
+            headers={"Origin": "http://127.0.0.1:8001"},
+        ),
+        403,
+    )
+    assert_denied(
+        urllib.request.Request(
+            "http://127.0.0.1:8001/inference",
+            data=b"",
+            method="POST",
+            headers={"Origin": "http://127.0.0.1:8001"},
+        ),
+        403,
+    )
     # Host-header rebinding must not expose the internal OAuth worker.
     assert_denied(
         urllib.request.Request(
