@@ -22,6 +22,7 @@ on:
       - 'src/sigma/agentic.py'
       - 'tests/auth_poc_host_broker.py'
       - 'tests/auth_poc_preview.py'
+      - 'tests/auth_poc_preview_runtime.sh'
       - 'tests/auth_poc_caddy_forward_auth.py'
       - 'src/sigma/tooling.py'
       - 'deploy/release_image.py'
@@ -53,6 +54,10 @@ jobs:
         shell: bash
         env:
           SIGMA_PERSONAL_LAB_EDGE_KEY: ci-only-edge-key-not-a-credential
+          SIGMA_CADDY_SCHEME: https
+          SIGMA_DOMAIN: sigma.example.invalid
+          SIGMA_TLS_EMAIL: admin@example.invalid
+          SIGMA_CADDY_UPSTREAM_SCHEME: https
         run: |
           set -euo pipefail
           cat > /tmp/auth-poc-preview.Caddyfile <<'EOF'
@@ -66,6 +71,27 @@ jobs:
             -v /tmp/auth-poc-preview.Caddyfile:/tmp/Caddyfile:ro \
             caddy:2.9.1-alpine \
             caddy adapt --adapter caddyfile --config /tmp/Caddyfile --pretty >/tmp/auth-poc-preview.json
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location(
+              "preview_route", "deploy/auth-poc-preview-caddy-route.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          current = Path("deploy/Caddyfile").read_bytes()
+          snippet = Path("deploy/auth-poc.preview.caddy").read_bytes()
+          output = module.render(current, snippet, "ci-only-edge-key-not-a-credential")
+          Path("/tmp/auth-poc-runtime.Caddyfile").write_bytes(output)
+          PY
+          docker run --rm \
+            -e SIGMA_PERSONAL_LAB_EDGE_KEY \
+            -e SIGMA_CADDY_SCHEME -e SIGMA_DOMAIN -e SIGMA_TLS_EMAIL \
+            -e SIGMA_CADDY_UPSTREAM_SCHEME \
+            -v "$PWD/deploy/auth-poc.preview.caddy:/etc/caddy/personal-lab.caddy:ro" \
+            -v /tmp/auth-poc-runtime.Caddyfile:/tmp/Caddyfile:ro \
+            caddy:2.9.1-alpine \
+            caddy adapt --adapter caddyfile --config /tmp/Caddyfile --pretty \
+            >/tmp/auth-poc-runtime.json
       - name: Exercise Caddy forward-auth and preview credential boundary
         run: python3 tests/auth_poc_caddy_forward_auth.py
       - name: Verify GCE Compose overlay remains nonpublic and persistent
@@ -142,6 +168,8 @@ jobs:
           cfg = json.loads(Path("/tmp/auth-poc-preview-compose.json").read_text())
           service = cfg["services"]["preview"]
           assert service["image"] == "sigma-auth-poc:" + __import__("os").environ["GITHUB_SHA"]
+          assert service["entrypoint"] == ["/opt/venv/bin/uvicorn"], service.get("entrypoint")
+          assert service["command"][0] == "preview_server:app", service["command"]
           assert not service.get("ports"), service.get("ports")
           assert service["read_only"] is True
           assert service["user"] == "10001:10001"
@@ -153,6 +181,43 @@ jobs:
           assert not any("docker.sock" in mount["target"] for mount in service["volumes"])
           print("PASS private edge-only preview service and read-only broker IPC mounts")
           PY
+      - name: Verify preview Caddy overlay preserves the production release checkout
+        shell: bash
+        env:
+          SIGMA_PERSONAL_LAB_EDGE_KEY: ci-only-edge-key-not-a-credential
+        run: |
+          set -euo pipefail
+          SIGMA_RELEASE="$GITHUB_SHA" \
+          SIGMA_DOMAIN="sigma.example.invalid" \
+          SIGMA_TLS_EMAIL="admin@example.invalid" \
+          SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="admin@example.invalid" \
+          GOOGLE_OIDC_CLIENT_ID="example.apps.googleusercontent.com" \
+          SIGMA_INVITATION_SMTP_USERNAME="admin@example.invalid" \
+          SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE="/tmp/dummy" \
+          SIGMA_CLOUD_OPENAI_API_KEY_FILE="/tmp/dummy" \
+          SIGMA_INVITATION_SMTP_PASSWORD_FILE="/tmp/dummy" \
+          SIGMA_SANDBOX_DOCKER_SOCKET="/tmp/dummy-docker.sock" \
+          SIGMA_SANDBOX_DOCKER_GID="10001" \
+          SIGMA_STATE_DISK_MOUNT="/srv/sigma-state" \
+          docker compose -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+            -f deploy/auth-poc.preview.edge.gce.yaml config --format json \
+            > /tmp/auth-poc-preview-edge-compose.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("/tmp/auth-poc-preview-edge-compose.json").read_text())
+          edge = cfg["services"]["edge"]
+          assert edge["environment"]["SIGMA_PERSONAL_LAB_EDGE_KEY"] == "ci-only-edge-key-not-a-credential"
+          mounts = [mount for mount in edge["volumes"] if mount["target"] == "/etc/caddy/Caddyfile"]
+          assert len(mounts) == 1, mounts
+          assert mounts[0]["source"] == "/var/lib/sigma-personal-lab/runtime/Caddyfile", mounts
+          assert any(mount["target"] == "/etc/caddy/personal-lab.caddy" for mount in edge["volumes"])
+          assert not any("/opt/sigma/current/deploy/Caddyfile" in mount["source"]
+                         for mount in edge["volumes"])
+          print("PASS Caddy route overlay reads only runtime-owned config, outside release checkout")
+          PY
+      - name: Build and run the actual preview Compose service
+        run: bash tests/auth_poc_preview_runtime.sh
       - name: Verify worker/browser network has no external route
         shell: bash
         run: |
