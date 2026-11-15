@@ -24,6 +24,20 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
 _ATTEMPT_ID: str | None = None
 
 
+def real_signin_enabled() -> bool:
+    # Explicitly fail closed while the nested Chromium sandbox is unavailable.
+    return os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") == "1"
+
+
+def require_real_signin() -> None:
+    if not real_signin_enabled():
+        raise HTTPException(
+            403,
+            "Real ChatGPT sign-in is disabled pending browser-sandbox and provider-eligibility review",
+        )
+
+
+
 def same_origin(request: Request) -> None:
     if request.headers.get("origin") != "http://127.0.0.1:8001":
         raise HTTPException(403, "Invalid browser origin")
@@ -40,7 +54,7 @@ code{color:#d7b58e}</style></head>
 <body><h1>Containerized Personal ChatGPT POC</h1>
 <p>Chromium runs in a disposable browser container. An isolated OAuth worker
 holds credentials in another container. They share a localhost network only.
-This is not a production-approved hosted integration.</p>
+<strong>Real ChatGPT sign-in is disabled for this synthetic test.</strong></p>
 <button id="start">Open ChatGPT account chooser</button>
 <button id="verify">Verify model catalog</button>
 <button id="infer">Test one real model response</button>
@@ -92,6 +106,7 @@ setInterval(poll,1800);
 async def begin(request: Request) -> dict[str, str]:
     global _ATTEMPT_ID
     same_origin(request)
+    require_real_signin()
     if _ATTEMPT_ID is not None:
         if chatgpt_auth.attempt_status(_ATTEMPT_ID)["status"] == "connecting":
             raise HTTPException(409, "Complete or cancel the previous sign-in")
@@ -122,6 +137,7 @@ async def status() -> dict[str, str | None]:
 @app.post("/verify")
 async def verify(request: Request) -> dict[str, str | bool]:
     same_origin(request)
+    require_real_signin()
     result = await connection(refresh=True)
     return {
         "connected": result.get("status") == "connected",
@@ -132,6 +148,7 @@ async def verify(request: Request) -> dict[str, str | bool]:
 @app.post("/inference")
 async def inference(request: Request) -> dict[str, bool]:
     same_origin(request)
+    require_real_signin()
     config = await chat.configuration()
     if not config["available"]:
         raise HTTPException(503, "No verified Personal ChatGPT model available")
