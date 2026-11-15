@@ -1,0 +1,47 @@
+# Opt-in, single-admin containerized OpenAI authentication feasibility test.
+# Entirely private application network, no port published to the Internet.
+# Use only with SIGMA_AUTH_BROWSER_POC_ENABLED=true in the release environment.
+services:
+  backend:
+    environment:
+      SIGMA_AUTH_BROWSER_POC_ENABLED: "true"
+      SIGMA_AUTH_BROWSER_POC_ORIGIN: http://auth-browser-poc:8765
+      SIGMA_AUTH_BROWSER_POC_KEY_FILE: /run/secrets/auth_browser_poc_key
+    secrets:
+      - auth_browser_poc_key
+  auth-browser-poc:
+    platform: linux/amd64
+    image: sigma-auth-browser-poc:${SIGMA_RELEASE:?set SIGMA_RELEASE}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: 1500m
+    cpus: 2.0
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m,uid=10001,gid=10001,mode=0700
+    volumes:
+      - auth-browser-poc-state:/var/lib/sigma-auth
+    secrets:
+      - auth_browser_poc_key
+    environment:
+      SIGMA_AUTH_BROWSER_POC_KEY_FILE: /run/secrets/auth_browser_poc_key
+    networks: [application]
+    expose: ["8765"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=2).read()"]
+      interval: 15s
+      timeout: 5s
+      start_period: 45s
+      retries: 5
+    logging:
+      driver: local
+      options: {max-size: "5m", max-file: "2"}
+secrets:
+  auth_browser_poc_key:
+    file: ${SIGMA_STATE_DISK_MOUNT:?set state mount}/auth/auth-browser-poc.key
+volumes:
+  auth-browser-poc-state:
