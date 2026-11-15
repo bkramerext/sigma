@@ -58,11 +58,33 @@ docker compose -f deploy/auth-poc.compose.yaml down
 To explicitly discard the POC credentials: run `down -v` instead. Do not
 use an important account until the adversarial review is accepted.
 
+## User-scoped hosted integration (synthetic only)
+
+The separate, **explicitly opted-in** overlay
+`deploy/auth-poc.backend-lab.gce.yaml` mounts only the trusted host broker's
+private Unix socket and each user's isolated browser-relay directory into the
+SIGMA backend. It does not expose any browser ports, mount the host Docker
+socket in SIGMA, activate real OpenAI sign-in, or change sponsored inference.
+It is **not included** in ordinary production deployment.
+
+The host broker `auth-poc/host_broker.py` accepts only fixed lifecycle
+commands from SIGMA's backend UID. It starts release-pinned, per-user Compose
+projects with separate worker token stores, network namespaces and Unix relay
+sockets. API handlers resolve the worker ID from the verified Google subject,
+not a caller-provided path or account name. The frontend's Personal choice
+currently opens only the credential-free lab UI.
+
+CI proves synthetic two-user isolation, routes, sandbox operation, Unix-socket
+permissions, and persistence under the private GCE Compose layout. Actual VM
+startup, SIGMA reverse-proxy WebSocket behavior, real OpenAI account selection,
+verified identity, and per-user inference routing remain **unproven**.
+
 ## Production acceptance gates (unmet)
 
-- The current lab is **single-user**, though CI also checks two independently
-  named Compose stacks have distinct credential volumes. Google identity must bind a unique worker
-  and browser session per SIGMA user, including lifecycle and revocation.
+- The basic command-line lab remains single-user. A separately gated hosted
+  prototype now binds authenticated Google users to isolated Docker projects;
+  credential-free isolation tests pass. Live OAuth, revocation across all
+  services, and the real inference routing boundary still require acceptance.
 - noVNC is visible only on the host loopback, using HTTP plus a temporary
   VNC password. A hosted integration must provide TLS and a Google-session
   checked, user-specific browser stream through SIGMA's backend, without

@@ -9,6 +9,7 @@ on:
       - 'deploy/auth-poc.compose.yaml'
       - 'deploy/auth-poc.gce.yaml'
       - 'deploy/auth-poc.user.gce.yaml'
+      - 'deploy/auth-poc.backend-lab.gce.yaml'
       - 'src/sigma/personal_browser.py'
       - 'tests/auth_poc_host_broker.py'
       - 'deploy/release_image.py'
@@ -49,6 +50,45 @@ jobs:
             -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
             config --format json > /tmp/auth-poc-gce-compose.json
           python3 -c 'import json; c=json.load(open("/tmp/auth-poc-gce-compose.json")); a=c["services"]["auth-poc"]; b=c["services"]["browser"]; assert not a.get("ports"), a.get("ports"); assert not b.get("ports"), b.get("ports"); assert a["image"]=="sigma-auth-poc:"+__import__("os").environ["GITHUB_SHA"]; assert b["image"]=="sigma-auth-browser-poc:"+__import__("os").environ["GITHUB_SHA"]; assert a["environment"]["SIGMA_AUTH_POC_REAL_SIGNIN"]=="0"; assert not b.get("volumes"), b.get("volumes"); assert c["volumes"]["auth-poc-state"]["driver_opts"]["device"]=="/srv/sigma-state/auth/auth-poc"'
+      - name: Validate opt-in GCE SIGMA browser broker overlay is private
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIGMA_RELEASE="$GITHUB_SHA" \
+          SIGMA_DOMAIN="sigma.example.invalid" \
+          SIGMA_TLS_EMAIL="admin@example.invalid" \
+          SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="admin@example.invalid" \
+          GOOGLE_OIDC_CLIENT_ID="example.apps.googleusercontent.com" \
+          SIGMA_INVITATION_SMTP_USERNAME="admin@example.invalid" \
+          SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE="/tmp/dummy" \
+          SIGMA_CLOUD_OPENAI_API_KEY_FILE="/tmp/dummy" \
+          SIGMA_INVITATION_SMTP_PASSWORD_FILE="/tmp/dummy" \
+          SIGMA_SANDBOX_DOCKER_SOCKET="/tmp/dummy-docker.sock" \
+          SIGMA_SANDBOX_DOCKER_GID="10001" \
+          SIGMA_STATE_DISK_MOUNT="/srv/sigma-state" \
+          SIGMA_PERSONAL_BROKER_DIR="/run/sigma-personal/broker" \
+          SIGMA_PERSONAL_GATEWAY_DIR="/run/sigma-personal/gateways" \
+          docker compose -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+            -f deploy/auth-poc.backend-lab.gce.yaml config --format json \
+            > /tmp/auth-poc-backend-lab.json
+          python3 - <<'PY'
+          import json
+          cfg = json.load(open("/tmp/auth-poc-backend-lab.json"))
+          backend = cfg["services"]["backend"]
+          env = backend["environment"]
+          assert env["SIGMA_PERSONAL_BROWSER_LAB_ENABLED"] == "1"
+          assert env["SIGMA_AUTH_POC_REAL_SIGNIN"] == "0"
+          assert env["SIGMA_PERSONAL_BROWSER_BROKER_SOCKET"] == "/run/sigma-personal-broker/broker.sock"
+          mounts = {m["target"]: m for m in backend["volumes"]}
+          for target in ("/run/sigma-personal-broker", "/run/sigma-personal-gateways"):
+              assert mounts[target]["read_only"] is True, mounts[target]
+          assert not backend.get("ports")
+          assert "auth-poc" not in cfg["services"], "Lab overlay accidentally starts shared worker"
+          assert "browser" not in cfg["services"], "Lab overlay accidentally publishes browser"
+          assert not any("docker.sock" in m["target"] for m in backend["volumes"]
+                         if m["target"] != "/run/sigma-sandbox/docker.sock")
+          print("PASS optional HTTPS broker overlay is private and real OAuth remains disabled")
+          PY
       - name: Assert GCE browser seccomp and capability parity
         run: |
           python3 - <<'PY'

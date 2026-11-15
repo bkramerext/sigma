@@ -1,0 +1,19 @@
+# Explicit opt-in hosted integration rehearsal only. NOT included by normal
+# GCE production deployments. No provider credentials or public browser ports.
+# The host supervisor must own the broker and per-user gateway sockets.
+services:
+  backend:
+    environment:
+      SIGMA_PERSONAL_BROWSER_LAB_ENABLED: "1"
+      SIGMA_AUTH_POC_REAL_SIGNIN: "0"
+      SIGMA_PERSONAL_BROWSER_BROKER_SOCKET: /run/sigma-personal-broker/broker.sock
+      SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT: /run/sigma-personal-gateways
+    volumes:
+      - type: bind
+        source: ${SIGMA_PERSONAL_BROKER_DIR:?private host supervisor socket directory required}
+        target: /run/sigma-personal-broker
+        read_only: true
+      - type: bind
+        source: ${SIGMA_PERSONAL_GATEWAY_DIR:?private per-user browser gateway directory required}
+        target: /run/sigma-personal-gateways
+        read_only: true
