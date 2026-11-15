@@ -1,0 +1,91 @@
+T88 R4R handoff — Red
+
+Issue: https://github.com/bkramerext/sigma/issues/88
+Base: main at 2c409e6b4e045e75a84b369c12f545cb8a969e32
+Branch: red/t88-google-sponsored-auth
+PR: https://github.com/bkramerext/sigma/pull/214
+Current reviewed PR head: 22304afc4d2542c10b2e9907f2955693aa572140
+Final PR head after this handoff refresh: recorded in the R4R response.
+
+Implementation
+
+- Added a persistent account record keyed by verified Google subject. It stores
+  verified email, current role/access state, hosted workspace mapping, personal
+  versus sponsored access, sponsorship eligibility, and the last server-checked
+  connection status. Grant role changes and revocation update role/eligibility.
+  Spend, held reservations and unknown attempts remain in T99's usage ledger.
+- After an authorized callback, the app creates/loads the hosted per-subject
+  workspace before issuing the session. Protected request middleware continues
+  to enforce active invitations and admin role; guest APIs cannot access private
+  workspaces or inference.
+- Added a protected, non-generating sponsored connection check using the
+  server-held credential and provider model catalog. It returns only safe state
+  and persists the result. Personal local-auth mode records the existing
+  connection service's status. No credential material is sent to the browser.
+- Replaced the separate hosted Google and model controls with one two-line
+  role/model pill and one account/model dialog. Added guest Explore-only entry,
+  explicit uninvited-account screen, provider retry/recovery states, sponsor
+  budget display, and clearing of remembered project selection at sign-out.
+- Added a browser fixture app that mocks the external provider boundary while
+  using SIGMA's real connection adapter, account persistence, workspace and
+  project APIs. Extended deterministic auth and sponsored API coverage.
+
+Verification
+
+- Focused backend: tests/cloud_auth.py (17 tests), tests/cloud_research_sponsored_api.py,
+  tests/cloud_research_api.py, tests/cloud_workspaces.py.
+- Browser: uv run --with playwright python browser_checks/t23_1_google_signin.py
+  in real Chrome. Covers guest Demo access/no AI requests, Google fixture A
+  regular user and B administrator, two-line account/model state, isolated
+  workspaces, sponsored connection success, network failure and provider
+  credential rejection with retry/recovery, exhausted budget display, sign-out,
+  uninvited access, and no page errors.
+- Static/frontend: Ruff, Ruff format, Pyright, npm frontend typecheck and
+  production build.
+- Full suite: `./sigma test` passed all repository scenarios, Ruff, Ruff format, Pyright, frontend
+  typecheck and production build on the final handoff content before commit.
+  The tested tree is the content of current reviewed head
+  `22304afc4d2542c10b2e9907f2955693aa572140` plus the SHA/handoff refresh;
+  the exact committed head is reported in the R4R response. Vite reports the existing 511.79 kB main JavaScript chunk
+  warning; build succeeded.
+- The first full-suite pass exposed a pre-existing Ruff B023/format failure in
+  browser_checks/model_availability.py. Fixed its closure capture with a bound
+  default argument; full suite passed once before the latest final edits.
+- Provider and Google boundaries are deterministic mocks. No live OAuth,
+  GCP configuration, external provider request, paid inference, or secret use.
+
+Integration overlaps and conflicts
+
+- T22.2 / PR #37 supplies and remains authoritative for Google OIDC, invitations,
+  admin grants, session revocation and denied-account behavior. This PR extends
+  its persistent auth DB with account state.
+- T174 / issue #192 and PR #148's preparation cover subject-keyed hosted
+  workspaces, project ownership and path confinement. Reused those services;
+  no second storage mapping was introduced.
+- T99 / PR #107 and T99.1 / PR #110 supply hosted sponsor credential selection,
+  budget admission, spend reconciliation and failure holds. This PR adds the
+  user-facing connectivity state only; it does not change budget limits.
+- T43.2 / PRs #166 and #169 cover multi-account fixture acceptance. Its real
+  Chrome script is updated to assert the unified account/model pill and extend
+  the actual hosted connection-check flow.
+- Architectural boundary: T22.2's explicit local-auth mode preserves the
+  traditional shared local project root. It therefore has no per-subject
+  workspace, by design. Hosted mode uses T174 isolation. Changing local project
+  ownership would conflict with T22.2's local compatibility contract and needs
+  coordinator/product direction. Hosted mode also intentionally rejects
+  personal ChatGPT OAuth under T172; it uses only SIGMA-sponsored inference.
+
+Current-main integration check
+
+- Checked against `main` at `6bab28f39349ec4696c19cb782bbf24740f8a130`; the PR is reported mergeable and a local merge-tree check found no conflict with current main.
+- Simulated combination with PR #213 (`811b3cf35aa7ee06e99ff1610b159b701c6a17bb`): the Current Understanding suggestion code and T88 account/provider code coexist in `frontend/src/main.tsx` and `src/sigma/api.py`. T88 status notes are positioned separately from PR #213’s top-of-file status addition to avoid a documentation conflict if T88 merges first. No source-code conflict or change dependency was found.
+
+Deployment acceptance gates (UNVERIFIED)
+
+- Real Google OAuth callback/cookie behavior, deployed two-account isolation,
+  and live sponsored-provider connectivity remain UNVERIFIED. These are
+  deployment acceptance gates, not blockers to merging the tested
+  implementation; they require an approved account/deployment window.
+
+- A successful provider catalog check confirms authentication/reachability,
+  not a successful inference, available quota or research quality.

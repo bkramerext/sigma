@@ -1,0 +1,1 @@
+PASS lossless evidence pooling, exact negative constraints and source coverage; missing/foreign/status/hash/citation/follow-up checks; execution failure cannot be a counterexample

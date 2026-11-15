@@ -1,0 +1,27 @@
+T21 FINAL LOCAL INTEGRATION AND PRODUCT ACCEPTANCE — R4R
+
+Branch: gray/t21-final-local-acceptance
+PR: https://github.com/bkramerext/sigma/pull/56
+Integrated base tested: origin/main 703442cfef6be004e8ed28e46f211ecf151e3f6e (PR #49 included)
+
+Scope and changes
+- Corrected the Nonconsecutive Subset Sums sample's imported Session #1 metrics snapshot. Its “Outcome classification” now says “Mixed · partial progress, unresolved,” consistent with the session's current outcome. The exact counterexample, recurrence hypothesis, and Skeptic evidence remain intact; no coordinator logic changed.
+- Extended the sample Chrome regression to inspect the expanded Metrics subsection and ensure the stale negative-project label does not return.
+- Updated the A20 Chrome assertions to the current local Google sign-in placeholder and all four current Export Project options.
+- Extended A17 Chrome checks to download and inspect Project Audit JSON, Text, and LaTeX reports. Existing HTML-tab math and AI-paper PDF checks remain covered.
+- Added final T21 verification evidence and limitations to docs/STATUS.md.
+
+Verification
+- ./sigma test: PASS after the sample correction, on integrated main plus this branch's sample data. Lifecycle, settings, agentic/session, computational evidence, reports, Python/Sage, Ruff/format, Pyright, frontend typecheck, and production build all passed. Existing Starlette/httpx deprecation warnings only.
+- tests/make_sample.py: PASS; the corrected imported evidence remains valid and persists through the sample loader.
+- Real Chrome with deterministic local fixtures: PASS browser_checks/a17_research.py, a20_paper.py, header.py, settings.py, recents.py (fresh fixture), nonconsecutive_sample.py, and t29_intervention.py.
+- The nonconsecutive sample shows five mixed/unresolved historical outcomes, preserves Session #1's exact counterexample, retains three strategies and open obligations in the report, and has no horizontal overflow at 390 px or 320 px.
+- Reports checked: Project Audit JSON, Text, HTML with rendered mathematical notation, and LaTeX; HTML/PDF downloads use fixture-backed local workflows. Exported outcome/evidence attribution and unverified provenance remain visible.
+- No live/paid provider calls were made. Chrome viewport emulation is not physical-device testing.
+
+Remaining limitations
+- Live provider reliability and model research quality remain unverified.
+- Cloud authentication and deployment remain Cloud-team ownership and were not browser-tested here.
+- `./sigma test` prints the existing Starlette/httpx deprecation warning but exits successfully.
+
+Coordinator action: review/integrate this PR. Do not merge from Gray's branch.

@@ -1,0 +1,71 @@
+{
+  "arms": [
+    {
+      "arm": "baseline",
+      "status": "completed",
+      "elapsed_seconds": 79.678,
+      "calls": 4,
+      "ledger": {
+        "version": 1,
+        "call_limit": 4,
+        "input_token_limit": 200000,
+        "output_tokens_per_call": 4096,
+        "cost_limit_usd": 0.67,
+        "input_price_per_million": 2.5,
+        "output_price_per_million": 10.0,
+        "calls": [
+          {
+            "call_id": "baseline-turn-1",
+            "status": "settled",
+            "request_body_bytes": 4330,
+            "input_token_bound": 12522,
+            "output_token_reservation": 4096,
+            "cost_bound_usd": 0.0108575,
+            "input_tokens": 959,
+            "output_tokens": 846
+          },
+          {
+            "call_id": "baseline-turn-2",
+            "status": "settled",
+            "request_body_bytes": 3384,
+            "input_token_bound": 11576,
+            "output_token_reservation": 4096,
+            "cost_bound_usd": 0.0100475,
+            "input_tokens": 719,
+            "output_tokens": 825
+          },
+          {
+            "call_id": "baseline-turn-3",
+            "status": "settled",
+            "request_body_bytes": 4930,
+            "input_token_bound": 13122,
+            "output_token_reservation": 4096,
+            "cost_bound_usd": 0.0109425,
+            "input_tokens": 1045,
+            "output_tokens": 833
+          },
+          {
+            "call_id": "baseline-turn-4",
+            "status": "settled",
+            "request_body_bytes": 7075,
+            "input_token_bound": 15267,
+            "output_token_reservation": 4096,
+            "cost_bound_usd": 0.0133025,
+            "input_tokens": 1541,
+            "output_tokens": 945
+          }
+        ],
+        "blocked_reason": null
+      }
+    },
+    {
+      "arm": "sigma",
+      "status": "completed",
+      "elapsed_seconds": 104.935,
+      "session_id": "805fcd85-4591-4dc9-885a-4623a9acce1d"
+    }
+  ],
+  "total_elapsed_seconds": 232.236,
+  "finished_at_utc": "2026-10-26T00:15:40.853260+00:00",
+  "overall_elapsed_basis": "cross-process UTC delta reconciled with current monotonic timer; SIGMA-arm elapsed is directly monotonic"
+}

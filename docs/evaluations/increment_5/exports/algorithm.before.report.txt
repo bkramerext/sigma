@@ -1,0 +1,26 @@
+Design and Verify an Incremental Dependency Scheduler v1
+========================================================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Design an algorithm for a build system that maintains a directed dependency graph under edge additions and removals, answers whether the graph contains a cycle, and, when acyclic, produces a valid build order. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.
+
+Project ID: d9e7d28c-68a1-4cbb-a05b-00ffc713700f
+
+Research type: Computer Science
+
+Difficulty: Medium
+
+Strategies
+----------
+No strategies are recorded.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.

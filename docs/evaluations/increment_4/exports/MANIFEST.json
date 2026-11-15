@@ -1,0 +1,349 @@
+{
+  "app_revision": "d9b1b196f1beeab7868832a3a2fa929e39c2d2e1",
+  "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-k7xk15eg",
+  "transport": "offline HTTP script; actual unmodified SIGMA Python/Sage Docker execution",
+  "live_provider_calls": 0,
+  "actual_cost_usd": 0,
+  "accounting": "Synthetic provider token/cost accounting inputs; no billing. Actual container wall durations are saved in execution records.",
+  "preflight": "Two actual application execute() diagnostics outside research sessions confirmed Python 3.12.8 and SageMath 10.8. They are not research findings or included in new-session execution counts.",
+  "projects": [
+    {
+      "slug": "nonconsecutive-subset-sums",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-k7xk15eg/projects/nonconsecutive-subset-sums.sigma",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "source": "Isolated path-rebound copy of the actual retained Increment 3 project: five historical deterministic fixture sessions, four prior offline scripted sessions and preserved approval companions. New execution is separately identified.",
+      "before": [
+        "docs/evaluations/increment_4/exports/subset.before.audit.json",
+        "docs/evaluations/increment_4/exports/subset.before.current-understanding.json",
+        "docs/evaluations/increment_4/exports/subset.before.report.txt",
+        "docs/evaluations/increment_4/exports/subset.before.report.html",
+        "docs/evaluations/increment_4/exports/subset.before.report.tex"
+      ],
+      "after": [
+        "docs/evaluations/increment_4/exports/subset.after.audit.json",
+        "docs/evaluations/increment_4/exports/subset.after.current-understanding.json",
+        "docs/evaluations/increment_4/exports/subset.after.report.txt",
+        "docs/evaluations/increment_4/exports/subset.after.report.html",
+        "docs/evaluations/increment_4/exports/subset.after.report.tex"
+      ]
+    },
+    {
+      "slug": "algorithm-design",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-k7xk15eg/projects/algorithm-design.sigma",
+      "project_id": "afe256ca-6b52-4719-82c5-d5f43b912285",
+      "source": "Fresh stock Algorithm Design sample with no sessions/strategies, then evaluator-authored bounded local conjectures; no complete solution or counterexample key supplied.",
+      "before": [
+        "docs/evaluations/increment_4/exports/algorithm.before.audit.json",
+        "docs/evaluations/increment_4/exports/algorithm.before.current-understanding.json",
+        "docs/evaluations/increment_4/exports/algorithm.before.report.txt",
+        "docs/evaluations/increment_4/exports/algorithm.before.report.html",
+        "docs/evaluations/increment_4/exports/algorithm.before.report.tex"
+      ],
+      "after": [
+        "docs/evaluations/increment_4/exports/algorithm.after.audit.json",
+        "docs/evaluations/increment_4/exports/algorithm.after.current-understanding.json",
+        "docs/evaluations/increment_4/exports/algorithm.after.report.txt",
+        "docs/evaluations/increment_4/exports/algorithm.after.report.html",
+        "docs/evaluations/increment_4/exports/algorithm.after.report.tex"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "scenario": "subset",
+      "mode": "actual",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "strategy_id": "f60af09a-0528-4f94-88ae-4aff8c700ca6",
+      "calls_used": 4,
+      "artifact_ids": [
+        "b494ce74-aa77-406d-8468-a4170a3809be",
+        "e4d05a08-37b2-4a28-9663-77f0fdb9dc63"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "withheld",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "affc2221-f821-4abe-8ab1-d74224dbc614",
+      "strategy_id": "6d51152d-c228-4e17-84ac-7884a57040b8",
+      "calls_used": 4,
+      "artifact_ids": [
+        "19eb32f8-7105-4fc7-8b98-e89354d45ece",
+        "7f447e57-9b15-4167-932d-c39ea1ff00ef"
+      ]
+    },
+    {
+      "scenario": "graph",
+      "mode": "actual",
+      "project_id": "afe256ca-6b52-4719-82c5-d5f43b912285",
+      "session_id": "ad6ce991-3451-4698-b2ef-64a6b34f3cf2",
+      "strategy_id": "72612364-5d88-4ee7-af91-201ddba9ff61",
+      "calls_used": 4,
+      "artifact_ids": [
+        "2ef7b8b5-9039-4c95-89e0-ab8fec500f09",
+        "d2adf5de-0dbd-419e-8bc7-40d88339701b"
+      ]
+    },
+    {
+      "scenario": "graph",
+      "mode": "withheld",
+      "project_id": "afe256ca-6b52-4719-82c5-d5f43b912285",
+      "session_id": "4e48ec17-0565-4c82-9929-3272347c70e7",
+      "strategy_id": "b3f3843d-09d7-4453-a67f-77d78633325b",
+      "calls_used": 4,
+      "artifact_ids": [
+        "9294952d-b4f5-4e67-b173-5d002b545e8e",
+        "b12b8d8b-93cc-461d-bd7c-e371b656c65d"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "error",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "dbd49c0a-2318-4b53-bcb7-b1ec0f7c7a97",
+      "strategy_id": "8758515c-0492-4385-85a5-6355a24a5e90",
+      "calls_used": 2,
+      "artifact_ids": [
+        "c80750b9-9502-4c02-8cf6-f24dceacabb7"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "timeout",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "7cf01b4b-d70f-4fd5-94c9-872c3fd89ef3",
+      "strategy_id": "f1fa1fd1-4adc-46cc-8468-65cb2c81bb67",
+      "calls_used": 2,
+      "artifact_ids": [
+        "8464ac33-8d76-4589-9093-1d22cbe019bd"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "sage",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "6095289e-599d-4765-856a-dc745b1380db",
+      "strategy_id": "b317e6de-848e-495d-86b2-db122283bc8f",
+      "calls_used": 2,
+      "artifact_ids": [
+        "1521a03f-e2f4-41f9-87ef-074dc7b59634"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "invalid_feedback",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "e4bcb378-e61c-4d9c-b5c5-88f7d93b7d2d",
+      "strategy_id": "0f936d8a-aaec-45ef-8057-d46c70ebe144",
+      "calls_used": 2,
+      "artifact_ids": []
+    },
+    {
+      "scenario": "subset",
+      "mode": "restart",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "strategy_id": "683e4342-a87b-4cd9-bce5-b896230e1d7a",
+      "calls_used": 4,
+      "artifact_ids": [
+        "f2fad7d2-0c2b-42c9-a348-42e10fab657e",
+        "faaf820b-6a21-4618-8fa1-dc757964f657"
+      ],
+      "interrupted_execution_id": "b0f28411-c478-4beb-9fcf-18d71bf48392"
+    }
+  ],
+  "offline_provider_calls": 28,
+  "execution_count": 10,
+  "execution_statuses": {
+    "completed": 7,
+    "interrupted": 1,
+    "timeout": 1,
+    "failed": 1
+  },
+  "runtimes": [
+    {
+      "runtime": "python",
+      "image_ids": [
+        "sha256:fffc6404b14615729025e62ce2f7f79cc846082035132e9053e3d684cd65a366"
+      ],
+      "versions": [
+        "3.12.8"
+      ],
+      "wall_duration_ms": 19284
+    },
+    {
+      "runtime": "sagemath",
+      "image_ids": [
+        "sha256:893cc1fd570d267cb57235f561ba3c7ac64c08ca2c86e48faba31ac1244bb41e"
+      ],
+      "versions": [
+        "10.8"
+      ],
+      "wall_duration_ms": 21813
+    }
+  ],
+  "execution_files": [
+    {
+      "id": "d5548044-eb28-42d3-a13b-40e107bd142d",
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "runtime": "python",
+      "status": "completed",
+      "source_sha256": "7444f7cf9e2799380a6bdcd7f3269ec04efbb5fc034301570b67060d2dbc83cc",
+      "record": "execution.d5548044-eb28-42d3-a13b-40e107bd142d.json",
+      "downloaded_artifacts": [
+        "execution.d5548044-eb28-42d3-a13b-40e107bd142d.observation.json"
+      ]
+    },
+    {
+      "id": "395258c2-b14d-4924-8772-1acd14fd4712",
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "runtime": "python",
+      "status": "completed",
+      "source_sha256": "4fef69ee3e80cc6b6c18ffcc4952b93c56e136e1b1e8073d05ccb3574574d3a3",
+      "record": "execution.395258c2-b14d-4924-8772-1acd14fd4712.json",
+      "downloaded_artifacts": [
+        "execution.395258c2-b14d-4924-8772-1acd14fd4712.observation.json"
+      ]
+    },
+    {
+      "id": "b0f28411-c478-4beb-9fcf-18d71bf48392",
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "runtime": "python",
+      "status": "interrupted",
+      "source_sha256": "ff35417b5b289f84aae1f370393fd0d9037c3c1bc83742ae162f40db2bac0f2e",
+      "record": "execution.b0f28411-c478-4beb-9fcf-18d71bf48392.json",
+      "downloaded_artifacts": []
+    },
+    {
+      "id": "748a03be-b45e-410d-b51c-3cc46dcfc9d2",
+      "session_id": "ad6ce991-3451-4698-b2ef-64a6b34f3cf2",
+      "runtime": "python",
+      "status": "completed",
+      "source_sha256": "fe34aafb773880400977c19e33e0d840332481b88acee99e3b95dd2b65d84432",
+      "record": "execution.748a03be-b45e-410d-b51c-3cc46dcfc9d2.json",
+      "downloaded_artifacts": [
+        "execution.748a03be-b45e-410d-b51c-3cc46dcfc9d2.observation.json"
+      ]
+    },
+    {
+      "id": "2e2dc817-09d8-4660-998e-191346920525",
+      "session_id": "e4bcb378-e61c-4d9c-b5c5-88f7d93b7d2d",
+      "runtime": "python",
+      "status": "completed",
+      "source_sha256": "5d7671d8911e3765709b9952a2374514a09f5e12b6ee7c57d5dc6ccac1691c31",
+      "record": "execution.2e2dc817-09d8-4660-998e-191346920525.json",
+      "downloaded_artifacts": [
+        "execution.2e2dc817-09d8-4660-998e-191346920525.observation.json"
+      ]
+    },
+    {
+      "id": "085cca15-817d-4457-88e2-07f26aefd503",
+      "session_id": "7cf01b4b-d70f-4fd5-94c9-872c3fd89ef3",
+      "runtime": "python",
+      "status": "timeout",
+      "source_sha256": "d8b5c4b6751d495e5ffef53e4af21891adb500da0df28dc19727ca0cda213d8b",
+      "record": "execution.085cca15-817d-4457-88e2-07f26aefd503.json",
+      "downloaded_artifacts": []
+    },
+    {
+      "id": "b8d79e50-8012-4a75-902e-f426615dc447",
+      "session_id": "6095289e-599d-4765-856a-dc745b1380db",
+      "runtime": "sagemath",
+      "status": "completed",
+      "source_sha256": "855c785a13f4f668990eadc77758308230df06995bb6bf1bd947657a1080fe57",
+      "record": "execution.b8d79e50-8012-4a75-902e-f426615dc447.json",
+      "downloaded_artifacts": [
+        "execution.b8d79e50-8012-4a75-902e-f426615dc447.observation.json"
+      ]
+    },
+    {
+      "id": "191bd679-b984-458d-9296-7fce4afaceac",
+      "session_id": "dbd49c0a-2318-4b53-bcb7-b1ec0f7c7a97",
+      "runtime": "python",
+      "status": "failed",
+      "source_sha256": "0d75f379eb49f02536fcd95ebf5a3732e3a7c4617db581a0ea22d324350d4e9c",
+      "record": "execution.191bd679-b984-458d-9296-7fce4afaceac.json",
+      "downloaded_artifacts": []
+    },
+    {
+      "id": "ab99f337-1937-4b87-8eeb-ca197bfc7a5f",
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "runtime": "python",
+      "status": "completed",
+      "source_sha256": "5d7671d8911e3765709b9952a2374514a09f5e12b6ee7c57d5dc6ccac1691c31",
+      "record": "execution.ab99f337-1937-4b87-8eeb-ca197bfc7a5f.json",
+      "downloaded_artifacts": [
+        "execution.ab99f337-1937-4b87-8eeb-ca197bfc7a5f.observation.json"
+      ]
+    },
+    {
+      "id": "c39b412b-abee-4f7d-bc03-10f6925b49f2",
+      "session_id": "ad6ce991-3451-4698-b2ef-64a6b34f3cf2",
+      "runtime": "python",
+      "status": "completed",
+      "source_sha256": "b61815ffc819011e972a823824c02a65e8e7b2d67badf5f17b6153c66aec1c92",
+      "record": "execution.c39b412b-abee-4f7d-bc03-10f6925b49f2.json",
+      "downloaded_artifacts": [
+        "execution.c39b412b-abee-4f7d-bc03-10f6925b49f2.observation.json"
+      ]
+    }
+  ],
+  "matched_actual_provider_calls": 28,
+  "code_type_only_fix": "fb919af adds explicit recursive traversal type annotations after the final engine capture on d9b1b19; behavior and runtime encoding unchanged. Final full-suite evidence includes this static-check fix.",
+  "budget_profile": "../context-budget.json: actual dispatched encoding compared with deterministic exact-expansion baseline of the same context; not an extra provider run. Every selected source round-trips exactly; full artifacts preserved.",
+  "useful_source_coverage": "100% of selected approved artifacts and mandatory negative evidence preserved by exact expansion, not a semantic relevance score.",
+  "omissions": [
+    "No autonomous model reasoning, live provider use or general proof claim",
+    "Native Markdown reports unsupported; actual native TXT/HTML/TeX and Markdown-valued Conclusions in audits retained; PDF/AI papers untested",
+    "Saved resource policies and actual timeout/restart exercised; no memory exhaustion or network escape experiment",
+    "Exact-text aliases reduce repetition but unscripted models handling them is unverified",
+    "Development Sage serialization failure retained separately in diagnostics; earlier isolated development runs excluded from final nine-session count",
+    "No new UI panels, tabs, dialogs or controls; existing execution navigation only"
+  ],
+  "full_suite_revision": "fb919afd8a0e2857040caaebd49d3c7e75284bb9",
+  "screenshots": [
+    "docs/evaluations/increment_4/graph-actual-execution-1440.png",
+    "docs/evaluations/increment_4/graph-actual-execution-320.png",
+    "docs/evaluations/increment_4/graph-actual-execution-390.png",
+    "docs/evaluations/increment_4/subset-actual-execution-1440.png",
+    "docs/evaluations/increment_4/subset-actual-execution-320.png",
+    "docs/evaluations/increment_4/subset-actual-execution-390.png",
+    "docs/evaluations/increment_4/subset-error-execution-1440.png",
+    "docs/evaluations/increment_4/subset-error-execution-320.png",
+    "docs/evaluations/increment_4/subset-error-execution-390.png",
+    "docs/evaluations/increment_4/subset-restart-execution-1440.png",
+    "docs/evaluations/increment_4/subset-restart-execution-320.png",
+    "docs/evaluations/increment_4/subset-restart-execution-390.png",
+    "docs/evaluations/increment_4/subset-sage-execution-1440.png",
+    "docs/evaluations/increment_4/subset-sage-execution-320.png",
+    "docs/evaluations/increment_4/subset-sage-execution-390.png",
+    "docs/evaluations/increment_4/subset-timeout-execution-1440.png",
+    "docs/evaluations/increment_4/subset-timeout-execution-320.png",
+    "docs/evaluations/increment_4/subset-timeout-execution-390.png"
+  ],
+  "inspection": "../inspection-observations.json: 18 existing UI execution inspections across 1440/390/320px, no page errors/overflow, zero new provider calls or sessions.",
+  "interrupted_attempt_boundary": "The interrupted record was a durable execution reservation at backend death; actual container execution/result is uncertain and its image_id is unavailable. It is not counted as a completed run or mathematical evidence. Explicit changed-source retry completed.",
+  "scripts": [
+    {
+      "path": "browser_checks/computation_programs.py",
+      "sha256": "ed58684e71d07ada2c7c6a2e7f598f8d78dd4f223679ea762cdcdc6fe4dd2c98"
+    },
+    {
+      "path": "browser_checks/computation_provider.py",
+      "sha256": "8355c89a499638afc8686566eeff8b454636b0b733ff0ae9499dcfe05dfa9c46"
+    },
+    {
+      "path": "browser_checks/computational_research.py",
+      "sha256": "a4f79bab8771eb451790a250182a2bb6b81f42ed81a923eee7fbe770d4190f6f"
+    },
+    {
+      "path": "browser_checks/computation_audit_check.py",
+      "sha256": "dbcd70ce82a187102d9214d619504432e32b33685baff9ff2ac22f55e07b66c0"
+    },
+    {
+      "path": "browser_checks/computation_inspection.py",
+      "sha256": "b81e53e4f57617d24b1b69f63f297c6551fd8ef021b5912f6386f955e8416ac9"
+    }
+  ]
+}

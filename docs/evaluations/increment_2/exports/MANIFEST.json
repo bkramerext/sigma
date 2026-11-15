@@ -1,0 +1,165 @@
+{
+  "captured_at": "2026-10-25T01:20:52.653983+00:00",
+  "app_revision": "f553934b9db37472e92339200857bf45246691c5",
+  "method": "Actual GET responses from SIGMA's own Project Audit and deterministic report API, bytes preserved",
+  "new_live_provider_calls": 0,
+  "new_research_sessions": 0,
+  "markdown_limit": "SIGMA has no native Markdown project-report export. Markdown-valued Outcome Conclusion fields, including historical fallbacks, are retained in audit JSON. No manually reconstructed Markdown is substituted.",
+  "limitations": [
+    "Audit Outcomes are SIGMA's current public projection, not a byte copy of stored session JSON.",
+    "Internal guards/auth fields are excluded by SIGMA's standard export. No additional content was redacted or omitted.",
+    "No AI paper authoring or PDF compilation performed; TeX/HTML/text are deterministic reports."
+  ],
+  "projects": [
+    {
+      "slug": "maximum-regions-archived",
+      "project_id": "9018b1fe-83a9-4027-a755-8f997b4f46b5",
+      "title": "Maximum regions formed by straight lines",
+      "evidence_class": "historical provider archive; no fresh live research",
+      "actual_activity": "Earlier preserved four-call Maximum Regions provider investigation. This workspace was opened in actual Chrome for proof/objection inspection, findings-fork draft inspection (cancelled), and HTML export. No argument enrichment; only project_path relocated when importing the archive.",
+      "strategy_count": 1,
+      "session_ids": [
+        "91e96112-27ce-412e-841f-5cbf67cbba75"
+      ],
+      "artifact_ids": [
+        "2a734507-ad3f-4d5b-b00b-80b0e1624717",
+        "a832588d-9da7-4ceb-b3ff-9451a9922ff5"
+      ],
+      "files": [
+        {
+          "path": "maximum-regions-archived.audit.json",
+          "format": "SIGMA Project Audit JSON",
+          "sha256": "85317bbcdfff93cf6463802723cd5af01baf024287c921cb5b7b8a3cc6bf13fe",
+          "bytes": 98218
+        },
+        {
+          "path": "maximum-regions-archived.report.txt",
+          "format": "txt",
+          "sha256": "2766f7af3d7071c55afbd6e042119ed1fd25448a5cf3d05da1925fa7421f05c5",
+          "bytes": 27664
+        },
+        {
+          "path": "maximum-regions-archived.report.html",
+          "format": "html",
+          "sha256": "9848e7abb5e41f836c16c96c6145c3d7bc3c1aa054a9b25c8d40c524109049e3",
+          "bytes": 40028
+        },
+        {
+          "path": "maximum-regions-archived.report.tex",
+          "format": "tex",
+          "sha256": "7a1d5a4d97893bbc32d336fb72da6cd1813309e52235306e95823e5eedb3e12b",
+          "bytes": 30257
+        }
+      ],
+      "source_file_sha256": {
+        "project.json": "88d661b4d699597f4e87a23dbde4f045e13954a50510d84531d8bc49dc441aa4",
+        "research-sessions/91e96112-27ce-412e-841f-5cbf67cbba75.json": "dcf436454c2fad0cca1d97ca3202ec17c99c9333458798e11490fd97d651a3b4"
+      },
+      "source_bytes_unchanged": true,
+      "research_content_omissions": []
+    },
+    {
+      "slug": "nonconsecutive-subset-sums",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "title": "Nonconsecutive Subset Sums Modulo 3 v1",
+      "evidence_class": "five explicitly deterministic archived fixture sessions; not live research",
+      "actual_activity": "Actual Chrome review of five saved fixture sessions and computational evidence. The evaluator manually saved Close the phase-matrix proof obligation, toggled eligibility, reloaded and reopened. No new investigation or computation by SIGMA.",
+      "strategy_count": 4,
+      "session_ids": [
+        "1a9a0c44-48ae-49e7-8bea-0e8d47297f9d",
+        "1aabbfc0-e642-4581-a96f-2e33ac17ee19",
+        "f7301d22-fd90-4675-95cd-17b006262ef9",
+        "6c552b3c-44e4-4b57-8b93-e5a645d057d1",
+        "7c70ca6e-3fb2-4cda-b75a-72702ee10d97"
+      ],
+      "artifact_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "ccc1045f-479d-4018-b8ed-42a60b94e567",
+        "02ca743b-d66f-41c0-8692-34579ea5adfa",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "files": [
+        {
+          "path": "nonconsecutive-subset-sums.audit.json",
+          "format": "SIGMA Project Audit JSON",
+          "sha256": "d52adc46ae59349edd9be0fccfbd1fa52bb5cc1a29225d9234f89de6724b4c6c",
+          "bytes": 240814
+        },
+        {
+          "path": "nonconsecutive-subset-sums.report.txt",
+          "format": "txt",
+          "sha256": "067ac7282833f67c1488556e7588e46edddd656668651b625ed29455241dba23",
+          "bytes": 49262
+        },
+        {
+          "path": "nonconsecutive-subset-sums.report.html",
+          "format": "html",
+          "sha256": "6eb3fc4b50e881e4d7908fc5411fce3058c9c700132e9dd25d143646b16e925b",
+          "bytes": 73792
+        },
+        {
+          "path": "nonconsecutive-subset-sums.report.tex",
+          "format": "tex",
+          "sha256": "a47134ca68809e9167b2914fcb8000542ee2d8e80f6c8fbfce07a87912807fd3",
+          "bytes": 56940
+        }
+      ],
+      "source_file_sha256": {
+        ".write.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "project.json": "913e6e0ede6d3311a9b68e878f445988c2673fff95e1389c638f03c0236dc4d0",
+        "project.v5.json": "e509777de5c81e75ec011c5d00858a54e698b0447b0bf9e0a3abbde6797ba255",
+        "research-sessions/.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "research-sessions/6c552b3c-44e4-4b57-8b93-e5a645d057d1.json": "98a23d6d23c35c6527a81b21d2793fee47951ae79c3c119c6e867a33068300af",
+        "research-sessions/7c70ca6e-3fb2-4cda-b75a-72702ee10d97.json": "81911bf25f414aa9da0836b8485cb6d1db4cedb8b37932b511fbaf8edaf00bf0",
+        "research-sessions/1aabbfc0-e642-4581-a96f-2e33ac17ee19.json": "7759267efe2c6ec3e8e23bbf8d6f18736eca879480f5bb70ab6a5f5cb9483555",
+        "research-sessions/f7301d22-fd90-4675-95cd-17b006262ef9.json": "1ec918831f1dfc231003d19e1d23b3ebe47be1a9cd00f07efc98764d36558c6b",
+        "research-sessions/1a9a0c44-48ae-49e7-8bea-0e8d47297f9d.json": "14ad27e77fd6c3ff68d5bf5ad302dda0d6c7ae5acb82559f069bcb28493c7ced"
+      },
+      "source_bytes_unchanged": true,
+      "research_content_omissions": []
+    },
+    {
+      "slug": "maximum-regions-by-lines",
+      "project_id": "5731fd49-e4fd-47c3-9d3e-1691e30d6ea1",
+      "title": "Maximum Regions Formed by Lines v1",
+      "evidence_class": "stock sample working copy; no research sessions",
+      "actual_activity": "Actual Chrome opening, manual Separate the bound from attainment strategy fork, save/reload/eligibility/Recent and text export. The stock copy has no saved research session; it is distinct from the historical provider archive.",
+      "strategy_count": 2,
+      "session_ids": [],
+      "artifact_ids": [],
+      "files": [
+        {
+          "path": "maximum-regions-by-lines.audit.json",
+          "format": "SIGMA Project Audit JSON",
+          "sha256": "f1360839c1c844bedd650bef7c60ceb5e6540cb965d1949764c32fe85eb5702d",
+          "bytes": 4120
+        },
+        {
+          "path": "maximum-regions-by-lines.report.txt",
+          "format": "txt",
+          "sha256": "4f8d5f426cf12a53485ccc91d33a7f16d65260bbfe8c4af792cfc3180fdf714b",
+          "bytes": 2802
+        },
+        {
+          "path": "maximum-regions-by-lines.report.html",
+          "format": "html",
+          "sha256": "9619d86d6e2dcef04d079cad34ed3f42e3c63ec63b938526f5f5d61bdf5fd3d9",
+          "bytes": 10860
+        },
+        {
+          "path": "maximum-regions-by-lines.report.tex",
+          "format": "tex",
+          "sha256": "ebf41dd61dcffd66ddcf86fef24333872f02f0b04490c66778d63c150b615367",
+          "bytes": 3732
+        }
+      ],
+      "source_file_sha256": {
+        ".write.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "project.json": "8f17fbac52b170a30251fb491d17e006d84499ad95a6fc90777e83c5bd79e31b"
+      },
+      "source_bytes_unchanged": true,
+      "research_content_omissions": []
+    }
+  ]
+}

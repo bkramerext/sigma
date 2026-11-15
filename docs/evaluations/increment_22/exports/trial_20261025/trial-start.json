@@ -1,0 +1,12 @@
+{
+  "started_at_utc": "2026-10-26T00:11:48.617894+00:00",
+  "arm_order": [
+    "baseline",
+    "sigma"
+  ],
+  "provider": "OpenAI API",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "output_tokens_per_call": 4096,
+  "project_id": "proj_ZqoKimk90I8vLSFDM7FGeLVj"
+}

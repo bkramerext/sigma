@@ -1,0 +1,18 @@
+{
+  "task_id": "custom-two-machine-schedule-v1",
+  "question": "A small workshop has two machines, M1 and M2. Each job is nonpreemptive and must run on one eligible machine for its listed duration. A job may start only after every listed predecessor has finished. The proposed schedule below is claimed to have minimum possible makespan. Determine whether that claim is correct. If it is not, give a better schedule and justify its makespan; also give a convincing lower-bound argument for the true minimum. Treat the job data and the proposed schedule as the complete problem statement.",
+  "jobs": [
+    {"id": "A", "duration": 2, "machines": ["M1", "M2"], "predecessors": []},
+    {"id": "B", "duration": 2, "machines": ["M2"], "predecessors": []},
+    {"id": "C", "duration": 5, "machines": ["M1", "M2"], "predecessors": ["B"]},
+    {"id": "D", "duration": 3, "machines": ["M1"], "predecessors": []},
+    {"id": "E", "duration": 1, "machines": ["M1", "M2"], "predecessors": []},
+    {"id": "F", "duration": 2, "machines": ["M1"], "predecessors": []},
+    {"id": "G", "duration": 5, "machines": ["M1"], "predecessors": ["A", "E"]}
+  ],
+  "proposed_schedule": {
+    "M1": [["A", 0, 2], ["E", 2, 3], ["D", 3, 6], ["F", 6, 8], ["G", 8, 13]],
+    "M2": [["B", 0, 2], ["C", 2, 7]],
+    "claimed_makespan": 13
+  }
+}

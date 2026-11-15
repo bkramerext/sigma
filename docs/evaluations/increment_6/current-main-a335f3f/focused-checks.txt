@@ -1,0 +1,100 @@
+START 2026-10-26T02:35:31Z
+RUN tests/continuations.py
+PASS continuation approval, mandatory refutation, foreign IDs, overflow, frozen cross-strategy dispatch, archive preservation, corrupt/edited approval and stale preview
+RUN tests/research_feedback.py
+PASS lossless evidence pooling, exact negative constraints and source coverage; missing/foreign/status/hash/citation/follow-up checks; execution failure cannot be a counterexample
+RUN tests/research_sessions.py
+PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.773s
+Persistent research session scenarios passed.
+RUN tests/project_settings.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS v1-v9 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen
+PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes
+PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior
+RUN tests/epistemic_continuity.py
+PASS persisted parity step A → cycle step B → later session; exact source IDs, unchanged origin, foreign rejection
+PASS retracted and truncated source closures rejected through real Skeptic dispatch
+PASS graph real failed/completed execution, saved witness follow-up, withheld prose contradiction
+{
+  "parity": {
+    "project_id": "c1a9bb23-e002-4834-9930-440682012f8f",
+    "first_session_id": "e4b00d8a-8a3a-4434-9fcd-65b7d5f86c51",
+    "later_session_id": "e77263c4-0e49-4838-ba22-fa74ac58e98b",
+    "foreign_session_id": "07807319-9fbe-4106-bb7e-f32ccd1e925b",
+    "first_artifact_id": "aa45af97-c0aa-47d2-8fd0-7288b956e470",
+    "calls": 6,
+    "foreign_rejected_calls": 1,
+    "first_record_unchanged": true
+  },
+  "parity_retracted": {
+    "project_id": "c1a9bb23-e002-4834-9930-440682012f8f",
+    "rejected_session_id": "a3aa10c0-8819-4f84-be91-d3db3066a1f2",
+    "tainted_source_artifact_id": "aa45af97-c0aa-47d2-8fd0-7288b956e470",
+    "kind": "retracted",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "parity_truncated": {
+    "project_id": "c1a9bb23-e002-4834-9930-440682012f8f",
+    "rejected_session_id": "aecc8bd0-c65c-4f19-b995-82b4b303ff97",
+    "tainted_source_artifact_id": "aa45af97-c0aa-47d2-8fd0-7288b956e470",
+    "kind": "truncated",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "graph_present": {
+    "project_id": "f12bf08a-5e54-4b84-98b6-8a8442ada58a",
+    "initial_session_id": "62b68cfd-27da-4ae1-9d92-a789739c8f81",
+    "followup_session_id": "3b3abfc7-40cf-420b-b690-e974a1f0d3e4",
+    "fork_session_id": "0ce47c9d-3529-44e4-a96b-1846171986c7",
+    "approved_negative_source_id": "d79520f4-ae16-4bc3-acd3-0d381dfe8510",
+    "execution_ids": [
+      "dae412be-58db-4bbe-ad92-b8b6753471cd",
+      "7888a21a-72f1-4643-9bf3-da9cbfe01d81"
+    ],
+    "execution_statuses": [
+      "failed",
+      "completed"
+    ],
+    "current_finding_count": 4,
+    "initial_record_unchanged": true
+  },
+  "graph_withheld": {
+    "project_id": "9d9e4c12-b24c-4168-8e98-2fcd78d4cecf",
+    "initial_session_id": "55193d73-f47a-4c64-b15b-afe631d3de39",
+    "followup_session_id": null,
+    "fork_session_id": null,
+    "approved_negative_source_id": null,
+    "execution_ids": [],
+    "execution_statuses": [],
+    "current_finding_count": 1,
+    "initial_record_unchanged": true
+  }
+}
+RUN tests/python_sandbox.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API
+RUN tests/sage_execution.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS Sage agent advertisement, typed selection, persisted evidence/API/artifacts/metrics, failure revision and crash-safe recovery
+RUN tests/computational_evidence.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+Computational evidence previews and cross-session citation scenarios passed.
+RUN tests/deployment_package.py
+Deployment package structure and secret-source checks passed.
+RUN tests/gce_host.py
+.................
+----------------------------------------------------------------------
+Ran 17 tests in 0.019s
+
+OK
+RUN tests/host_monitor.py
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.011s
+
+OK
+EXIT 0
+END 2026-10-26T02:36:17Z

@@ -1,0 +1,14 @@
+R4R — PR for issue #265 (hosted SIGMA-sponsored API path)
+
+Base: current origin/main e81750b08803fd42f9da433259a38e422f029732
+Scope: fix hosted connection pill to select SIGMA-sponsored API rather than the blocked ChatGPT OAuth begin route; use hosted sponsored provider status; keep an already-selected sponsor connected on repeat pill click. Keep the hosted OAuth guard and spending/concurrency safeguards intact. Update GCE release deployment helper to synchronize the host preflight script from the selected release before validation and activation/rollback, fixing the demonstrated stale-helper startup gate. Add mocked browser and deployment-helper regressions; update fixture rehearsals.
+
+Evidence:
+- Production sponsor config restored with SIGMA_CLOUD_INFERENCE_PROVIDER=api_key and SIGMA_CLOUD_SPONSORED_ENABLED=true. Credential model discovery is non-billable and passed for gpt-6-luna, gpt-6-astra, gpt-6.1-sol.
+- Previous host preflight helper rejected the supported sponsor setting; synced helper, 23/23 preflight checks passed, same release service restarted, backend/frontend/edge healthy. Data disk remained mounted.
+- Public `/` still returns old bundle index-CzWcx-8K.js. Candidate build emits index-CHNuuinu.js. Production UI code has not been deployed yet.
+- Focused checks passed: cloud_auth (46), cloud_research_sponsored_api (mocked), deployment_automation, real Chrome hosted pill regression, frontend production build, Ruff, Pyright, T173 build/source identity rehearsals.
+- Full ./sigma test was interrupted at owner direction to prioritize deployment; no claim of full-suite pass.
+- No paid production inference call was made. Bounded one-session/two-call/$0.25 paid acceptance remains pending owner approval.
+
+Please independently review and merge under the user's standing authorization to merge this operational fix. Then deploy the merged exact SHA to GCE using the existing release flow, preserve `/srv/sigma-state`, and verify public assets/UI and service identity. Keep #265 open until the public UI and authorized-user research acceptance are verified.

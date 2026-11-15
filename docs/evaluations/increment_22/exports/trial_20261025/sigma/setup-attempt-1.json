@@ -1,0 +1,6 @@
+{
+  "status": "incomplete_setup_or_session_FileNotFoundError",
+  "elapsed_seconds": 0.003,
+  "provider_dispatches": 0,
+  "explanation": "Local runner read limits.json from project root instead of using SIGMA research_sessions.get_limits; no session started and no provider request was dispatched."
+}

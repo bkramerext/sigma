@@ -1,0 +1,47 @@
+T20.1 follow-up — Gray
+
+The UI follow-up is implemented on a branch from current main, including the
+recent Arrival, Xenopus, and quantum chemistry sample-project merges.
+It carries the requested research-session limit changes through the frontend,
+shared backend validation, persistence, and enforcement. Existing saved values
+remain intact. Session duration accepts minutes, hours, and days and is stored
+as backend minutes. Defaults are 30 agent calls, 60 minutes, 12,000 output
+tokens per call, and 3 Skeptic iterations with a 1–5 range. The proposed $5
+budget remains out of scope.
+
+Home Recent and Samples are grouped by project type in an internally scrolling
+list. Recent shows at most four projects per category, bolds the most recent,
+and reopens with only the active project's category expanded. Selecting the
+active tab again collapses or expands all categories. Recent and Sample rows
+omit duplicate category details and use matching Inter 13px title styling;
+ordinary rows are regular weight and only the most recent Recent title is
+bold. The Open Project Cancel button follows the dialog title. Tooltip delay
+and hide-until-rehover behavior were also refined.
+The Lean proof control is shown only for mathematical projects; it remains a
+copper disabled (coming soon) action there and is hidden for other project
+types.
+Request-failure toasts now use compact dark/copper styling that matches the
+workspace; the underlined Dismiss action remains visible and keyboard
+accessible.
+
+Validation:
+- `./sigma test` passed, including Python checks, Ruff, Pyright, frontend
+  typecheck, and production build.
+- Real Chrome `browser_checks/recents.py` passed at 1280×720, 390×844, and
+  320×700. Screenshots are `/tmp/sigma-samples-1280.png`,
+  `/tmp/sigma-samples-390.png`, and `/tmp/sigma-samples-320.png`.
+- Real Chrome `browser_checks/header.py`, `browser_checks/settings.py`, and
+  `browser_checks/a20_paper.py` passed.
+- A read-only Chrome style check confirmed Recent and Sample titles both use
+  Inter 13px; standard rows are weight 400 and newest Recent is weight 700.
+- A focused real Chrome check confirmed Lean is hidden for Engineering and
+  remains copper and disabled for Mathematics.
+- Real Chrome confirmed request-toast colors, compact width, understated
+  Dismiss styling, and keyboard dismissal.
+- `browser_checks/a17_research.py` was attempted but its isolated session ended
+  at 0/30 provider calls, so its research-result assertions could not run.
+- No paid provider calls were made.
+
+PR: https://github.com/bkramerext/sigma/pull/35
+
+The PR is open for coordinator review and has not been merged.

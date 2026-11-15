@@ -1,0 +1,149 @@
+name: Strategy scheduler semantic parity (#421)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/sigma/research_sessions.py'
+      - 'src/sigma/research_budget.py'
+      - 'src/sigma/cloud_research.py'
+      - 'tests/research_sessions.py'
+      - 'tests/cloud_research.py'
+      - 'tests/strategy_global_slots.py'
+      - 'tests/strategy_scheduler_parity.py'
+      - 'tests/strategy_scheduler_parity_compare.py'
+      - '.github/workflows/strategy-scheduler-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-main-parity:
+    # All relevant scheduler PRs must execute semantic parity, not only historical PR numbers.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      SIGMA_CLOUD_AUTH_ENABLED: 'false'
+      SIGMA_RESEARCH_GLOBAL_INFLIGHT: '32'
+    steps:
+      - name: Check out candidate branch
+        uses: actions/checkout@v4
+        with:
+          path: candidate
+          persist-credentials: false
+      - name: Check out immutable original sequential v1 baseline
+        uses: actions/checkout@v4
+        with:
+          ref: 48c1fb2322a95ddcb5a218cca29fcba59c4f8108
+          path: research-baseline
+          persist-credentials: false
+      - name: Check out immutable pre-v2 main baseline for full v1 request comparison
+        uses: actions/checkout@v4
+        with:
+          ref: 156a13d6536e73ccafeaf0aa9d5f2e6a3bb2b176
+          path: v1-main
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install synthetic-test dependencies, no live API
+        run: uv sync --project candidate --locked --no-dev
+      - name: Compile parity harness before executing it
+        run: python -m py_compile candidate/tests/strategy_scheduler_parity.py candidate/tests/strategy_scheduler_parity_compare.py
+      - name: Run actual baseline scheduler against deterministic synthetic provider
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/research-baseline/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py research-baseline baseline-parity.json
+      - name: Run pre-v2 main against deterministic synthetic provider
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/v1-main/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py v1-main v1-main-parity.json parallel-v1
+      - name: Run candidate parallel scheduler against identical synthetic provider
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py candidate parallel-parity.json parallel-v1
+      - name: Verify actual v2 paired-turn session, enabled selection and peer transfers
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py candidate paired-v2-parity.json paired-v2
+      - name: Verify v2 stopped session resumes without losing committed pairs
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_scheduler_parity.py candidate paired-v2-resume-parity.json paired-v2-resume
+      - name: Verify failed calls cannot falsely complete v2 and no pair is skipped
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src:$GITHUB_WORKSPACE/candidate/tests" \
+            uv run --project candidate --locked --no-sync python - <<'PY'
+          from research_sessions import (
+              test_paired_round_protocol_requires_every_accepted_role,
+              test_paired_round_pipeline_orders_roles_without_paid_calls,
+              test_paired_round_positions_are_explicit_and_legacy_is_unchanged,
+              test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs,
+              test_paired_round_defaults_and_enabled_call_ceiling,
+          )
+          test_paired_round_defaults_and_enabled_call_ceiling()
+          test_paired_round_positions_are_explicit_and_legacy_is_unchanged()
+          test_paired_round_protocol_requires_every_accepted_role()
+          test_paired_round_pipeline_orders_roles_without_paid_calls()
+          test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs()
+          print("PASS: v2 paired-turn accounting, failed/missing calls, and recovery budget invariants.")
+          PY
+      - name: Verify legacy semantic invariants and full pre-v2 and v2 parity
+        run: |
+          python candidate/tests/strategy_scheduler_parity_compare.py \
+            baseline-parity.json v1-main-parity.json parallel-parity.json \
+            paired-v2-parity.json paired-v2-resume-parity.json
+      - name: Verify real local admission and 32 global provider slots across processes
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src" \
+            uv run --project candidate --locked --no-sync python \
+            candidate/tests/strategy_global_slots.py
+      - name: Validate stop/resume on baseline revision
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/research-baseline/src:$GITHUB_WORKSPACE/research-baseline/tests" uv run --project candidate --locked --no-sync python - <<'PY'
+          import asyncio
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          from research_sessions import (
+              test_peer_finding_changes_target_investigator_after_stop_and_resume,
+              test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers,
+          )
+          with TemporaryDirectory() as root:
+              base = Path(root)
+              asyncio.run(test_peer_finding_changes_target_investigator_after_stop_and_resume(base / "peer.sigma"))
+              asyncio.run(test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(base / "timeout.sigma"))
+          print("Baseline: stop/resume and timeout recovery passed.")
+          PY
+      - name: Validate stop/resume handoff and timeout recovery on parallel branch
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/candidate/src:$GITHUB_WORKSPACE/candidate/tests" uv run --project candidate --locked --no-sync python - <<'PY'
+          import asyncio
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          from research_sessions import (
+              test_peer_finding_changes_target_investigator_after_stop_and_resume,
+              test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers,
+          )
+          with TemporaryDirectory() as root:
+              base = Path(root)
+              asyncio.run(test_peer_finding_changes_target_investigator_after_stop_and_resume(base / "peer.sigma"))
+              asyncio.run(test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(base / "timeout.sigma"))
+          print("Parallel branch: stop/resume and timeout recovery passed.")
+          PY
+      - name: Upload synthetic diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: strategy-parity-snapshots
+          path: '*-parity.json'
+          if-no-files-found: ignore

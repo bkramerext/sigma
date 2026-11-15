@@ -1,0 +1,45 @@
+T131 production Google OAuth readiness — Gray handoff
+
+Branch: gray/t131-production-oauth-readiness
+Base: main at a335f3f before this documentation-only change
+Head: d6d10e1 (handoff file follow-up commit pending)
+State: R4R for coordinator review; do not merge.
+
+Deliverable: docs/T131_PRODUCTION_OAUTH_READINESS.md records the exact
+production checklist, evidence status, Secret Manager/runtime IAM path,
+bootstrap/member requirements, fail-closed behavior, human authorization
+blockers, and the first hosted sign-in acceptance procedure. tickets/t131.md
+links it; docs/STATUS.md records the evidence boundary and actual checks.
+
+Evidence: docs/OPERATION_RUNBOOK.md and docs/CLOUD_DEPLOYMENT.md identify
+SIGMA Auth (sigma-auth-512601) as an existing OAuth project but leave
+production-client project selection open. The runbook checkpoint says the
+OAuth Secret Manager secret was not created as of 2026-10-25. No secret,
+active version, runtime binding, deployed environment, hosted auth status,
+Google consent screen, or production client was inspected. DNS/external-IP
+verification remains with the coordinator and human; this assessment assumes
+no DNS correctness. The source requests scopes openid/email/profile and code
+inspects the OAuth state/claim checks and fail-closed responses.
+
+Checks: git diff --check passed. `./sigma test` failed overall on the same
+three deployment contract assertions in tests/deployment_package.py,
+tests/gce_host.py and tests/host_monitor.py: they expect the escaped
+srv-sigma\x2dstate.mount dependency, while deploy/systemd/sigma.service uses
+RequiresMountsFor=/srv/sigma-state. The remaining test scenarios, including
+tests/cloud_auth.py (16), cloud workspaces/storage/research, public_endpoint
+(7), Ruff check/format, Pyright (0 diagnostics), and frontend typecheck passed.
+Frontend production build was skipped after failures. No real-browser check
+was run because no browser workflow changed; T172's fixture Chrome pass is
+historical local evidence only.
+
+No provider calls/costs, live OAuth, production cloud changes, secret reads,
+DNS probes, hosted endpoint checks, identity use, or personal ChatGPT auth.
+Human/operator actions still required: designate production OAuth project and
+consent policy; configure exact Web client/origin/callback/scopes; create and
+deliver the OAuth secret through approved Secret Manager flow; apply
+resource-scoped runtime IAM; set the approved bootstrap/contact and member
+grants; finish independent DNS/IP verification; provide deployed SHA and
+ready hosted status; approve named identities and test window. T134 privacy
+acceptance remains a separate blocker.
+
+Elapsed work time: approximately 12 minutes through handoff preparation.

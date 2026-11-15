@@ -1,0 +1,214 @@
+{
+  "paper_id": "35c52a1cf10744879ee91e9f96087743",
+  "title": "Policy-First University AI Access: Conditional Safety Guarantees and the Unresolved Case for Campus Federation",
+  "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+  "session_id": "d82391f1-956a-4546-adfd-20f030e33688",
+  "source_archive_sha256": "89ba5b8410735334622ce7e1fb36fbe0b6f50062cbf9aff94ab53178b783994f",
+  "frozen_snapshot_sha256": "5a75ad1bb249ed4da8a1b43ced21ed737e45c1e373cab5923f7443e0b55b732b",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider": {
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "started_at": "2026-11-02T06:39:50.636664+00:00",
+  "finished_at": "2026-11-02T06:42:14.266470+00:00",
+  "elapsed_seconds": 143.11,
+  "provider_calls_total": 18,
+  "proofreading": {
+    "accepted_correction_count": 0,
+    "ai_performed": true,
+    "attempted": true,
+    "corrected_tex_sha256": "8e6838412a1c537e56b9efdff8000445c8792f1a5376d649157a02ef13aa4a2b",
+    "correction_categories": [],
+    "elapsed_seconds": 61,
+    "fallback_reason": "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+    "final_tex_sha256": "ffdeb8e15c6f37f66212ce4921085b318b8a3d9e89037f63ab14ea95734a7b03",
+    "model": "gpt-6.1-sol",
+    "original_tex_sha256": "8e6838412a1c537e56b9efdff8000445c8792f1a5376d649157a02ef13aa4a2b",
+    "prior_render_provider_calls": 0,
+    "provider_calls_attempted": 8,
+    "provider_calls_current_render": 8,
+    "reasoning_effort": "high",
+    "review_reason": "Layout warnings remained after the bounded TeX correction passes.",
+    "status": "fallback",
+    "unresolved_diagnostics": [
+      "warning: report.tex:50: Overfull \\hbox (19.22394pt too wide) in paragraph at lines 49--50",
+      "warning: report.tex:369: Overfull \\hbox (2.49706pt too wide) in paragraph at lines 368--369",
+      "warning: report.tex:415: Underfull \\hbox (badness 6173) in paragraph at lines 413--415",
+      "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.",
+      "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+      "Proofreading chunk 2 was not applied: A proposed correction changed protected scientific or reference content.",
+      "Proofreading chunk 4 was not applied: A proposed correction changed protected scientific or reference content.",
+      "warning: report.tex:51: Underfull \\hbox (badness 10000) in paragraph at lines 50--51",
+      "warning: report.tex:51: Underfull \\hbox (badness 5008) in paragraph at lines 50--51",
+      "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+      "warning: report.tex:396: Underfull \\hbox (badness 4981) in paragraph at lines 395--396",
+      "warning: report.tex:416: Underfull \\hbox (badness 6173) in paragraph at lines 414--416"
+    ],
+    "verification_status": "incomplete"
+  },
+  "publication_status": "needs_review",
+  "layout_status": "needs_review",
+  "pdf_check_passes": [
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:51: Overfull \\hbox (19.22394pt too wide) in paragraph at lines 50--51",
+        "warning: report.tex:370: Overfull \\hbox (2.49706pt too wide) in paragraph at lines 369--370",
+        "warning: report.tex:416: Underfull \\hbox (badness 6173) in paragraph at lines 414--416",
+        "warning: report.tex:51: Overfull \\hbox (19.22394pt too wide) in paragraph at lines 50--51",
+        "warning: report.tex:370: Overfull \\hbox (2.49706pt too wide) in paragraph at lines 369--370",
+        "warning: report.tex:416: Underfull \\hbox (badness 6173) in paragraph at lines 414--416",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [
+        "warning: report.tex:51: Overfull \\hbox (19.22394pt too wide) in paragraph at lines 50--51",
+        "warning: report.tex:370: Overfull \\hbox (2.49706pt too wide) in paragraph at lines 369--370"
+      ],
+      "page_count": 27,
+      "pass": 1,
+      "tex_repair": "Increased TeX emergency line-breaking stretch from 2em to 4em."
+    },
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:51: Overfull \\hbox (19.22394pt too wide) in paragraph at lines 50--51",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:396: Underfull \\hbox (badness 3679) in paragraph at lines 395--396",
+        "warning: report.tex:416: Underfull \\hbox (badness 6173) in paragraph at lines 414--416",
+        "warning: report.tex:51: Overfull \\hbox (19.22394pt too wide) in paragraph at lines 50--51",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:396: Underfull \\hbox (badness 3679) in paragraph at lines 395--396",
+        "warning: report.tex:416: Underfull \\hbox (badness 6173) in paragraph at lines 414--416",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [
+        "warning: report.tex:51: Overfull \\hbox (19.22394pt too wide) in paragraph at lines 50--51",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370"
+      ],
+      "page_count": 27,
+      "pass": 2,
+      "tex_repair": "Increased TeX emergency line-breaking stretch from 4em to 8em."
+    },
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:51: Underfull \\hbox (badness 10000) in paragraph at lines 50--51",
+        "warning: report.tex:51: Underfull \\hbox (badness 5008) in paragraph at lines 50--51",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:396: Underfull \\hbox (badness 4981) in paragraph at lines 395--396",
+        "warning: report.tex:416: Underfull \\hbox (badness 6173) in paragraph at lines 414--416",
+        "warning: report.tex:51: Underfull \\hbox (badness 10000) in paragraph at lines 50--51",
+        "warning: report.tex:51: Underfull \\hbox (badness 5008) in paragraph at lines 50--51",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370",
+        "warning: report.tex:396: Underfull \\hbox (badness 4981) in paragraph at lines 395--396",
+        "warning: report.tex:416: Underfull \\hbox (badness 6173) in paragraph at lines 414--416",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [
+        "warning: report.tex:51: Underfull \\hbox (badness 10000) in paragraph at lines 50--51",
+        "warning: report.tex:370: Underfull \\hbox (badness 10000) in paragraph at lines 369--370"
+      ],
+      "page_count": 27,
+      "pass": 3
+    }
+  ],
+  "omitted_evidence_count": null,
+  "official_publication_reference_set": [
+    {
+      "name": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines"
+    },
+    {
+      "name": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/"
+    }
+  ],
+  "writing_source_selection": "selected",
+  "selected_writing_sources": [
+    {
+      "title": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines",
+      "tier": "general",
+      "type": "computer_science",
+      "branch": "project_type",
+      "sha256": "44af7d8134f80040e8cc872095590effff565d5e4bc0e2ce0a4d63ad8f6d8efb",
+      "reference_set_sha256": "602cce95c9df0850d59c308e1e2f9780fa2120a6620da2ecc66584f2f7d04635",
+      "excerpt_characters": 3500
+    },
+    {
+      "title": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/",
+      "tier": "general",
+      "type": "computer_science",
+      "branch": "project_type",
+      "sha256": "a23c6d17c1136919a64c63fa172e818ec1b979fa7ad79e1e5b032e56e29c31bf",
+      "reference_set_sha256": "602cce95c9df0850d59c308e1e2f9780fa2120a6620da2ecc66584f2f7d04635",
+      "excerpt_characters": 3500
+    }
+  ],
+  "artifact_hashes": {
+    "txt": {
+      "path": "sovereign-ai-federation-v2/paper.txt",
+      "bytes": 73551,
+      "sha256": "a1e6c14dd378f26067240af6e6e87ba00a3eec312b4687bbae1dc06b477baafd"
+    },
+    "tex": {
+      "path": "sovereign-ai-federation-v2/paper.tex",
+      "bytes": 87503,
+      "sha256": "ffdeb8e15c6f37f66212ce4921085b318b8a3d9e89037f63ab14ea95734a7b03"
+    },
+    "pdf": {
+      "path": "sovereign-ai-federation-v2/paper.pdf",
+      "bytes": 132733,
+      "sha256": "5acfac2f3b084d4b8d8549c1a25d960cfc1567f72e60a347cf22421aabddc30f"
+    }
+  },
+  "full_record_sha256": "8f91765c2f9950284399a92263d1913651a4467818963590f91540c50fa195ca",
+  "full_record_path": "sovereign-ai-federation-v2/metadata.full.json.gz",
+  "manuscript": {
+    "words": 9865,
+    "sections": 7,
+    "claims": 14,
+    "pdf_pages": 27
+  },
+  "author_review_warnings": [
+    "Evidence indexing omitted 20030 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Published MindRouter features remain project-reported rather than independently inspected; federation, frontier routing, release serialization, and financial reservations must not be attributed to the existing gateway.",
+    "The broader claim that any lost authority path stops submissions was narrowed: an unreachable administrator does not necessarily disable a functioning broker under commit-time semantics.",
+    "OS transport acceptance does not imply immediate physical transmission cutoff or recipient deletion after revocation.",
+    "The old exploratory pilot gate and symmetric substitution of upper cost bounds were criticized and must not be reused as valid confirmatory methods.",
+    "Sample-size figures and interval repairs remain unexecuted design arguments; correlated calls or episodes would invalidate naive independent-sample interpretation.",
+    "This plan contains incomplete claim coverage and duplicated claim IDs; the claim register and section text require repair before drafting.",
+    "Duplicate claim C10 was assigned a unique identifier.",
+    "Duplicate proposition C1 was linked to identical claim C10.",
+    "The evidence index explicitly omitted 20033 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 379 source-linked text fragments from 20 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field."
+  ],
+  "validation_warnings": [
+    "Evidence indexing omitted 20030 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Published MindRouter features remain project-reported rather than independently inspected; federation, frontier routing, release serialization, and financial reservations must not be attributed to the existing gateway.",
+    "The broader claim that any lost authority path stops submissions was narrowed: an unreachable administrator does not necessarily disable a functioning broker under commit-time semantics.",
+    "OS transport acceptance does not imply immediate physical transmission cutoff or recipient deletion after revocation.",
+    "The old exploratory pilot gate and symmetric substitution of upper cost bounds were criticized and must not be reused as valid confirmatory methods.",
+    "Sample-size figures and interval repairs remain unexecuted design arguments; correlated calls or episodes would invalidate naive independent-sample interpretation.",
+    "This plan contains incomplete claim coverage and duplicated claim IDs; the claim register and section text require repair before drafting.",
+    "Duplicate claim C10 was assigned a unique identifier.",
+    "Duplicate proposition C1 was linked to identical claim C10.",
+    "The evidence index explicitly omitted 20033 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 379 source-linked text fragments from 20 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C21 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C21 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C20 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C20 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C11 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C11 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C12 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C12 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C14 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ]
+}

@@ -1,0 +1,27 @@
+name: Increment 17 archival quality audit
+on:
+  push:
+    branches:
+      - coordinator/research-increment-17
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python scripts/increment17_longitudinal_audit.py > /tmp/increment17.json
+          python - <<'PY'
+          import json
+          x = json.load(open("/tmp/increment17.json"))
+          assert x["disposition"] == "RESEARCH_QUALITY_GATE_NOT_MET"
+          assert x["generic_followup_reset_detected"]
+          assert x["unsupported_computation_claim_at_summary_lead"]
+          assert x["new_paid_calls"] == 0
+          print("PASS: research quality deficits preserved, not concealed")
+          PY

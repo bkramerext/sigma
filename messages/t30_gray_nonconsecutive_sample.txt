@@ -1,0 +1,116 @@
+T30 follow-up and existing Nonconsecutive Subset Sums sample review
+
+Branch: gray/nonconsecutive-review-history-resume
+Integrated main: 6b0d0c9 (T22.3 ticket specification; includes T22 Gate C PR #44 and merged PR #42)
+Status: R4R; no merge performed.
+
+Sample changes
+
+The existing `samples/nonconsecutive-subset-sums` sample now carries a sanitized
+`sample-evidence.json` sidecar with five saved sessions. Its `project.json`, math
+problem, and three strategies are unchanged. The history contains:
+
+1. Mixed, partial progress: a deterministic exact enumeration refutes the
+   tentative a_(n+3)=a_(n+2)+a_n recurrence at n=2 (a_5=5, while
+   a_4+a_2=4). This is a failed strategy hypothesis, not a negative result
+   for the project objective. The general recurrence and asymptotic limit
+   remain open.
+2. Mixed: roots-of-unity recurrence candidate and a_12=128, supported by finite
+   exact DP, with matrix and asymptotic obligations open.
+3. Mixed/productive: gap-removal and the q-binomial polynomial formula, with
+   finite exact polynomial checks and the global recurrence/limit unresolved.
+4. Mixed: a later transfer-matrix pass consults earlier findings, avoids the
+   refuted short recurrence, and checks a candidate order-12 step-three relation
+   by exact DP through n=60; it does not claim a global proof.
+5. Mixed/productive: a follow-up corrects an exponent explanation in session 3.
+   Under the standard one-based Gaussian-binomial convention the subset baseline
+   is k(k+1)/2; together with the gap shift k(k-1)/2 this yields k^2. Exact
+   polynomial comparisons through n=18 support the formula while its all-n proof
+   remains open.
+
+All Investigator/Skeptic responses came from deterministic local fixtures and
+are explicitly marked as not live-model output in the saved outcomes and
+artifacts. The Python programs were actually run in the isolated local research
+sandbox and their code, output, status, and runtime metadata are preserved.
+No live or paid provider calls were made. The first attempt at session 4 was
+rejected by SIGMA because the fixture incorrectly supplied a formal peer
+citation absent from that single-strategy call; the fixture was corrected to
+refer to prior-session notes as notes, and the successful session remains
+inconclusive. No failed attempt was copied into the sample.
+
+The browser check is documented in `browser_checks/README.md` and verifies all
+five saved outcomes, their collapsible detail areas, session metrics and
+provenance, the corrected q-binomial artifact, the exported report, and no
+horizontal overflow at 390px/320px. It explicitly guards Session #1's mixed
+objective assessment and preserves its counterexample in the evidence.
+The report is about 35K characters.
+
+Load and review instructions
+
+1. Start the local application with `./sigma start`.
+2. On Home, open Samples, expand Mathematics, and choose
+   “Nonconsecutive Subset Sums Modulo 3”. This creates a working copy; the
+   catalog template stays unchanged.
+3. Open Sessions #1–#5 and inspect each Outcome, especially Metrics, Provenance,
+   and Citations, Evidence & Obligations. Session #1 is the counterexample;
+   Session #5 shows the q-binomial convention correction.
+4. To read the full deterministic history outside the UI, use the project
+   toolbar's Download action and choose a Text file or HTML report.
+
+Defect fixed
+
+While round-tripping the sample, a legacy-project export included dataclass-only
+`ai_model` and `reasoning_effort` defaults that are not fields in its canonical
+v5 document. The strict sample importer then rejected the export. The endpoint
+now serializes through the canonical project-document writer, and
+`tests/make_sample.py` protects export → sample import, preserved fields, and
+source immutability. The export still retains the current cloud
+`WorkspaceAccessError` behavior from main.
+
+Verification
+
+- `./sigma test` — passed after the final sample and code changes, including
+  `tests/make_sample.py`, all backend scenarios, Ruff/format, Pyright (0
+  diagnostics), frontend typecheck, and production build. Existing Starlette
+  httpx deprecation warnings were informational.
+- `uv run --locked --no-sync python tests/make_sample.py` — passed.
+- `uv run --locked --no-sync python tests/recents.py` — passed; the template
+  remains immutable when a user opens a working copy.
+- `uv run --locked --no-sync python tests/test_sample_copies.py` — 9 passed.
+- Real Chrome `browser_checks/nonconsecutive_sample.py` — passed at 1440px,
+  390px, and 320px. No page errors or horizontal overflow. Screenshots:
+  `/tmp/sigma-nonconsecutive-desktop.png` and
+  `/tmp/sigma-nonconsecutive-mobile.png`.
+- Session #1 regression verifies its derived outcome is
+  `Mixed · partial progress, unresolved`, its objective review is partial,
+  both general proof obligations remain open, and the Skeptic's exact n=2
+  counterexample remains visible and unchanged.
+- Export/import round-trip retained five sessions, five linked artifacts,
+  strategy IDs, five completed Python evidence records, and report content.
+  The source project JSON SHA-256 stayed
+  `cb4e67fe05d521776bc3afb67fef800d112fefa550db4957fa36d399829463b8`.
+
+Coordination and dependencies
+
+T30's original sample-export implementation PR #40 is already in current main;
+this change is a focused integration correction and a saved sample fixture. The
+Open T37 PR #45 also edits `docs/STATUS.md`; the integration conflict with Gate C
+was resolved by preserving both status entries. Its application changes do not
+overlap this PR. PR #42 merged into main during this work and is included only
+through the main merge; this branch adds no Lean-logo changes. I did not contact
+any other worker.
+
+After main advanced to c4b18d3, I merged it into the branch and resolved the
+append-only `docs/STATUS.md` conflict while retaining both the Gate C and sample
+entries. Main then advanced to 6b0d0c9 with the T22.3 ticket specification; I
+merged that commit as well. On the current integrated head, `./sigma test`
+passed all steps and the real Chrome sample check passed again at 1440px,
+390px, and 320px with no page errors or horizontal overflow. PR #48 contains
+the updated head.
+
+After the review correction, the branch still contains current `origin/main`
+as an ancestor and local `git merge-tree` reports no conflicts. GitHub's PR
+metadata nevertheless currently reports `mergeable: false`; the coordinator
+should check this platform status while reviewing.
+
+R4R for coordinator review and integration. Do not self-merge.

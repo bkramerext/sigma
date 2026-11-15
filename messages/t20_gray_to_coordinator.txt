@@ -1,0 +1,27 @@
+T20 / PR #10 handoff — project-header LaTeX shortcut
+
+PR: https://github.com/bkramerext/sigma/pull/10
+Branch: feature/project-header-latex
+
+Reconciled PR #10 with current main after the T23.1 four-pill project header
+landed. The direct copper LaTeX action is in the project action row beside
+“Back to home”; Model and Google remain in the first row, Thinking and ChatGPT
+remain in the second row. This keeps the current compact header geometry and
+avoids the extra 21 px workspace displacement from a third control-grid row.
+The direct paper dialog restores focus to the LaTeX action; the existing
+Export Project authoring route still returns to its saved export options.
+
+Validation on this branch:
+- `UV_CACHE_DIR=/tmp/sigma-codex-uv-cache ./sigma test` — passed, including
+  Ruff, formatting, Pyright, frontend typecheck, and production build.
+- `browser_checks/a20_paper.py` in real Chrome against UI :5174 and isolated
+  fixture :8130 — passed (direct paper action, preserved Export Project route,
+  evidence and compiled PDF checks, mobile 390 px layout).
+- `browser_checks/header.py` in real Chrome against UI :5174 and isolated
+  fixture :8130 — passed (2×2 pills, keyboard and persistence behavior,
+  ChatGPT disclosure, Google placeholder, 1280/1100/700/390/320 px and no
+  horizontal overflow).
+- `git diff --check` — passed.
+
+The merge from current main is resolved on the existing PR branch. No merge was
+performed. PR #10 is ready for review.

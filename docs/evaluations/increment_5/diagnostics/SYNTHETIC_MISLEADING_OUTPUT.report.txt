@@ -1,0 +1,102 @@
+SYNTHETIC ADVERSARIAL TEST; NOT AN ACTUAL SIGMA RESEARCH SESSION
+
+SYNTHETIC ADVERSARIAL TEST
+==========================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Prove a universal mathematical statement.
+
+Project ID: synthetic
+
+Research type: Mathematics
+
+Strategies
+----------
+No strategies are recorded.
+
+Research sessions
+-----------------
+Session #1
+Execution status: ended
+Outcome: Mixed · partial progress, unresolved
+Strategy: Test a purported proof
+Started: Not recorded
+
+Outcome summary: A program asserted theorem_proved=true; the universal claim remains open.
+
+Conclusion
+~~~~~~~~~~
+### Partial finding
+
+A program asserted theorem_proved=true; the universal claim remains open.
+
+No derivation was supplied.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- The program did not derive the claim.
+- Supply a derivation and inspect every inference.
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- The program did not derive the claim.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+**Evidence:** Artifact 1
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.
+
+Outcome caveats:
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- The program did not derive the claim.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+Verification: Incomplete
+Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed.
+
+Claim scope: not recorded
+Solution claim: A program asserted theorem_proved=true; the universal claim remains open.
+Argument: No derivation was supplied.
+Skeptic response: The output is an assertion. No universal proof follows.
+Assumptions reviewed: Not recorded
+Proof obligations considered: Not recorded
+Still open: Supply a derivation and inspect every inference.
+Solution evidence references: synthetic-artifact
+Unresolved objections: The program did not derive the claim.
+Resolved review notes: None recorded
+
+Skeptic objection: The program did not derive the claim.
+Saved verification code: incomplete
+
+Strategy finding: Test a purported proof · partial
+Strategy execution status: unknown
+Strategy failure detail: Not recorded
+Claim: A program asserted theorem_proved=true; the universal claim remains open.
+Source artifacts: synthetic-artifact
+Objection: The program did not derive the claim.
+Open obligation: Supply a derivation and inspect every inference.
+
+Artifact 1 · Not recorded
+Claim: A program printed a proof flag but no proof.
+Method: Print a JSON assertion.
+Assumptions: Not recorded
+Evidence status: incomplete
+Skeptic response: The output is an assertion. No universal proof follows.
+Objections: The program did not derive the claim.
+Decision: revise
+Open obligations: Supply a derivation and inspect every inference.
+Next question: Supply a derivation and inspect each claimed inference independently.
+
+Agentic runs
+------------
+No agentic runs are recorded.

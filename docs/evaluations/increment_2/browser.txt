@@ -1,0 +1,1 @@
+PASS real Chrome: current understanding, exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no provider work

@@ -1,0 +1,39 @@
+R4R — T171 pre-deployment host security and runtime readiness audit
+
+Branch: red/t171-host-readiness
+Base: main (fresh worktree from origin/main b33e994)
+PR: https://github.com/bkramerext/sigma/pull/175
+
+Result: BLOCKED for production start. Offline implementation review is
+complete, but no live GCE host verification was authorized in this assignment.
+T128's rootless daemon, UUID-backed state mount, deployed app, actual container
+restrictions and reboot recovery still need the exact checks in
+docs/T171_HOST_READINESS.md.
+
+Code change: gce_preflight previously accepted the merged Compose config
+without checking most resource and privilege controls. It now checks fixed
+backend/frontend/edge read-only/user/capability/security/resource policy,
+noexec temporary filesystems, and only edge TCP 80/443 port publication. The
+regression checks missing PID limits, contradictory exec tmpfs flags,
+seccomp:unconfined, and unsafe host/target port mappings.
+
+Offline checks actually run:
+- `./sigma test`: completed all independent checks. Four failures were
+  reported: three known stale systemd mount assertions in tests/deployment_package.py,
+  tests/gce_host.py and tests/host_monitor.py (left untouched per instruction),
+  and frontend typecheck could not find `tsc`; frontend build was skipped.
+- Focused host suite excluding only the known stale assertion: 16 passed.
+- `uv run --locked --no-sync pyright`: 0 errors, warnings or informations.
+- Ruff lint and format on changed Python files: passed.
+- `git diff --check`: passed.
+- Local `docker info` responded with workstation AppArmor/seccomp/cgroupns
+  settings; Docker Compose v2 and systemd-analyze were unavailable. This is
+  not target-host evidence.
+
+No installer, VM, reboot, infrastructure, provider, paid call, or production
+service action occurred. No real-browser check was relevant to this host audit.
+Installer failure remains non-transactional and may leave partial state.
+
+Handoff also recorded in docs/STATUS.md, docs/T171_HOST_READINESS.md and
+tickets/t171.md. The docs include exact later host commands and expected
+results, with start/reboot explicitly requiring separate authorization.

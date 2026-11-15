@@ -1,0 +1,260 @@
+{
+  "paper_id": "a36af0bc60294fbabb936263e2cd27ab",
+  "title": "Agent Reliability at the External-Effect Boundary: Conditional Evaluation and Recovery Guarantees",
+  "project_id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+  "session_id": "e3f02cce-aed5-42f7-aa01-a5cad3c99c18",
+  "source_archive_sha256": "293cef2ff93aeae243aa23bbf0b5e8975deaee196a4385b77f3eb0c0e78ebae1",
+  "frozen_snapshot_sha256": "25f563690e5ba43b618d6897f44653c1847640b0f5bdb5dbca98029d81dce2bb",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider": {
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "started_at": "2026-11-02T06:03:46.976190+00:00",
+  "finished_at": "2026-11-02T06:18:26.804316+00:00",
+  "elapsed_seconds": 878.64,
+  "provider_calls_total": 18,
+  "proofreading": {
+    "accepted_correction_count": 0,
+    "ai_performed": true,
+    "attempted": true,
+    "corrected_tex_sha256": "06a74f460bf9c252a8a06513b55d0890fc66786ee53870f7127ec8193d21b35e",
+    "correction_categories": [],
+    "elapsed_seconds": 162,
+    "fallback_reason": "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+    "final_tex_sha256": "a26de75cb82c76f01ec4673fcf742ce19ff45feab0ec30b8501c6f08543e28de",
+    "model": "gpt-6.1-sol",
+    "original_tex_sha256": "06a74f460bf9c252a8a06513b55d0890fc66786ee53870f7127ec8193d21b35e",
+    "prior_render_provider_calls": 0,
+    "provider_calls_attempted": 10,
+    "provider_calls_current_render": 10,
+    "reasoning_effort": "high",
+    "review_reason": "Layout warnings remained after the bounded TeX correction passes.",
+    "status": "fallback",
+    "unresolved_diagnostics": [
+      "Potentially wide diagram or table line 136 (311 characters).",
+      "Potentially wide diagram or table line 137 (327 characters).",
+      "Potentially wide diagram or table line 138 (304 characters).",
+      "Potentially wide diagram or table line 217 (209 characters).",
+      "Potentially wide diagram or table line 218 (257 characters).",
+      "Potentially wide diagram or table line 267 (347 characters).",
+      "Potentially wide diagram or table line 268 (233 characters).",
+      "Potentially wide diagram or table line 269 (339 characters).",
+      "Potentially wide diagram or table line 337 (390 characters).",
+      "Potentially wide diagram or table line 341 (390 characters).",
+      "Potentially wide diagram or table line 349 (185 characters).",
+      "Potentially wide diagram or table line 351 (192 characters).",
+      "Potentially wide diagram or table line 352 (205 characters).",
+      "Potentially wide diagram or table line 405 (267 characters).",
+      "Potentially wide diagram or table line 406 (246 characters).",
+      "Potentially wide diagram or table line 407 (257 characters).",
+      "Potentially wide diagram or table line 408 (293 characters).",
+      "warning: report.tex:98: Overfull \\hbox (0.19504pt too wide) in paragraph at lines 97--98",
+      "warning: report.tex:106: Overfull \\hbox (20.61447pt too wide) in paragraph at lines 105--106",
+      "warning: report.tex:161: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 160--161",
+      "warning: report.tex:423: Underfull \\hbox (badness 10000) in paragraph at lines 420--423",
+      "warning: report.tex:423: Underfull \\hbox (badness 3364) in paragraph at lines 420--423",
+      "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.",
+      "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+      "Proofreading chunk 2 was not applied: A proposed correction changed protected scientific or reference content.",
+      "Proofreading chunk 6 was not applied: A proposed correction changed protected scientific or reference content.",
+      "Proofreading chunk 8 was not applied: A proposed correction changed protected scientific or reference content.",
+      "warning: report.tex:99: Underfull \\hbox (badness 4391) in paragraph at lines 98--99",
+      "warning: report.tex:99: Underfull \\hbox (badness 5667) in paragraph at lines 98--99",
+      "warning: report.tex:99: Underfull \\hbox (badness 10000) in paragraph at lines 98--99",
+      "warning: report.tex:107: Underfull \\hbox (badness 10000) in paragraph at lines 106--107",
+      "warning: report.tex:107: Underfull \\hbox (badness 5578) in paragraph at lines 106--107",
+      "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+      "warning: report.tex:386: Underfull \\hbox (badness 1721) in paragraph at lines 385--386",
+      "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+      "warning: report.tex:424: Underfull \\hbox (badness 3364) in paragraph at lines 421--424"
+    ],
+    "verification_status": "incomplete"
+  },
+  "publication_status": "needs_review",
+  "layout_status": "needs_review",
+  "pdf_check_passes": [
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:99: Overfull \\hbox (0.19504pt too wide) in paragraph at lines 98--99",
+        "warning: report.tex:107: Overfull \\hbox (20.61447pt too wide) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 3364) in paragraph at lines 421--424",
+        "warning: report.tex:99: Overfull \\hbox (0.19504pt too wide) in paragraph at lines 98--99",
+        "warning: report.tex:107: Overfull \\hbox (20.61447pt too wide) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 3364) in paragraph at lines 421--424",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [
+        "warning: report.tex:99: Overfull \\hbox (0.19504pt too wide) in paragraph at lines 98--99",
+        "warning: report.tex:107: Overfull \\hbox (20.61447pt too wide) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424"
+      ],
+      "page_count": 50,
+      "pass": 1,
+      "tex_repair": "Increased TeX emergency line-breaking stretch from 2em to 4em."
+    },
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:99: Overfull \\hbox (0.19504pt too wide) in paragraph at lines 98--99",
+        "warning: report.tex:107: Underfull \\hbox (badness 5726) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 3364) in paragraph at lines 421--424",
+        "warning: report.tex:99: Overfull \\hbox (0.19504pt too wide) in paragraph at lines 98--99",
+        "warning: report.tex:107: Underfull \\hbox (badness 5726) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 3364) in paragraph at lines 421--424",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [
+        "warning: report.tex:99: Overfull \\hbox (0.19504pt too wide) in paragraph at lines 98--99",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424"
+      ],
+      "page_count": 50,
+      "pass": 2,
+      "tex_repair": "Increased TeX emergency line-breaking stretch from 4em to 8em."
+    },
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:99: Underfull \\hbox (badness 4391) in paragraph at lines 98--99",
+        "warning: report.tex:99: Underfull \\hbox (badness 5667) in paragraph at lines 98--99",
+        "warning: report.tex:99: Underfull \\hbox (badness 10000) in paragraph at lines 98--99",
+        "warning: report.tex:107: Underfull \\hbox (badness 10000) in paragraph at lines 106--107",
+        "warning: report.tex:107: Underfull \\hbox (badness 5578) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:386: Underfull \\hbox (badness 1721) in paragraph at lines 385--386",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 3364) in paragraph at lines 421--424",
+        "warning: report.tex:99: Underfull \\hbox (badness 4391) in paragraph at lines 98--99",
+        "warning: report.tex:99: Underfull \\hbox (badness 5667) in paragraph at lines 98--99",
+        "warning: report.tex:99: Underfull \\hbox (badness 10000) in paragraph at lines 98--99",
+        "warning: report.tex:107: Underfull \\hbox (badness 10000) in paragraph at lines 106--107",
+        "warning: report.tex:107: Underfull \\hbox (badness 5578) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:386: Underfull \\hbox (badness 1721) in paragraph at lines 385--386",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424",
+        "warning: report.tex:424: Underfull \\hbox (badness 3364) in paragraph at lines 421--424",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [
+        "warning: report.tex:99: Underfull \\hbox (badness 10000) in paragraph at lines 98--99",
+        "warning: report.tex:107: Underfull \\hbox (badness 10000) in paragraph at lines 106--107",
+        "warning: report.tex:162: Overfull \\hbox (34.91809pt too wide) in paragraph at lines 161--162",
+        "warning: report.tex:424: Underfull \\hbox (badness 10000) in paragraph at lines 421--424"
+      ],
+      "page_count": 50,
+      "pass": 3
+    }
+  ],
+  "omitted_evidence_count": null,
+  "official_publication_reference_set": [
+    {
+      "name": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines"
+    },
+    {
+      "name": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/"
+    }
+  ],
+  "writing_source_selection": "selected",
+  "selected_writing_sources": [
+    {
+      "title": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines",
+      "tier": "general",
+      "type": "computer_science",
+      "branch": "project_type",
+      "sha256": "44af7d8134f80040e8cc872095590effff565d5e4bc0e2ce0a4d63ad8f6d8efb",
+      "reference_set_sha256": "602cce95c9df0850d59c308e1e2f9780fa2120a6620da2ecc66584f2f7d04635",
+      "excerpt_characters": 3500
+    },
+    {
+      "title": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/",
+      "tier": "general",
+      "type": "computer_science",
+      "branch": "project_type",
+      "sha256": "a23c6d17c1136919a64c63fa172e818ec1b979fa7ad79e1e5b032e56e29c31bf",
+      "reference_set_sha256": "602cce95c9df0850d59c308e1e2f9780fa2120a6620da2ecc66584f2f7d04635",
+      "excerpt_characters": 3500
+    }
+  ],
+  "artifact_hashes": {
+    "txt": {
+      "path": "agent-reliability-v1/paper.txt",
+      "bytes": 101448,
+      "sha256": "c12a8b88dc2fc34f544f3b295981ca8f658f9b74a674b9fc93a59442808d4364"
+    },
+    "tex": {
+      "path": "agent-reliability-v1/paper.tex",
+      "bytes": 136264,
+      "sha256": "a26de75cb82c76f01ec4673fcf742ce19ff45feab0ec30b8501c6f08543e28de"
+    },
+    "pdf": {
+      "path": "agent-reliability-v1/paper.pdf",
+      "bytes": 188155,
+      "sha256": "a7096eaa45f8a2304cce9be2bbe245c05f9b18843ba5d47d0b7dd6ca1e3e3e68"
+    }
+  },
+  "full_record_sha256": "f7ec8e206a09cd45d8c253c35fd1365bee9cb07de646296a2dad4e4f5bb978c4",
+  "full_record_path": "agent-reliability-v1/metadata.full.json.gz",
+  "manuscript": {
+    "words": 13499,
+    "sections": 7,
+    "claims": 129,
+    "pdf_pages": 50
+  },
+  "author_review_warnings": [
+    "Evidence indexing omitted 43723 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The claim register contains duplicate identifiers and redundant propositions; these must be consolidated into unique records before drafting.",
+    "Several abstract, framing, and methods links use zero-padded identifiers that do not match the non-padded identifiers in the register; all links require normalization.",
+    "The supplied mathematical assessments are not independent formal verification. Conditional proof candidates must not be described as validated theorems.",
+    "Full hypergeometric inversion details, sharpness constructions, and some historical fixtures are absent from the preview.",
+    "The supplied audit-minimization discussion contains arithmetic corrections; its numerical minimum is not reproduced.",
+    "The historical delivery-relaxation claim and the unqualified split-write safety claim are retracted rather than retained.",
+    "False evidence certificates can invalidate outcome containment even with a conforming mapper.",
+    "No bibliography or literature-novelty claim is justified by the supplied scientific evidence.",
+    "The evidence index explicitly omitted 43727 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 370 source-linked text fragments from 43 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field."
+  ],
+  "validation_warnings": [
+    "Evidence indexing omitted 43723 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The claim register contains duplicate identifiers and redundant propositions; these must be consolidated into unique records before drafting.",
+    "Several abstract, framing, and methods links use zero-padded identifiers that do not match the non-padded identifiers in the register; all links require normalization.",
+    "The supplied mathematical assessments are not independent formal verification. Conditional proof candidates must not be described as validated theorems.",
+    "Full hypergeometric inversion details, sharpness constructions, and some historical fixtures are absent from the preview.",
+    "The supplied audit-minimization discussion contains arithmetic corrections; its numerical minimum is not reproduced.",
+    "The historical delivery-relaxation claim and the unqualified split-write safety claim are retracted rather than retained.",
+    "False evidence certificates can invalidate outcome containment even with a conforming mapper.",
+    "No bibliography or literature-novelty claim is justified by the supplied scientific evidence.",
+    "The evidence index explicitly omitted 43727 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 370 source-linked text fragments from 43 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C16 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C16 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C22 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C22 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C13 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C13 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C12 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C12 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C11 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ]
+}

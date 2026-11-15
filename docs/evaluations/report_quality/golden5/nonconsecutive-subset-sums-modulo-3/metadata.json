@@ -1,0 +1,186 @@
+{
+  "paper_id": "0c9118a41e2c420089ab890acd6a80b5",
+  "title": "Exact Fibonacci Corrections for Nonconsecutive Subset Sums Modulo Three",
+  "project_id": "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a",
+  "session_id": "6ce6a07a-c844-4681-a6ec-ede98aa923ea",
+  "source_archive_sha256": "cbd1eb4c09f11445361bcd00851b46d3fed10618781db481c54f5e153c8ae8c1",
+  "frozen_snapshot_sha256": "71b345c5dd63be6e1ba38e011d7274bb6a36dbb0e1d3aba70ea46c2968b84bae",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider": {
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "started_at": "2026-11-02T06:50:38.972800+00:00",
+  "finished_at": "2026-11-02T06:52:09.988134+00:00",
+  "elapsed_seconds": 90.92,
+  "provider_calls_total": 13,
+  "proofreading": {
+    "accepted_correction_count": 0,
+    "ai_performed": false,
+    "attempted": true,
+    "corrected_tex_sha256": "5328e7171ca7cb5def9897ed59214aa71427cab6c3717b1538309f7622d15d51",
+    "correction_categories": [],
+    "elapsed_seconds": 17,
+    "fallback_reason": "AI proofreading stopped safely: ChatGPT plan or app usage limit reached. Manage usage at https://chatgpt.com/settings/usage; no API-key fallback occurred. Provider error code: subscription_sharing_usage_limit_exceeded (error; HTTP transport 200). This is separate from SIGMA's sponsored-dollar allowance. The provider did not identi",
+    "final_tex_sha256": "f4600b2d74e6bc9d071b1fc6eeefb017864972d55f54ffeed9dccca5c44139c7",
+    "model": "gpt-6.1-sol",
+    "original_tex_sha256": "5328e7171ca7cb5def9897ed59214aa71427cab6c3717b1538309f7622d15d51",
+    "prior_render_provider_calls": 0,
+    "provider_calls_attempted": 2,
+    "provider_calls_current_render": 2,
+    "reasoning_effort": "high",
+    "status": "fallback",
+    "unresolved_diagnostics": [
+      "Potentially wide diagram or table line 123 (187 characters).",
+      "warning: report.tex:212: Overfull \\hbox (7.78601pt too wide) in paragraph at lines 211--212",
+      "warning: report.tex:283: Underfull \\hbox (badness 2875) in paragraph at lines 281--283",
+      "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.",
+      "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+      "Proofreading chunk 2 was not applied: ChatGPT plan or app usage limit reached. Manage usage at https://chatgpt.com/settings/usage; no API-key fallback occurred. Provider error code: subscription_sharing_usage_limit_exceeded (error; HTTP transport 200). This is separate from SIG",
+      "warning: report.tex:88: Underfull \\hbox (badness 1776) in paragraph at lines 85--88",
+      "warning: report.tex:213: Underfull \\hbox (badness 4132) in paragraph at lines 212--213",
+      "warning: report.tex:284: Underfull \\hbox (badness 2875) in paragraph at lines 282--284"
+    ],
+    "verification_status": "incomplete"
+  },
+  "publication_status": "needs_review",
+  "layout_status": "no_severe_box_warnings_reported",
+  "pdf_check_passes": [
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:213: Overfull \\hbox (7.78601pt too wide) in paragraph at lines 212--213",
+        "warning: report.tex:284: Underfull \\hbox (badness 2875) in paragraph at lines 282--284",
+        "warning: report.tex:213: Overfull \\hbox (7.78601pt too wide) in paragraph at lines 212--213",
+        "warning: report.tex:284: Underfull \\hbox (badness 2875) in paragraph at lines 282--284",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [
+        "warning: report.tex:213: Overfull \\hbox (7.78601pt too wide) in paragraph at lines 212--213"
+      ],
+      "page_count": 14,
+      "pass": 1,
+      "tex_repair": "Increased TeX emergency line-breaking stretch from 2em to 4em."
+    },
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:88: Underfull \\hbox (badness 1776) in paragraph at lines 85--88",
+        "warning: report.tex:213: Underfull \\hbox (badness 4132) in paragraph at lines 212--213",
+        "warning: report.tex:284: Underfull \\hbox (badness 2875) in paragraph at lines 282--284",
+        "warning: report.tex:88: Underfull \\hbox (badness 1776) in paragraph at lines 85--88",
+        "warning: report.tex:213: Underfull \\hbox (badness 4132) in paragraph at lines 212--213",
+        "warning: report.tex:284: Underfull \\hbox (badness 2875) in paragraph at lines 282--284",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [],
+      "page_count": 14,
+      "pass": 2
+    }
+  ],
+  "omitted_evidence_count": null,
+  "official_publication_reference_set": [
+    {
+      "name": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines"
+    },
+    {
+      "name": "Keith Conrad — Advice on Mathematical Writing (full text)",
+      "url": "https://kconrad.math.uconn.edu/blurbs/proofs/writingtips.pdf"
+    },
+    {
+      "name": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/"
+    }
+  ],
+  "writing_source_selection": "selected",
+  "selected_writing_sources": [
+    {
+      "title": "Keith Conrad — Advice on Mathematical Writing (full text)",
+      "url": "https://kconrad.math.uconn.edu/blurbs/proofs/writingtips.pdf",
+      "tier": "discipline",
+      "type": "mathematical",
+      "branch": "project_type",
+      "sha256": "64177f8823021581ec3452a3565abd50a7b6c9fb51bb2e248bed2b1bc9b4ea81",
+      "reference_set_sha256": "8dce54c69b68dfa2a710f6ac12f9d90205b852200fcbb5f10c798d204fb3a764",
+      "excerpt_characters": 3500
+    },
+    {
+      "title": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines",
+      "tier": "general",
+      "type": "mathematical",
+      "branch": "project_type",
+      "sha256": "44af7d8134f80040e8cc872095590effff565d5e4bc0e2ce0a4d63ad8f6d8efb",
+      "reference_set_sha256": "8dce54c69b68dfa2a710f6ac12f9d90205b852200fcbb5f10c798d204fb3a764",
+      "excerpt_characters": 3500
+    },
+    {
+      "title": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/",
+      "tier": "general",
+      "type": "mathematical",
+      "branch": "project_type",
+      "sha256": "a23c6d17c1136919a64c63fa172e818ec1b979fa7ad79e1e5b032e56e29c31bf",
+      "reference_set_sha256": "8dce54c69b68dfa2a710f6ac12f9d90205b852200fcbb5f10c798d204fb3a764",
+      "excerpt_characters": 3500
+    }
+  ],
+  "artifact_hashes": {
+    "txt": {
+      "path": "nonconsecutive-subset-sums-modulo-3/paper.txt",
+      "bytes": 28812,
+      "sha256": "aea757c65e477118d287bf30dc10e854e166a5a5e430832fa5971a7746d07c21"
+    },
+    "tex": {
+      "path": "nonconsecutive-subset-sums-modulo-3/paper.tex",
+      "bytes": 42615,
+      "sha256": "f4600b2d74e6bc9d071b1fc6eeefb017864972d55f54ffeed9dccca5c44139c7"
+    },
+    "pdf": {
+      "path": "nonconsecutive-subset-sums-modulo-3/paper.pdf",
+      "bytes": 117291,
+      "sha256": "9ff3caaaefee1ee3e6af3becf756c72efe75c6de1a613b6302b30cf84dd85e7d"
+    }
+  },
+  "full_record_sha256": "d79ef742d6a72f02b906bf5bd3120d1385c2f004cbf350c2bce07567cc32295a",
+  "full_record_path": "nonconsecutive-subset-sums-modulo-3/metadata.full.json.gz",
+  "manuscript": {
+    "words": 5031,
+    "sections": 5,
+    "claims": 10,
+    "pdf_pages": 14
+  },
+  "author_review_warnings": [
+    "Evidence indexing omitted 2809 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The source index is explicitly bounded and contains truncated excerpts. This plan does not claim exhaustive semantic review of the saved research or inspection of unavailable originals.",
+    "The minimal-order result is asserted and favorably reviewed in the supplied excerpts, but the decisive coprimality arithmetic is not fully visible. Its unresolved label records an evidentiary reconstruction gap, not a mathematical refutation.",
+    "No material mathematical contradiction is apparent among the displayed recurrence, correction formulas, generating function, initial values, and limiting estimate. Inconsistent operational assessment labels do not establish a mathematical failure and are not used as scientific premises.",
+    "No computational execution, external proof checking, formal verification, or literature-based novelty assessment is supported. Publication and writing-method references are editorial guidance only, not evidence for the mathematical claims.",
+    "The response schema has no section-table field. The outline therefore specifies a compact initial-value table within the relevant section rather than adding an unsupported JSON field. No diagram is proposed because the short algebraic dependency chain is clearer in the proof itself.",
+    "The evidence index explicitly omitted 2812 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 451 source-linked text fragments from 11 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field."
+  ],
+  "validation_warnings": [
+    "Evidence indexing omitted 2809 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The source index is explicitly bounded and contains truncated excerpts. This plan does not claim exhaustive semantic review of the saved research or inspection of unavailable originals.",
+    "The minimal-order result is asserted and favorably reviewed in the supplied excerpts, but the decisive coprimality arithmetic is not fully visible. Its unresolved label records an evidentiary reconstruction gap, not a mathematical refutation.",
+    "No material mathematical contradiction is apparent among the displayed recurrence, correction formulas, generating function, initial values, and limiting estimate. Inconsistent operational assessment labels do not establish a mathematical failure and are not used as scientific premises.",
+    "No computational execution, external proof checking, formal verification, or literature-based novelty assessment is supported. Publication and writing-method references are editorial guidance only, not evidence for the mathematical claims.",
+    "The response schema has no section-table field. The outline therefore specifies a compact initial-value table within the relevant section rather than adding an unsupported JSON field. No diagram is proposed because the short algebraic dependency chain is clearer in the proof itself.",
+    "The evidence index explicitly omitted 2812 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 451 source-linked text fragments from 11 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C1 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C1 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C2 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C2 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C3 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C3 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C4 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C4 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C5 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C5 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C6 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C6 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout."
+  ]
+}

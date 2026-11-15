@@ -1,0 +1,25 @@
+[Unit]
+Description=Read-only SIGMA host, state disk and backup monitoring
+OnFailure=sigma-monitor-failure.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/sigma/host-monitor.py --json
+Environment=HOME=/var/lib/sigma-backup
+Environment=CLOUDSDK_CONFIG=/var/lib/sigma-backup/gcloud
+User=root
+Group=root
+UMask=0077
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/sigma-backup
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+TimeoutStartSec=2min

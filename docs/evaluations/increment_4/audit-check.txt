@@ -1,0 +1,1 @@
+PASS 28 actual call bodies/hashes, 10 actual execution records, exact subset/Sage outputs, 543 four-vertex DAGs/4500 insertion cases, no-computation/error/timeout/invalid-hash/restart controls, lossless source coverage

@@ -1,0 +1,166 @@
+{
+  "app_revision": "1acb310320b36debb36feafa09d6478d6657e215",
+  "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-_qbj25dc",
+  "transport": "offline HTTP script; actual unmodified SIGMA Python/Sage Docker execution",
+  "live_provider_calls": 0,
+  "actual_cost_usd": 0,
+  "accounting": "Synthetic provider token/cost accounting inputs; no billing. Actual container wall durations are saved in execution records.",
+  "preflight": "Two actual application execute() diagnostics outside research sessions confirmed Python 3.12.8 and SageMath 10.8. They are not research findings or included in new-session execution counts.",
+  "projects": [
+    {
+      "slug": "nonconsecutive-subset-sums",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-_qbj25dc/projects/nonconsecutive-subset-sums.sigma",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "source": "Isolated path-rebound copy of the actual retained Increment 3 project: five historical deterministic fixture sessions, four prior offline scripted sessions and preserved approval companions. New execution is separately identified.",
+      "before": [
+        "docs/evaluations/increment_5/exports/subset.before.audit.json",
+        "docs/evaluations/increment_5/exports/subset.before.current-understanding.json",
+        "docs/evaluations/increment_5/exports/subset.before.report.txt",
+        "docs/evaluations/increment_5/exports/subset.before.report.html",
+        "docs/evaluations/increment_5/exports/subset.before.report.tex"
+      ],
+      "after": [
+        "docs/evaluations/increment_5/exports/subset.after.audit.json",
+        "docs/evaluations/increment_5/exports/subset.after.current-understanding.json",
+        "docs/evaluations/increment_5/exports/subset.after.report.txt",
+        "docs/evaluations/increment_5/exports/subset.after.report.html",
+        "docs/evaluations/increment_5/exports/subset.after.report.tex"
+      ],
+      "browser_final": [
+        "docs/evaluations/increment_5/exports/subset.browser-final.audit.json"
+      ]
+    },
+    {
+      "slug": "algorithm-design",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-_qbj25dc/projects/algorithm-design.sigma",
+      "project_id": "d9e7d28c-68a1-4cbb-a05b-00ffc713700f",
+      "source": "Fresh stock Algorithm Design sample with no sessions/strategies, then evaluator-authored bounded local conjectures; no complete solution or counterexample key supplied.",
+      "before": [
+        "docs/evaluations/increment_5/exports/algorithm.before.audit.json",
+        "docs/evaluations/increment_5/exports/algorithm.before.current-understanding.json",
+        "docs/evaluations/increment_5/exports/algorithm.before.report.txt",
+        "docs/evaluations/increment_5/exports/algorithm.before.report.html",
+        "docs/evaluations/increment_5/exports/algorithm.before.report.tex"
+      ],
+      "after": [
+        "docs/evaluations/increment_5/exports/algorithm.after.audit.json",
+        "docs/evaluations/increment_5/exports/algorithm.after.current-understanding.json",
+        "docs/evaluations/increment_5/exports/algorithm.after.report.txt",
+        "docs/evaluations/increment_5/exports/algorithm.after.report.html",
+        "docs/evaluations/increment_5/exports/algorithm.after.report.tex"
+      ],
+      "browser_final": [
+        "docs/evaluations/increment_5/exports/algorithm.browser-final.audit.json"
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "scenario": "subset",
+      "mode": "actual",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "strategy_id": "eea0d6c7-f58c-4206-8e85-c1d2d183ee50",
+      "calls_used": 4,
+      "artifact_ids": [
+        "2e486289-e8b7-4cb5-b005-741d5a0d4ef2",
+        "3c711767-5fc7-405b-a612-e149f2597f19"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "withheld",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "4c01ac39-ee8f-4947-9c5e-4f79b1929a0c",
+      "strategy_id": "2ca26ac4-c9e7-4d88-993f-5517f366a6bd",
+      "calls_used": 4,
+      "artifact_ids": [
+        "7daa7a02-f41f-4254-b679-60c81e567f35",
+        "0c25ab14-56a1-4fc9-8321-600772e85353"
+      ]
+    },
+    {
+      "scenario": "graph",
+      "mode": "actual",
+      "project_id": "d9e7d28c-68a1-4cbb-a05b-00ffc713700f",
+      "session_id": "152a6149-7aa9-435d-b7ff-0ea87a641643",
+      "strategy_id": "c4eb4c32-a591-475e-bd59-ceca9816c5fa",
+      "calls_used": 4,
+      "artifact_ids": [
+        "a540f665-db5b-4346-b1dd-25fc68abec6f",
+        "c6503628-40d0-41c2-9ae1-ffde0382c564"
+      ]
+    },
+    {
+      "scenario": "graph",
+      "mode": "withheld",
+      "project_id": "d9e7d28c-68a1-4cbb-a05b-00ffc713700f",
+      "session_id": "308bb619-263d-479b-b3b3-5204b3685c2e",
+      "strategy_id": "be7a317a-b8ce-4e20-914d-9a69b961dca7",
+      "calls_used": 4,
+      "artifact_ids": [
+        "5f4639d5-d288-40ab-a256-02ecc21c48ad",
+        "59c316fe-885b-4781-bba2-68da78c93012"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "error",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "strategy_id": "cebec5f5-847b-4964-a50b-b251908721fc",
+      "calls_used": 2,
+      "artifact_ids": [
+        "5ed60895-eba0-45fa-a296-ef06e8c8e359"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "timeout",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "strategy_id": "1cde062f-ac2d-441d-913d-5fe9443e3522",
+      "calls_used": 2,
+      "artifact_ids": [
+        "b269b6c1-45de-42ee-b989-b0db96c3d71a"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "sage",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "strategy_id": "e6f827ab-9d07-48a5-a8c7-b72ce8a4b431",
+      "calls_used": 2,
+      "artifact_ids": [
+        "3b178ed5-5d6e-4938-8225-6f058c52271c"
+      ]
+    },
+    {
+      "scenario": "subset",
+      "mode": "invalid_feedback",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "4c3c8dd6-7b65-4089-9881-1b9839b2ec31",
+      "strategy_id": "3790a917-cc62-4131-b994-b449ec8079ad",
+      "calls_used": 2,
+      "artifact_ids": []
+    },
+    {
+      "scenario": "subset",
+      "mode": "restart",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "strategy_id": "9117f562-49bc-4bbc-8a42-92bd642045a3",
+      "calls_used": 4,
+      "artifact_ids": [
+        "11960c8c-70b2-4883-ad2c-6bfea3626566",
+        "2f52d49c-66e6-4b3c-acfc-b4d93c35f90d"
+      ],
+      "interrupted_execution_id": "0c376030-2755-4ec7-a9a0-90770300f2a0"
+    }
+  ],
+  "offline_provider_calls": 28,
+  "integration_note": "Full literal contexts were dispatched by default; the exact-text pool is an inactive experiment. Browser-final audits follow Preferences changes and have session objects equal to after audits.",
+  "full_test_and_browser_revision": "82bca9f85ddfe6a60a7269832920b6c63f4f94e0",
+  "revision_note": "Actual API research run was recorded at app_revision 1acb310; subsequent code change only bounded Simple UI qualifications and expanded browser verification. Full suite and Chrome ran on 82bca9f source tree."
+}

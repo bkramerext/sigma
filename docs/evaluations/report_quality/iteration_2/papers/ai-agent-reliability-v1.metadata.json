@@ -1,0 +1,513 @@
+{
+  "author_review_warnings": [
+    "Evidence indexing omitted 32185 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Author self-review: the bounded preview does not expose complete statistical proofs or enough numerical detail to reproduce a confidence bound. No omitted formula has been inferred.",
+    "The proposed retry bound was explicitly corrected: without assured retry commitment, an always-retry policy with lost retries defeats the claimed upper bound in the already-committed history.",
+    "The blanket claim that split commits invalidate at-most-once safety was explicitly withdrawn. Effect-first duplication and marker-first loss of delivery must remain distinct.",
+    "A mapper that follows its specification is not automatically defective when its input evidence excludes the actual outcome. Reference validity and mapper conformance require separate labels.",
+    "Service invariants, sound certificates, and possible-outcome containment are conditional premises, not observed implementation properties. The treatment invariant must not be reused as the outcome oracle.",
+    "Preflight and context-assembly failures in the research records do not provide controlled evidence of deployed-agent failure prevalence or architectural effectiveness.",
+    "The selection contains no genuine external bibliographic sources sufficient for a literature review or bibliography. Benchmark sensitivity and contamination remain research questions rather than findings here.",
+    "The planned qualitative comparison table must be populated only from inspected mechanisms and explicit assumptions; it must not imply measured reliability, latency, or cost rankings.",
+    "The evidence index explicitly omitted 32189 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 441 source-linked text fragments from 36 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field."
+  ],
+  "baseline_paper_id": "13a908d9b3074cb49b993186164559cb",
+  "baseline_snapshot_sha256": "080d3b70b67cfbe346acdb0f565d4a61c09ec4819229f2dd92dded43d9de40d9",
+  "finished_at": "2026-11-01T14:08:49.231645+00:00",
+  "full_record": {
+    "bytes": 5679181,
+    "path": "docs/evaluations/report_quality/iteration_2/papers/ai-agent-reliability-v1.metadata.full.json.gz",
+    "sha256": "c81cc46553b6d3911c93fe46183a85cec05592bae9655f269009792e327914e6"
+  },
+  "generation": {
+    "diagram_count": 1,
+    "evidence_batch_count": 0,
+    "evidence_conflict_note_count": 0,
+    "evidence_fields_omitted": 32189,
+    "generation_elapsed_seconds": 677,
+    "include_claim_details": true,
+    "include_diagrams": true,
+    "include_research_details": true,
+    "include_research_excerpts": false,
+    "include_validation_notes": true,
+    "layout_repairs": [
+      "Increased TeX emergency line-breaking stretch from 2em to 4em.",
+      "Increased TeX emergency line-breaking stretch from 4em to 8em."
+    ],
+    "layout_status": "needs_review",
+    "layout_warnings": [
+      "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+      "warning: report.tex:621: Underfull \\hbox (badness 10000) in paragraph at lines 620--621"
+    ],
+    "long_form": true,
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "pdf_check_final_pass": 3,
+    "pdf_check_passes": [
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:250: Underfull \\hbox (badness 1009) in paragraph at lines 248--250",
+          "warning: report.tex:536:",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning:   you may need to load the `fontspec` package and use (e.g.) \\setmainfont to",
+          "warning:   choose a different font that covers the unrepresentable character(s)",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:540: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+          "warning: report.tex:250: Underfull \\hbox (badness 1009) in paragraph at lines 248--250",
+          "warning: report.tex:536:",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning:   you may need to load the `fontspec` package and use (e.g.) \\setmainfont to",
+          "warning:   choose a different font that covers the unrepresentable character(s)",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:540: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567"
+        ],
+        "page_count": 42,
+        "pass": 1,
+        "tex_repair": "Increased TeX emergency line-breaking stretch from 2em to 4em."
+      },
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:250: Underfull \\hbox (badness 1009) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1418) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1831) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1960) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 3460) in paragraph at lines 248--250",
+          "warning: report.tex:536:",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning:   you may need to load the `fontspec` package and use (e.g.) \\setmainfont to",
+          "warning:   choose a different font that covers the unrepresentable character(s)",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:540: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+          "warning: report.tex:621: Underfull \\hbox (badness 2547) in paragraph at lines 620--621",
+          "warning: report.tex:250: Underfull \\hbox (badness 1009) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1418) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1831) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1960) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 3460) in paragraph at lines 248--250",
+          "warning: report.tex:536:",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning:   you may need to load the `fontspec` package and use (e.g.) \\setmainfont to",
+          "warning:   choose a different font that covers the unrepresentable character(s)",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:540: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+          "warning: report.tex:621: Underfull \\hbox (badness 2547) in paragraph at lines 620--621",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567"
+        ],
+        "page_count": 42,
+        "pass": 2,
+        "tex_repair": "Increased TeX emergency line-breaking stretch from 4em to 8em."
+      },
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:77: Underfull \\hbox (badness 1448) in paragraph at lines 76--77",
+          "warning: report.tex:77: Underfull \\hbox (badness 1320) in paragraph at lines 76--77",
+          "warning: report.tex:250: Underfull \\hbox (badness 1009) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1418) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1831) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1960) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 3460) in paragraph at lines 248--250",
+          "warning: report.tex:536:",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning:   you may need to load the `fontspec` package and use (e.g.) \\setmainfont to",
+          "warning:   choose a different font that covers the unrepresentable character(s)",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:540: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+          "warning: report.tex:589: Underfull \\hbox (badness 4981) in paragraph at lines 588--589",
+          "warning: report.tex:607: Underfull \\hbox (badness 2875) in paragraph at lines 606--607",
+          "warning: report.tex:621: Underfull \\hbox (badness 1297) in paragraph at lines 620--621",
+          "warning: report.tex:621: Underfull \\hbox (badness 3635) in paragraph at lines 620--621",
+          "warning: report.tex:621: Underfull \\hbox (badness 10000) in paragraph at lines 620--621",
+          "warning: report.tex:77: Underfull \\hbox (badness 1448) in paragraph at lines 76--77",
+          "warning: report.tex:77: Underfull \\hbox (badness 1320) in paragraph at lines 76--77",
+          "warning: report.tex:250: Underfull \\hbox (badness 1009) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1418) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1831) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 1960) in paragraph at lines 248--250",
+          "warning: report.tex:250: Underfull \\hbox (badness 3460) in paragraph at lines 248--250",
+          "warning: report.tex:536:",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning:   you may need to load the `fontspec` package and use (e.g.) \\setmainfont to",
+          "warning:   choose a different font that covers the unrepresentable character(s)",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:540: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+          "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+          "warning: report.tex:589: Underfull \\hbox (badness 4981) in paragraph at lines 588--589",
+          "warning: report.tex:607: Underfull \\hbox (badness 2875) in paragraph at lines 606--607",
+          "warning: report.tex:621: Underfull \\hbox (badness 1297) in paragraph at lines 620--621",
+          "warning: report.tex:621: Underfull \\hbox (badness 3635) in paragraph at lines 620--621",
+          "warning: report.tex:621: Underfull \\hbox (badness 10000) in paragraph at lines 620--621",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+          "warning: report.tex:621: Underfull \\hbox (badness 10000) in paragraph at lines 620--621"
+        ],
+        "page_count": 42,
+        "pass": 3
+      }
+    ],
+    "proofreading": {
+      "accepted_correction_count": 0,
+      "ai_performed": true,
+      "attempted": true,
+      "corrected_tex_sha256": "1a05b17f752c0fb8dc5d53f9ef1eb6b7c55a0f6bc3d73349126ce824b2e94ab4",
+      "correction_categories": [],
+      "elapsed_seconds": 157,
+      "fallback_reason": "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+      "final_tex_sha256": "fd997113c9a0eac7e40d1fdcbb5800c75f608852387115b1a0baf068d6ff41c3",
+      "model": "gpt-6.1-sol",
+      "original_tex_sha256": "1a05b17f752c0fb8dc5d53f9ef1eb6b7c55a0f6bc3d73349126ce824b2e94ab4",
+      "prior_render_provider_calls": 0,
+      "provider_calls_attempted": 9,
+      "provider_calls_current_render": 9,
+      "reasoning_effort": "high",
+      "review_reason": "Layout warnings remained after the bounded TeX correction passes.",
+      "status": "fallback",
+      "unresolved_diagnostics": [
+        "Potentially wide diagram or table line 120 (486 characters).",
+        "Potentially wide diagram or table line 121 (477 characters).",
+        "Potentially wide diagram or table line 164 (218 characters).",
+        "Potentially wide diagram or table line 165 (193 characters).",
+        "Potentially wide diagram or table line 167 (199 characters).",
+        "Potentially wide diagram or table line 168 (191 characters).",
+        "Potentially wide diagram or table line 227 (432 characters).",
+        "Potentially wide diagram or table line 228 (275 characters).",
+        "Potentially wide diagram or table line 229 (329 characters).",
+        "Potentially wide diagram or table line 230 (320 characters).",
+        "Potentially wide diagram or table line 231 (315 characters).",
+        "Potentially wide diagram or table line 232 (392 characters).",
+        "Potentially wide diagram or table line 233 (355 characters).",
+        "Potentially wide diagram or table line 234 (449 characters).",
+        "Potentially wide diagram or table line 235 (364 characters).",
+        "Potentially wide diagram or table line 248 (1017 characters).",
+        "Potentially wide diagram or table line 314 (201 characters).",
+        "Potentially wide diagram or table line 375 (408 characters).",
+        "Potentially wide diagram or table line 376 (419 characters).",
+        "Potentially wide diagram or table line 377 (449 characters).",
+        "warning: report.tex:249: Underfull \\hbox (badness 1009) in paragraph at lines 247--249",
+        "warning: report.tex:535:",
+        "warning: could not represent character \"η\" (0x3b7) in font \"ec-lmr10\"",
+        "warning:   you may need to load the `fontspec` package and use (e.g.) \\setmainfont to",
+        "warning:   choose a different font that covers the unrepresentable character(s)",
+        "warning: report.tex:537: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+        "warning: report.tex:539: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+        "warning: report.tex:566: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 566--566",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.",
+        "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+        "Proofreading chunk 2 was not applied: A proposed correction changed protected scientific or reference content.",
+        "Proofreading chunk 4 was not applied: A proposed correction changed protected scientific or reference content.",
+        "Proofreading chunk 6 was not applied: A proposed correction changed protected scientific or reference content.",
+        "Proofreading chunk 8 was not applied: A proposed correction changed protected scientific or reference content.",
+        "warning: report.tex:77: Underfull \\hbox (badness 1448) in paragraph at lines 76--77",
+        "warning: report.tex:77: Underfull \\hbox (badness 1320) in paragraph at lines 76--77",
+        "warning: report.tex:250: Underfull \\hbox (badness 1009) in paragraph at lines 248--250",
+        "warning: report.tex:250: Underfull \\hbox (badness 1418) in paragraph at lines 248--250",
+        "warning: report.tex:250: Underfull \\hbox (badness 1831) in paragraph at lines 248--250",
+        "warning: report.tex:250: Underfull \\hbox (badness 1960) in paragraph at lines 248--250",
+        "warning: report.tex:250: Underfull \\hbox (badness 3460) in paragraph at lines 248--250",
+        "warning: report.tex:536:",
+        "warning: report.tex:538: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+        "warning: report.tex:540: Missing character: There is no �� (\"3B7) in font ec-lmr10!",
+        "warning: report.tex:567: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 567--567",
+        "warning: report.tex:589: Underfull \\hbox (badness 4981) in paragraph at lines 588--589",
+        "warning: report.tex:607: Underfull \\hbox (badness 2875) in paragraph at lines 606--607",
+        "warning: report.tex:621: Underfull \\hbox (badness 1297) in paragraph at lines 620--621",
+        "warning: report.tex:621: Underfull \\hbox (badness 3635) in paragraph at lines 620--621",
+        "warning: report.tex:621: Underfull \\hbox (badness 10000) in paragraph at lines 620--621"
+      ],
+      "verification_status": "incomplete"
+    },
+    "provider": "openai",
+    "provider_calls_attempted": 16,
+    "provider_calls_lifetime_total": 16,
+    "provider_calls_prior_runs": 0,
+    "publication_status": "needs_review",
+    "reasoning_effort": "high",
+    "reduction_source_refs_omitted": [],
+    "research_integrity_record_count": 1055,
+    "snapshot_size_bytes": 14352082,
+    "source_count": 36,
+    "source_reference_map": [
+      {
+        "label": "Project overview",
+        "source_ref": "project:da4580f5-7620-49b0-882e-aee34fcdc05d"
+      },
+      {
+        "label": "Strategy 1: Develop a rigorous framework for measuring AI agent reliability",
+        "source_ref": "strategy:b89a50a8-a730-4ca7-a99f-9eb199aa24d1"
+      },
+      {
+        "label": "Strategy 2: Understand failure propagation and recovery in autonomous AI age",
+        "source_ref": "strategy:843ffb99-1d7b-476b-973f-845d79d4b6e3"
+      },
+      {
+        "label": "Strategy 3: Test architectural mechanisms for dependable agent outcomes",
+        "source_ref": "strategy:260e90ee-69ee-4e5a-b9e8-c0bc84062c81"
+      },
+      {
+        "label": "Research session 1",
+        "source_ref": "session:a1a9ab51-f8d1-4b60-ba10-baad7585a34f"
+      },
+      {
+        "label": "Research session 1, artifact 1",
+        "source_ref": "artifact:a1a9ab51-f8d1-4b60-ba10-baad7585a34f:df5067f1-d298-4203-a108-a2e7056af576"
+      },
+      {
+        "label": "Research session 1, artifact 2",
+        "source_ref": "artifact:a1a9ab51-f8d1-4b60-ba10-baad7585a34f:984e8fd3-f76b-46fb-b868-378c2f103425"
+      },
+      {
+        "label": "Research session 2",
+        "source_ref": "session:6298e28d-b9e9-4b8a-99cb-a4872c5af875"
+      },
+      {
+        "label": "Research session 3",
+        "source_ref": "session:6ca303b6-130f-4f30-ad6e-9dea7e2031ff"
+      },
+      {
+        "label": "Research session 4",
+        "source_ref": "session:d2f726f2-e5d5-4a00-ac51-a07b089bcf10"
+      },
+      {
+        "label": "Research session 4, artifact 1",
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:0310e2ff-4aa0-4c95-b1a8-795559e484b8"
+      },
+      {
+        "label": "Research session 4, artifact 2",
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:4435b6ec-fefc-43a1-8706-a3a6794dbbe5"
+      },
+      {
+        "label": "Research session 4, artifact 3",
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:faca8cd0-991f-46a4-91d4-288bb0cd53ea"
+      },
+      {
+        "label": "Research session 4, artifact 4",
+        "source_ref": "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:9df3cd5f-0a68-4356-81e9-189708026006"
+      },
+      {
+        "label": "Research session 5",
+        "source_ref": "session:60b63ed0-9a6f-486c-9d4f-232b1fe082c3"
+      },
+      {
+        "label": "Research session 5, artifact 1",
+        "source_ref": "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:2c4dca26-4c2f-4c55-bab1-b11bb97a5954"
+      },
+      {
+        "label": "Research session 5, artifact 2",
+        "source_ref": "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:fdfb1b57-9f8a-451c-b9b4-2cca9cbf618f"
+      },
+      {
+        "label": "Research session 5, artifact 3",
+        "source_ref": "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:c8070adb-7c30-44b1-b0ad-e838053aaf29"
+      },
+      {
+        "label": "Research session 6",
+        "source_ref": "session:bea430f9-56e7-4ced-aa69-376cee40c523"
+      },
+      {
+        "label": "Research session 6, artifact 1",
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:f59b1252-c29e-4f4a-a888-f436ab9a93aa"
+      },
+      {
+        "label": "Research session 6, artifact 2",
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:7d39bad1-603b-43cf-ad04-0d256b837472"
+      },
+      {
+        "label": "Research session 6, artifact 3",
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:5e47ab12-4c7d-45ae-9b1f-af87a75768d6"
+      },
+      {
+        "label": "Research session 6, artifact 4",
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:ced69145-e60c-42ed-bd2c-b39b70905a03"
+      },
+      {
+        "label": "Research session 6, artifact 5",
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:db6d3f8e-de46-4162-bbac-d615d3092afa"
+      },
+      {
+        "label": "Research session 6, artifact 6",
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:2a80dd67-72e5-4748-9a2f-3d6ed5bafbf3"
+      },
+      {
+        "label": "Research session 6, artifact 7",
+        "source_ref": "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:6c3a675d-0b11-40f4-8ca2-548f100367a4"
+      },
+      {
+        "label": "Research session 7",
+        "source_ref": "session:ebc7ac05-823c-4a02-9590-1e9f9726e807"
+      },
+      {
+        "label": "Research session 7, artifact 1",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:0040c8af-dd04-481b-8b9a-b08d1be1865e"
+      },
+      {
+        "label": "Research session 7, artifact 2",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:93f26c0d-5b31-4566-8b43-abc04d7d2cb7"
+      },
+      {
+        "label": "Research session 7, artifact 3",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:c1fd1f73-e977-4767-af23-6d44dd28c105"
+      },
+      {
+        "label": "Research session 7, artifact 4",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:b34bf3a5-c7b4-459a-adaa-be0a091bebc0"
+      },
+      {
+        "label": "Research session 7, artifact 5",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:3c991003-9fc5-4d55-848a-000e98154d8c"
+      },
+      {
+        "label": "Research session 7, artifact 6",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:0db63ee8-6358-421e-bd88-1929ba799dc5"
+      },
+      {
+        "label": "Research session 7, artifact 7",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:4de86267-cde1-423d-a2e6-7576deba7571"
+      },
+      {
+        "label": "Research session 7, artifact 8",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:36ec8074-02b1-4343-92f5-9ee5dccbf79c"
+      },
+      {
+        "label": "Research session 7, artifact 9",
+        "source_ref": "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:8a554d50-7080-431c-aacf-1fa03496133c"
+      }
+    ]
+  },
+  "hashes": {
+    "pdf": {
+      "bytes": 166895,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/ai-agent-reliability-v1.pdf",
+      "sha256": "19d4db9cd1f41b2b4bad9057380c20051fce1577550f086400d4bb9c19eb5f4e"
+    },
+    "tex": {
+      "bytes": 122743,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/ai-agent-reliability-v1.tex",
+      "sha256": "fd997113c9a0eac7e40d1fdcbb5800c75f608852387115b1a0baf068d6ff41c3"
+    },
+    "txt": {
+      "bytes": 65149,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/ai-agent-reliability-v1.txt",
+      "sha256": "1725678e7784784c0e74f7c944b9e0f90f806bef97eba4bd16c7bffc7de2919e"
+    }
+  },
+  "manuscript": {
+    "characters": 65098,
+    "claims": 17,
+    "claims_by_status": {
+      "established": 8,
+      "limitation": 2,
+      "unresolved": 7
+    },
+    "conclusion_paragraphs": 4,
+    "pdf_pages": 42,
+    "sections": 6,
+    "words": 8849
+  },
+  "name": "ai-agent-reliability-v1",
+  "paper_id": "1ebf4741f33f479daeb24ee73abd81d8",
+  "preflight_snapshot_sha256": "080d3b70b67cfbe346acdb0f565d4a61c09ec4819229f2dd92dded43d9de40d9",
+  "project_id": "da4580f5-7620-49b0-882e-aee34fcdc05d",
+  "source_count": 36,
+  "source_ids": [
+    "project:da4580f5-7620-49b0-882e-aee34fcdc05d",
+    "strategy:b89a50a8-a730-4ca7-a99f-9eb199aa24d1",
+    "strategy:843ffb99-1d7b-476b-973f-845d79d4b6e3",
+    "strategy:260e90ee-69ee-4e5a-b9e8-c0bc84062c81",
+    "session:a1a9ab51-f8d1-4b60-ba10-baad7585a34f",
+    "artifact:a1a9ab51-f8d1-4b60-ba10-baad7585a34f:df5067f1-d298-4203-a108-a2e7056af576",
+    "artifact:a1a9ab51-f8d1-4b60-ba10-baad7585a34f:984e8fd3-f76b-46fb-b868-378c2f103425",
+    "session:6298e28d-b9e9-4b8a-99cb-a4872c5af875",
+    "session:6ca303b6-130f-4f30-ad6e-9dea7e2031ff",
+    "session:d2f726f2-e5d5-4a00-ac51-a07b089bcf10",
+    "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:0310e2ff-4aa0-4c95-b1a8-795559e484b8",
+    "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:4435b6ec-fefc-43a1-8706-a3a6794dbbe5",
+    "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:faca8cd0-991f-46a4-91d4-288bb0cd53ea",
+    "artifact:d2f726f2-e5d5-4a00-ac51-a07b089bcf10:9df3cd5f-0a68-4356-81e9-189708026006",
+    "session:60b63ed0-9a6f-486c-9d4f-232b1fe082c3",
+    "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:2c4dca26-4c2f-4c55-bab1-b11bb97a5954",
+    "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:fdfb1b57-9f8a-451c-b9b4-2cca9cbf618f",
+    "artifact:60b63ed0-9a6f-486c-9d4f-232b1fe082c3:c8070adb-7c30-44b1-b0ad-e838053aaf29",
+    "session:bea430f9-56e7-4ced-aa69-376cee40c523",
+    "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:f59b1252-c29e-4f4a-a888-f436ab9a93aa",
+    "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:7d39bad1-603b-43cf-ad04-0d256b837472",
+    "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:5e47ab12-4c7d-45ae-9b1f-af87a75768d6",
+    "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:ced69145-e60c-42ed-bd2c-b39b70905a03",
+    "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:db6d3f8e-de46-4162-bbac-d615d3092afa",
+    "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:2a80dd67-72e5-4748-9a2f-3d6ed5bafbf3",
+    "artifact:bea430f9-56e7-4ced-aa69-376cee40c523:6c3a675d-0b11-40f4-8ca2-548f100367a4",
+    "session:ebc7ac05-823c-4a02-9590-1e9f9726e807",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:0040c8af-dd04-481b-8b9a-b08d1be1865e",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:93f26c0d-5b31-4566-8b43-abc04d7d2cb7",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:c1fd1f73-e977-4767-af23-6d44dd28c105",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:b34bf3a5-c7b4-459a-adaa-be0a091bebc0",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:3c991003-9fc5-4d55-848a-000e98154d8c",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:0db63ee8-6358-421e-bd88-1929ba799dc5",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:4de86267-cde1-423d-a2e6-7576deba7571",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:36ec8074-02b1-4343-92f5-9ee5dccbf79c",
+    "artifact:ebc7ac05-823c-4a02-9590-1e9f9726e807:8a554d50-7080-431c-aacf-1fa03496133c"
+  ],
+  "title": "Evaluating Agent Reliability Under Uncertain Outcomes and Ambiguous External Effects",
+  "validation_warnings": [
+    "Evidence indexing omitted 32185 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Author self-review: the bounded preview does not expose complete statistical proofs or enough numerical detail to reproduce a confidence bound. No omitted formula has been inferred.",
+    "The proposed retry bound was explicitly corrected: without assured retry commitment, an always-retry policy with lost retries defeats the claimed upper bound in the already-committed history.",
+    "The blanket claim that split commits invalidate at-most-once safety was explicitly withdrawn. Effect-first duplication and marker-first loss of delivery must remain distinct.",
+    "A mapper that follows its specification is not automatically defective when its input evidence excludes the actual outcome. Reference validity and mapper conformance require separate labels.",
+    "Service invariants, sound certificates, and possible-outcome containment are conditional premises, not observed implementation properties. The treatment invariant must not be reused as the outcome oracle.",
+    "Preflight and context-assembly failures in the research records do not provide controlled evidence of deployed-agent failure prevalence or architectural effectiveness.",
+    "The selection contains no genuine external bibliographic sources sufficient for a literature review or bibliography. Benchmark sensitivity and contamination remain research questions rather than findings here.",
+    "The planned qualitative comparison table must be populated only from inspected mechanisms and explicit assumptions; it must not imply measured reliability, latency, or cost rankings.",
+    "The evidence index explicitly omitted 32189 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 441 source-linked text fragments from 36 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C31 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C31 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C32 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C32 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C35 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C35 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C36 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C36 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C37 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ]
+}

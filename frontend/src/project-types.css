@@ -1,0 +1,344 @@
+.project-types-dialog { box-sizing: border-box; display: flex; flex-direction: column; width: min(680px, calc(100vw - 32px)); max-height: min(690px, calc(100dvh - 32px)); margin: auto; padding: 0; overflow: hidden; border: 1px solid #a96548; border-radius: 8px; color: #d5dfe7; background: linear-gradient(145deg, #111a23, #07111e); box-shadow: 0 24px 65px #0009; }
+.project-types-dialog:not([open]) { display: none; }
+.project-types-dialog::backdrop { background: #01050bba; backdrop-filter: blur(3px); }
+.project-types-dialog > header { display: flex; flex: 0 0 auto; align-items: baseline; justify-content: flex-start; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #35404a; }
+.project-types-dialog > header h2 { margin: 0; color: var(--sigma-copper-foreground); font: 400 25px/1.25 Georgia, serif; }
+.project-types-dialog > header > .project-types-header-actions { display: flex; align-items: baseline; gap: 12px; }
+.project-types-dialog button, .project-types-dialog input, .project-types-dialog textarea, .project-types-dialog select { font: 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]) { appearance: none; min-height: 28px; padding: 2px 3px; border: 0; border-radius: 0; box-shadow: none; color: var(--sigma-copper-foreground); background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; box-shadow: none; text-shadow: none; }
+.project-types-dialog button:disabled { opacity: .55; cursor: default; }
+.project-types-section-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+.project-types-section-heading > div { display: flex; gap: 12px; }
+.project-types-section-heading > span { font-size: 12px; color: var(--sigma-copper-foreground); }
+.project-types-body { flex: 1 1 auto; overflow: auto; padding: 16px 20px 22px; }
+.project-types-body > section { margin-top: 18px; }
+.project-types-body h3 { margin: 0 0 9px; color: var(--sigma-copper-foreground); font: 400 17px/1.35 Georgia, serif; }
+.project-types-checkbox { display: inline-flex; align-items: center; gap: 8px; width: fit-content; color: #c4ced8; cursor: pointer; }
+.project-types-dialog .project-types-checkbox input[type="checkbox"] { box-sizing: border-box; display: inline-block; flex: 0 0 16px; width: 16px; min-width: 16px; height: 16px; min-height: 16px; margin: 0; padding: 0; accent-color: #bc7e58; }
+.project-type-card { margin: 7px 0; border: 1px solid #604832; border-radius: 6px; background: #0b141e; }
+.project-type-card > summary { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 6px 11px; color: var(--sigma-copper-foreground); cursor: pointer; list-style: none; }
+.project-type-card > summary::-webkit-details-marker { display: none; }
+.project-type-card > summary:before { content: '›'; color: var(--sigma-copper-foreground); font-size: 21px; transform: rotate(0); }
+.project-type-card[open] > summary:before { transform: rotate(90deg); }
+.project-type-card > summary strong { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.project-type-card > summary small { flex: 0 0 auto; margin-left: auto; color: var(--sigma-copper-foreground); }
+.project-type-card-icon, .project-type-card-icon > * { display: inline-flex; width: 23px; height: 23px; align-items: center; justify-content: center; color: var(--sigma-copper-foreground); }
+.project-type-card-body { display: grid; gap: 12px; padding: 4px 14px 15px 33px; }
+.project-type-card-body > label { display: grid; gap: 5px; color: #c6d0d9; font-size: 12px; }
+.project-type-card-body :is(input, textarea, select) { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #59636e; border-radius: 4px; color: #e5ebf0; background: #080f17; }
+.project-type-card-body textarea { min-height: 62px; resize: vertical; }
+.project-type-card-body section { min-width: 0; }
+.project-type-card-body section h3 { margin-bottom: 6px; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
+.pt-reference-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pt-reference-table td { padding: 2px 0; border: 0; text-align: left; }
+.pt-reference-entry { display: flex; align-items: center; gap: 9px; }
+.pt-reference-field { display: grid; flex: 1 1 auto; min-width: 0; gap: 3px; }
+.project-types-dialog .pt-reference-entry input { box-sizing: border-box; min-width: 0; width: 100%; height: 27px; min-height: 27px; padding: 3px 7px; text-overflow: ellipsis; }
+.pt-reference-entry button { flex: 0 0 auto; }
+/* Common, built-in, and custom reference actions share the link yellow.
+   Removing horizontal button padding aligns New directly beneath the URL text. */
+.project-types-dialog .pt-reference-table td button:not([role="combobox"]):not([role="option"]) {
+  min-height: 24px; padding: 1px 0; border: 0; color: var(--sigma-copper-foreground);
+  background: transparent; text-decoration: underline;
+}
+.project-types-dialog .pt-reference-table td button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) {
+  color: var(--sigma-copper-foreground);
+}
+.project-type-card > summary .project-type-remove { flex: 0 0 auto; margin-left: 0; white-space: nowrap; }
+.pt-reference-new-row td { padding-top: 2px; }
+.project-types-add { margin-top: 8px; }
+.project-types-body [role=alert] { color: #f1aaa0; }
+.project-type-missing-warning { margin: 12px 0; padding: 12px 14px; border: 1px solid #b87e4f; border-radius: 6px; color: var(--sigma-copper-foreground); background: #32251c; }
+.project-type-missing-warning p { margin: 6px 0 10px; }
+.project-type-warning-dialog { box-sizing: border-box; width: min(520px, calc(100vw - 32px)); margin: auto; padding: 20px; border: 1px solid #b87e4f; border-radius: 8px; color: #d5dfe7; background: linear-gradient(145deg, #111a23, #07111e); box-shadow: 0 24px 65px #0009; }
+.project-type-warning-dialog::backdrop { background: #01050bd9; backdrop-filter: blur(3px); }
+.project-type-warning-dialog h2 { margin: 0 0 12px; color: var(--sigma-copper-foreground); font: 400 23px/1.25 Georgia, serif; }
+.project-type-warning-dialog p { line-height: 1.55; }
+.project-type-warning-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.project-type-warning-actions button { min-height: 36px; padding: 7px 11px; border: 1px solid #765342; border-radius: 4px; color: var(--sigma-copper-foreground); background: #101a24; cursor: pointer; }
+.project-type-warning-actions button:first-child { border-color: #ba7658; background: linear-gradient(140deg, #a75e43, #74402f); color: #fff2e9; }
+@media (max-width: 600px) {
+  .project-types-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .project-types-dialog > header { align-items: flex-start; flex-wrap: wrap; padding: 13px 14px; }
+  .project-types-dialog > header h2 { font-size: 22px; }
+  .project-types-dialog > header > .project-types-header-actions { margin-left: 0; }
+  .project-types-body { padding: 12px 12px 18px; }
+  .project-type-card-body { padding-left: 33px; }
+}
+
+
+/* Use the same custom-picker geometry as New Project; ordinary actions remain unboxed. */
+.project-types-dialog .pt-based-on-picker { position: relative; z-index: 3; width: fit-content; max-width: 100%; justify-self: start; }
+.project-types-dialog .pt-based-on-picker [role="combobox"] { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 43px; padding: 9px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; text-decoration: none; }
+.project-types-dialog .pt-based-on-picker [role="combobox"] > span { flex: 1 1 auto; }
+.project-types-dialog .pt-based-on-picker .research-type-chevron { width: 12px; height: 12px; flex: 0 0 12px; fill: none; stroke: var(--sigma-copper-foreground); stroke-width: 1.5; transition: transform 120ms ease; }
+.project-types-dialog .pt-based-on-picker [aria-expanded="true"] .research-type-chevron { transform: rotate(180deg); }
+.project-types-dialog .pt-based-on-picker .research-type-options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: min(256px, 36dvh); overflow: auto; padding: 4px; border: 1px solid #806247; border-radius: 6px; background: #091522; box-shadow: 0 14px 35px #000b; }
+.project-types-dialog .pt-based-on-picker .research-type-options [role="option"] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #dce7f0; font: 13px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; text-decoration: none; }
+.project-types-dialog .pt-based-on-picker .research-type-options [role="option"]:hover,
+.project-types-dialog .pt-based-on-picker .research-type-options [role="option"]:focus-visible,
+.project-types-dialog .pt-based-on-picker .research-type-options [role="option"][aria-selected="true"] { border-color: #a87950; background: #241a16; color: var(--sigma-copper-foreground); }
+.project-types-dialog .pt-based-on-picker .research-type-icon { display: block; flex: 0 0 20px; width: 20px; height: 20px; color: var(--sigma-copper-foreground); }
+
+/* Prevent global pill/button themes from painting ordinary text actions red. */
+.project-types-dialog button:not([role="combobox"]):not([role="option"]),
+.project-types-dialog button:not([role="combobox"]):not([role="option"]):visited { color: var(--sigma-copper-foreground); background: transparent !important; background-image: none !important; border: 0 !important; box-shadow: none !important; text-decoration: underline; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]):hover:not(:disabled) { color: var(--sigma-copper-foreground); text-shadow: none; }
+.project-types-dialog button:not([role="combobox"]):not([role="option"]):disabled { opacity: .5; }
+.pt-validation-error { display: block; color: #f1aaa0; font-size: 12px; line-height: 1.45; }
+.pt-dialog-error { flex: 0 0 auto; max-height: 120px; margin: 0; padding: 10px 20px; overflow-y: auto; border-bottom: 1px solid #8c514a; color: #f1aaa0; background: #211719; font-size: 13px; line-height: 1.45; }
+.project-types-dialog .pt-based-on-picker [role="combobox"] { max-width: 100%; }
+
+/* Invisible intrinsic-width ruler, kept in normal layout for longest dropdown label. */
+.project-types-dialog .pt-picker-width-measure { display: flex; align-items: center; gap: 6px; height: 0; padding: 0 24px; overflow: hidden; visibility: hidden; white-space: nowrap; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+.project-types-dialog .pt-picker-icon-space { flex: 0 0 20px; }
+.project-types-dialog .pt-picker-chevron-space { flex: 0 0 12px; }
+
+/* Shared and type-specific reference lists use identical controls and previews. */
+.pt-common-references > p { margin: 0 0 12px; color: #b6c3cf; font-size: 12px; line-height: 1.55; }
+.pt-common-references > h4 { margin: 13px 0 6px; color: #cdd7e0; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
+.pt-reference-link { display: grid; gap: 0; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
+.project-types-dialog .pt-reference-link a { width: fit-content; max-width: 100%; color: var(--sigma-copper-foreground); text-underline-offset: 3px; }
+/* Research and Publication Standards links share Source Material's subtle
+   yellow label highlight; retain the link underline and normal text weight. */
+.project-types-dialog .pt-reference-link a {
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px transparent;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.project-types-dialog .pt-reference-link a:is(:hover, :focus-visible) {
+  font-weight: 400;
+  background-color: #f5d49a26;
+  box-shadow: 0 0 0 3px #f5d49a26;
+}
+.project-types-dialog .pt-reference-link .pt-reference-url { color: #aab7c4; font-size: 11px; }
+.project-types-dialog .pt-restore-references { justify-self: start; }
+
+/* Usage controls apply to shared, built-in and custom references alike. */
+.pt-usage-notice { margin: 0 0 12px; color: #c8d1d9; font-size: 11px; line-height: 1.45; }
+.pt-reference-entry > .pt-reference-field { min-width: 0; }
+.pt-reference-disabled .pt-reference-link { opacity: .52; }
+.project-types-dialog .pt-reference-toggle { flex: 0 0 auto; min-width: 53px; align-self: center; text-align: right; }
+
+/* New follows the same copper link palette as neighboring actions. */
+.project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]) {
+  color: var(--sigma-copper-foreground) !important;
+}
+.project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]):hover:not(:disabled),
+.project-types-dialog button.pt-new-action:not([role="combobox"]):not([role="option"]):focus-visible {
+  color: #ffe5a6 !important;
+}
+
+/* A native top-layer popover escapes the scrollport and dialog border. */
+.project-types-dialog .pt-based-on-picker .research-type-options[popover] {
+  position: fixed;
+  inset: auto;
+  right: auto;
+  bottom: auto;
+  box-sizing: border-box;
+  margin: 0;
+  min-width: 0;
+}
+
+/* Inline reference actions: same vocabulary for custom, built-in and common refs. */
+.project-types-dialog .pt-reference-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-types-dialog .pt-reference-heading > :is(h3, h4) { margin-bottom: 6px; }
+.project-types-dialog .pt-circled-plus {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  width: 1.15em;
+  height: 1.15em;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font: 600 1em/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: none;
+}
+.project-types-dialog .pt-new-action:has(.pt-circled-plus) {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  text-decoration: none !important;
+}
+.project-types-dialog .project-types-section-heading > .pt-new-action { font-size: 17px; }
+.project-types-dialog .pt-reference-heading > .pt-new-action { font-size: 13px; }
+.project-types-dialog .pt-reference-action-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.project-types-dialog .pt-reference-entry button:has(.pt-reference-action-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 24px;
+  padding: 2px;
+  text-decoration: none !important;
+}
+
+/* Keep reference controls directly after their link instead of pinning them
+   to the opposite edge of the section. Shared by all reference scopes. */
+.project-types-dialog .pt-reference-table {
+  width: 100%;
+}
+.project-types-dialog .pt-reference-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  gap: 6px;
+}
+.project-types-dialog .pt-reference-entry > .pt-reference-field {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+}
+.project-types-dialog .pt-reference-entry > .pt-reference-field .pt-reference-link {
+  width: fit-content;
+  max-width: 100%;
+}
+.project-types-dialog .pt-reference-entry .pt-reference-toggle {
+  min-width: 22px;
+  text-align: center;
+}
+
+/* New uses the same single-stroke SVG as Home/Strategy New, never a font glyph in a drawn circle. */
+.project-types-dialog .pt-new-action .sigma-action-glyph {
+  display: block; width: 24px; height: 24px;
+}
+.project-types-dialog .pt-reference-heading .pt-new-action .sigma-action-glyph {
+  width: 19px; height: 19px;
+}
+
+/* Keep the New glyph directly beside and centered on the project-types title. */
+.project-types-dialog .project-types-section-heading:has(> .pt-new-action) {
+  align-items: center;
+  gap: 8px;
+}
+.project-types-dialog .project-types-section-heading:has(> .pt-new-action) > h3 {
+  margin: 0;
+}
+.project-types-dialog .project-types-section-heading > .pt-new-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 2px;
+  line-height: 0;
+  text-decoration: none;
+}
+
+/* All reference heading Add buttons share one centered baseline and icon slot. */
+.project-types-dialog .pt-reference-heading {
+  align-items: center;
+  column-gap: 8px;
+}
+.project-types-dialog .pt-reference-heading > :is(h3, h4) {
+  margin: 0;
+}
+.project-types-dialog .pt-reference-heading > .pt-new-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  flex: 0 0 24px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px;
+  margin: 0;
+  line-height: 0;
+  text-decoration: none;
+}
+
+/* Custom project-type removal matches the small standard icon actions. */
+.project-types-dialog .project-type-card > summary .project-type-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 24px; width: 24px; min-width: 24px; height: 24px; min-height: 24px;
+  margin: 0; padding: 3px; line-height: 0; text-decoration: none;
+}
+.project-types-dialog .project-type-card > summary .project-type-remove .pt-reference-action-icon {
+  display: block; width: 18px; height: 18px;
+}
+
+/* Match the standard SIGMA close/remove X geometry and hover treatment. */
+.project-types-dialog .project-type-card > summary .project-type-remove > svg {
+  display: block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+.project-types-dialog .project-type-card > summary .project-type-remove:hover:not(:disabled) {
+  background: #3b3029;
+  border: 1px solid #ac7054;
+  border-radius: 6px;
+}
+
+/* The Based-on picker follows the same unfilled hover convention. */
+.project-types-dialog .pt-based-on-picker [role="combobox"]:hover:not(:disabled),
+.project-types-dialog .pt-based-on-picker [role="combobox"]:focus,
+.project-types-dialog .pt-based-on-picker [role="combobox"][aria-expanded="true"] {
+  background: #030b14 !important; background-image: none !important;
+  color: #e3edf6 !important; box-shadow: none !important;
+}
+.project-types-dialog .pt-based-on-picker .research-type-options [role="option"]:hover:not([aria-selected="true"]) {
+  background: transparent !important; border-color: #a87950;
+}
+
+/* User-defined project type Add matches Project's metallic copper action hover. */
+.project-types-dialog .project-types-section-heading > button.pt-new-action {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.project-types-dialog .project-types-section-heading > button.pt-new-action:is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  border-color: #ac7054 !important;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+}
+.project-types-dialog .project-types-section-heading > button.pt-new-action:is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9;
+}
+
+/* Research/Publication Standards inline icon actions use metallic copper hover. */
+.project-types-dialog .pt-reference-entry button:has(.pt-reference-action-icon):is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  background-image: var(--copper-gradient) !important;
+  border: 1px solid #ac7054 !important;
+  border-radius: 4px;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+}
+.project-types-dialog .pt-reference-entry button:has(.pt-reference-action-icon):is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9;
+}
+
+/* Global standards section: headings are peers, with compact descriptions. */
+.project-types-dialog .pt-common-references > .pt-reference-heading > h3 {
+  margin-bottom: 0;
+}
+.project-types-dialog .pt-common-references > .settings-hint {
+  margin: 2px 0 4px;
+}
+.project-types-dialog .pt-common-references > .pt-publication-heading {
+  margin-top: 20px;
+}

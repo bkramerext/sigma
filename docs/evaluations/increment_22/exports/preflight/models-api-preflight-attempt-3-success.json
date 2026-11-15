@@ -1,0 +1,18 @@
+{
+  "check": "read-only-model-metadata",
+  "checked_at_utc": "2026-10-25T23:42:56.487971+00:00",
+  "method": "GET",
+  "endpoint": "/v1/models/gpt-6.1-sol",
+  "project_id": "proj_ZqoKimk90I8vLSFDM7FGeLVj",
+  "project_header_sent": true,
+  "key_classification": "not-confirmed-project-scoped",
+  "http_status": 401,
+  "model_id": null,
+  "request_id": "48778463-30fd-4aa0-af48-eb420425bfab",
+  "elapsed_seconds": 0.134,
+  "authorization_header_recorded": false,
+  "response_headers_recorded": false,
+  "response_body_recorded": false,
+  "blocker": "Model metadata lookup failed; response body intentionally not retained.",
+  "ok": false
+}

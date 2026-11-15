@@ -1,0 +1,102 @@
+T17.8 acceptance handoff — Gray
+
+Tested integration base: current main `aaf0995` (T29 PR #39), merged into
+`gray/t17-8-agentic-solution-quality` at `29d5d53`. The merge completed without
+conflicts, including shared changes to `TICKET_TRACKING.md`, `docs/STATUS.md`,
+and `tests/research_sessions.py`. No paid provider or live model calls were
+made. No direct worker coordination occurred.
+
+The current workflow was traced through project/strategy snapshot, Investigator
+request and validated response, Skeptic review of ordered saved evidence,
+coordinator decision, objective/verification projection, strategy attribution,
+session persistence, workspace UI and report export. A17.6/A17.7, T27 and T28
+are present on main. The assignment's referenced `docs/ASSIGNMENT-A17.6.md` and
+`.7.md` do not exist in this checkout; history is preserved in `docs/STATUS.md`.
+T29 was not in the initial acceptance base; its merged behavior is covered by
+the integration recheck below.
+
+I added `test_maximum_regions_false_candidate_is_rejected` in
+`tests/research_sessions.py`. It feeds a false `R(n)=n^2+1` candidate and a
+specific two-line counterexample through a complete mocked session. The session
+ends on `stop_decisive_counterexample`, saves the objection, remains
+`not_achieved`, projects a negative outcome, and credits the strategy as
+unproductive. The test checks that neither the candidate nor the evaluation
+reference is present in the initial Investigator context and verifies saved
+evidence after reload.
+
+The existing suite also covers an answer-free Maximum Regions prompt, a
+complete unverified candidate with no next step, an incomplete proof with a
+material unresolved objection, a retracted spurious counterexample, ordered
+multi-artifact proof completion, strategy attribution snapshots, legacy
+unknown attribution, and deterministic generalization to the Fibonacci
+recurrence for constrained binary strings.
+
+Acceptance matrix:
+1. Solution quality — UNVERIFIED. Real-provider research was prohibited. The
+   earlier live Maximum Regions run is documented but disqualified for
+   independent discovery because the shipped strategy disclosed the proof.
+2. Meaningful criticism — MET for deterministic adversarial cases; live model
+   behavior remains empirically unverified.
+3. Sound coordination — MET for saved-evidence completion with no next path,
+   incomplete continuation and decisive counterexample termination.
+4. Calibrated conclusions — MET for separating achieved-but-unverified,
+   incomplete, and refuted outcomes; no independent proof claim.
+5. Evidence-based attribution — MET for linked artifacts, eligibility
+   snapshots, project ordering, noncontributors and legacy unknowns.
+6. Generalization — MET deterministically on a distinct Fibonacci recurrence
+   proof mechanism; live generalization remains unverified.
+7. Operational reliability — MET in current-main full tests and real Chrome
+   fixture-backed session, persistence, recovery and export checks. Live-provider
+   reliability remains unverified.
+8. Reproducible evidence — MET; exact commands, results, screenshots, historical
+   session/artifact IDs and limitations are recorded in docs/STATUS.md.
+
+Validation:
+- `uv run --locked --no-sync python tests/research_sessions.py`
+- `uv run --locked --no-sync python tests/project_reports.py`
+- `uv run --locked --no-sync python tests/computational_evidence.py`
+- `uv run --locked --no-sync python tests/agentic_evidence.py`
+- `SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8022 uv run --with playwright python browser_checks/a17_research.py`
+- `./sigma test` (all steps passed after the added regression)
+
+Chrome screenshots include `/tmp/sigma-a177-after-maximum-regions.png`,
+`/tmp/sigma-a1771-after-maximum-regions-html.png`,
+`/tmp/sigma-a1771-after-maximum-regions-export-mobile.png`, and
+`/tmp/sigma-a177-after-export-mobile.png`. The A17 browser test printed a legacy
+“A18” PASS label; its actual file and executed coverage were
+`browser_checks/a17_research.py` and the A17 workspace/report flows. “Live
+activity” in the line was mock-fixture traffic, never a model request.
+
+No product defect was found. T17.8 remains open for human acceptance, and
+criterion 1 remains UNVERIFIED until a separately authorized bounded real-model
+trial. Do not interpret this handoff or PR as authorizing provider calls.
+
+R4R for deterministic and local browser acceptance.
+
+T29 integration recheck:
+- Focused `tests/research_sessions.py`, `tests/project_reports.py`,
+  `tests/computational_evidence.py`, and `tests/agentic_evidence.py` passed on
+  the integrated tree. The T17.8 regression
+  `test_maximum_regions_false_candidate_is_rejected` remains in the research
+  session run.
+- Real Chrome `browser_checks/a17_research.py` passed with the local mock
+  fixture at port 8023. The script prints a legacy “A18” pass label, but this
+  is the A17 research/workspace journey.
+- Real Chrome `browser_checks/t29_intervention.py` passed with a fresh local
+  mock fixture at port 8024: guidance submission triggered no additional
+  provider call, acknowledgement/provenance appeared, and mobile layout passed.
+- `./sigma test` passed after the T29 merge, including sample-export,
+  intervention service cases, Ruff, Pyright, frontend typecheck and production
+  build. The sole output warnings were existing Starlette/httpx TestClient
+  deprecation notices.
+- T29 mobile screenshot: `/tmp/sigma-t29-intervention-mobile.png`. Existing
+  A17 screenshots are listed above.
+
+No conflict or new acceptance blocker was found. T17.8 remains open for human
+sign-off; live-model solution quality remains UNVERIFIED. R4R again for review
+of the integrated branch.
+
+After pushing the updated branch, GitHub PR REST reports PR #41 as
+`mergeable: true` / `mergeable_state: clean` at base `aaf0995` and head
+`c1fe8ea`. A previous connector summary still showed a stale `mergeable: false`
+value; no merge conflict remains.

@@ -1,0 +1,177 @@
+{
+  "arm_count": 24,
+  "ceilings": {
+    "arm_usd_cap": 0.65,
+    "calls_per_arm": 8,
+    "estimated_worst_case_usd_per_arm": 0.62768,
+    "estimated_worst_case_usd_study": 15.06432,
+    "input_tokens_per_arm": 60000,
+    "output_tokens_per_arm": 32768,
+    "study_usd_cap": 15.6
+  },
+  "pair_count": 12,
+  "pairs": [
+    {
+      "arm_codes": {
+        "A": "sigma_cumulative",
+        "B": "single_role"
+      },
+      "domain": "domain-4",
+      "execution_order": [
+        "B",
+        "A"
+      ],
+      "pair_id": "46b2c6995fd1a3d4",
+      "task_commitment_sha256": "088903f5cab200dee432b434ff72bdb6b91b969f57d0cc981e143dbb7afcaa90"
+    },
+    {
+      "arm_codes": {
+        "A": "sigma_cumulative",
+        "B": "single_role"
+      },
+      "domain": "domain-1",
+      "execution_order": [
+        "B",
+        "A"
+      ],
+      "pair_id": "2dcc6584b38c69f9",
+      "task_commitment_sha256": "4e2ebbe25ae25342498ea4576e7df7c88a04263ac04757d366afaeb03f7045ef"
+    },
+    {
+      "arm_codes": {
+        "A": "single_role",
+        "B": "sigma_cumulative"
+      },
+      "domain": "domain-6",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "1746f6533cc12c0e",
+      "task_commitment_sha256": "2aaa06ca7c3337dcae8374798bdbb85368bf2264c1e2af429eae45b6d104a61b"
+    },
+    {
+      "arm_codes": {
+        "A": "single_role",
+        "B": "sigma_cumulative"
+      },
+      "domain": "domain-1",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "1332b02e98bbf561",
+      "task_commitment_sha256": "52671e752935282b9e6c35c7efc9e6a3699464da5d60fda1752a4b849559049a"
+    },
+    {
+      "arm_codes": {
+        "A": "sigma_cumulative",
+        "B": "single_role"
+      },
+      "domain": "domain-5",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "65ddc6280419248c",
+      "task_commitment_sha256": "97fb105ce9a9c4bc6241b5a861761a16d654599d8e49cbf34994a2c58dd00351"
+    },
+    {
+      "arm_codes": {
+        "A": "single_role",
+        "B": "sigma_cumulative"
+      },
+      "domain": "domain-2",
+      "execution_order": [
+        "B",
+        "A"
+      ],
+      "pair_id": "79262267ae253ffa",
+      "task_commitment_sha256": "de6373b798696940e6551f0dcb999081b2796839ff11372c0df69583e78ff665"
+    },
+    {
+      "arm_codes": {
+        "A": "single_role",
+        "B": "sigma_cumulative"
+      },
+      "domain": "domain-2",
+      "execution_order": [
+        "B",
+        "A"
+      ],
+      "pair_id": "893963562a808b0b",
+      "task_commitment_sha256": "8df00044138fe146b40af4e568022b25409aae63294276a4cc06596e1b49cf4d"
+    },
+    {
+      "arm_codes": {
+        "A": "sigma_cumulative",
+        "B": "single_role"
+      },
+      "domain": "domain-6",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "b1c2defd5a25e53c",
+      "task_commitment_sha256": "007322b67f84c3909b69bc476d1fd6e01e11d2e0a9289c7d6c69389478e28406"
+    },
+    {
+      "arm_codes": {
+        "A": "sigma_cumulative",
+        "B": "single_role"
+      },
+      "domain": "domain-3",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "e13ab7cb163a331b",
+      "task_commitment_sha256": "85c69b76815dc5e86c60939799bd19582592af26ce2a119c0b25440c25b0a033"
+    },
+    {
+      "arm_codes": {
+        "A": "single_role",
+        "B": "sigma_cumulative"
+      },
+      "domain": "domain-4",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "b1c5752e70054c22",
+      "task_commitment_sha256": "5f438d6b2cae291aa69c7c386e9c516e1267016cccb89c99d71e26896090fd46"
+    },
+    {
+      "arm_codes": {
+        "A": "single_role",
+        "B": "sigma_cumulative"
+      },
+      "domain": "domain-3",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "d52f285159a6edcd",
+      "task_commitment_sha256": "286013d1c36cb4dacdf87876872eefa6f5af96becae83253334ffce2408b4494"
+    },
+    {
+      "arm_codes": {
+        "A": "sigma_cumulative",
+        "B": "single_role"
+      },
+      "domain": "domain-5",
+      "execution_order": [
+        "A",
+        "B"
+      ],
+      "pair_id": "6d78f587b4e70214",
+      "task_commitment_sha256": "e124be05168ca2754bdfc0773775addc86785390d74fbcff6abd89abd9874c2c"
+    }
+  ],
+  "provider_calls_authorized": 0,
+  "schema_version": 1,
+  "seed": 114026,
+  "status": "DRAFT_NOT_FROZEN",
+  "task_count": 12,
+  "task_manifest_sha256": "e19d6ef63127701a74a04bc43c5858a2f2cad8d42429609f196fd84e62a95338"
+}

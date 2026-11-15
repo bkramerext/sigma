@@ -1,0 +1,18 @@
+T27 PR #18 follow-up is implemented and pushed for review.
+
+Review concern 1 — newest prior-session failures:
+The failure collector now sorts all failed/interrupted attempts by their attempt timestamp, newest first, across sessions. It uses finished_at, then started_at, then session timestamps as a fallback. The regression deliberately makes session creation order disagree with attempt recency and verifies the newer attempt is supplied first.
+
+Review concern 2 — deferred handoff storage bound:
+A strategy may now retain at most 24 deferred peer handoffs, in addition to the four-item active prompt batch. Once that cap is reached, SIGMA retains an overflow count and at most eight compact recent omission records (with source/target artifact IDs and handoff IDs); older omission records are counted. Coordinator output exposes the overflow summary. This bounds per-branch deferred storage while making overflow visible.
+
+Regression tests added:
+- test_prior_session_failure_history_prioritizes_newest_attempts
+- test_peer_handoff_deferred_storage_is_bounded_and_reports_overflow
+
+Verification on 2026-10-23:
+- Focused tests/research_sessions.py passed.
+- ./sigma test passed: backend scenarios, 10-strategy 20/20-call concurrency case, Ruff check/format, Pyright (0 errors/warnings/informations), frontend typecheck, and Vite production build.
+- No live provider calls or UI/browser changes were needed.
+
+The latest changes are on the existing t27-research-intelligence branch and PR #18. Ready for review; do not self-merge.

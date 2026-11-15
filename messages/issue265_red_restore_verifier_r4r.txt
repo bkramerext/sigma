@@ -1,0 +1,26 @@
+RED / Issue #265 — restore verifier path correction
+
+Base: merged main 3f2426c6fa83866c655cb1b601a7e2df78e5e459.
+Branch: red/issue-265-restore-verifier.
+
+During the 0.1.1 backup gate, a consistent snapshot
+sigma-state-issue265-20261027-075405 reached READY. Its clone was mounted
+read-only on a temporary recovery VM without a public IP or service account.
+The packaged restore verifier failed because its fixture placed
+workspaces.sqlite3 and cloud-research.sqlite3 at /auth, while the actual
+production layout stores both under /auth/workspaces. The verified snapshot
+and live disk agree on that layout. This PR corrects those paths, treats the
+two database files as permitted workspace-root metadata, and updates the
+fixture to represent production.
+
+With the corrected verifier copied only to the recovery VM, the read-only
+restore check passed: all three SQLite databases integrity and tables, two
+saved identities and workspace mappings, three project records, ten research
+artifacts, zero paper pairs, and accounting references including one
+reserved/unknown call. Temporary VM and clone disk were removed; snapshot
+is retained. No production release change, provider call, or secret exposure.
+
+Tests: tests/state_backup.py passed (10 tests); `./sigma test` passed,
+including Ruff, Pyright, frontend typecheck and production build.
+The production UI remains on the old release pending SMTP credential and
+deployment of reviewed 3f2426c6fa83866c655cb1b601a7e2df78e5e459.

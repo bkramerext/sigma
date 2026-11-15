@@ -1,0 +1,53 @@
+# Issue #289 — Green R4R handoff
+
+Branch: `green/issue-289-configurable-limits`
+Base: `main` at `b305cbf371425f9c0e5913ec179eda1f8ec19a99`
+Implementation commit: `bc8196ecf7259b83631793832df6a50d91b1148e`
+PR: https://github.com/bkramerext/sigma/pull/291
+
+## Implemented
+
+- Removed the per-session six-call and `$0.25` replacements from sponsored
+  research admission. Saved Project Settings limits now govern the session;
+  account allowance, global ceiling, cost reservation, and the 15-minute
+  hosted/sponsored runtime cap still apply. An unset sponsored session cost
+  limit returns an actionable settings message.
+- Hosted and local Project Settings expose the required estimated-cost limit
+  for sponsored research. Configured duration persists as entered while the
+  runtime deadline uses the applicable cap.
+- Restored the local sponsored account's default global spending ceiling to
+  `$0.25`; an explicit `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` still overrides it.
+- In the supported local ChatGPT flow, explicitly disconnect before returning
+  to sponsorship. Failed sign-in or disconnect does not silently change the
+  funding source. Sponsored allowance records remain intact while personal
+  inference is selected. Hosted personal authorization remains disabled; no
+  hosted OAuth bypass was added.
+- Model catalog 401/403 errors disable model selection and show the auth state;
+  temporary provider failures preserve editable preferences as unverified.
+- Session termination diagnostics distinguish session cost/token caps from
+  hard account/global ledger refusals, with cycle/call counts and clear notice
+  when a Skeptic call was never dispatched.
+- Added deterministic regression coverage reproducing the former 1/6-call
+  budget failure, hard-ledger refusal, token diagnostics, hosted sponsored cost
+  setup, and local account transitions/model availability.
+
+## Verification actually run
+
+- `./sigma test` — PASS, all steps, including backend integration suites, Ruff,
+  Ruff format check, Pyright, frontend typecheck, and production build.
+- Real Chrome browser checks — PASS:
+  - `browser_checks/hosted_sponsored_connection.py`
+  - `browser_checks/local_sponsored_limits.py` (hosted settings cost validation,
+    persistence/reload, and local sponsored project limits)
+  - `browser_checks/model_availability.py` (401/403 disabled; 503 editable and
+    unverified)
+- `git diff --check` — PASS before commit.
+
+Browser checks used deterministic local fixtures. No live or paid provider
+inference and no hosted deployment authorization were exercised.
+
+## Limits and review status
+
+- Hosted personal ChatGPT authorization remains disabled pending the existing
+  OpenAI hosted-integration authorization path. This PR does not circumvent it.
+- No self-merge. This branch is ready for review (R4R).

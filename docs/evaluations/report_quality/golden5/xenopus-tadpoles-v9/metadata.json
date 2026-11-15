@@ -1,0 +1,156 @@
+{
+  "paper_id": "53d81e3911174d8db26b0ac1a2b6c87c",
+  "title": "Identifiability Limits of a Signal-Memory Hypothesis for the Xenopus laevis Regeneration Switch",
+  "project_id": "01de54c9-9593-413a-9577-1a952d28da70",
+  "session_id": "44e759ac-38bb-4e8d-8c4c-4850541ad3dd",
+  "source_archive_sha256": "2f5abc0d7e697de93d6c853d8b6f576addff731496599d0d8492087179649920",
+  "frozen_snapshot_sha256": "055ebf569bc22db2373aba19981d90086f9a098cebfa71a1f8781125f5dae162",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider": {
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "started_at": "2026-11-02T06:03:46.976285+00:00",
+  "finished_at": "2026-11-02T06:12:19.571435+00:00",
+  "elapsed_seconds": 512.24,
+  "provider_calls_total": 12,
+  "proofreading": {
+    "accepted_correction_count": 0,
+    "ai_performed": true,
+    "attempted": true,
+    "corrected_tex_sha256": "5068fac0a56c3d2230f966ddbb83f3ad3c95bb476d4036b8a3ceb1482e1992ca",
+    "correction_categories": [],
+    "elapsed_seconds": 38,
+    "fallback_reason": "Proofreading chunk 2 was not applied: A proposed correction changed protected scientific or reference content.",
+    "final_tex_sha256": "a3db4be06508504f59e29ee45267b652a1f549adce5d2641fdb24b7a679e6b59",
+    "model": "gpt-6.1-sol",
+    "original_tex_sha256": "5068fac0a56c3d2230f966ddbb83f3ad3c95bb476d4036b8a3ceb1482e1992ca",
+    "prior_render_provider_calls": 0,
+    "provider_calls_attempted": 6,
+    "provider_calls_current_render": 6,
+    "reasoning_effort": "high",
+    "status": "fallback",
+    "unresolved_diagnostics": [
+      "Potentially wide diagram or table line 181 (248 characters).",
+      "Potentially wide diagram or table line 182 (187 characters).",
+      "Potentially wide diagram or table line 183 (217 characters).",
+      "Potentially wide diagram or table line 184 (270 characters).",
+      "warning: report.tex:296: Underfull \\hbox (badness 1394) in paragraph at lines 295--296",
+      "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.",
+      "Proofreading chunk 2 was not applied: A proposed correction changed protected scientific or reference content.",
+      "warning: report.tex:297: Underfull \\hbox (badness 1394) in paragraph at lines 296--297"
+    ],
+    "verification_status": "incomplete"
+  },
+  "publication_status": "needs_review",
+  "layout_status": "no_severe_box_warnings_reported",
+  "pdf_check_passes": [
+    {
+      "compiler_diagnostics": [
+        "warning: report.tex:297: Underfull \\hbox (badness 1394) in paragraph at lines 296--297",
+        "warning: report.tex:297: Underfull \\hbox (badness 1394) in paragraph at lines 296--297",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+      ],
+      "diagnostics": [],
+      "page_count": 21,
+      "pass": 1
+    }
+  ],
+  "omitted_evidence_count": null,
+  "official_publication_reference_set": [
+    {
+      "name": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines"
+    },
+    {
+      "name": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/"
+    }
+  ],
+  "writing_source_selection": "selected",
+  "selected_writing_sources": [
+    {
+      "title": "PLOS ONE — Manuscript and Reporting Guidelines",
+      "url": "https://journals.plos.org/plosone/s/submission-guidelines",
+      "tier": "general",
+      "type": "biology",
+      "branch": "project_type",
+      "sha256": "44af7d8134f80040e8cc872095590effff565d5e4bc0e2ce0a4d63ad8f6d8efb",
+      "reference_set_sha256": "602cce95c9df0850d59c308e1e2f9780fa2120a6620da2ecc66584f2f7d04635",
+      "excerpt_characters": 3500
+    },
+    {
+      "title": "EASE — Guidelines for Authors of Scientific Articles (full text)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4130677/",
+      "tier": "general",
+      "type": "biology",
+      "branch": "project_type",
+      "sha256": "a23c6d17c1136919a64c63fa172e818ec1b979fa7ad79e1e5b032e56e29c31bf",
+      "reference_set_sha256": "602cce95c9df0850d59c308e1e2f9780fa2120a6620da2ecc66584f2f7d04635",
+      "excerpt_characters": 3500
+    }
+  ],
+  "artifact_hashes": {
+    "txt": {
+      "path": "xenopus-tadpoles-v9/paper.txt",
+      "bytes": 47104,
+      "sha256": "6cb10e7b79f21bf12f8f81ded3be77b50fefa7ba2fc1430721f7f6ad14464e27"
+    },
+    "tex": {
+      "path": "xenopus-tadpoles-v9/paper.tex",
+      "bytes": 65309,
+      "sha256": "a3db4be06508504f59e29ee45267b652a1f549adce5d2641fdb24b7a679e6b59"
+    },
+    "pdf": {
+      "path": "xenopus-tadpoles-v9/paper.pdf",
+      "bytes": 120765,
+      "sha256": "fad47d90e9302dc433532f7c0aff007084f416ad36d725b2aef90ac49724e562"
+    }
+  },
+  "full_record_sha256": "a731752120e48d7790376ef896a2941f776b5d97e8c4d16a9ed7c8a71a994254",
+  "full_record_path": "xenopus-tadpoles-v9/metadata.full.json.gz",
+  "manuscript": {
+    "words": 6364,
+    "sections": 5,
+    "claims": 14,
+    "pdf_pages": 21
+  },
+  "author_review_warnings": [
+    "Evidence indexing omitted 12862 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Claim-ID normalization is required: several aggregate linkage arrays use zero-padded identifiers such as C01, C02, and C03, whereas the corresponding register entries are C1, C2, and C3. These references must be reconciled before downstream drafting.",
+    "The bounded index is not an exhaustive review of the saved research. Omitted fragments and source counts do not establish complete evidence coverage.",
+    "The mathematical reporter, restricted crossed-pulse, and accumulated-output claims are retained as unresolved proof candidates where complete constructions or assumptions are absent. Their full proofs must not be supplied by invention.",
+    "One combined-gating critique initially alleges a sign error and then explicitly confirms the displayed equality. The allegation is locally withdrawn by its own calculation, not evidence of an unresolved mathematical contradiction.",
+    "No expression values, sample counts, outcome labels, effect sizes, confidence intervals, baseline improvements, or intervention results can be supplied from this package.",
+    "An absence of supplied primary records must not be described as public data unavailability or proof that the GEO observations are unpaired.",
+    "Operational failures and execution-tool field names are not scientific evidence and do not establish computation, replication, or biological refutation.",
+    "A failure to exclude a meaningful benefit is inconclusive. Evidence against a useful effect requires an uncertainty bound that excludes the prespecified minimum useful effect.",
+    "The evidence index explicitly omitted 12865 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 432 source-linked text fragments from 22 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field."
+  ],
+  "validation_warnings": [
+    "Evidence indexing omitted 12862 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "Claim-ID normalization is required: several aggregate linkage arrays use zero-padded identifiers such as C01, C02, and C03, whereas the corresponding register entries are C1, C2, and C3. These references must be reconciled before downstream drafting.",
+    "The bounded index is not an exhaustive review of the saved research. Omitted fragments and source counts do not establish complete evidence coverage.",
+    "The mathematical reporter, restricted crossed-pulse, and accumulated-output claims are retained as unresolved proof candidates where complete constructions or assumptions are absent. Their full proofs must not be supplied by invention.",
+    "One combined-gating critique initially alleges a sign error and then explicitly confirms the displayed equality. The allegation is locally withdrawn by its own calculation, not evidence of an unresolved mathematical contradiction.",
+    "No expression values, sample counts, outcome labels, effect sizes, confidence intervals, baseline improvements, or intervention results can be supplied from this package.",
+    "An absence of supplied primary records must not be described as public data unavailability or proof that the GEO observations are unpaired.",
+    "Operational failures and execution-tool field names are not scientific evidence and do not establish computation, replication, or biological refutation.",
+    "A failure to exclude a meaningful benefit is inconclusive. Evidence against a useful effect requires an uncertainty bound that excludes the prespecified minimum useful effect.",
+    "The evidence index explicitly omitted 12865 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 432 source-linked text fragments from 22 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "C14 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C14 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C3 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C3 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C4 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C4 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C7 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "C7 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+    "C9 is labeled established, but cited saved evidence includes unverified, incomplete, or conjectural material.",
+    "A diagram's graph could not be laid out without likely crossings or overlap; its complete nodes, boundaries, and relationships are shown in a readable text representation.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout."
+  ]
+}

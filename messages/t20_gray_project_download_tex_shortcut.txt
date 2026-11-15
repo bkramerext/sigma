@@ -1,0 +1,12 @@
+T20 / Issue #26 — TeX shortcut beside Project Download
+
+The LaTeX wordmark action is now in the Project pane action row immediately after Export project (Project Download) and before Project settings. It reuses the existing AI-authored LaTeX export workflow, including focus return when the dialog closes, and uses the existing copper/dark icon-control treatment. The existing 2×2 Model/Thinking/Google/ChatGPT header controls are unchanged.
+
+Validation completed:
+- `./sigma test` — passed (including frontend typecheck and production build).
+- Real Chrome `browser_checks/a20_paper.py` with the isolated provider fixture — passed. Verified action order and horizontal placement at 1440px and 390px, keyboard Enter activation and focus restoration, direct paper flow, existing Export Project paper route, and PDF generation workflow.
+- Real Chrome `browser_checks/header.py` — passed at 1280, 1100, 700, 390, and 320px with no horizontal overflow and the 2×2 controls intact.
+- Desktop and mobile action-row screenshots inspected from `/tmp/sigma-t20-project-download-desktop.png` and `/tmp/sigma-t20-project-download-mobile.png`.
+- No paid/live provider calls.
+
+Branch: `feature/project-header-latex`, updating PR #10. Ready for review; not merged.

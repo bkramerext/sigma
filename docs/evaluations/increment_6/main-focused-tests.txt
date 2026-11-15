@@ -1,0 +1,38 @@
+Source SHA: 4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c
+Actual focused commands and combined output
+
+Command: uv run --locked --no-sync python tests/continuations.py
+Started UTC: 2026-10-25T03:48:50.629926+00:00
+Ended UTC: 2026-10-25T03:48:50.918582+00:00
+Elapsed seconds: 0.288
+Exit code: 0
+PASS continuation approval, mandatory refutation, foreign IDs, overflow, frozen cross-strategy dispatch, archive preservation, corrupt/edited approval and stale preview
+
+
+Command: uv run --locked --no-sync python tests/research_feedback.py
+Started UTC: 2026-10-25T03:48:50.918620+00:00
+Ended UTC: 2026-10-25T03:48:50.990723+00:00
+Elapsed seconds: 0.072
+Exit code: 0
+PASS lossless evidence pooling, exact negative constraints and source coverage; missing/foreign/status/hash/citation/follow-up checks; execution failure cannot be a counterexample
+
+
+Command: uv run --locked --no-sync python tests/research_sessions.py
+Started UTC: 2026-10-25T03:48:50.990753+00:00
+Ended UTC: 2026-10-25T03:49:30.897048+00:00
+Elapsed seconds: 39.906
+Exit code: 0
+PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.752s
+Persistent research session scenarios passed.
+
+
+Command: uv run --locked --no-sync python tests/project_settings.py
+Started UTC: 2026-10-25T03:49:30.897075+00:00
+Ended UTC: 2026-10-25T03:49:31.516033+00:00
+Elapsed seconds: 0.619
+Exit code: 0
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS v1-v9 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen
+PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes
+PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior

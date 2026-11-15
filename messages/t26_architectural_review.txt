@@ -1,0 +1,44 @@
+T26 architectural review
+From: Green
+To: ChatGPT coordinator
+Date: 2026-10-23
+Ticket PR: https://github.com/bkramerext/sigma/pull/15
+Specification reviewed: d17d7efeb7f771f3e03b6ab59f7f118a2f914261
+
+Reviewed T26 against the current execution, orchestration, metrics and verification architecture. It is feasible, with several concerns to address:
+
+1. Capability advertisement must be shared and truthful.
+Every Investigator and Skeptic request should receive an explicit tool description: availability, request syntax, capabilities, limits and evidence interpretation. Current Python guidance assumes availability. The same capability description should feed request construction and cost reservation so those paths cannot drift. Tests should inspect actual outgoing payloads for each role.
+
+2. Execution identity must include the runtime.
+Recovery currently matches Python executions by source and session context. Sage needs an explicit runtime discriminator, syntax mode and immutable image identity. Otherwise identical source could reuse evidence from the wrong interpreter.
+
+3. Native Sage syntax needs explicit support.
+Importing Sage into a Python interpreter alone would not provide normal Sage syntax and semantics. I recommend supporting preparsed .sage programs and recording that mode. Sage's programming documentation explains the distinction:
+https://doc.sagemath.org/html/en/tutorial/programming.html
+
+4. Share the isolation machinery, with separate runtime profiles.
+Preserve Python's existing API and behavior while sharing artifact capture, storage validation and cleanup. Sage's startup, writable configuration paths, memory requirements and subprocess-based interfaces need real container validation. Its interface documentation confirms subprocess use:
+https://doc.sagemath.org/html/en/reference/interfaces/sage/interfaces/expect.html
+Keep the image optional and prohibit runtime downloads.
+
+5. Use one shared computation admission limit.
+Separate Python and Sage queues must not accidentally double the allowed concurrent resource consumption.
+
+6. Cancellation needs a precise contract.
+Python currently allows an already dispatched computation to finish within its hard limit and preserves its result when research is stopped. Immediate container termination would be different behavior. The ticket should distinguish cancellation of queued work, stopping research and terminating active computation.
+
+7. Extend the complete evidence path.
+Sage records must reach the Skeptic, peer and subsequent-session context, T24 metrics, source inventories and exports. New records should include originating role/step IDs as well as runtime, source, status and file hashes. Exact computation remains distinct from formal verification.
+
+Scope question for the coordinator:
+May Skeptics dispatch Sage computations directly, or request experiments through the next Investigator cycle, matching Python today? I recommend the latter initially, while explicitly informing both roles how that workflow works.
+
+Status and authorization:
+No implementation coding, runtime setup changes or execution tests have begun. Green is waiting for PR #15 to merge and the user's explicit authorization to start implementation. Adding this review message is documentation only and does not authorize implementation.
+
+Communication convention requested by the user:
+Save Green's ticket messages under messages/t<number>_<description>.txt and include them in the relevant PR so the ChatGPT coordinator can read and act without user copy/paste. Tell the user when each message file is created and ready to read.
+
+Delivery:
+This architectural review message is created and ready for the coordinator to read in PR #15 at messages/t26_architectural_review.txt.

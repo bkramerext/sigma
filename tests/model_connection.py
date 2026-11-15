@@ -1,0 +1,387 @@
+"""No-network fixtures: classified discovery, cache/coalescing, project model snapshots."""
+
+import asyncio
+import json
+import os
+from dataclasses import asdict
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+import httpx
+
+from sigma import chatgpt_auth
+from sigma import openai_connection as connection
+from sigma.model_catalog import CATALOG
+from sigma.projects import (
+    ProjectError,
+    initialize_project,
+    inspect_project,
+    project_settings,
+    update_project,
+)
+from sigma.proposals import configuration, generate_proposal
+
+REAL_CLIENT = httpx.AsyncClient
+KEY = "non-secret-discovery-fixture"
+MODELS = {
+    "object": "list",
+    "data": [{"id": i} for i in [*CATALOG, "gpt-unreviewed", "text-embedding-3-small"]],
+}
+DRAFT = {
+    "title": "Bounded kernel obstruction",
+    "summary": "Compare a concrete kernel inequality with a necessary bound.",
+    "approach": "Derive the kernel inequality on an explicitly bounded domain and test counterexamples before extending it.",
+    "first_tests": "Check small exact examples against independent calculations.",
+    "assumptions": "Justify each limit interchange and domain restriction.",
+    "failure_modes": "The bound may be necessary but insufficient.",
+}
+
+
+def reset():
+    connection.clear_cache_for_tests()
+
+
+def client_factory(handler):
+    return lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
+
+
+async def checks():
+    await chatgpt_auth.select("api_key")
+    with patch.dict(os.environ, {"OPENAI_API_KEY": KEY}):
+        auth_context = await connection.auth_context()
+        assert auth_context["token"] == KEY
+        assert KEY not in repr(auth_context)
+        assert "token" not in dict(auth_context)
+        try:
+            json.dumps(auth_context)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("AuthContext must not be JSON serializable")
+    calls = []
+
+    async def success(request):
+        calls.append(request)
+        assert str(request.url) == "https://api.openai.com/v1/models"
+        await asyncio.sleep(0.02)
+        return httpx.Response(200, json=MODELS)
+
+    reset()
+    with patch("sigma.openai_connection.httpx.AsyncClient", side_effect=client_factory(success)):
+        results = await asyncio.gather(*(connection.models() for _ in range(8)))
+        assert len(calls) == 1
+        assert all(r["connection"]["status"] == "connected" for r in results)
+        assert {m["id"] for m in results[0]["models"]} == set(CATALOG)
+        assert all(m["efforts"] == ("low", "medium", "high", "xhigh") for m in results[0]["models"])
+        assert {m["id"]: m["relative_cost"] for m in results[0]["models"]} == {
+            "gpt-6-luna": "$",
+            "gpt-6.1-sol": "$$",
+            "gpt-6-astra": "$$$",
+        }
+        assert results[0]["default_model"] == "gpt-6.1-sol" and results[0]["default_verified"]
+        await connection.connection()
+        await connection.connection(refresh=True)
+        assert len(calls) == 1  # cooldown also bounds retry spam.
+        next(iter(connection._credential_states.values())).checked_at -= connection.TTL + 1
+        await connection.models()
+        assert len(calls) == 2
+        next(iter(connection._credential_states.values())).checked_at -= 4
+        await connection.connection(refresh=True)
+        assert len(calls) == 3
+    print(
+        "PASS bounded curated account intersection, coalesced initial requests, TTL, retry cooldown and refresh"
+    )
+    for code, status in [
+        (401, "unauthorized"),
+        (403, "forbidden"),
+        (429, "limited"),
+        (500, "unavailable"),
+        (302, "unavailable"),
+    ]:
+        reset()
+        with patch(
+            "sigma.openai_connection.httpx.AsyncClient",
+            side_effect=client_factory(lambda r, code=code: httpx.Response(code, text=KEY)),
+        ):
+            state = await connection.connection()
+            assert state["status"] == status, state
+            assert KEY not in json.dumps(state)
+            assert state["checked_at"]
+    for raw in (
+        {"data": []},
+        {"object": "list", "data": [{"id": None}]},
+        [],
+        {"object": "list", "data": None},
+    ):
+        reset()
+        with patch(
+            "sigma.openai_connection.httpx.AsyncClient",
+            side_effect=client_factory(lambda r, raw=raw: httpx.Response(200, json=raw)),
+        ):
+            assert (await connection.connection())["status"] == "invalid_response"
+    reset()
+    with patch(
+        "sigma.openai_connection.httpx.AsyncClient",
+        side_effect=client_factory(
+            lambda r: httpx.Response(200, content=b"x" * (connection.MAX_BYTES + 1))
+        ),
+    ):
+        assert (await connection.connection())["status"] == "invalid_response"
+
+    def disconnected(request):
+        raise httpx.ConnectError(KEY)
+
+    reset()
+    with patch(
+        "sigma.openai_connection.httpx.AsyncClient", side_effect=client_factory(disconnected)
+    ):
+        assert (await connection.connection())["status"] == "unavailable"
+
+    async def slow(request):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json=MODELS)
+
+    reset()
+    with (
+        patch("sigma.openai_connection.TIMEOUT", 0.01),
+        patch("sigma.openai_connection.httpx.AsyncClient", side_effect=client_factory(slow)),
+    ):
+        assert (await connection.connection())["status"] == "unavailable"
+    reset()
+    with (
+        patch.dict(os.environ, {"OPENAI_API_KEY": ""}),
+        patch(
+            "sigma.openai_connection.httpx.AsyncClient", side_effect=AssertionError("must not send")
+        ),
+    ):
+        assert (await connection.models())["connection"]["status"] == "unconfigured"
+    reset()
+    with patch(
+        "sigma.openai_connection.httpx.AsyncClient",
+        side_effect=client_factory(
+            lambda r: httpx.Response(200, json={"object": "list", "data": []})
+        ),
+    ):
+        assert not (await connection.models())["default_verified"]
+    print(
+        "PASS missing/auth/permission/rate/provider/network/timeout/redirect/bad/oversized responses; no raw secret/error exposure or invented readiness"
+    )
+    with TemporaryDirectory() as directory:
+        path = Path(directory) / "settings.sigma"
+        initialize_project(
+            path, "Snapshot", "A mathematical question", "mathematical", "gpt-6-luna", "xhigh"
+        )
+        initial = inspect_project(path)
+        # The model/Thinking pair now belongs to the user, not the project.
+        from sigma import global_research_settings
+
+        with (
+            patch.dict(
+                CATALOG,
+                {"gpt-6-luna": {**CATALOG["gpt-6-luna"], "efforts": ("low", "medium")}},
+            ),
+            patch(
+                "sigma.global_research_settings._path",
+                return_value=Path(directory) / ".research-settings.json",
+            ),
+        ):
+            original = global_research_settings.load_config()
+            try:
+                global_research_settings.save_config(
+                    {"ai_model": "gpt-6-luna", "reasoning_effort": "high"}
+                )
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Unsupported model/thinking pair was persisted")
+            assert global_research_settings.load_config() == original
+            assert inspect_project(path) == initial
+        # Configure the user-selected pair explicitly; project edits no longer
+        # carry model preferences into new provider requests.
+        global_research_settings.save_config(
+            {"ai_model": "gpt-6-luna", "reasoning_effort": "xhigh"}
+        )
+        request_started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def generate(request):
+            if request.method == "GET":
+                return httpx.Response(200, json=MODELS)
+            payload = json.loads(request.content)
+            assert payload["model"] == "gpt-6-luna" and payload["reasoning"] == {"effort": "xhigh"}
+            assert (
+                payload["max_output_tokens"] == 8000 and payload["text"]["format"]["strict"] is True
+            )
+            request_started.set()
+            await release.wait()
+            return httpx.Response(
+                200,
+                json={
+                    "status": "completed",
+                    "model": "gpt-6-luna-returned",
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [{"type": "output_text", "text": json.dumps(DRAFT)}],
+                        }
+                    ],
+                },
+            )
+
+        reset()
+        with patch("sigma.proposals.httpx.AsyncClient", side_effect=client_factory(generate)):
+            pending = asyncio.create_task(
+                generate_proposal(str(path), "A starting constraint", True)
+            )
+            await asyncio.wait_for(request_started.wait(), 2)
+            global_research_settings.save_config(
+                {"ai_model": "gpt-6-astra", "reasoning_effort": "low"}
+            )
+            release.set()
+            # User preference changes apply to future calls; this in-flight
+            # proposal retains the originally selected model.
+            await pending
+            before = inspect_project(path)
+            assert not before.project.strategies
+            assert before.project.ai_model == initial.project.ai_model
+            assert inspect_project(path) == before
+        reset()
+        with patch(
+            "sigma.openai_connection.httpx.AsyncClient",
+            side_effect=client_factory(
+                lambda r: httpx.Response(
+                    200, json={"object": "list", "data": [{"id": "gpt-6-luna"}]}
+                )
+            ),
+        ):
+            config = await configuration(str(path))
+            assert not config["available"] and config["model"] == "gpt-6-astra"
+            try:
+                await generate_proposal(str(path), consent=True)
+            except ProjectError as exc:
+                assert "unavailable" in str(exc)
+            else:
+                raise AssertionError("No model fallback allowed")
+        # Catalog removal never erases settings or forces metadata edits to make network calls.
+        with patch.dict(CATALOG, {}, clear=True):
+            prior = asdict(project_settings(inspect_project(path).project))
+            settings_update = {
+                key: value for key, value in prior.items() if key != "investigation_type"
+            }
+            settings_update["research_mode"] = prior["investigation_type"]
+            edited = update_project(
+                path, **{**settings_update, "title": "Still editable"}, expected=prior
+            )
+            assert edited.project.ai_model == initial.project.ai_model
+    print(
+        "PASS per-project model/actual effort request, changed-model draft rejection, signed acceptance, unavailable choice/no fallback and offline metadata edits"
+    )
+
+
+def main():
+    with (
+        TemporaryDirectory() as directory,
+        patch.dict(
+            os.environ, {"SIGMA_AUTH_HOME": str(Path(directory) / "auth"), "OPENAI_API_KEY": KEY}
+        ),
+    ):
+        asyncio.run(checks())
+        asyncio.run(credential_isolation_checks())
+
+
+async def credential_isolation_checks():
+    reset()
+    z = {
+        "token": "z-personal-secret",
+        "mode": "chatgpt",
+        "status": "connected",
+        "identity": "cloud_personal:Z",
+    }
+    b = {
+        "token": "b-personal-secret",
+        "mode": "chatgpt",
+        "status": "connected",
+        "identity": "cloud_personal:B",
+    }
+    started = {"z": asyncio.Event(), "b": asyncio.Event()}
+    release = {"z": asyncio.Event(), "b": asyncio.Event()}
+    calls = []
+
+    async def check(token, mode):
+        who = "z" if token.startswith("z-") else "b"
+        calls.append(who)
+        started[who].set()
+        await release[who].wait()
+        if who == "b":
+            return connection._CatalogResult(
+                {"status": "limited", "checked_at": "b", "ttl_seconds": connection.TTL}
+            )
+        return connection._CatalogResult(
+            {"status": "connected", "checked_at": "z", "ttl_seconds": connection.TTL},
+            {"gpt-6.1-sol"},
+            {"gpt-6.1-sol": "Z private catalog"},
+            ["gpt-6.1-sol"],
+        )
+
+    with patch.object(connection, "_check", side_effect=check):
+        z_task = asyncio.create_task(connection.models(context=z))
+        b_task = asyncio.create_task(connection.models(context=b))
+        await asyncio.gather(started["z"].wait(), started["b"].wait())
+        # An inference failure is scoped to Z's credential and cannot stop B's check.
+        z_guard = __import__("hashlib").sha256(("chatgpt" + z["token"]).encode()).hexdigest()
+        connection.inference_failure("unavailable", z_guard)
+        release["b"].set()
+        b_result = await b_task
+        release["z"].set()
+        z_result = await z_task
+        assert calls == ["z", "b"] or calls == ["b", "z"]
+        assert b_result["connection"]["status"] == "limited"
+        assert z_result["connection"]["status"] == "unavailable"
+        # Z's late catalog check cannot overwrite its newer inference failure;
+        # B's independently failed result and Z's failure remain isolated.
+        b2 = await connection.connection(context=b)
+        assert b2["status"] == "limited"
+        z_cached = connection._credential_states[z_guard].result
+        assert z_cached is not None and z_cached["status"] == "unavailable"
+
+    reset()
+    sponsor = {
+        "token": "shared-sponsor-token",
+        "mode": "chatgpt",
+        "status": "connected",
+        "identity": "cloud_sponsor:Z",
+    }
+    count = 0
+    gate = asyncio.Event()
+
+    async def sponsor_check(token, mode):
+        nonlocal count
+        count += 1
+        await gate.wait()
+        return connection._CatalogResult(
+            {"status": "connected", "checked_at": "s", "ttl_seconds": connection.TTL},
+            {"gpt-6-luna"},
+            {"gpt-6-luna": "Sponsor catalog"},
+            ["gpt-6-luna"],
+        )
+
+    with patch.object(connection, "_check", side_effect=sponsor_check):
+        first = asyncio.create_task(connection.models(context=sponsor))
+        second = asyncio.create_task(connection.models(context=sponsor))
+        await asyncio.sleep(0)
+        gate.set()
+        one, two = await asyncio.gather(first, second)
+        assert count == 1
+        assert one["connection"]["status"] == two["connection"]["status"] == "connected"
+        assert (
+            next(model for model in one["models"] if model["id"] == "gpt-6-luna")["label"]
+            == "Sponsor catalog"
+        )
+    print(
+        "PASS per-credential provider checks, failure/catalog isolation and shared sponsor coalescing"
+    )
+
+
+if __name__ == "__main__":
+    main()

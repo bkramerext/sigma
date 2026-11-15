@@ -1,0 +1,81 @@
+T40 coordinator handoff — R4R
+Branch: gray/t40-cloud-ui-admin
+Base: current main 1aff185 (includes scope decision 42bfb3a)
+PR: https://github.com/bkramerext/sigma/pull/57 (rebased; open and mergeable)
+
+Implemented the coordinator clarification. The user-facing fake administrator
+switch, preview middleware, preview documentation and fake-preview browser test
+are removed. There is no simulated-admin or mock-cloud mode. `./sigma start
+--nav` is supported; with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` set and OAuth
+credentials configured, the launcher automatically enables real loopback Google
+OIDC. With no bootstrap email, normal local startup stays in its prior local
+single-user mode. OAuth secret, bootstrap email, auth database path and contact
+email are kept out of the Vite process environment.
+
+Local Google configuration is documented in docs/CLOUD-AUTH.md. It covers the
+OAuth consent screen, Web application client, authorized origin and exact
+callback URI, the actual Gmail export in ~/.bashrc, OAuth client ID/secret in
+the ignored checkout .env, and the exact source-and-launch command. Local
+authentication is explicitly identified as local SQLite state; it does not
+claim to edit hosted account rules. The existing verified-email and immutable
+Google-subject binding, OIDC/PKCE/state/nonce/CSRF/session validation and
+server-side authorization checks are preserved.
+
+Acceptance matrix
+
+MET — The removed preview/admin switch is no longer parsed or shown in CLI help;
+CLI regression coverage verifies it is rejected. `--nav` help and launcher
+environment propagation are covered by tests/tooling.py.
+
+MET — Deterministic OIDC tests cover first verified bootstrap login, persisted
+subject binding, nonmatching identity denial, member/admin roles, account
+switching, logout, unauthorized API groups, local loopback-only HTTP settings,
+and unchanged local project/provider API behavior.
+
+MET — Real Chrome with deterministic API fixtures verified signed-out, local
+admin and member states; Google account dialog; no raw account email in the Home
+header; admin-only Settings link; access table; Add, role/allowance edit, Save
+Updates and Revoke; copper artwork credit; desktop and narrow Home/admin-dialog
+layout. It also verified project-header account controls, sign-out, the disabled
+Google placeholder when local auth is unavailable, and that hosted allowance is
+read-only inside the ChatGPT connection dialog rather than a Home budget card.
+
+MET — After rebasing onto `42bfb3a`, `./sigma test` passed, including focused cloud_auth and tooling tests,
+backend cloud workspace/accounting tests, Ruff, format, Pyright (0 diagnostics),
+frontend typecheck and production build. The existing Starlette/httpx
+deprecation warnings remain.
+
+UNVERIFIED — The operator's live external Google OAuth round trip on localhost.
+Per the coordinator decision recorded in main, this remains a post-merge
+acceptance obligation. No operator OAuth client credentials or Google account
+were supplied, and this run made no external sign-in attempt. Browser/API
+fixtures exercise the route and UI; unit tests exercise the callback and
+verified-subject security behavior.
+
+DEFERRED — Local-to-hosted administration is explicitly out of T40 scope per
+coordinator decision `42bfb3a`. Local SIGMA manages local authorization records;
+hosted administration is performed through the hosted SIGMA website. The UI
+and documentation keep these targets distinct. This is not an unmet T40
+requirement.
+
+Browser evidence used real Chrome against isolated ports because other
+checkouts owned the standard 8000/5173 ports; no other checkout was stopped or
+modified. `./sigma start --nav` parsing and launcher behavior were tested, but
+the real launcher was not started on ports owned by another checkout.
+
+Commands/evidence:
+- `uv run --project . python -m unittest tests.cloud_auth -q`
+- `uv run --project . python tests/tooling.py`
+- `./sigma test`
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5176 SIGMA_BROWSER_API_URL=http://127.0.0.1:8001 uv run --project . --with playwright python browser_checks/t40_cloud_ui.py`
+- `SIGMA_T23_UI_ORIGIN=http://127.0.0.1:5176 SIGMA_T23_API_ORIGIN=http://127.0.0.1:8001 uv run --project . --with playwright python browser_checks/t23_1_google_signin.py`
+- `SIGMA_HEADER_UI_ORIGIN=http://127.0.0.1:5176 SIGMA_HEADER_API_ORIGIN=http://127.0.0.1:8001 uv run --project . --with playwright python browser_checks/header.py`
+- Chrome screenshots: `/tmp/sigma-t40-admin-home-{1440,390}.png`,
+  `/tmp/sigma-t40-admin-dialog-{1440,390}.png`,
+  `/tmp/sigma-t23.1-cloud-header-{1280,390,320}.png`.
+
+Post-rebase verification: all three focused Chrome checks above passed again;
+`./sigma test` passed again. The updated PR head is recorded in the commit/PR
+metadata after push.
+
+No paid provider calls or cloud provisioning were performed. No self-merge.

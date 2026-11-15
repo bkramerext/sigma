@@ -1,0 +1,79 @@
+{
+  "schema_version": 13,
+  "id": "7c12b4a1-6e10-4f89-9a20-000000000002",
+  "title": "The Right to Correct an AI-Derived Inference",
+  "problem": "A completely fictional state named Cascadia enacts a 2027 statute: \"A person may require a covered organization to correct personal data materially inaccurate as to that person when used to make a consequential decision.\" Personal data means information reasonably linked to a person; consequential decisions include employment screening. The law is silent on opinions, forecasts, AI scores, remedies beyond correction, and constitutional questions. Applicant Mara Chen's accurate work history includes a 14-month gap and three job changes. An employer's third-party model assigns an \"elevated professional misconduct risk\" label based on those facts and an occupational cohort. The model is documented as reasonably calibrated in aggregate, but produces no individualized evidence of misconduct. The employer rejects Mara, citing the label as a significant reason. Mara requests correction; vendor argues the score is a predictive opinion, not a false fact. The statute, events, and parties are invented.\n\nRESEARCH QUESTION AND METHOD\nCan an accurate-facts-but-misleading-inference output be materially inaccurate personal data under the stipulated fictional statute? Develop competing textual constructions and analyze real U.S. privacy, screening, opinion/defamation, evidence, employment and constitutional analogies, explicitly labeling them nonbinding unless independently applicable. Distinguish statistical calibration from individualized support, factual assertion from evaluative opinion, and remedies including explanation, qualification, review, correction or restricted use. Address state action when relevant, standing, proof, causation, vendor/employer duties and speech concerns. Test strong individualized evidence, faulty calibration, purely subjective opinion, and accurate but unfairly generalized risk estimates.\n\nTreat this as an original, simulated case study, not an actual lawsuit or legislation. Verify real authorities and jurisdictions before relying on them. Seek novel but defensible conclusions. Each investigator/skeptic exchange should record established authority, unresolved law or fact, strongest objection, dead ends, and a precise next strategy inference. Do not repeat arguments known to fail absent a specific new distinction. Preserve useful independent doctrinal discoveries, even without a definitive result.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-11-08T19:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:00:00+00:00",
+      "strategy_id": "7c12b4a1-6e10-4f89-9a21-000000000001"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:00:00+00:00",
+      "strategy_id": "7c12b4a1-6e10-4f89-9a21-000000000002"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-08T19:00:00+00:00",
+      "strategy_id": "7c12b4a1-6e10-4f89-9a21-000000000003"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "7c12b4a1-6e10-4f89-9a21-000000000001",
+      "title": "Text and Accuracy",
+      "approach": "Interpret the invented statutory language under alternative legal canons and analogies, without inventing real enactments or findings.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Distinguish data inaccuracy from unsupported predictive labels.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "7c12b4a1-6e10-4f89-9a21-000000000002",
+      "title": "Rights, Process and Remedies",
+      "approach": "Analyze constitutional and procedural objections, vendor/employer responsibilities, causation, and proportionate remedies.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Find correction mechanisms compatible with opinion and due process concerns.",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "7c12b4a1-6e10-4f89-9a21-000000000003",
+      "title": "Inference-Correction Decision Test",
+      "approach": "Create a falsifiable framework separating false input, misleading implication, weak individual support, and subjective assessment; test counterexamples.",
+      "author_kind": "human",
+      "created_at": "2026-11-08T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Propose and stress-test a workable accuracy threshold.",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "law",
+  "active_order": [
+    "7c12b4a1-6e10-4f89-9a21-000000000001",
+    "7c12b4a1-6e10-4f89-9a21-000000000002",
+    "7c12b4a1-6e10-4f89-9a21-000000000003"
+  ],
+  "difficulty": "hard",
+  "desired_outcomes": "Develop a legal analysis of the right to correct an ai-derived inference that resolves the stated legal question as far as verified existing authorities permit. State alternatives where law or factual assumptions remain uncertain. Compare competing interpretations and adversarial counterexamples. If a novel legal test or independent doctrinal insight survives criticism, present it as a positive research outcome suitable for further validation or separate publication, not as established law. Every cycle must preserve source-linked progress, failed paths, strongest objections, and specific successor-strategy questions. Never fabricate authorities, findings, quotations, citations, or claims of novelty.",
+  "paper_requirements": "Produce a publishable-style legal research article about this explicitly fictional fact pattern, not legal advice or a claim of litigation. Include facts and assumptions, precise issues, jurisdiction, verifiable primary legal authority, rival doctrinal analyses, strongest opposing arguments, application to the base case and stated counterfactuals, remedial or governance implications, limitations, and future verification needs. Distinguish binding law from persuasive analogy, proposed reform and policy preference. Cite authentic sources, and disclose when a relevant authority cannot be verified. Any original legal framework must be labeled proposed and stress-tested. End with concrete research handoff questions and preserve independently valuable insights for possible standalone publication.",
+  "project_type_snapshot": null
+}

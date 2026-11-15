@@ -1,0 +1,409 @@
+RED — R4R handoff: Issue #306 and happy-path reliability (#302)
+
+## SECTION A — ISSUE #306
+
+### Terminology changes
+
+- “Skeptic iterations” is now “Research rounds”: one round is one
+  Investigator→Skeptic exchange per strategy.
+- “Maximum agent calls” is now “Maximum agent turns”: one turn is one provider
+  call by either role, shared across all selected strategies.
+- Progress, session metrics, summaries, and saved artifact labels use rounds
+  and agent turns consistently.
+
+### Defaults and rationale
+
+- Research rounds: 2 (per-strategy ceiling).
+- Maximum agent turns: 12 (shared ceiling; six full pairs in the one-strategy
+  case).
+- Duration: 30 minutes; output: 4,000 tokens per call; concurrency: 1.
+- Optional cost and input-token caps: unset. Existing global/account/service
+  allowances remain in force.
+
+These defaults provide two chances to revise a result while keeping the
+shared-call ceiling, wall time, and per-call output reserve conservative.
+They avoid reserving a high output ceiling or a maximum-length session by
+default.
+
+### Scheduling and validation
+
+- Frontend and backend enforce the same ranges; at least two turns are required
+  to allow one complete Investigator/Skeptic pair.
+- The previous rule coupling turns to twice the rounds was removed, as was the
+  launch check requiring a pair for every selected strategy.
+- Portfolio scheduling rotates fairly among active strategies, reserves a
+  complete pair when possible, and allows a pending Skeptic to use the final
+  single turn. Unserved branches are explicitly marked Deferred with the
+  reason in the Outcome.
+- Tests cover 1, 3, and 5 strategies with shared limits of 3, 6, and 12 turns,
+  including rotation/fairness and launching three strategies under a 3-turn
+  ceiling.
+
+### Currency input
+
+USD cost input accepts a plain decimal or one leading `$`, with surrounding
+whitespace. It validates cent precision and the $0.01–$100.00 range, then
+persists the normalized numeric USD amount. Browser acceptance saved and
+reloaded `  $2.00  ` as numeric `2`.
+
+### 1 MB investigation and measurements
+
+Session #11 was reported to fail when research transport exceeded the previous
+hard 1,000,000-byte response cap. Research Responses bodies and completed SSE
+streams now have an 8,000,000-byte cap, preserving a finite memory/transport
+bound while allowing large valid Responses envelopes. Regressions accept a
+1,010,000-byte response and reject responses/streams above 8 MB.
+
+The 1 MB issue was not caused by the Maximum Regions project's stored data:
+real browser acceptance measured its copied project JSON at 3,801 bytes and the
+assembled provider context at 5,410 bytes. Thus the reported oversized
+transport response and this sample's project/context overhead are distinct
+measurements; the latter does not approach 1 MB.
+
+### Tests and disposition
+
+- `tests/project_settings.py` — passed; defaults, legacy reads, cost values,
+  and validation parity covered.
+- `tests/research_sessions.py` — passed; schedule matrix, deferred branches,
+  response bounds, and incomplete-stop recovery covered.
+- Ruff check/format, Pyright, frontend typecheck, production build, and final
+  `./sigma test` — passed.
+- **MET:** terminology, defaults, scheduling, validation, currency handling,
+  bounded transport change, and regression coverage.
+- **UNMET:** none in the offline/local acceptance scope.
+- **UNVERIFIED:** live provider response behavior above 1 MB; no real provider
+  call was authorized or made.
+
+## SECTION B — HAPPY-PATH RELIABILITY
+
+### Root cause of previous failures
+
+The reported failure modes included a 1 MB raw research-transport cutoff and
+sessions ending after a Skeptic reported a productive stop even though the
+review still had open objective obligations. Such a stop could leave a
+persisted session terminal with only mixed/partial findings. The local browser
+fixture also identified the Maximum Regions sample by a phrase absent from the
+actual sample question; its matcher now recognizes the real line/region
+wording. These are addressed without a sample-specific production code path.
+
+### Fixes and actual sample execution evidence
+
+`browser_checks/happy_path_reliability.py` used SIGMA's actual sample-copy UI,
+API services, session worker, reports, storage, and a deterministic local
+provider fixture in real Chrome. It passed on the final synchronized code
+tree. The session dispatched exactly two fixture calls in order:
+Investigator, then Skeptic. The Investigator supplied
+`R(n) = 1 + n(n+1)/2`; the Skeptic reviewed the claim as an achieved candidate
+with unverified status. The fixture supplied token usage so cost reservation
+and reconciliation ran through the normal accounting path. The session ended
+with status `ended`, two calls used, one saved finding artifact, and an
+available estimated-cost record. No sample-specific formula or branch exists
+in production implementation.
+
+The deterministic run's usage was simulated by the fixture and displayed an
+estimated cost of $0.004008. Actual paid provider calls and actual provider
+cost: zero.
+
+### Completion, saved result, report, and persistence
+
+- Terminal session status: `ended`.
+- Saved result: the formula `R(n) = 1 + n(n+1)/2`, recorded as an achieved,
+  unverified candidate with reviewed reasoning.
+- Report: TXT report export contained the saved formula and its unverified
+  status.
+- Persistence: after a browser refresh and reopening the copied project URL,
+  the same session and artifact remained available and unchanged.
+- The test checks no browser page errors and measured the 3,801-byte project
+  copy and 5,410-byte assembled provider context above.
+
+### Regression coverage and disposition
+
+- Deterministic real-Chrome lifecycle: passed, including sample copy, `$2.00`
+  currency round-trip, role order, accounting, terminal outcome, report,
+  refresh, and reopen.
+- Backend role/scheduling/completion tests and project report persistence
+  tests: passed.
+- Full `./sigma test`: passed on the final implementation tree.
+- **MET:** local happy-path lifecycle, Investigator/Skeptic behavior, simulated
+  reservation/accounting, completion detection, terminal status, persisted
+  result, report availability, and refresh/reopen persistence.
+- **UNMET:** none in deterministic local verification.
+- **UNVERIFIED:** real provider-backed Play session, provider-specific
+  completion quality, and live provider cost. The real session was not run
+  because it would make paid calls, and explicit approval was not granted.
+
+## Delivery and integration
+
+- Issues: #306 and #302.
+- Branch: `red/issue-306-happy-path`.
+- Original updated-main base SHA at branch creation:
+  `2cf878a3290e697b408ebdb5d58871690e2c030b`.
+- Main later advanced to `6ecc0df23127f4f1f920943331ff43afcc399682`; that
+  change was merged into this branch with a normal merge commit, no force push,
+  then the full suite and browser acceptance were rerun.
+- Final implementation HEAD SHA verified by these checks:
+  `f05021f3f1d3bbfe0d43faff206db72fbd70b1d5`.
+- PR #317: https://github.com/bkramerext/sigma/pull/317
+- PR is open for independent review. Not deployed and not self-merged.
+- No direct communication with other workers occurred.
+
+### Known limitations and remaining integration risks
+
+- The deterministic provider fixture demonstrates application lifecycle and
+  accounting, not live model correctness, provider rate/transport behavior,
+  or live cost reconciliation.
+- The 8 MB transport cap remains finite; any provider response or stream above
+  that size still fails safely.
+- The PR was synchronized with the intervening `main` update and reported
+  mergeable at the time of handoff. The coordinator should independently
+  review both requirement sets and rerun integration checks after merge.
+
+## PR #317 adversarial correction pass (2026-10-28)
+
+### SECTION A — ISSUE #306 correction evidence
+
+- **MET:** additional scheduler regressions exercise an active strategy set
+  changing from A/B/C/D to B/C/D/E, round-robin fairness when a strategy is
+  skipped by budget, a pending Skeptic receiving the final turn, no orphaned
+  Investigator dispatch, and a precise `Deferred:` reason for branches that
+  receive no pair. An exhausted queued branch is no longer reported as though
+  an incomplete pair had been retried.
+- **MET:** adversarial completion regressions cover a productive Skeptic stop
+  with open obligations, contradictory achieved claims with a next question,
+  and a challenged result exactly at the two-call/one-round ceiling. All end
+  terminally without an achieved or positive outcome.
+- Focused scheduling/completion tests pass. The final full `./sigma test` result
+  is recorded below after its completed run.
+
+### SECTION B — HAPPY-PATH RELIABILITY correction evidence
+
+- **MET:** deterministic real-Chrome run uses the actual Maximum Regions
+  sample copy, actual SIGMA settings/session/report/storage surfaces, and a
+  deterministic local provider fixture. It dispatched exactly
+  `Investigator → Skeptic → Investigator → Skeptic` over cycles 1 and 2.
+  Round 1 saved the deliberately flawed `n^2+1` claim and Skeptic objection;
+  round 2 saved the revised `R(n) = 1 + n(n+1)/2` proof candidate and Skeptic
+  review. Both artifacts remained in sequence.
+- The fixture's four calls reported 3,600 input tokens (400 cached) and 4,800
+  output tokens; the normal reservation/reconciliation path produced an
+  available estimated cost below the saved $2 limit. These are fixture values,
+  not provider usage or charges. Session status was `ended`; TXT report
+  contained the result and unverified status. Refresh and reopening returned
+  the identical session, artifacts, steps, and estimated cost.
+- Measured copied project JSON: 3,801 bytes; assembled context: 5,410 bytes.
+- **UNVERIFIED:** live provider-backed Play execution and live usage/cost; no
+  paid provider calls were authorized or made.
+
+### T201 CI browser failure investigation
+
+The failed T201 workflow run `40809905085` on pre-correction PR head
+`59a0ad9abc735f7c2d3485f30408b29eb981ca86` passed `t201_overflow.py` and
+`t81_public_legal_pages.py`, then failed `browser_checks/guest_samples.py:409`
+when clicking Cancel. Playwright's hit-test log identifies the existing
+`.project-controls-message` status span (“Model availability requires an
+authorized session…”) as intercepting the click. This is a genuine transient
+pointer obstruction, not a bad locator target. The status component and guest
+sample script are unchanged from base `6ecc0df23127f4f1f920943331ff43afcc399682`;
+this PR does not change their UI or test code. The same guest-sample script
+passed twice on detached, unchanged `origin/main` and failed once on the PR
+head, so the observed failure is intermittent. Evidence supports a pre-existing
+UI hit-test defect with a fixture/timing-sensitive trigger; it does not
+establish that this PR introduced it. It was left unchanged to avoid editing
+another workstream's UI polish. Aggregate T201 CI is **UNMET** until rerun
+passes; coordinator should route the status-span obstruction through the
+human to the UI owner.
+
+### Correction pass disposition
+
+- **MET:** offline scheduling/completion checks and two-round browser lifecycle
+  described above.
+- **UNMET:** T201 aggregate browser workflow on the observed run; its failing
+  guest-samples Cancel click must pass in a later CI rerun. No production
+  deployment or merge occurred.
+- **UNVERIFIED:** post-correction GitHub Actions results until the pushed head's
+  workflow run completes; live provider-backed Play and live cost remain
+  unverified.
+- PR #317 remains open at the correction commit noted in the delivery record
+  after push. The base SHA remains
+  `6ecc0df23127f4f1f920943331ff43afcc399682`.
+
+Final correction verification: `./sigma test` passed all steps on the correction
+working tree, including Ruff, format, Pyright, frontend typecheck, and frontend
+production build. One unrelated sandbox graph-present case explicitly skipped
+because its local Python sandbox image is unavailable. The deterministic
+Maximum Regions Chrome lifecycle passed on the same working tree.
+
+### Commit identifiers
+
+- Base `main` SHA: `6ecc0df23127f4f1f920943331ff43afcc399682`.
+- Correction implementation SHA (tested tree):
+  `fd826d4b` (`Strengthen research scheduling and happy path regressions`).
+- The handoff/status documentation update is committed after this tested code
+  tree; the branch's current HEAD includes this handoff update.
+- PR #317: https://github.com/bkramerext/sigma/pull/317 (open; not merged).
+
+### CI snapshot for tested correction implementation
+
+On branch head `a651a96622340e4a4c8cd9aa66fa5ca839cfa7ee`:
+SIGMA verification run `40811468896` succeeded; Research Outcome browser run
+`40811468824` succeeded; T92 run `40811468849` succeeded; T200 run
+`40811468798` succeeded. T201 run `40811468962` failed in its recovery job;
+its workflow step reached the browser recovery exercise after setup, and the
+same intercepting status-span failure remains the previously documented
+recovery-browser CI failure. T249 integrated verification run `40811468856`
+remained in progress at the final check snapshot (sandbox image build step), so
+its final result is **UNVERIFIED**. The locally executed `./sigma test` and
+focused deterministic Chrome lifecycle both passed.
+
+## Reconciliation and adversarial review follow-up
+
+### Reconciliation with current main
+
+- Fetched `origin/main` at `4cff1e544bc30f14096073ee6c7440c45bb5e499` (T314,
+  Blue Markdown work) and merged it into this branch without overwriting its
+  files. Blue's renderer, fixtures, browser checks, ticket, and evidence remain
+  in the merged tree. Current branch includes the T314 changes.
+- Merge base before reconciliation: `6ecc0df23127f4f1f920943331ff43afcc399682`.
+  The reconciled base/main SHA is `4cff1e544bc30f14096073ee6c7440c45bb5e499`.
+
+### Deterministic Chrome scope and security limits
+
+The Maximum Regions acceptance runs the scripted four-turn role sequence and
+checks application persistence, report generation, and fixture-simulated usage
+and cost reconciliation. Provider outputs and token counts are predetermined.
+It is evidence for deterministic UI/backend orchestration and persistence; it
+is not evidence of live model quality, real provider usage, or real provider
+cost. The acceptance launches Chrome with `--disable-web-security` and routes
+`/api` calls from the UI origin to the separate local fixture origin. Therefore
+it does not verify normal same-origin behavior, CORS enforcement, or browser
+security boundaries. No production-origin acceptance is claimed.
+
+### 8 MB response bound risk statement
+
+The per-response body and completed-stream limit remains finite at 8,000,000
+bytes. The oversized-response regression still accepts a 1,010,000-byte
+successful response and rejects a response/stream that crosses the 8 MB bound.
+No evidence from a live provider establishes that 8 MB payloads are needed; live
+payload size, parsing peak memory, and production concurrency memory impact
+remain **UNVERIFIED**. The bound applies to each response. Local portfolio
+execution can have three provider calls in flight, so raw response buffers can
+approach 24 MB in aggregate before JSON/SSE parsing and object allocations;
+this is not a total process-memory ceiling. Hosted sponsored execution serializes
+provider concurrency to one. Keep the bound finite and do not increase it absent
+measured provider evidence.
+
+### T201 pointer interception correction
+
+On the reconciled code, the T201 guest-sample workflow reproduced the Cancel
+click failure. The header-controls grid's transparent box covered part of the
+workspace hit-test region, even after the status span itself was made
+pointer-transparent. The project header control container now passes pointer
+events through its empty grid area while explicit interactive controls retain
+pointer events. This is a narrow functional hit-test correction; it does not
+change labels, layout, authentication, or other workstream behavior.
+`browser_checks/guest_samples.py` then passed in real Chrome locally (68
+transient guest workspaces observed). The complete GitHub T201 workflow on the
+final pushed HEAD is the acceptance gate and remains to be observed after push.
+
+### Final reconciliation disposition
+
+- **MET:** issue #306 terminology, defaults, validation, currency normalization,
+  fair shared-turn scheduling, pending-Skeptic final-turn dispatch, explicit
+  deferred outcomes, 8 MB finite transport cap and oversized regression; local
+  deterministic happy-path lifecycle; and targeted T201 pointer hit-test fix.
+- **UNMET:** none in local execution after the targeted T201 browser correction.
+- **UNVERIFIED:** terminal T201/T249 GitHub results on the final reconciled
+  branch, live provider-backed Play session, live provider response sizes and
+  memory behavior, live model quality, actual provider usage/cost, and normal
+  same-origin/CORS behavior of the deterministic Chrome harness.
+
+## Consolidated R4R — final review gates (2026-10-29)
+
+### Final repository and branch state
+
+- PR #317; issues #306 and #302.
+- Branch: `red/issue-306-happy-path`.
+- Base `main`: `4cff1e544bc30f14096073ee6c7440c45bb5e499` (T314 merged).
+- Current implementation HEAD at verification: `f7ce1dafe6c513db995ab847e16f7bea66439e07`.
+- T314 merge commit: `099fe0584c3d8ac207373362a251b82a62b4293e`.
+- PR: https://github.com/bkramerext/sigma/pull/317 (open; not merged).
+- No deployment and no paid provider calls.
+
+### Terminal CI and local checks
+
+All six GitHub Actions workflows on implementation HEAD `f7ce1daf` reached a
+terminal `success` result:
+
+- T201 obligation recovery browser acceptance: run `40813340833`.
+- T249 integrated project verification: run `40813340817`.
+- SIGMA verification: run `40813340820`.
+- Research Outcome browser acceptance: run `40813340819`.
+- T92 Recent Projects: run `40813340813`.
+- T200 Model availability: run `40813340805`.
+
+After installing dependencies from the merged lockfile, local `./sigma test`
+passed all steps, including Ruff, formatting, Pyright, frontend typecheck and
+production build. Its graph-present sandbox subcase explicitly skipped because
+the local sandbox image is unavailable; T249 CI built that image and passed its
+integrated verification. `tests/storage.py` passed both standalone and inside
+the final successful local full-suite run.
+
+Real Chrome checks on the reconciled tree passed:
+
+- T201 `browser_checks/guest_samples.py`: Cancel hit testing and complete guest
+  sample workflow (68 transient guest workspaces observed). The CI T201 workflow
+  also passed its overflow and public legal checks.
+- T301 Markdown math rendering and T47 saved Research Outcome rendering.
+- Deterministic Maximum Regions two-round scripted lifecycle, report, accounting
+  and persistence (details below).
+
+### MET / UNMET / UNVERIFIED
+
+- **MET:** #306 terminology, conservative defaults, frontend/backend validation
+  parity, currency input normalization, fair shared-turn scheduling, pending
+  Skeptic final-turn use, no orphan Investigator calls, and explicit deferred
+  outcomes.
+- **MET:** completion guards and adversarial tests ensure open obligations,
+  contradictory achieved claims, challenged reasoning, and exact budget
+  termination do not produce an unsupported achieved solution.
+- **MET:** Maximum Regions deterministic lifecycle: sample creation, four
+  scripted roles in exact order `Investigator → Skeptic → Investigator →
+  Skeptic`, flawed claim and objection, revised candidate and review, two saved
+  artifacts, fixture usage/cost reconciliation, terminal `ended`, report, and
+  refresh/reopen persistence. Usage was scripted: 3,600 input (400 cached),
+  4,800 output tokens; the estimate reconciled below $2. No real usage or
+  provider cost is represented.
+- **MET:** T201 and T249 terminal CI on implementation HEAD above; full CI and
+  relevant browser checks passed.
+- **MET:** finite 8,000,000-byte response/stream limit retained. Regression
+  accepts 1,010,000 bytes and rejects responses/streams crossing 8 MB. No
+  further cap increase was made.
+- **UNMET:** none among authorized deterministic and CI verification criteria.
+- **UNVERIFIED:** live provider-backed Play, live model correctness, actual
+  provider usage/cost, live provider payload size distribution, response parsing
+  peak memory, and production browser-origin/CORS security behavior. No paid
+  provider calls were authorized or made.
+
+### Bound and browser-harness limitations
+
+The 8 MB bound is per response, not a total process-memory ceiling. Local
+portfolio mode may hold three 8 MB response bodies concurrently (24 MB raw
+body buffers in the theoretical maximum) before parsing/object allocation;
+actual peak memory and live payload sizes were not measured. Hosted sponsored
+calls serialize to one. The limit stays finite and must not be raised without
+provider evidence.
+
+The deterministic Chrome test launches with `--disable-web-security` and routes
+API traffic from the UI origin to a separate fixture origin. It establishes
+scripted SIGMA UI/backend orchestration, persistence and simulated accounting;
+it is not production-origin, same-origin, CORS, or browser-security acceptance,
+and it does not establish live model quality or real provider cost.
+
+### Remaining integration risks
+
+- Live provider behavior remains unverified until separately authorized.
+- The per-response bound allows bounded but material buffering; memory behavior
+  under production concurrency still needs measurement if provider payloads
+  approach the limit.
+- Current `main` may advance again before merge; coordinator should recheck the
+  base and CI after any further main changes.

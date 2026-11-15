@@ -1,0 +1,15 @@
+{
+  "source_project_id": null,
+  "source_session_ids": [],
+  "captured_at_utc": "2026-10-25T19:51:28+00:00",
+  "capture_app_commit": "690fff6d42476bf4ef81befd3104883bc5d0edcd",
+  "publishing_commit": null,
+  "capture_method": "No SIGMA project/export scenario was exercised in this harness-readiness audit. The workspace projects/ directory contained no active project; this record documents the omission rather than reusing an earlier increment's export.",
+  "activity": [],
+  "files": [],
+  "omissions": [
+    "No project, strategy, session, Outcome or evidence export was created for this increment.",
+    "Offline fixture records are synthetic harness inputs, not saved research sessions.",
+    "No provider call, browser workflow, Python/Sage research execution or export endpoint was exercised."
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "method": "POST",
+  "path": "/v1/responses",
+  "http_status": 200,
+  "request_sha256": "767cd42b34f30fbd84b7c8dd8e9a71932ce9d4c5d6b703e0c33ca04d41d4f7f8",
+  "response_sha256": "75b8e1fab025ad3806009e432dc207c2f7bc64c861530a61cc4b487fa311ef80",
+  "request_id": "req_48b2d6be9e36435bbc6e234c35188d78",
+  "response_headers": {
+    "x-request-id": "req_48b2d6be9e36435bbc6e234c35188d78",
+    "openai-version": "2020-10-01"
+  },
+  "authorization_header_recorded": false
+}

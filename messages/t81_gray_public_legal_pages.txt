@@ -1,0 +1,172 @@
+T81 public legal pages follow-up — Gray R4R
+
+Branch: gray/t81-public-legal-pages
+Base: origin/main at 623a9464fed585cf951b02be54e8e4ab683bb559
+PR head: see exact SHA in the linked PR description (the handoff is part of
+the commit, so the commit cannot contain its own object ID).
+
+Implemented:
+- Preserved the unauthenticated `/privacy` route and its existing proposed /
+  draft status; changed the About dialog's link label to `Privacy`.
+- Added a public direct route at `/tos`, rendered before the auth gate. Its
+  concise proposed terms describe experimental research limitations, user
+  review of outputs, and provider context when an AI feature is selected.
+- Marked `/tos` as awaiting Brian's review. It is not linked from the SIGMA
+  application. Wording for review is in `docs/TOS_DRAFT_v1.md`.
+- Added `browser_checks/t81_public_legal_pages.py` for signed-out direct
+  navigation and refresh, draft labels, the About link, and no `/tos` links.
+
+Checks actually run:
+- Real Chrome `uv run --with playwright python
+  browser_checks/t81_public_legal_pages.py`: PASS for `/privacy` and `/tos`
+  direct navigation + refresh, draft labels, About Privacy link, and no app
+  `/tos` links.
+- `uv run --locked ruff check browser_checks/t81_public_legal_pages.py`: PASS.
+- `uv run --locked ruff format --check browser_checks/t81_public_legal_pages.py`:
+  PASS after formatting the new file.
+- `npm --prefix frontend run build`: PASS; existing >500 kB chunk advisory.
+- `./sigma test`: FAIL on existing current-main Ruff violations and formatting
+  in `src/sigma/gmail_delivery.py`, `src/sigma/ui_instance.py`,
+  `tests/gmail_delivery.py`, and Pyright error at `tests/gmail_delivery.py:56`.
+  Application test scenarios and frontend typecheck preceding those final
+  checks passed; the suite skipped the build after failure, and direct build
+  passed.
+
+Hosted `/privacy` and `/tos` verification is UNVERIFIED; no deployment or
+production publication was performed. Brian's review of proposed Terms wording
+is required before production publication. The existing privacy notice remains
+a proposed draft awaiting approval. No AI provider calls, email, or production
+changes were made.
+
+Dependencies/conflicts: `gh` is not installed in this checkout. PR submission
+uses the connected GitHub tool. No direct coordination with other workers.
+
+T81 CI-unblock follow-up (2026-10-26)
+
+Reconciled with current `origin/main` at
+`6a607a488106f9c9233336eb940f0458024e527b`; merge commit before the fix commit
+is `a98b2f0fdfcfb9f6cb7aec6fe1b22323d1b7ca5d`.
+
+Changes are limited to inherited Ruff/format findings in
+`src/sigma/gmail_delivery.py`, `src/sigma/ui_instance.py`, and
+`src/sigma/cli.py` / `tests/gmail_delivery.py`, plus the email test's Pyright
+decode typing. `src/sigma/ui.py` is current-main code and is already formatted;
+no edit was needed. The non-dict OAuth credential error now uses `TypeError`,
+matching the invalid-type condition. The test asserts bytes before decoding.
+No delivery, authentication, launcher, or UI behavior was redesigned.
+
+Checks on the reconciled tree:
+- Ruff check on the requested files: PASS.
+- Ruff format check on the requested files: PASS.
+- Pyright: 0 errors, warnings, or informations.
+- `uv run --locked python tests/gmail_delivery.py`: PASS (3 tests).
+- Real Chrome `uv run --with playwright python
+  browser_checks/t81_public_legal_pages.py`: PASS; signed-out direct route
+  navigation and refresh, draft statuses, About Privacy link, and no `/tos`
+  app link.
+- `./sigma test`: FAIL. All application scenarios reached the final global
+  lint/type/frontend checks. Ruff check passed and Pyright reported 0. It
+  failed `tests/tooling.py:337` because the startup warning assertion did not
+  find `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`, and then failed format check on
+  `src/sigma/cloud_auth.py`. Both are current-main findings outside the
+  authorized file scope and were left untouched. Frontend typecheck passed;
+  build was skipped after the suite failure.
+
+Exact updated PR head SHA and CI result are recorded in PR #242 after pushing
+this follow-up. This is not R4R while full `./sigma test` / CI remains failing.
+Privacy and terms remain drafts. No deployment, self-merge, issue closure,
+email, or AI provider calls were made.
+
+T81 current-main startup test and cloud-auth format follow-up
+
+Base remains `origin/main` at
+`6a607a488106f9c9233336eb940f0458024e527b` (merged in commit
+`a98b2f0fdfcfb9f6cb7aec6fe1b22323d1b7ca5d`). Updated `tests/tooling.py` to
+match current startup behavior:
+- Guest startup with a blank admin-contact value runs with
+  `SIGMA_LOCAL_AUTO_ADMIN=false` and does not require admin contact or OAuth
+  credentials.
+- `--signin` without the admin-contact value prints the friendly error and
+  returns before constructing the launcher or starting servers.
+- Configured `--signin` remains covered; tests confirm the backend receives
+  the OAuth secret and admin identity, the frontend receives neither, and
+  local auto-admin is enabled.
+
+Applied only Ruff's formatter output to three existing expressions in
+`src/sigma/cloud_auth.py`; no behavior changed. **Coordination note for
+Brian/coordinator:** Blue's PR #246 also touches `src/sigma/cloud_auth.py`.
+This branch's overlap is formatting-only on the current-main expressions near
+config validation, cookie creation, and denied-access redirect. Please route
+this overlap to the coordinator through Brian; no direct worker coordination
+occurred.
+
+Verification on this tree:
+- `uv run --locked python tests/tooling.py`: PASS.
+- `uv run --locked ruff check tests/tooling.py src/sigma/cloud_auth.py`: PASS.
+- `uv run --locked ruff format --check tests/tooling.py src/sigma/cloud_auth.py`:
+  PASS.
+- `uv run --locked pyright`: 0 errors, warnings, or informations.
+- `./sigma test`: PASS, all scenarios, Ruff check/format, Pyright, frontend
+  typecheck, and production build. Existing >500 kB chunk advisory remains.
+- Real Chrome `uv run --with playwright python
+  browser_checks/t81_public_legal_pages.py`: PASS for signed-out direct
+  navigation/refresh at `/privacy` and `/tos`, draft labels, About Privacy,
+  and no `/tos` app link.
+
+Validated implementation head: `9bdc3132a7604060e8edf377fe7c18ec086e6a68`.
+GitHub Actions on that head all passed:
+- SIGMA verification run #801: success, including full `./sigma test`.
+- T92 Recent Projects browser acceptance run #89: success.
+- Research Outcome browser acceptance run #158: success.
+
+The exact final PR head, including this handoff update, is recorded in PR #242's
+description because a commit cannot contain its own object ID. R4R criteria
+have been met on the validated code head. No deployment, self-merge, or issue
+closure.
+
+T81 current-main reconciliation (2026-10-26)
+
+Reconciled with `origin/main` at
+`48fe9a1fee87a23c1af1665f1f30723ef39d9e97`, including merged PR #230
+(`T200: Fix hosted model discovery and sponsor session`). Merge conflicts were
+in `tests/tooling.py` and `tests/gmail_delivery.py`:
+- Retained #230's `check_partial_google_startup_remains_guest_without_admin`
+  coverage, including no warning, local guest mode, and backend-only OAuth
+  credential handling.
+- Retained T81's configured `--signin` test, which asserts local auto-admin and
+  keeps credentials out of the frontend.
+- Added the T81 missing-admin `--signin` friendly-error test, asserting no
+  launcher or server starts.
+- Kept the equivalent current-main bytes-narrowed Gmail payload assertion,
+  preserving Pyright safety.
+- `src/sigma/cloud_auth.py` merged automatically with #230; its current-main
+  sponsor/auth changes and existing Ruff formatter layout remain intact. No
+  manual conflict resolution was needed in that file.
+
+Verification after reconciliation:
+- `uv run --locked python tests/tooling.py`: PASS.
+- `uv run --locked python tests/gmail_delivery.py`: PASS (3 tests).
+- Focused Ruff check/format for `tests/tooling.py`, `tests/gmail_delivery.py`,
+  and `src/sigma/cloud_auth.py`: PASS.
+- `uv run --locked pyright`: 0 errors, warnings, or informations.
+- `./sigma test`: PASS, all scenarios, Ruff, formatting, Pyright, frontend
+  typecheck, and build (existing >500 kB chunk advisory).
+- Local real Chrome legal-page check: PASS for signed-out direct navigation
+  and refresh at `/privacy` and `/tos`, draft labels, About Privacy, and no
+  `/tos` app link.
+- No deployment, self-merge, issue closure, or provider calls.
+
+The exact merge-result PR head SHA and hosted CI results are recorded in PR #242
+after the reconciliation commit is pushed.
+
+T81 current-main hosted verification update (2026-10-26)
+
+On merge-result head `1338b8355807ba471716da95c5423f5d196263b1`, the first
+SIGMA verification run #808 failed in `tests/research_sessions.py` because
+restart coverage encountered an already-active research worker. Startup safety
+passed, as did Ruff, formatting, Pyright, and the frontend typecheck in that
+run. The retry of the failed job passed. The T92 Recent Projects browser run
+#95, Research Outcome browser run #164, and T200 Model availability browser run
+#8 also passed. Local `./sigma test` and the real Chrome T81 legal-page check
+passed on this merge result. No deploy, self-merge, issue closure, or provider
+calls occurred.

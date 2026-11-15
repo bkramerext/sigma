@@ -1,0 +1,28 @@
+{
+  "turn": 1,
+  "request_sha256": "981997511a73081d8f24387a6bfa42b808b696dd83a804a69ca07259abbd3807",
+  "response_sha256": "d465abb756788ef0db7448e5a7e44b453bc8767028a8e9653c6a6f4086707102",
+  "http_status": 200,
+  "response_headers": {
+    "x-request-id": "req_525e8247949b446f97fcc1cc6559b8da",
+    "openai-version": "2020-10-01"
+  },
+  "authorization_header_recorded": false,
+  "provider_response_id": "resp_0b300f60188aa318016ade9ac5676487d0a787262285a049cf",
+  "provider_status": "completed",
+  "model_returned": "gpt-6.1-sol",
+  "service_tier_returned": "default",
+  "usage": {
+    "input_tokens": 959,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 0
+    },
+    "output_tokens": 846,
+    "output_tokens_details": {
+      "reasoning_tokens": 516
+    },
+    "total_tokens": 1805
+  },
+  "usage_cost_upper_usd": 0.0108575
+}

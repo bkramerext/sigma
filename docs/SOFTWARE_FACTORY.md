@@ -1,0 +1,328 @@
+# SIGMA Software Factory
+
+This document is the operating protocol for developing SIGMA with a human engineering lead, ChatGPT coordinators, and parallel color-identified Codex workers. It describes **how we build SIGMA**, not SIGMA's own research-agent architecture. It is a working agreement, not a claim that agents execute autonomously.
+
+## 1. Participants and authority
+
+| Participant | Responsibility | Authority and limits |
+|---|---|---|
+| **Human engineering lead** | Product vision, architecture and UX decisions, priorities, constraints, budget authorization, worker dispatch, hands-on product evaluation, release signoff | Final authority. May override assignments, challenge coordination decisions, and stop or redirect work. Manually forwards instructions between otherwise disconnected sessions. |
+| **ChatGPT coordinator** | Clarify intent, propose architecture, scope T-tickets, assign workers, sequence dependencies, inspect GitHub code and PRs, review evidence, request corrections, merge reviewed PRs under the human's standing authorization, maintain integration and release status | Coordinates work, but does **not** secretly operate local Codex windows or run continuously between chat messages. Repository inspection is not local execution. Escalates consequential product/UX changes and paid calls. |
+| **Codex workers** | Implement assigned tickets, maintain code and tests, run focused/full checks, exercise browser/CLI when relevant, document findings, resolve their own PR conflicts, and submit reviewable PRs | Work only within assigned scope. Do not self-merge, reassign other workers, or communicate directly with other Codex workers. |
+| **GitHub** | Durable shared memory and integration boundary | Tickets, code, tests, PRs, commit history, review handoffs, and tracking provide the record. Conversation memory alone is not authoritative. |
+
+A second ChatGPT conversation may coordinate a distinct domain. For example, cloud deployment (Red) is coordinated separately from local alpha (Blue, Green, Gray). The boundary is explicit: one coordinator does not assume ownership of the other's work. The human mediates cross-domain priorities and decisions.
+
+**Accountability:** The coordinator must distinguish *assigned*, *started*, *reported complete*, *reviewed*, *merged*, and *accepted*. Assigning work does not make it run. ChatGPT cannot claim background execution without an actual persistent worker or scheduled mechanism.
+
+**Human-request acknowledgment convention:** Use a single visible `✓` at the start of a coordinator reply to acknowledge that the human's latest input was captured. For multi-part requests, confirm coverage in plain language as needed. Do **not** decorate individual bullets, headings, or the coordinator's own output with checkmarks. Acknowledgment is not proof of completion: distinguish captured, implemented, reviewed, merged, and accepted in the accompanying prose. This is a lightweight communication habit, not a new approval gate.
+
+## 2. Color identity and ownership
+
+Colors identify **persistent Codex sessions/terminal windows**, not PR status or severity. Color-coding was adopted because terminal titles were unreliable. Use the color in every assignment and handoff to avoid sending instructions to the wrong worker.
+
+| Color | Typical focus | Assignment source |
+|---|---|---|
+| **Blue** | Research orchestration, agent/session behavior, model controls | Current GitHub issue/PR |
+| **Green** | Python/Sage execution, computational evidence, data and CLI tooling | Current GitHub issue/PR |
+| **Gray** | UI, browser acceptance, integration validation | Current GitHub issue/PR |
+| **Red** | Cloud deployment and access | Current GitHub issue/PR and release instructions |
+
+These are **specializations, not permanent silos**. The coordinator can reassign workers as capacity and critical path change. Ticket ownership, rather than color, defines the current modification boundary. Workers should not touch another worker's active area without coordinator authorization.
+
+The human keeps the color windows open and forwards instructions to the corresponding session. ChatGPT can advise dispatch, but cannot directly send to those local sessions through this conversation.
+
+## 3. Ticket and assignment contract
+
+Canonical work items may be GitHub Issues (the current default) or legacy `tickets/tN.md` files (including dotted IDs). The issue or ticket named by the assignment defines scope; GitHub PRs and commits define implementation state. `docs/TICKET_TRACKING.md`, where maintained, is a secondary snapshot, not a prerequisite or more authoritative than current GitHub state. Keep existing issues updated rather than creating duplicate work items for review corrections.
+
+A good ticket or dispatch states:
+
+1. **Objective and scope:** desired user-visible or system behavior, what is explicitly out of scope, and the branch/base to use.
+2. **Acceptance:** observable success criteria, adverse cases, persistence/recovery, and required tests.
+3. **Constraints:** established UX/design, security/billing, model and thinking budget where applicable, compatibility, and no unrelated churn.
+4. **Ownership:** one accountable worker, any known dependencies, and areas not to modify.
+5. **Deliverables:** code, tests, docs/tracker updates as needed, a PR, and a coordinator handoff with evidence.
+6. **Stop/escalation conditions:** blockers, unclear requirements, risky redesign, provider charges, or overlapping work.
+
+Human-facing assignments must be supplied as **one copyable message block** addressed to the worker, not scattered across commentary. The human explicitly confirms dispatch when it matters. Do not assume a proposed message was forwarded. The coordinator is the sole channel for instructions and changes of ownership within its domain.
+
+Example dispatch shape:
+
+```text
+GRAY: Take T17.8 on current main. Read tickets/t17.8.md.
+Scope: deterministic/mock research-quality acceptance.
+No paid provider calls. Do not coordinate with other Codex workers.
+Run ./sigma test and focused acceptance checks.
+Document MET/UNMET/UNVERIFIED with evidence.
+Open a PR, mark R4R, and do not self-merge.
+Write a message file for coordinator handoff.
+```
+
+## 4. Worker isolation and message protocol
+
+**Mandatory instruction in every worker-facing message:** Include the exact rule **“Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.”** This requirement applies to initial ticket assignments, follow-up tasks, correction requests, rebase requests, and handoffs. Do not assume a worker remembers the rule from an earlier message. Workers may read shared repository artifacts and integrated code, but may not directly instruct, message, or negotiate with other workers. The human and ChatGPT coordinator remain the only authorized coordination path.
+
+**No worker-to-worker coordination.** Blue, Green, Gray, and Red do not send each other instructions, negotiate APIs directly, or silently modify each other's branches. Dependencies, collisions, or discoveries are reported to the responsible ChatGPT coordinator through the human. The coordinator decides sequencing, interface contracts, and reassignment. If an issue crosses the local/cloud boundary, the human routes it between coordinators.
+
+**Mandatory human dispatch presentation:** Whenever ChatGPT wants the human to communicate anything to a Codex worker, it must **first name the intended color explicitly outside the message block** (for example, **Send to Blue (T29)**), then provide **one complete, copyable block of the exact text to forward**. This applies to initial assignments, corrections, rebases, merge notifications, dependency updates, stop/wait instructions, and requests for evidence. Do not replace the block with paraphrased advice, mix multiple worker instructions into one block, or assume that writing the block delivers it. If more than one color needs instructions, provide a separate labeled copyable block for each. Never instruct one color to contact another directly. When no communication is needed, do not manufacture a forwarding message.
+
+**Mandatory coordinator response to every worker handoff:** When the human forwards a worker status, blocker, R4R notice, or completed PR, the coordinator must review the available evidence and provide an explicit next-step disposition. If the worker must do anything further (fix defects, update the handoff/head SHA, rerun tests, resolve conflicts, wait for CI, or supply missing evidence), the coordinator **must provide a complete, ready-to-forward message block**, labeled **“Send to [Color] ([Ticket/PR])”** outside the block. Never leave the human to translate review comments into worker instructions, and never merely say that the worker should fix something. Include the exact no-worker-coordination sentence in each block. If no worker action is required, explicitly say so and proceed with coordinator-owned review/merge work. Do not manufacture a handoff message when the next action belongs only to the coordinator. This is a hard requirement, including after partial review and failed merge attempts.
+
+**Outbound, coordinator → worker:**
+- Use a copyable, self-contained assignment prefixed with the worker color and ticket.
+- Reference the canonical ticket and expected base branch.
+- Specify what changed since the last assignment, the exact ask, constraints, and whether the worker should wait.
+- State explicitly when a message is a proposed draft rather than already dispatched.
+
+**Inbound, worker → coordinator:**
+- Worker reports **R4R** (ready for review) with PR number/link, ticket, branch, base, and any dependencies.
+- Worker provides a **durable handoff** in the PR description or a linked `messages/` file when complexity warrants it.
+- The message file summarizes implemented behavior, tests actually executed and results, relevant screenshots/artifacts, conflicts/rebases, known limitations, and any unmet criteria. Include whether provider calls or costs occurred.
+- The coordinator **reads the message file**, PR description, changed files, and test evidence before review. A terse “R4R” is not sufficient acceptance evidence.
+
+No invented test results. Report skipped, unavailable, or inconclusive verification as such. Screenshots left only under a worker's `/tmp` may be inaccessible to the coordinator; preserve important evidence in an accessible artifact or provide a reproducible command. Distinguish code inspection, automated tests, real-browser exercise, real sandbox execution, and real-provider quality assessment.
+
+## 4A. Messaging process: dispatch, handoff, correction, and closure
+
+**Single routing rule:** The human forwards messages between the ChatGPT coordinator and color-identified Codex sessions. GitHub tickets, PRs, and `messages/` files are the durable record. Writing a message does not dispatch it; a worker's completion claim does not constitute review or merge.
+
+**Coordinator to worker (via human):**
+1. The coordinator names the recipient **color outside** one self-contained, copyable message block. The block begins with the color and ticket/issue ID, identifies the current `main` base and scope, gives observable acceptance criteria, constraints, tests, deliverables, and stop/escalation conditions.
+2. The message must contain this exact sentence: **“Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.”**
+3. The human forwards the complete block to that worker's session. Until forwarded, the work is **proposed**, not **assigned** or **started**. The coordinator must not imply the worker received it.
+
+**Worker to coordinator (via human and GitHub):**
+4. The worker works only in its assigned scope and isolated branch. Questions, cross-worker dependencies, conflicts, or requests for scope changes go **back to the coordinator through the human**, never directly to another color.
+5. At completion, the worker opens a PR and supplies a durable handoff in the PR description or a linked `messages/` file when needed. The handoff names the branch/base/head, actual changes, tests run and results, browser/CLI/provider evidence, any costs, known limitations, and unmet/unverified criteria.
+6. The worker sends a concise **R4R** notice with issue/ticket, PR link/number, head SHA, and handoff location. The human forwards the notice to the coordinator. **R4R means ready for independent review, not approved.**
+
+**Coordinator review and reply:**
+7. The coordinator reads the ticket and subsequent human decisions, the **current** PR diff/head, the PR handoff or linked message, and available test evidence. It records substantive requirements as **MET / UNMET / UNVERIFIED** and identifies integration risks.
+8. If corrections are needed, the coordinator gives the human **one complete copyable message addressed to the original color**, with precise changes and retest expectations. The same worker updates the same PR, resolves conflicts against current `main`, updates its handoff, and reports **R4R again**. No worker self-merges.
+9. If review passes, the coordinator merges under its authority, verifies the resulting state, and tells the human the PR number, merge SHA, completed scope, and remaining unverified work. The coordinator arranges combined integration checks when multiple PRs interact. The human retains release signoff.
+
+**Worker completion and session clearing:** **DONE requires both (a) the worker's PR is merged into `main`, and (b) the assigned ticket/issue is resolved and closed.** The coordinator must verify both conditions against current GitHub state before declaring completion. A merged PR with an open ticket is **not DONE**; an issue closed without the PR merged is **not DONE**. If a ticket covers broader work than the worker's PR, the coordinator must not close it merely to clear the worker: explicitly resolve the remaining scope through the human-approved ticket process first. Only after both conditions hold, and no follow-up work remains assigned to that worker, tell the human using the exact form **“[Color] is done, you can use /clear”** (for example, “Gray is done, you can use /clear”). Do not issue clearance for R4R, an open PR, temporary idleness, pending corrections, CI, review, or integration. If multiple workers qualify, state the sentence separately for each color. This is a required human-facing closure notification; no worker-forwarded message is needed solely to clear a finished session.
+
+**State and failure handling:** Use explicit states **PROPOSED → DISPATCHED → IMPLEMENTING → R4R → REVIEW → (CORRECTIONS → R4R)* → MERGED → INTEGRATION VERIFIED**. Distinguish `blocked`, `unverified`, and `not started` from `done`. If the human has not confirmed forwarding, or a worker has not returned evidence, do not assume progress. Never invent executed tests, paid calls, communication, or background activity. Any change in ownership or cross-domain coordination requires a new human-forwarded instruction.
+
+## 5. Git and PR integration protocol
+
+### Copyable coordination handoffs
+
+Whenever the coordinator asks the human to forward instructions, changes of ownership, status requests, integration decisions, or corrections to **any separate ChatGPT conversation or Codex worker**, present the complete message as **one self-contained, copyable text block**, with its intended recipient named outside the block. Do not scatter the handoff across surrounding commentary or require the human to assemble instructions. Existing mandatory worker-isolation wording remains applicable to Codex dispatches. A prepared block is not evidence that it was delivered.
+
+### Local-first verification and economical CI
+
+**CI is a final integration and merge gate, not the primary iterative debugging tool.** Before pushing, run available focused tests, the repository's pinned Ruff lint and formatter checks, relevant type checks, and applicable local integration/browser verification. Prefer narrow checks during development, then the full required local checks before final push. If a check genuinely cannot run locally, document why and use CI for that check; never claim unexecuted local checks passed.
+
+**Avoid routine Ruff failures:** Check changed files while editing, then run the same pinned-version, repository-wide `ruff check` and `ruff format --check` coverage used by CI before pushing. Treat simple formatting and lint errors as preventable local issues.
+
+**Fix failures together, then push once:** After a PR is pushed to CI, let **every scheduled test job finish**, including jobs still running after the first failure. Collect and diagnose **all failures across the entire CI run** before making another push. Fix those failures together in the local working tree, run the relevant local checks, and push **one consolidated correction** to trigger the next CI run. Do **not** push an immediate fix for Ruff or the first failing test while other jobs are still running: that creates repeated, overlapping CI executions and wastes CI capacity. Identify shared root causes rather than applying isolated workarounds, and keep the corrections on the existing PR. Only make an earlier push for an explicitly justified urgent security/safety issue or to unblock a CI run that cannot otherwise produce useful evidence; document the exception.
+
+**Reuse the current PR:** Keep corrections and related changes on the existing branch/PR, using additional local commits as useful. Avoid one PR per defect, unnecessary pushes, repeated rebases, force pushes, and full-suite reruns when focused local tests suffice during development. Coordinate overlapping changes to reduce duplicate integration and CI work. Rebase or merge updated `main` only when needed to resolve real integration conflicts or meet the final merge gate; verify the combined result locally before pushing.
+
+**No weakening of gates:** A final pushed head must pass all required CI and security/release checks. A successful earlier commit does not validate a newer head; GitHub's rerun-failed-jobs action tests the *same* commit and cannot validate a subsequently committed fix. Any CI-only failure not reproducible locally still requires diagnosis and an evidence-backed resolution, not a skipped check.
+
+- Each worker uses an isolated checkout/worktree and a ticket-specific branch targeting `main`.
+- Keep changes narrow and avoid unrelated formatting, UI redesign, or other workers' ownership areas.
+- Worker runs focused tests and `./sigma test`, plus CLI, real-Chrome, Python/Sage, or export checks as appropriate. If a check cannot run, explain why.
+- Worker opens a PR, includes a concise handoff in its description (or links a detailed message file), marks **R4R**, and **does not self-merge**.
+- ChatGPT coordinator checks ticket requirements, handoff, actual diff, tests, regression risk, integration dependencies, and mergeability. Start substantive code review as soon as a reviewable push exists; CI can run in parallel and remains a separate merge gate. It can request another iteration rather than merge.
+- **The PR author owns conflict resolution.** Coordinator explains the conflict and intended behavior. Worker updates from current `main`, preserves both sides' functionality, reruns affected checks, and returns R4R. Never resolve by blindly choosing one side.
+- Coordinator rechecks the revised head and mergeability, then merges in dependency order, using an expected head SHA when supported. Merge is not proof of final product acceptance.
+- After multiple PRs land, perform **combined integration checks** on updated `main`. Isolated PR tests are necessary but insufficient.
+
+Review must account for downstream behavior, not just diff size. A fixture mismatch may be a test update rather than a product defect, but must be demonstrated rather than assumed.
+
+## 5A. Explicit review, merge, and message-passing state machine
+
+The normal work cycle is **ASSIGNED → IMPLEMENTING → R4R → REVIEW → (CHANGES REQUESTED → IMPLEMENTING → R4R)* → APPROVED → MERGED → INTEGRATION VERIFIED**. A PR can be merged without overall product acceptance; release signoff is a separate human decision.
+
+| Event | Who initiates | Required response | Who owns next action |
+|---|---|---|---|
+| Assignment ready | ChatGPT coordinator | Send one copyable message to the human; human forwards it to the named color and confirms when necessary | Human dispatch, then Codex |
+| Worker blocked or dependency found | Codex | Write a concise handoff; do not contact another worker or alter another branch | ChatGPT decides resolution; human forwards any new instruction |
+| PR ready for review (R4R) | Codex | Provide PR URL/number and repository message-file path; report executed tests and remaining gaps | ChatGPT |
+| Review finds defects or missing evidence | ChatGPT | Send a single actionable, copyable correction request tied to the existing ticket/PR; do not create a new ticket for routine fixes | Human forwards; same Codex worker corrects |
+| Review approves | ChatGPT | Verify current head SHA, mergeability, intended scope, and evidence; record outstanding integration obligations | ChatGPT merges under standing human authorization |
+| Branch conflict or stale base | ChatGPT or GitHub | Explain exact conflict and expected combined behavior | PR-author Codex rebases/resolves, retests, resubmits R4R; ChatGPT re-reviews |
+| PR merged | ChatGPT | Tell human PR number, merge SHA, what is complete, and what remains unverified | Coordinator schedules combined tests; human may redirect priorities |
+| Integrated product ready | ChatGPT and workers | Exercise relevant workflows on updated main and report MET/UNMET/UNVERIFIED | Human decides alpha acceptance |
+
+**Merge authority is deliberately asymmetric.** Codex workers must never merge their own PRs. ChatGPT coordinators conduct the independent review and may execute the merge within their assigned domain under the human's standing authorization. The human can pause, veto, or require explicit approval for any merge. A coordinator does not merge another coordinator's domain without an agreed handoff. Review and merge should not be delegated back to the PR author merely because that author reports tests passing.
+
+**Review means more than reading the PR description.** The coordinator reads the worker's PR handoff and any linked message file, examines changed code and tests, compares against the ticket, checks merge state and relevant dependencies, and evaluates whether the claimed checks actually support the acceptance criteria. Review need not wait for CI completion; final merge acceptance does. A green test report from the author is evidence, not independent verification. If review is incomplete, report it as pending rather than silently merging.
+
+### Requirement Traceability and Review Completeness
+
+**Requirement completeness is a merge gate.** Before approving a substantive PR, the ChatGPT coordinator must reconcile the delivered implementation against:
+
+1. The canonical ticket and its acceptance criteria.
+2. Subsequent human-approved clarifications and decisions.
+3. Corrections requested during earlier review rounds.
+4. Applicable integration, security, compatibility, and UX requirements.
+
+For **each substantive requirement**, record its disposition and supporting evidence in the PR review or a durable, linked review handoff:
+
+- **MET:** The implementation and relevant verification evidence demonstrate the requirement.
+- **UNMET:** The implementation is missing, incorrect, or violates the requirement.
+- **UNVERIFIED:** The implementation may exist, but sufficient evidence is unavailable.
+
+Worker-reported test results are **evidence, not independent verification**. The reviewer inspects the actual code and tests, challenges test coverage, and explicitly distinguishes what was established by source inspection, what the worker reports executing, and what the coordinator independently executed or observed. A green suite does not excuse missing acceptance coverage. Review the **current PR head**, not an earlier revision.
+
+**Do not approve or merge a PR with UNMET mandatory requirements.** UNVERIFIED requirements must receive sufficient additional verification before approval or be explicitly documented as outstanding, with the human's informed acceptance. Any change or deferral of mandatory ticket scope requires **explicit human authorization**, recorded with the affected requirement and rationale; a coordinator cannot unilaterally drop it. Preserve subsequent clarifications and authorized deferrals in the ticket or a durable linked handoff so they are not lost in later iterations. An accepted PR-level limitation is not automatically a release acceptance or authorization to bypass separate security/deployment gates.
+
+**Corrections stay in the same PR.** The coordinator sends one consolidated correction message to the original color; the worker updates the branch, executes appropriate regressions, updates its message file, and announces **R4R again**. ChatGPT re-reads the changed head and message file before approving. Do not merge on the basis of an earlier review after the branch changes.
+
+**Message-passing path:** `Codex → PR handoff (or linked message file) + R4R notice → human → ChatGPT coordinator → copyable response → human → same Codex`. ChatGPT may inspect GitHub directly, but does not thereby gain access to a worker's local terminal. The human is the transport between disconnected conversations; GitHub is the durable record. Messages should be addressed to a color and ticket, state the requested action, and distinguish decisions from suggestions. The coordinator must never assert that a message was delivered merely because it generated one.
+
+**Post-merge discipline:** Notify the human of the merge result and immediately update the dependency picture. If another worker's branch is affected, send that worker a targeted update through the human. Run or assign cross-PR regression checks; do not mistake per-PR test success for a tested combined system. The final acceptance report names outstanding risks and explicitly identifies any unverified live-model behavior.
+
+## 6. Verification and release gates
+
+SIGMA has both local development and a deployed production environment. A passing local build or merged PR does not authorize deployment. Prioritize functioning core workflows, bounded execution, coherent UX, recoverable failures, evidence integrity, and truthful limitations. Defer unrelated enhancements.
+
+Verification layers are distinct:
+
+| Layer | What it can establish | What it cannot establish |
+|---|---|---|
+| Source/PR review | Scope, plausible correctness, obvious bugs, architectural consistency | That the application ran successfully |
+| Deterministic and mock tests | Contract behavior, failure handling, reproducible regression cases | Actual LLM research quality |
+| Real browser/CLI checks | Integrated UI flow, persistence, exports, responsiveness, usability symptoms | Mathematical validity of model reasoning |
+| Real Python/Sage sandbox runs | Computational execution, output, provenance, artifacts | Independent proof of a research conclusion |
+| Real provider runs and expert evaluation | Evidence of actual model behavior and substantive output | General correctness from a single successful case |
+
+No paid provider calls without **explicit human authorization**. Mock-based criteria can be MET, while live-model research quality must remain **UNVERIFIED** until supported by live evidence, not assumed passed. No silent model/account/billing fallback. Network/provider failures should produce a clear recoverable UI state.
+
+Acceptance reports use **MET / UNMET / UNVERIFIED** with evidence and open obligations. The human retains final product and release signoff.
+
+**Separate cloud security and deployment gate.** Production changes need explicit, independent acceptance of tenant/workspace isolation, authentication and session revocation, durable execution and recovery, enforced cost/call limits, and guest/denied-account restrictions. Include adverse-case and cross-tenant tests, threat/security review, deployment configuration, and documented operational rollback as applicable. **Passing local or PR checks does not authorize production deployment.** Cloud publication requires the human's explicit signoff on this separate gate; incomplete or unverified security requirements block public release unless the human explicitly resolves their disposition without misrepresenting the risk.
+
+## 7. Operating cadence and schedule discipline
+
+The coordinator maintains a current view of workers, tickets, PRs, blockers, and the critical path. When a worker becomes free, propose useful independent work rather than leave capacity idle while deadlines slip. Do not assign overlapping ownership simply to keep every color busy. Reprioritize explicitly when integration or quality acceptance becomes critical.
+
+The human may challenge any staffing or priority decision. Record resulting changes in the active issue/PR rather than embedding temporary worker assignments in this protocol.
+
+**Coordinator capacity is not background compute.** A ChatGPT coordinator that promises to “own” a ticket must either execute it during active tool-supported work, dispatch it to a persistent worker, or explicitly mark it unstarted.
+
+## 8. Integration lessons
+
+Prior PRs establish useful principles: preserve worker isolation, review actual changes rather than relying on author reports, resolve cross-branch conflicts deliberately, and test integrated behavior after merge. Historical assignments and completed ticket statuses belong in GitHub history and the journal, not in this standing protocol.
+
+## 9. Failure modes to watch
+
+**Lost or ambiguous dispatch:** A message prepared by ChatGPT is not necessarily sent. Confirm handoff; keep tickets durable.
+
+**Context fragmentation:** Separate conversations and Codex windows do not share live state. GitHub documents and PRs are the contract; coordinator must re-read current state.
+
+**Worker collision:** Parallel branches can change the same schemas or UI. Respect ownership, rebase deliberately, and retest combined behavior.
+
+**Overclaiming:** “Tests passed,” “PR merged,” “alpha accepted,” and “research works” are different claims. Preserve provenance and unresolved evidence gaps.
+
+**Human overload:** The human forwards messages and exercises the UI, but should not become the default tester for every minor change. Assign browser and regression acceptance to workers; reserve human attention for product judgment.
+
+**Visual and semantic drift:** A structurally functional UI may still be poorly polished or misunderstand strategy/session semantics. Preserve the established dark/copper visual system and require review before large UX changes.
+
+**Unbounded scope:** Do not let new ideas, documentation, or cloud unknowns obscure the local alpha's critical path. Track follow-ups separately.
+
+## 10. Cold-start recovery: resume the factory without conversation history
+
+A new human, ChatGPT coordinator, or replacement Codex session must be able to resume from GitHub alone. **Do not rely on memory of a previous chat or on an old worker terminal.** The first action is to reconstruct the actual state, not issue new assignments.
+
+1. Read this protocol, the human–AI collaboration rules in Section 16, and `README.md`. Read the active GitHub Issues or legacy tickets, PR descriptions, and linked handoffs. Consult `docs/TICKET_TRACKING.md` if maintained.
+2. Inspect **current GitHub state**, not just tracker prose: default branch HEAD, open PRs and their bases/heads, mergeability, latest commits, review comments, and `messages/` handoffs. Tracking files are snapshots and can lag reality.
+3. Reconstruct a worker ledger: color, coordinator domain, assigned ticket, branch/PR, status, last confirmed human dispatch, blocker, next action, and whether tests were reported or independently reproduced.
+4. Reconcile discrepancies with the human. Ask which worker windows are still active, which instructions were actually forwarded, and whether a worker has unpushed changes. Never infer live activity from an open PR.
+5. Confirm **current authorization**: who may merge, whether provider calls are permitted, spending limits, release target, UX constraints, and any paused work. Prior approvals do not imply approval for a new paid action.
+6. Check integration order and outstanding release gates; identify one critical path and independent secondary work. Only then dispatch or review.
+7. Record the reconciled snapshot in the appropriate tracker/handoff so the next coordinator can repeat this procedure.
+
+A useful restart summary is:
+
+```text
+Repository/main HEAD:
+Coordinator domains and responsible human:
+Release goal / target / blockers:
+Color | ticket | branch/PR | last confirmed dispatch | state | next owner/action
+Open PR review queue and merge order:
+Outstanding integration/acceptance criteria:
+Paid-provider authorization:
+Known local-only/unpushed work (human-confirmed):
+Last reconciled date and evidence links:
+```
+
+**Source-of-truth precedence:** actual GitHub commit/PR state for repository facts; canonical ticket for scope; most recent explicitly confirmed human decision for authority and product intent; worker message files for *reported* execution; independent reproduction for *verified* runtime behavior. If these conflict, surface the conflict rather than silently selecting the most convenient account.
+
+## 11. Replacing or recovering a worker
+
+A color identifies a logical work slot, not a guaranteed persistent model identity. If a Codex window crashes, loses context, or must be replaced:
+
+1. Freeze new assignments to that color and ask the human whether there are uncommitted or unpushed changes in its checkout.
+2. Preserve the branch, PR, ticket, handoff, and any reproducible logs; do not discard local-only work without human approval.
+3. Start the replacement in an isolated checkout on the **existing branch** where appropriate. Read this protocol, ticket, PR discussion, message file, current main, and changed files before coding.
+4. Have the replacement state its understanding of scope, branch, blockers, and tests to rerun. Do not treat a previous worker's test claims as newly executed.
+5. Continue the existing PR when possible, rather than creating duplicate tickets or competing PRs. Mark the handoff explicitly.
+
+For a ChatGPT coordinator replacement, use Section 10. A coordinator conversation is not a running daemon; no work should be assumed to have progressed during the gap.
+
+## 12. Operational conventions and tooling
+
+**Repository:** `bkramerext/sigma`, default integration branch `main`. Current work is tracked primarily in GitHub Issues and PRs; legacy tickets may be under `tickets/`, and detailed handoffs may be under `messages/`. The exact current filenames and commands should be verified in the checkout before execution.
+
+**Local setup and checks:** The documented starting point is `./sigma setup`, `./sigma start`, and `./sigma test`. Run focused tests for the affected subsystem, plus browser checks under `browser_checks/` where relevant. Python/Sage sandbox tests may require Docker and prepared images. Distinguish a test that was *reported* from one the reviewer actually ran. Never claim that GitHub PR review itself ran local Chrome, Docker, or provider calls.
+
+**Branch hygiene:** Base new work on current `main`; keep one primary ticket per branch/PR; avoid force pushes over other people's work; do not commit secrets, personal datasets, generated credentials, or bulky transient artifacts. If a branch has changed after review, review its new head. Use an expected head SHA at merge to prevent merging an unseen revision.
+
+**Evidence retention:** A PR handoff or linked message must contain enough to reproduce meaningful tests: commands, relevant environment prerequisites, base/head revisions, outcomes, and artifact locations. Temporary `/tmp` screenshots are not durable evidence. When a screenshot or log is essential to acceptance, attach it to an accessible PR artifact or commit a small appropriate test fixture, subject to repository policy. Redact tokens, email addresses, private paths, and user data.
+
+**Documentation hygiene:** Prefer updating the existing issue, PR description, or established documentation. Do not create transient status documents, duplicate trackers, or unrelated files merely to record a handoff. Keep review corrections on the existing PR.
+
+**Research and billing review:** For changes to research execution, verify that provider output truncation, retry ambiguity, cancellation, restart, and session deadlines preserve partial work and never silently replay a potentially billed call. Distinguish pre-dispatch cost reservations from actual settled usage; review sponsor allowance and global spend enforcement, including an unexpectedly expensive completed response. Do not conflate research incompleteness with a provider failure.
+
+**Change control:** Human discussion does not automatically authorize repository edits. Obtain explicit authorization for changes when required by the human–AI collaboration rules in Section 16; standing permission to review and merge assigned PRs is not blanket permission for unrelated direct edits. For consequential architecture, security, billing, UX redesign, or release-scope changes, return to the human for a decision.
+
+## 13. Exceptions, escalation, and rollback
+
+**Stop and escalate** when a worker encounters an undocumented paid call, credential exposure, destructive migration, unexpected data loss, scope collision, unresolved security boundary, or a change that materially alters approved UX. Do not work around the constraint by switching accounts, providers, or billing modes. Report what happened, affected state, and the safest next action.
+
+**Urgent defect discovered after merge:** record the symptom and reproducer, identify the introducing commit/PR, decide with the human whether to revert or issue a narrow fix, and assign an owner. A revert is not automatically safe if later PRs depend on the change; inspect dependencies and retest. Keep the original ticket/PR history intact and document the corrective commit.
+
+**Blocked worker:** report the precise dependency and whether independent work can continue. The coordinator can park the ticket, move the worker to another bounded task, or request a small interface agreement through the human. Do not let blocked workers silently idle or invent interfaces.
+
+**Unavailable reviewer/coordinator:** leave the PR unmerged. R4R is not self-approval. The human can explicitly reassign independent review to another coordinator.
+
+**Unclear human dispatch:** treat the message as *not yet sent* until confirmed or evidenced. Avoid issuing conflicting follow-ups to an unconfirmed worker.
+
+## 14. Decision and status hygiene
+
+For every significant decision, record **what changed, why, who authorized it, which ticket/PR it affects, and what remains to verify**. Prefer updating the canonical ticket or a short linked handoff over scattering decisions across chat. Do not rewrite history to imply that a changed plan was always intended.
+
+Keep these statuses distinct: `PROPOSED`, `ASSIGNED (dispatch unconfirmed)`, `DISPATCHED`, `IN PROGRESS (worker reported)`, `BLOCKED`, `R4R`, `CHANGES REQUESTED`, `APPROVED`, `MERGED`, `INTEGRATION VERIFIED`, and `ACCEPTED`. A ticket may be merged but have an explicitly **UNVERIFIED** quality criterion.
+
+At the end of an integration cycle, the coordinator should provide a concise ledger of completed merges, PRs still in review, worker availability, blockers, critical path, and what the human must do next. **Never promise work is happening in the background unless a real persistent executor has been dispatched.**
+
+## 15. Maintenance of this protocol
+
+This file is the stable operating contract; GitHub Issues, PRs, and any maintained tracker hold volatile assignment state. Avoid turning this protocol into a daily status log. When practice changes, update the affected rule here, explain the rationale in the commit, and ensure worker assignments refer to the current protocol. Periodically check for contradictions with the human–AI collaboration rules in Section 16, ticket instructions, and actual observed behavior.
+
+A future team should be able to answer without the original chat: **Who decides? Who sends? Who codes? Who reviews? Who merges? Who tests the integrated result? What is actually running? What is still unverified? What happens if a participant disappears?**
+
+This protocol should evolve when the team changes its actual practices. Amend it based on observed behavior, not an idealized account of autonomous development.
+
+## 16. Human–AI collaboration principles
+
+These principles apply to the human engineering lead, ChatGPT coordinators, and worker-facing communication alongside the operational rules above.
+
+- **Clarity:** Lead with the point. Match detail to complexity, not a word count.
+- **Audience:** Human-facing writing should be easy to scan. Preserve meaning; cut explanation that adds no value.
+- **AI-to-AI assignments:** Chat → Codex instructions need **granularity and exactness**. Brevity is not a goal; include contracts, edge cases, constraints, and verification requirements.
+- **Agency and authorization:** Independently investigate, challenge assumptions, and develop substantial drafts. Never modify the repository during discussion or treat a request to draft content as permission to publish it. Commit only with explicit user authorization, consolidating settled changes into deliberate commits rather than recording conversational iterations.
+- **Continuity of agency:** Maintain independent judgment after criticism. Do not overcorrect into deference, agreement-seeking, passive replies, or merely echoing the user. Authorization boundaries do not remove responsibility to think and contribute.
+- **Continuity:** Keep decisions and revisions traceable without retelling discussions.
+- **Trust:** Separate facts from hypotheses and uncertainty. Never imply unperformed work is complete.
+- **Approved references:** Preserve exact approved assets, externally specified contracts, and acceptance tests. Changes should follow explicit requirements and be verified against actual files and runtime behavior.
+- **Defect response:** Diagnose observable failures against source, logs, and tests; distinguish root cause from hypothesis; report corrected behavior and remaining verification gaps.
+- **Feedback:** Adapt behavior to corrections rather than defending earlier choices.
+- **Research storytelling:** Creative explanations and illustrations must remain faithful to evidence. Communicate failure as carefully as success.

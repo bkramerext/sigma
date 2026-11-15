@@ -1,0 +1,38 @@
+name: Ruff lint and format
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sigma-ruff-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: Ruff check and format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Match the exact Ruff version in uv.lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; from pathlib import Path; packages=tomllib.loads(Path("uv.lock").read_text())["package"]; print(next(p["version"] for p in packages if p["name"]=="ruff"))')"
+          echo "RUFF_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Ruff lint
+        run: uvx --from "ruff==$RUFF_VERSION" ruff check src tests sigma deploy browser_checks scripts docs/evaluations
+      - name: Ruff format
+        if: success() || failure()
+        run: uvx --from "ruff==$RUFF_VERSION" ruff format --check src tests sigma deploy scripts browser_checks docs/evaluations

@@ -1,0 +1,769 @@
+.home-recents ul { list-style: none; padding: 0; margin: 12px 0 0; }
+.home-page .home-recents li { display: block; border-bottom: 0; }
+.home-page .home-recents .recent-entry { position: relative; min-width: 0; padding: 12px 0; }
+.home-page .home-recents .recent-title-row {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px;
+}
+.home-page .home-recents .recent-open {
+  flex: 0 1 auto; min-width: 0; width: auto; min-height: 0; padding: 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: var(--sigma-copper-foreground); text-align: left; font: 400 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.home-page .home-recents .recent-meta-row { position: relative; display: flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; margin-top: 2px; }
+.home-page .home-recents .recent-meta-row > small { display: inline-flex; align-items: center; gap: 6px; margin-top: 0; color: #b6c2ce; font-size: 11px; font-weight: 400; }
+.home-page .home-recents .recent-open:hover:not(:disabled) {
+  background: transparent; color: var(--sigma-copper-foreground); text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.home-page .home-recents .recent-open:disabled { color: #9aa6af; cursor: default; }
+.home-page .home-recents .recent-title-annotation {
+  position: relative; display: inline-flex; flex: 0 0 auto; align-items: center;
+  align-self: center; width: auto; height: auto; min-height: 0;
+  border: 0; padding: 0; margin: 0; background: transparent; box-shadow: none;
+  color: var(--sigma-copper-foreground); line-height: 1; cursor: pointer;
+}
+.home-page .home-recents .recent-title-star { color: var(--sigma-copper-foreground); font-size: 16px; }
+.home-page .home-recents .recent-title-shared { margin-left: -2px; color: var(--sigma-copper-foreground); }
+.home-page .home-recents .recent-title-shared svg { display: block; width: 17px; height: 17px; }
+.home-page .home-recents .recent-title-annotation:disabled { opacity: .6; cursor: wait; }
+.home-page .home-recents .recent-save-as,
+.home-page .home-recents .recent-forget {
+  flex: 0 0 auto; width: auto; height: auto; min-height: 0; margin: 0; padding: 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: var(--sigma-copper-foreground); font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.home-page .home-recents .recent-save-as,
+.home-page .home-recents .recent-forget { display: inline-flex; align-items: center; justify-content: center; align-self: center; line-height: 1; text-decoration: none; }
+/* Slightly loosen only the spacing between the home project action icons. */
+.home-page .home-recents .recent-save-as,
+.home-page .home-recents .recent-forget { margin-left: 3px; }
+.home-page .home-recents .recent-save-as svg,
+.home-page .home-recents .recent-forget svg { display: block; width: 20px; height: 20px; }
+.home-page .home-recents .recent-save-as:focus-visible,
+.home-page .home-recents .recent-forget:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+/* Consistent actions across project rows. */
+.home-page .home-recents .recent-save-as:hover:not(:disabled),
+.home-page .home-recents .recent-forget:hover:not(:disabled) {
+  background: transparent; color: var(--sigma-copper-foreground);
+}
+.home-page .home-recents .recent-save-as:disabled,
+.home-page .home-recents .recent-forget:disabled { opacity: .5; cursor: default; }
+
+/* All project glyphs share the scored-star hover treatment, including
+   keyboard focus. Keep the background clear rather than showing a button box. */
+.home-page .home-recents :is(.recent-title-star, .recent-title-shared, .recent-save-as, .recent-forget):is(:hover:not(:disabled), :focus-visible),
+.home-page .home-samples .recent-title-star:is(:hover, :focus-visible),
+.workspace-page .papers-pane .paper-title-star:is(:hover, :focus-visible) {
+  color: var(--sigma-copper-foreground); background: transparent; box-shadow: none; text-decoration: none;
+}
+.home-page .home-recents .recent-remove-actions { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; width: min(300px, calc(100vw - 32px)); margin: 0; }
+.home-page .home-recents .recent-remove-actions.recent-remove-above { top: auto; bottom: calc(100% + 4px); }
+.home-page .home-recents .recent-remove-confirm { padding: 14px 16px; border: 1px solid #66533d; border-radius: 6px; background: #101820f5; color: #d5dfe7; line-height: 1.6; box-shadow: 0 14px 35px #0009; }
+.home-page .home-recents .recent-remove-confirm p { margin: 5px 0 10px; font-size: 13px; }
+.home-page .home-recents .recent-remove-confirm-actions { display: flex; align-items: center; gap: 8px; }
+.home-page .home-recents .recent-remove-confirm-actions button { display: inline-flex; width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.home-page .home-recents .recent-remove-confirm-actions button:hover:not(:disabled) { background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); }
+.home-page .home-recents .recent-remove-confirm-actions button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.home-page .home-recents .recent-remove-confirm-actions button:disabled { opacity: .5; cursor: default; }
+.home-page .home-recents .recent-entry > small,
+.home-page .home-recents .recent-entry > span { display: block; min-width: 0; }
+.home-page .home-recents .recent-entry > small {
+  margin-top: 4px; font-size: 11px; color: #b6c2ce;
+}
+.home-page .home-recents .recent-entry > span {
+  margin-top: 3px; font-size: 10px; color: #a6b4c2;
+  white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+}
+.home-page .home-recents .recent-unavailable { font-size: 11px; margin: 0 0 10px; }
+
+/* A11 Home controls share the approved art's restrained copper palette. */
+.home-page .home-content { -webkit-user-select: none; user-select: none; }
+.home-page input, .home-page textarea { -webkit-user-select: text; user-select: text; }
+.home-page .home-hero h1:focus, .home-page .home-hero h1:focus-visible { outline: none; }
+.home-page .project-entry-dialog .entry-dialog-actions button[type="submit"],
+.home-page .project-settings-dialog .settings-actions button[type="submit"] {
+  color: #fff2e9; background: var(--copper-gradient); border: 1px solid #ba7658;
+  text-shadow: 0 1px 1px #24120d; box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004;
+}
+.home-page .project-entry-dialog .entry-dialog-actions button[type="submit"]:hover:not(:disabled),
+.home-page .project-settings-dialog .settings-actions button[type="submit"]:hover:not(:disabled) { background: var(--copper-gradient); color: #fff2e9; filter: brightness(1.13); }
+.home-page .project-entry-dialog .entry-dialog-actions button:disabled { background: #513e38; color: #d8cac4; border-color: #66524b; box-shadow: none; }
+.home-page .project-settings-dialog .settings-actions button[type="submit"]:disabled { opacity: 1; color: #d3c1b7; background: #44352f; border-color: #6b5045; text-shadow: none; box-shadow: none; }
+.home-page :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.home-page .project-entry-dialog, .home-page .project-settings-dialog { border-color: #a96548; }
+.home-page .project-entry-dialog h2, .home-page .project-settings-dialog h2 { color: var(--sigma-copper-foreground); }
+.home-page .project-entry-dialog label, .home-page .project-settings-dialog label { color: var(--sigma-copper-foreground); }
+.home-page .project-entry-dialog input:focus, .home-page .project-settings-dialog input:focus,
+.home-page .project-settings-dialog select:focus, .home-page .project-settings-dialog textarea:focus { border-color: #cd9270; }
+.home-page .project-entry-dialog .entry-cancel:hover:not(:disabled) { color: var(--sigma-copper-foreground); }
+.home-page .project-settings-dialog .settings-actions .settings-cancel:hover:not(:disabled) { color: #ffe1d1; background: #30211e; }
+
+.home-catalog { max-width: 560px; margin-top: 32px; border-top: 1px solid #a9654860; padding-top: 17px; }
+.home-page .catalog-tabs { display: flex; width: max-content; max-width: 100%; gap: 2px; padding: 3px; background: #07111eea; border: 1px solid #80503e; border-radius: 7px; }
+.home-page .catalog-tabs button { min-height: 38px; padding: 8px 15px; border: 1px solid transparent; border-radius: 4px; background: #0b1725; box-shadow: none; color: #bfc5cb; font-size: 12px; text-shadow: none; }
+.home-page .catalog-tabs button:hover:not([aria-selected="true"]) { background: #182432; color: var(--sigma-copper-foreground); }
+.home-page .catalog-tabs button[aria-selected="true"] { background: var(--copper-gradient); border-color: #ac7054; color: #fff2e9; text-shadow: 0 1px 1px #24120d; }
+.home-page .catalog-tabs button:disabled { cursor: default; opacity: .5; color: #9099a1; }
+.home-page .home-catalog .home-empty { margin: 0; padding: 14px 0 20px; border: 0; max-width: none; }
+.home-page .home-samples li { border-color: #a965483d; }
+.home-page .home-samples ul { list-style: none; padding: 0; margin: 12px 0 0; }
+.home-page .home-samples li { border-bottom: 0; }
+.home-page .home-samples strong { display: block; }
+.home-page .home-samples small { display: flex; align-items: center; gap: 6px; }
+.home-page .home-samples strong { color: var(--sigma-copper-foreground); font: 400 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
+.home-page .home-samples small { color: #b6c2ce; font-size: 11px; font-weight: 400; margin-top: 4px; }
+.home-page .home-samples .sample-open span { margin-left: 0; }
+.home-page .home-samples .sample-open { display: block; flex: 1 1 auto; width: 100%; min-width: 0; padding: 12px 0; text-align: left; background: transparent; border: 0; border-radius: 0; box-shadow: none; color: var(--sigma-copper-foreground); }
+.home-page .home-samples .sample-open:hover:not(:disabled) { background: #a9654824; }
+
+.home-cloud-prompt, .home-cloud-denied { position: relative; z-index: 2; width: min(520px, calc(100% - 56px)); margin: 18px 0 0 clamp(26px, 5.4vw, 90px); padding: 20px 22px; border: 1px solid #9a684c; border-radius: 7px; background: linear-gradient(118deg, #090e16ec, #15120ff0); box-shadow: 0 18px 48px #0008; color: #d7d0c7; }
+.home-cloud-prompt > p, .home-cloud-denied > .cloud-auth-kicker { margin: 0 0 8px; color: var(--sigma-copper-foreground); font: 600 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .15em; text-transform: uppercase; }
+.home-page .home-cloud-prompt h1, .home-page .home-cloud-denied h1 { margin: 0; color: var(--sigma-copper-foreground); font: 400 clamp(19px, 2vw, 23px)/1.35 Georgia, serif; letter-spacing: 0; text-shadow: none; }
+.home-cloud-prompt > span, .home-cloud-denied > p { color: #c1b9ad; font: 13px/1.65 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-cloud-denied-email { overflow-wrap: anywhere; }
+.home-cloud-denied-email strong { color: var(--sigma-copper-foreground); font-weight: 500; }
+.home-cloud-denied .cloud-denied-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 17px; }
+.home-cloud-denied .cloud-denied-actions a, .home-cloud-denied .cloud-denied-actions button { min-height: 34px; padding: 7px 11px; border: 1px solid #a87950; border-radius: 4px; background: #181510; color: var(--sigma-copper-foreground); font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: none; }
+.home-cloud-denied .cloud-denied-actions .cloud-auth-button { background: linear-gradient(115deg, #835536, #d19a62); color: #160f09; border-color: #d7a56f; }
+.home-cloud-denied .cloud-denied-actions .cloud-text-button { border-color: transparent; background: transparent; text-decoration: underline; }
+.cloud-auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; color: #d5dce2; background: radial-gradient(ellipse at 48% 40%, #192432, #07111c 68%); }
+.cloud-auth-card, .cloud-access-dialog { width: min(100%, 520px); padding: 32px; border: 1px solid #a96548; border-radius: 9px; background: linear-gradient(145deg, #16212c, #0b141e); box-shadow: 0 24px 65px #0008; }
+.cloud-auth-card .about-feedback-disclosure { margin-top: 16px; border: 1px solid #70543a; border-radius: 6px; background: #101820; }
+.cloud-auth-card .about-feedback-disclosure > summary { padding: 10px 12px; color: var(--sigma-copper-foreground); cursor: pointer; }
+.cloud-auth-card .about-feedback-disclosure .about-disclosure-content { padding: 0 12px 12px; }
+.cloud-auth-card .about-feedback-form { display: grid; gap: 10px; }
+.cloud-auth-card .about-feedback-form label { display: grid; gap: 5px; color: var(--sigma-copper-foreground); font-size: 12px; }
+.cloud-auth-card .about-feedback-form label span { color: #aeb9c4; }
+.cloud-auth-card .about-feedback-form textarea, .cloud-auth-card .about-feedback-form input { box-sizing: border-box; width: 100%; min-height: 38px; padding: 9px 10px; border: 1px solid #59636e; border-radius: 4px; background: #080f17; color: #e5ebf0; font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+.cloud-auth-card .about-feedback-form textarea { resize: vertical; }
+.cloud-auth-card .about-feedback-form :focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.cloud-auth-card .about-feedback-form a, .cloud-auth-card > p a { color: var(--sigma-copper-foreground); text-underline-offset: 3px; }
+.cloud-auth-card .about-feedback-form [role="alert"] { color: #f1aaa0; }
+.cloud-auth-card .about-feedback-form [role="status"] { color: #c7dfc7; }
+.cloud-auth-card h1, .cloud-access-dialog h2 { margin: 6px 0 12px; color: var(--sigma-copper-foreground); font: 400 32px/1.2 Georgia, serif; }
+.cloud-auth-card p, .cloud-access-dialog p { color: #bcc5cc; line-height: 1.6; }
+.cloud-auth-kicker { margin: 0; color: var(--sigma-copper-foreground) !important; text-transform: uppercase; letter-spacing: .13em; font: 10px/1.5 Inter, sans-serif; }
+.cloud-auth-button { display: inline-flex; margin-top: 14px; padding: 11px 17px; border: 1px solid #ba7658; border-radius: 5px; background: linear-gradient(140deg, #a75e43, #74402f); color: #fff2e9; text-decoration: none; }
+.cloud-denied-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.cloud-denied-actions .cloud-auth-button { margin-top: 0; }
+.cloud-secondary-button, .cloud-text-button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 9px 13px; border: 1px solid #765342; border-radius: 5px; background: #101a24; color: var(--sigma-copper-foreground); font: 13px/1.3 Inter, sans-serif; text-decoration: none; cursor: pointer; }
+.cloud-text-button { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.cloud-secondary-button:disabled { opacity: .55; cursor: default; }
+.cloud-auth-footnote { margin-top: 23px; font-size: 12px; }
+.admin-feedback-table .admin-feedback-message { min-width: 250px; max-width: 460px; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
+.admin-feedback-table .admin-feedback-account { min-width: 220px; overflow-wrap: anywhere; }
+.admin-feedback-table td { vertical-align: top; }
+.privacy-notice-card { box-sizing: border-box; }
+@media (max-width: 560px) { .home-cloud-prompt, .home-cloud-denied { margin-left: 22px; width: calc(100% - 44px); padding: 17px; } }
+
+.home-page .home-samples .sample-type-group { border-bottom: 0; }
+.home-page .home-samples .sample-type-group > summary { display: grid; grid-template-columns: 10px 16px 120px max-content; align-items: center; gap: 8px; min-height: 40px; margin-left: -8px; padding: 6px 8px; color: var(--sigma-copper-foreground); font: 500 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; list-style: none; }
+.home-page .home-samples .sample-type-group > summary::-webkit-details-marker { display: none; }
+.home-page .home-samples .sample-type-group > summary::before { content: '›'; width: 10px; color: var(--sigma-copper-foreground); font-size: 18px; line-height: 1; transform: rotate(0); transition: transform 120ms ease; }
+.home-page .home-samples .sample-type-group[open] > summary::before { transform: rotate(90deg); }
+.home-page .home-samples .sample-type-group > summary .research-type-icon { width: 16px; height: 16px; flex-basis: 16px; }
+/* An optional project-type icon must not shift the name into the icon column. */
+.home-page .home-samples .sample-type-group > summary > span { grid-column: 3; min-width: 0; }
+.home-page .home-samples .sample-type-group > summary > small { grid-column: 4; }
+.home-page .home-samples .sample-type-group > summary small { margin: 0; color: #aeb9c4; font-size: 11px; }
+.home-page .home-samples .sample-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
+.home-page .home-cloud-prompt { position: absolute; z-index: 1; top: 72px; right: clamp(26px, 5vw, 72px); margin: 0; }
+@media (max-width: 900px) {
+  .home-page .home-cloud-prompt { position: relative; top: auto; right: auto; margin: 18px 0 0 clamp(26px, 5.4vw, 90px); }
+  /* Projects stays anchored to the left pills, independent of right stack height. */
+  .home-page .home-projects { position: absolute; top: var(--home-projects-top); left: var(--home-project-edge); width: min(520px, calc(100% - 2 * var(--home-project-edge))); margin: 0; }
+}
+.home-page { height: 100dvh; min-height: 100dvh; overflow: hidden; }
+.home-page > .home-shell { height: 100%; min-height: 0; overflow: hidden; }
+.home-page .home-topline { position: relative; z-index: 2; pointer-events: none; }
+.home-page .home-topline > * { pointer-events: auto; }
+.home-page .home-effect-definitions { position: absolute; display: block; width: 0; height: 0; }
+.home-page .home-content { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 16px; overflow: hidden; }
+.home-page .home-topline { flex: 0 0 auto; height: auto; min-height: 52px; }
+.home-page .home-auth-pills, .home-page .home-header-actions { display: grid; flex: 0 0 auto; justify-items: end; gap: 16px; }
+:root { --identity-pill-gap: 13px; --identity-pill-pad-block: 7px; --identity-pill-pad-inline: 12px; }
+.identity-pill-stack { display: grid; justify-items: start; row-gap: var(--identity-pill-gap); }
+.identity-pill-stack > .api-connection { position: relative; top: auto; right: auto; margin: 0; }
+.project-identity-pill-stack { max-width: min(240px, calc(100vw - 32px)); }
+.home-page .home-header-actions { order: -1; }
+.home-page .home-projects { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.home-page .home-catalog { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.home-page .catalog-tabs { flex: 0 0 auto; }
+.home-page #samples-panel, .home-page #recent-panel, .home-page #most-recent-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
+.home-page #samples-panel[hidden], .home-page #recent-panel[hidden], .home-page #most-recent-panel[hidden] { display: none; }
+.home-page #recent-panel > .guest-recent-message { display: flex; flex-direction: column; margin: 18px 4px; color: var(--sigma-copper-foreground); font: 400 18px/1.45 Georgia, serif; letter-spacing: 0; }
+.home-page #samples-panel > .home-samples, .home-page #recent-panel > .home-recents, .home-page #most-recent-panel > .home-recents { flex: 1 1 auto; height: 100%; min-height: 0; max-height: none; margin: 0; padding: 8px 4px 44px 0; box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
+.home-page .home-samples .sample-type-group ul { margin: 0 0 0 20px; }
+.home-page .home-samples .sample-type-group li:last-child { border-bottom: 0; }
+.home-page .home-samples .sample-type-group li { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.home-page .home-recents .recent-type-group { border-bottom: 0; }
+.home-page .home-recents .recent-type-group > summary { display: grid; grid-template-columns: 10px 16px 120px max-content; align-items: center; gap: 8px; min-height: 40px; margin-left: -8px; padding: 6px 8px; color: var(--sigma-copper-foreground); font: 500 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; list-style: none; }
+.home-page .home-recents .recent-type-group > summary::-webkit-details-marker { display: none; }
+.home-page .home-recents .recent-type-group > summary::before { content: '›'; width: 10px; color: var(--sigma-copper-foreground); font-size: 18px; line-height: 1; }
+.home-page .home-recents .recent-type-group[open] > summary::before { transform: rotate(90deg); }
+.home-page .home-recents .recent-type-group > summary .research-type-icon { display: block; flex: 0 0 16px; width: 16px; height: 16px; margin: 0; color: var(--sigma-copper-foreground); }
+.home-page .home-recents .recent-type-group > summary > span { grid-column: 3; min-width: 0; color: var(--sigma-copper-foreground); }
+.home-page .home-recents .recent-type-group > summary > small { grid-column: 4; }
+.home-page .home-recents .recent-type-group > summary .research-running-indicator { position: relative; top: -2px; margin-left: 6px; vertical-align: middle; }
+.home-page .home-recents .recent-type-group > summary small { display: block; margin: 0; color: #aeb9c4; font-size: 11px; }
+.home-page .home-recents .recent-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
+.home-page .home-recents .recent-type-group > ul { margin: 0 0 0 20px; padding: 0; }
+.home-page .home-recents .recent-running { color: #8fbd9a; }
+@media (max-width: 400px) {
+  .home-page .catalog-tabs { width: 100%; }
+  .home-page .catalog-tabs button { flex: 1; padding-inline: 8px; }
+}
+
+/* Account controls and administrator editing follow the established pill and underlined-action language. */
+.home-page .administrator-settings-link { position: relative; z-index: 2; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; margin: 0; text-decoration: none; cursor: pointer; }
+.project-google-signin { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; min-height: 27px; padding: 4px 9px; border: 1px solid #5b5148; border-radius: 999px; background: #091824ed; color: var(--sigma-copper-foreground); font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
+.project-google-signin > span { margin-left: 0; }
+button.project-google-signin { cursor: pointer; }
+button.project-google-signin:hover:not(:disabled), button.project-google-signin:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
+button.project-google-signin:disabled { border-color: #5b5148; background: #091824ed; color: #b4bdc5; cursor: default; opacity: 1; }
+button.project-google-signin[aria-busy="true"] { cursor: progress; }
+.home-page .project-google-signin { position: relative; z-index: 2; }
+.home-page .home-topline .project-google-signin,
+.home-page .home-topline .home-about-button,
+.home-page .home-topline .administrator-settings-link { box-sizing: border-box; min-height: 34px; padding: 7px 12px; gap: 7px; border: 1px solid #a9654875; border-radius: 999px; background: #07111ef2; box-shadow: none; color: #e0d0c8; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-decoration: none; }
+.home-page .home-topline .project-google-signin:hover:not(:disabled), .home-page .home-topline .project-google-signin[aria-expanded="true"],
+.home-page .home-topline .home-about-button:hover:not(:disabled), .home-page .home-topline .administrator-settings-link:hover { border-color: #cd9270; background: #172536fa; box-shadow: none; color: #fff2e9; }
+.home-page .home-topline .project-google-signin .connection-dot { margin-top: 0; }
+.home-page .home-topline .home-about-button { flex: 0 0 auto; margin: 0; cursor: pointer; }
+.home-page .home-topline .home-about-button:focus-visible, .home-page .home-topline .administrator-settings-link:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.google-account-dialog, .cloud-access-dialog { color-scheme: dark; color: #dce7f0; border: 1px solid #a96548; border-radius: 8px; background: linear-gradient(145deg, #16212c, #0b141e); box-shadow: 0 24px 65px #000b; }
+.google-connection-details:has(.google-account-email) { width: fit-content; min-width: 0; max-width: min(360px, calc(100vw - 40px)); padding: 12px; }
+.google-account-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; }
+.google-account-dialog::backdrop, .cloud-access-dialog::backdrop { background: #000b; }
+.google-account-dialog h2 { margin: 5px 0 14px; color: var(--sigma-copper-foreground); font: 400 26px/1.2 Georgia, serif; }
+.google-account-dialog p { color: #bcc5cc; line-height: 1.55; overflow-wrap: anywhere; }
+.google-account-dialog .cloud-text-button { display: inline-flex; width: fit-content; margin: 5px 16px 5px 0; padding: 3px 0; min-height: 0; border: 0; color: var(--sigma-copper-foreground); font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
+.google-account-dialog .cloud-text-button:hover { color: var(--sigma-copper-foreground); }
+.google-account-dialog .google-account-close { display: block; margin-top: 14px; }
+.google-account-dialog .google-invitation-signin { display: inline-flex; width: fit-content; margin: 0; text-decoration: underline; text-underline-offset: 3px; }
+.google-invitation-dialog { position: fixed; inset: 0; margin: auto; }
+.google-invitation-heading { margin-bottom: 14px; }
+.google-account-dialog .google-invitation-retry { margin-left: 14px; }
+.home-page .google-invitation-footer { margin-top: 22.5px; }
+.google-invitation-heading h2 { flex: 0 1 auto; margin-right: 0; }
+.home-page .google-invitation-dialog .privacy-close-button { background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); }
+.home-page .google-invitation-dialog .privacy-close-button:hover:not(:disabled) { background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); }
+.home-page .google-invitation-dialog .privacy-close-button:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.home-page .google-invitation-dialog .cloud-text-button,
+.home-page .google-invitation-dialog .cloud-text-button:hover:not(:disabled),
+.home-page .google-invitation-dialog .cloud-text-button:focus-visible,
+.home-page .google-invitation-dialog .cloud-text-button:active:not(:disabled) { border-color: transparent; background: transparent; box-shadow: none; }
+.invitation-welcome-dialog { position: fixed; inset: 0; box-sizing: border-box; margin: auto; width: min(625px, calc((100vw - 32px) / 1.25)); max-height: calc((100dvh - 32px) / 1.25); overflow-y: auto; padding: clamp(22px, 5vw, 34px); transform: scale(1.25); }
+.invitation-welcome-dialog .cloud-auth-kicker { margin: 0 0 6px; color: var(--sigma-copper-foreground); font: 600 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+.invitation-welcome-dialog h2 { margin: 0 0 18px; color: var(--sigma-copper-foreground); font: 400 clamp(27px, 7vw, 34px)/1.15 Georgia, serif; }
+.invitation-welcome-dialog .invitation-welcome-allowance { margin: 0 0 14px; color: var(--sigma-copper-foreground); font: 500 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+.invitation-welcome-dialog .invitation-welcome-intro { margin: 0 0 16px; color: #bcc5cc; font: inherit; }
+.invitation-welcome-dialog .invitation-welcome-about-hint { margin: -5px 0 14px; color: #aebbc7; font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+.invitation-welcome-dialog .invitation-welcome-phrase { margin: 0 0 14px; padding: 0; border: 0; background: transparent; color: #bcc5cc; font: inherit; font-style: italic; }
+.invitation-welcome-dialog .invitation-welcome-dismiss { display: block; min-height: 38px; margin: 22px auto 0; padding: 8px 15px; border: 1px solid #dfb476; border-radius: 5px; background: linear-gradient(145deg, #533323, #251b18); box-shadow: inset 0 1px 0 #ffe0ab24; color: var(--sigma-copper-foreground); font: 500 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.invitation-welcome-dialog .invitation-welcome-dismiss:hover:not(:disabled) { border-color: #ffe1ad; background: linear-gradient(145deg, #69442e, #31221d); color: #fff0dc; }
+.invitation-welcome-dialog .invitation-welcome-dismiss:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.invitation-welcome-dialog .invitation-welcome-dismiss:disabled { opacity: .65; cursor: wait; }
+.invitation-welcome-dialog .invitation-welcome-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 38px; margin: 20px auto 0; }
+.invitation-welcome-dialog .invitation-welcome-actions .google-invitation-actions { display: contents; }
+.invitation-welcome-dialog .invitation-welcome-link { width: auto; min-height: 32px; margin: 0; padding: 4px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: 500 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.invitation-welcome-dialog .invitation-welcome-link:hover:not(:disabled) { background: transparent; color: var(--sigma-copper-foreground); }
+/* Invite me / Explore as guest are underlined text actions, never bordered buttons. */
+.invitation-welcome-dialog .invitation-welcome-actions button.invitation-welcome-link,
+.invitation-welcome-dialog .invitation-welcome-actions button.invitation-welcome-link:hover:not(:disabled),
+.invitation-welcome-dialog .invitation-welcome-actions button.invitation-welcome-link:active:not(:disabled) { appearance: none; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+
+.invitation-welcome-dialog .invitation-welcome-link:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.invitation-welcome-dialog .invitation-welcome-link:disabled { opacity: .65; cursor: wait; }
+.invitation-welcome-dialog .google-invitation-actions { display: flex; justify-content: center; }
+.invitation-welcome-dialog .invitation-welcome-request { margin: 8px auto 0; }
+.invitation-welcome-dialog .invitation-welcome-requested { margin: 18px 0 6px; color: var(--sigma-copper-foreground); text-align: center; }
+.invitation-welcome-dialog .invitation-welcome-secondary { display: block; margin: 12px auto 0; padding: 5px 10px; border: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: 500 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.invitation-welcome-dialog .invitation-welcome-secondary:hover:not(:disabled) { background: transparent; color: var(--sigma-copper-foreground); }
+.invitation-welcome-dialog .invitation-welcome-secondary:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.invitation-welcome-dialog .invitation-welcome-secondary:disabled { opacity: .65; cursor: wait; }
+.google-invitation-dialog .google-invitation-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
+.google-invitation-dialog .google-invitation-actions p { flex-basis: 100%; }
+.privacy-notice-card { position: relative; }
+.privacy-notice-heading { display: flex; align-items: baseline; gap: 18px; }
+.privacy-notice-heading h1 { margin-right: 0; }
+.privacy-close-button { flex: 0 0 auto; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; transform: translateY(-2px); cursor: pointer; }
+.privacy-close-button:hover { color: var(--sigma-copper-foreground); background: transparent; box-shadow: none; }
+.home-page .home-topline .api-connection { width: max-content; min-width: 0; max-width: 240px; margin-left: 0; }
+.home-page .home-topline .api-connection.api-connection { top: 0; }
+.home-page .home-topline .api-connection > summary { box-sizing: border-box; gap: 7px; min-height: 34px; margin-left: 0; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); align-items: center; font-size: 11px; line-height: 1.5; max-width: 100%; white-space: normal; }
+.home-page .home-topline .api-connection > summary.has-sponsored-allowance { gap: 6px; }
+.home-page .home-topline .api-connection > summary [role="status"] { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.cloud-chatgpt-allowance { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-top: 1px solid #a9654844; border-bottom: 1px solid #a9654844; }
+.cloud-chatgpt-allowance strong { color: var(--sigma-copper-foreground); }
+.cloud-chatgpt-usage { color: #aeb9c4; font-size: 11px; }
+.cloud-access-dialog { box-sizing: border-box; display: flex; flex-direction: column; width: min(1200px, calc(100vw - 40px)); height: min(900px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); overflow: visible; padding: 24px 32px 28px; }
+.admin-access-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.admin-access-panel > * { flex: 0 0 auto; }
+.admin-access-panel .admin-invitation-scroll { max-height: 185px; overflow: auto; }
+.admin-access-panel .admin-feedback-scroll { max-height: 34vh; overflow: auto; }
+.admin-access-panel .admin-invitation-scroll { max-height: 165px; }
+.admin-access-panel .admin-invitation-table th, .admin-access-panel .admin-invitation-table td { padding: 5px 9px; }
+.admin-access-panel .admin-invitation-table tbody th small { margin-top: 2px; }
+.admin-authorized-users-section .admin-authorized-table-scroll { max-height: 34vh; overflow: auto; }
+.admin-account-usage-scroll { max-height: 34vh; overflow: auto; }
+.admin-collapsible-section { margin: 14px 0 4px; border-bottom: 1px solid #573f35; }
+.admin-collapsible-section > summary { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 5px 0 8px; color: var(--sigma-copper-foreground); cursor: pointer; list-style: none; }
+.admin-collapsible-section > summary::-webkit-details-marker { display: none; }
+.admin-collapsible-section > summary::before { content: '▸'; flex: 0 0 24px; color: var(--sigma-copper-foreground); font-size: 27px; line-height: 1; }
+.admin-collapsible-section[open] > summary::before { content: '▾'; }
+.admin-collapsible-section > summary h3 { margin: 0; color: inherit; font: 400 20px/1.25 Georgia, serif; }
+/* Match the inline Collaborators heading control in Project Settings. */
+.admin-authorized-users-section > summary { gap: 8px; }
+.cloud-access-dialog .admin-authorized-users-section > summary .admin-authorized-add.admin-authorized-add {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 4px;
+  flex: 0 0 auto;
+}
+.cloud-access-dialog .admin-authorized-users-section > summary .admin-authorized-add svg {
+  width: 24px;
+  height: 24px;
+}
+
+.admin-feedback-table { width: 100%; min-width: 930px; table-layout: fixed; }
+.admin-feedback-table th, .admin-feedback-table td { vertical-align: top; }
+.admin-feedback-table .admin-feedback-message { min-width: 0; }
+.admin-feedback-table .admin-feedback-account { min-width: 0; }
+.admin-feedback-actions { display: flex; align-items: baseline; gap: 12px; white-space: nowrap; }
+.admin-access-panel .admin-authorized-table th, .admin-access-panel .admin-authorized-table td { padding: 3px 7px; }
+.admin-access-panel .admin-authorized-table select, .admin-access-panel .admin-authorized-table input { min-height: 26px; padding: 3px 6px; }
+.admin-dialog-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+.admin-dialog-heading h2 { margin: 0; color: var(--sigma-copper-foreground); font: 400 28px/1.2 Georgia, serif; }
+.admin-text-action { min-height: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.admin-text-action:hover:not(:disabled) { background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); }
+.admin-text-action:disabled { background: transparent; color: #929da5; opacity: .75; cursor: default; }
+.admin-target { margin: 8px 0 16px; color: #aeb9c4; font-size: 11px; }
+.admin-access-note { margin: 0 0 7px; color: #c0cad2; font-size: 12px; }
+.cloud-access-bootstrap { margin: 4px 0 10px; color: #aeb9c4; font-size: 11px; }
+.admin-table-heading { display: flex; align-items: center; gap: 12px; margin: 15px 0 7px; }
+.admin-table-heading h3 { color: var(--sigma-copper-foreground); font: 400 20px/1.25 Georgia, serif; }
+.admin-add-row { border-top: 1px solid #a9654844; }
+.admin-add-row .admin-text-action { font-size: 12px; }
+.admin-usage-panel > h3 { margin: 2px 0 12px; color: var(--sigma-copper-foreground); font: 400 20px/1.25 Georgia, serif; }
+.admin-table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
+.admin-grants-table, .admin-usage-table { width: 100%; border-collapse: collapse; color: #dce7f0; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; }
+.admin-grants-table { min-width: 650px; table-layout: fixed; }
+.admin-authorized-table { min-width: 650px; }
+.admin-authorized-table th, .admin-authorized-table td { padding: 3px 7px; }
+.admin-authorized-table select, .admin-authorized-table input { min-height: 26px; padding: 3px 6px; }
+.admin-authorized-actions { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.admin-usage-table { min-width: 840px; margin-top: 8px; }
+.admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 8px 9px; border-bottom: 1px solid #a9654844; vertical-align: middle; }
+.admin-grants-table thead th, .admin-usage-table thead th { color: var(--sigma-copper-foreground); font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+.admin-grants-table .admin-allowance-heading, .admin-grants-table .admin-allowance-cell { text-align: center; }
+.admin-grants-table .admin-allowance-cell .admin-allowance-input { justify-content: center; transform: translateY(13px); }
+.admin-grants-table .admin-allowance-cell small { margin-top: 4px; text-align: center; }
+.admin-grants-table tbody th, .admin-usage-table tbody th { color: #f0eee8; font-weight: 500; }
+.admin-grants-table tbody th small, .admin-grants-table td small { display: block; margin-top: 4px; color: #aeb9c4; font-size: 10px; }
+.admin-grants-table .admin-entry-value { overflow-wrap: anywhere; }
+.admin-grants-table select, .admin-grants-table input { min-height: 30px; padding: 5px 7px; border: 1px solid #66533d; border-radius: 4px; background: #08131e; color: #f0eee8; font: 12px/1.3 Inter, sans-serif; }
+.admin-grants-table select { min-width: 84px; }
+.admin-allowance-input { display: inline-flex; align-items: center; gap: 4px; color: var(--sigma-copper-foreground); }
+.admin-allowance-input input { width: 88px; }
+.admin-grants-table tr.is-revoked { opacity: .72; }
+.admin-grants-table .admin-remove { color: var(--sigma-copper-foreground); }
+.admin-invitation-actions { display: inline-flex; align-items: baseline; gap: 14px; }
+.admin-remove-confirm { position: fixed; z-index: 10; box-sizing: border-box; width: min(280px, calc(100vw - 24px)); padding: 10px 11px; border: 1px solid #66533d; border-radius: 5px; background: #101820; box-shadow: 0 10px 24px #000b; white-space: normal; }
+.admin-remove-confirm p { margin: 0 0 8px; color: #d5dfe7; font-size: 11px; line-height: 1.45; }
+.admin-remove-confirm-actions { display: flex; gap: 13px; }
+.admin-protected-entry { color: #aeb9c4; font-size: 10px; }
+.admin-empty-row { padding: 18px !important; color: #aeb9c4; text-align: center; }
+.admin-new-entry-heading { display: flex; align-items: baseline; justify-content: flex-start; gap: 14px; }
+.admin-new-entry-heading h3 { margin: 0; color: var(--sigma-copper-foreground); font: 400 20px/1.2 Georgia, serif; }
+.admin-new-entry-actions { display: flex; flex: 0 0 auto; align-items: baseline; gap: 14px; }
+.admin-new-entry-panel { position: fixed; z-index: 10; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; width: min(340px, calc(100vw - 24px)); max-height: calc(100dvh - 16px); overflow-y: auto; padding: 14px; border: 1px solid #66533d; border-radius: 5px; background: #101820; box-shadow: 0 10px 24px #000b; color: #d5dfe7; }
+.admin-new-entry-panel > h3 { margin: 0; color: var(--sigma-copper-foreground); font: 400 20px/1.2 Georgia, serif; }
+.admin-new-entry-panel > label { display: flex; flex-direction: column; gap: 5px; color: var(--sigma-copper-foreground); font-size: 11px; }
+.admin-new-entry-classification { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.admin-new-entry-classification > label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: var(--sigma-copper-foreground); font-size: 11px; }
+.admin-new-entry-classification select { box-sizing: border-box; width: 100%; min-height: 30px; padding: 5px 7px; border: 1px solid #66533d; border-radius: 4px; background: #08131e; color: #f0eee8; font: 12px/1.3 Inter, sans-serif; }
+.admin-new-entry-panel > label > input, .admin-new-entry-panel > label > select { box-sizing: border-box; width: 100%; min-height: 30px; padding: 5px 7px; border: 1px solid #66533d; border-radius: 4px; background: #08131e; color: #f0eee8; font: 12px/1.3 Inter, sans-serif; }
+.admin-new-entry-panel .admin-allowance-input { min-height: 30px; }
+.admin-new-entry-panel .admin-allowance-input input { box-sizing: border-box; flex: 1; width: 100%; min-height: 30px; padding: 5px 7px; border: 1px solid #66533d; border-radius: 4px; background: #08131e; color: #f0eee8; font: 12px/1.3 Inter, sans-serif; }
+.admin-new-entry-panel .admin-allowance-input input::placeholder { color: #9aa7b1; opacity: 1; }
+.admin-new-entry-panel .admin-allowance-input + small { color: #aeb9c4; font-size: 10px; }
+.admin-save-row { display: flex; align-items: center; justify-content: flex-end; gap: 18px; min-height: 42px; margin-top: 9px; }
+.admin-save-row p { margin: 0 auto 0 0; color: #c0cad2; font-size: 11px; }
+.admin-feedback { margin: 8px 0 0; color: var(--sigma-copper-foreground); font-size: 12px; }
+.admin-feedback[role="alert"] { color: #f0a89b; }
+.home-page .home-art-credit { --home-credit-edge: 5px; right: 5px; bottom: var(--home-credit-edge); justify-items: end; gap: 2px; color: var(--sigma-copper-foreground); font: 500 12px/1.3 Georgia, 'Times New Roman', serif; font-variant: normal; letter-spacing: .08em; text-align: right; text-transform: none; text-shadow: 0 1px 8px #05101dcc, 0 0 14px #b8643c55; }
+.google-connection-details .google-setup-missing { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
+.google-connection-details .google-setup-missing code { color: var(--sigma-copper-foreground); font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 700px) {
+  .home-page:has(.administrator-settings-link) .home-topline { flex-basis: 78px; height: 78px; }
+  .cloud-access-dialog { width: calc(100vw - 20px); height: min(900px, calc(100dvh - 20px)); max-height: calc(100dvh - 20px); padding: 16px 13px; }
+  .admin-dialog-heading h2 { font-size: 23px; }
+  .admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 7px; }
+}
+@media (max-width: 560px) {
+  .home-page:has(.administrator-settings-link) .home-topline { flex-basis: 96px; height: 96px; }
+}
+@media (max-width: 520px) {
+  .home-page .home-topline .project-google-signin,
+  .home-page .home-topline .api-connection > summary { font-size: clamp(9px, calc(1.25vw + 4.5px), 11px); }
+}
+
+@media (max-width: 700px) {
+  :root { --identity-pill-pad-block: 4px; --identity-pill-pad-inline: 9px; }
+  .home-page .home-topline .project-google-signin,
+  .home-page .home-topline .api-connection > summary { box-sizing: border-box; min-height: 28px; padding: var(--identity-pill-pad-block) var(--identity-pill-pad-inline); font-size: 9px; line-height: 1.2; }
+}
+
+
+/* T88: use the existing account-pill language for the guest's two-line state. */
+.project-google-signin .google-identity-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 0; line-height: 1.3; }
+.project-google-signin .google-identity-lines > span:first-child { color: #e0d0c8; font-weight: 600; }
+.project-google-signin .google-identity-lines > span:last-child { color: var(--sigma-copper-foreground); font-size: 10px; }
+
+/* Sample showcase annotations reuse the Saved Projects star, never pin controls. */
+.home-page .home-samples .recent-title-star {
+  display: inline-flex; align-items: center; vertical-align: middle;
+  flex: 0 0 auto; margin-right: 0; padding: 0; border: 0; background: transparent;
+  color: var(--sigma-copper-foreground); font-size: 16px; cursor: pointer; text-decoration: none;
+}
+
+/* Keep the scored-star glyph identical in project listings and paper cards.
+   Each title row supplies the same 6px gap immediately after the star. */
+.home-page .home-recents .recent-title-star,
+.home-page .home-samples .recent-title-star,
+.workspace-page .papers-pane .paper-title-star {
+  display: inline-flex; align-items: center; justify-content: center;
+  align-self: center; box-sizing: border-box; flex: 0 0 16px;
+  width: 16px; height: 16px; min-width: 16px; min-height: 16px;
+  margin: 0; padding: 0; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none;
+  color: #f4cc69; font: 400 16px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: none;
+}
+
+
+/* Save Copy is a compact one-field dialog, not a full Project Settings form. */
+.home-page .project-settings-dialog.save-as-project-dialog {
+  width: min(470px, calc(100vw - 32px));
+  height: fit-content; min-height: 0; max-height: calc(100dvh - 32px);
+}
+.home-page .project-settings-dialog.save-as-project-dialog > form {
+  height: auto; min-height: 0; max-height: calc(100dvh - 32px);
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header {
+  padding: 16px 22px 12px; gap: 16px; flex-wrap: nowrap; align-items: baseline;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header h2 {
+  width: auto; flex: 0 0 auto; margin: 0; font-size: 24px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions {
+  flex: 0 0 auto; width: auto; gap: 14px; justify-content: flex-start; flex-wrap: nowrap;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-body {
+  flex: 0 0 auto; min-height: 0; overflow: auto; padding: 12px 22px 18px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-body label {
+  margin: 0 0 6px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-body input {
+  box-sizing: border-box; padding: 8px 11px;
+}
+/* The global Home submit styling must not fill Save or Saving… with copper.
+   Match Cancel at rest, on hover, and while disabled/busy. */
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions button {
+  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  background: transparent; background-image: none; border: 0; border-radius: 0;
+  color: var(--sigma-copper-foreground); box-shadow: none; text-shadow: none; filter: none;
+  font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions button:hover:not(:disabled) {
+  color: var(--sigma-copper-foreground); background: transparent; background-image: none;
+  border: 0; box-shadow: none; text-shadow: none; filter: none;
+}
+.home-page .project-settings-dialog.save-as-project-dialog .settings-header .settings-actions button:disabled {
+  color: var(--sigma-copper-foreground); background: transparent; background-image: none;
+  border: 0; box-shadow: none; text-shadow: none; filter: none; opacity: .5;
+}
+@media (max-width: 560px) {
+  .home-page .project-settings-dialog.save-as-project-dialog .settings-header {
+    padding: 15px 18px 11px; gap: 12px;
+  }
+  .home-page .project-settings-dialog.save-as-project-dialog .settings-header h2 {
+    font-size: 22px;
+  }
+  .home-page .project-settings-dialog.save-as-project-dialog .settings-body {
+    padding: 11px 18px 16px;
+  }
+}
+
+/* Save Copy errors must remain readable above the modal backdrop. */
+.home-page .project-settings-dialog.save-as-project-dialog .save-as-project-error {
+  margin: 9px 0 0;
+  color: #f5aaa1;
+  font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  overflow-wrap: anywhere;
+}
+
+/* Preserve the regular hand cursor while displaying progress next to the title. */
+.home-page .home-catalog :is(.home-recents, .home-samples)[data-opening="true"] :is(.recent-open, .sample-open):disabled {
+  cursor: pointer;
+}
+.home-page .home-catalog .project-opening-hourglass { display: inline; vertical-align: baseline; margin-left: 12px; color: var(--sigma-copper-foreground); font-size: 14px; line-height: 1; }
+ /* The Samples title styles reset margins on every nested span; restore the
+    opening indicator spacing explicitly without changing other sample spans. */
+.home-page .home-samples .sample-open .project-opening-hourglass { margin-left: 12px; }
+.home-page .home-samples .sample-open .project-opening-label { margin-left: 4px; }
+.home-page .home-recents .recent-open[aria-busy="true"],
+.home-page .home-samples .sample-open[aria-busy="true"] {
+  color: var(--sigma-copper-foreground); opacity: 1;
+}
+
+.home-page .home-catalog .project-opening-label { margin-left: 4px; color: inherit; font: 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+
+/* The project list shows one heartbeat: green for active work, yellow only
+   when paper generation is waiting and no work is running. */
+.home-page .home-recents .research-running-indicator.paper-queued-indicator {
+  border-color: #eac16a; background: #e3b74d;
+  box-shadow: 0 0 0 0 #e3b74d80;
+  --pulse-shadow-rest: #e3b74d40; --pulse-shadow-peak: #e3b74d80;
+  animation-name: research-running-heartbeat;
+}
+.home-page .home-recents .recent-running.recent-queued { color: var(--sigma-copper-foreground); }
+@media (prefers-reduced-motion: reduce) {
+  .home-page .home-recents .paper-queued-indicator { animation: none; }
+}
+
+/* The Most Recent tab reuses Saved project rows without type accordions. */
+.home-page .home-recents .recent-flat-group > summary { display: none; }
+.home-page .home-recents .recent-flat-group > ul { margin-left: 0; }
+
+/* Keep project-type headings compact and pulses alongside their counts. */
+.home-page .home-recents .recent-type-group > summary { min-height: 0; padding-block: 6px; }
+.home-page .home-recents .recent-type-group > summary small { display: inline-flex; align-items: center; gap: 4px; }
+.home-page .home-recents .recent-type-group > ul { margin-top: 2px; }
+.home-page .home-recents .recent-meta-row .research-running-indicator { display: inline-block; vertical-align: middle; margin-left: 0; }
+
+/* Admin Settings icon-only actions share SIGMA's copper hover treatment.
+   Save, confirmation and other decision actions remain text. */
+.cloud-access-dialog .admin-icon-action.admin-icon-action {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  text-decoration: none;
+}
+.cloud-access-dialog .admin-icon-action svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+/* Use the same 20px X glyph as the paper removal action. */
+.cloud-access-dialog .admin-icon-action:has(svg path[stroke-width="4"]) svg {
+  width: 20px;
+  height: 20px;
+}
+.cloud-access-dialog .admin-icon-action:hover:not(:disabled) {
+  background: #3b3029;
+  border-color: #ac7054;
+}
+.cloud-access-dialog .admin-icon-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
+
+/* Improve text legibility over the home artwork around each glyph,
+   rather than dimming a rectangular area behind the project list. */
+.home-page .home-recents .recent-open,
+.home-page .home-recents .recent-meta-row,
+.home-page .home-samples .sample-open,
+.home-page .home-samples .sample-open strong,
+.home-page .home-samples .sample-open small {
+  text-shadow: 0 0 2px #000, 0 0 5px #000, 0 1px 10px #000f, 0 0 14px #000d;
+}
+/* No separator rules between Saved/Sample category rows. */
+.home-page .home-catalog { border-top: 0; }
+.home-page .home-samples .sample-type-group, .home-page .home-recents .recent-type-group { border-bottom: 0; }
+
+/* Home action icons use the same metallic copper hover as Project, Sessions
+   and Papers. These selectors deliberately override the older transparent
+   star/shared/copy/remove rules above. Keep project title text unboxed. */
+.home-page .home-recents :is(
+  button.recent-title-star,
+  button.recent-title-shared,
+  button.recent-save-as,
+  button.recent-forget
+),
+.home-page .home-samples :is(a, button).recent-title-star {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  min-width: 24px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+  vertical-align: middle;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.home-page .home-recents button.recent-title-shared {
+  margin-left: 0;
+}
+.home-page :is(
+  .home-recents button.recent-title-star,
+  .home-recents button.recent-title-shared,
+  .home-recents button.recent-save-as,
+  .home-recents button.recent-forget,
+  .home-samples :is(a, button).recent-title-star,
+  .home-projects-heading button.home-icon-action
+):is(:hover, :focus-visible):not(:disabled) {
+  color: #fff2e9 !important;
+  background: var(--copper-gradient) !important;
+  background-image: var(--copper-gradient) !important;
+  border-color: #ac7054 !important;
+  border-radius: 4px;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important;
+  filter: none;
+  text-decoration: none;
+}
+.home-page :is(
+  .home-recents button.recent-title-star,
+  .home-recents button.recent-title-shared,
+  .home-recents button.recent-save-as,
+  .home-recents button.recent-forget,
+  .home-projects-heading button.home-icon-action
+):is(:hover, :focus-visible):not(:disabled) svg {
+  color: #fff2e9 !important;
+}
+
+/* Saved-project title actions are one aligned inline group: shared, copy, remove.
+   The controls move with the title rather than sitting after the metadata. */
+.home-page .home-recents .recent-title-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.home-page .home-recents .recent-title-row > .recent-open {
+  margin-right: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Match the visible title-to-first-glyph spacing to the icon-to-icon rhythm.
+   Apply to whichever action is first (shared, star, copy, or remove). */
+.home-page .home-recents .recent-title-row > .recent-open + :is(
+  .recent-title-star,
+  .recent-title-shared,
+  .recent-save-as,
+  .recent-forget
+) {
+  margin-left: 6px;
+}
+.home-page .home-recents .recent-title-row > :is(
+  .recent-title-star,
+  .recent-title-shared,
+  .recent-save-as,
+  .recent-forget
+) {
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+/* The auth stack is nested inside home-right-actions. Empty grid space
+   must not intercept the My Work and Samples tabs beneath it. */
+.home-page .home-topline > .home-right-actions,
+.home-page .home-topline .home-auth-pills,
+.home-page .home-topline .home-header-actions { pointer-events: none; }
+.home-page .home-right-actions :is(button, a, summary, input, select, [role="combobox"]) {
+  pointer-events: auto;
+}
+
+/* The activity heartbeat is a direct navigation target, not a decorative dot. */
+.recent-activity-jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: baseline;
+  position: relative;
+  top: -1px;
+  line-height: 1;
+  appearance: none;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 0 3px;
+  margin: 0;
+  cursor: pointer;
+}
+.recent-activity-jump:disabled { cursor: default; }
+.recent-activity-jump:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+
+/* The clickable activity pulse sits vertically centered just beside the
+   project title; neither hover nor focus paints a yellow backdrop. */
+.home-page .home-recents .recent-title-row > .recent-activity-jump {
+  align-self: center;
+  flex: 0 0 15px;
+  width: 15px;
+  height: 22px;
+  min-width: 15px;
+  min-height: 22px;
+  top: 0;
+  margin: 0 8px 0 -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  filter: none;
+}
+.home-page .home-recents .recent-title-row > .recent-activity-jump:is(:hover, :active, :focus) {
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+.home-page .home-recents .recent-title-row > .recent-activity-jump:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.home-page .home-recents .recent-meta-row { min-width: 0; }
+.home-page .home-recents .recent-meta-row > small { min-width: 0; max-width: 100%; }
+.home-page .home-recents .recent-meta-row > small > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

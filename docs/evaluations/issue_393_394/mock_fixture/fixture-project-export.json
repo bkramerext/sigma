@@ -1,0 +1,361 @@
+{
+  "files": {
+    "papers/ea1cd494385340bea96bd4494bfaa96a.json": {
+      "author_review_warnings": [
+        "Deterministic mocked artifact; not independently validated research."
+      ],
+      "created_at": "2026-10-31T07:21:48.686000+00:00",
+      "draft": {
+        "abstract": "This deterministic engineering fixture uses the sample project objective to exercise SIGMA paper rendering. It contains no independently conducted investigation, workload measurement, university policy finding, or provider-price analysis. Its diagram is an illustrative proposal and does not describe an implemented MindRouter federation.",
+        "abstract_claim_ids": [
+          "C1"
+        ],
+        "claims": [
+          {
+            "evidence_refs": [
+              "project:dc98d234-4b89-43e5-962f-aa0182ce9562"
+            ],
+            "id": "C1",
+            "reasoning": "This scope appears directly in the frozen project objective; it is a description of the fixture, not an external research result.",
+            "statement": "The saved project asks universities to compare local, frontier, hybrid and proposed federation models.",
+            "status": "established"
+          }
+        ],
+        "conclusion_claim_ids": [
+          "C1"
+        ],
+        "conclusions": [
+          "This fixture verifies safe diagram compilation only; it does not answer the sample research question."
+        ],
+        "diagrams": [
+          {
+            "boundaries": [
+              {
+                "label": "Campus controlled domain",
+                "node_ids": [
+                  "campus",
+                  "local"
+                ]
+              }
+            ],
+            "caption": "Illustrative proposal only: the campus decides which data may reach an approved external provider. This is not an implemented MindRouter federation.",
+            "edges": [
+              {
+                "label": "request",
+                "source": "researcher",
+                "target": "campus"
+              },
+              {
+                "label": "eligible local task",
+                "source": "campus",
+                "target": "local"
+              },
+              {
+                "label": "approved class only",
+                "source": "campus",
+                "target": "frontier"
+              }
+            ],
+            "nodes": [
+              {
+                "id": "researcher",
+                "label": "Researcher task"
+              },
+              {
+                "id": "campus",
+                "label": "Campus gateway and policy check"
+              },
+              {
+                "id": "local",
+                "label": "Campus GPU pool"
+              },
+              {
+                "id": "frontier",
+                "label": "Approved frontier API"
+              }
+            ]
+          }
+        ],
+        "limitations": [
+          "No Investigator/Skeptic research session or external sources were saved.",
+          "The architecture is illustrative and unmeasured."
+        ],
+        "methods": [
+          "A mocked author response was passed through SIGMA validation, archive and Tectonic compilation. No live provider was contacted."
+        ],
+        "methods_claim_ids": [
+          "C1"
+        ],
+        "open_obligations": [
+          "Conduct and save substantive research before evaluating actual campus costs, quality or governance."
+        ],
+        "problem_framing": [
+          "Universities may compare campus-local, approved frontier, hybrid and cooperative service models under sovereignty and budget constraints. This sentence restates the sample question and is not an empirical finding."
+        ],
+        "problem_framing_claim_ids": [
+          "C1"
+        ],
+        "sections": [
+          {
+            "claim_ids": [
+              "C1"
+            ],
+            "heading": "Fixture scope",
+            "paragraphs": [
+              "No claims about performance, price, policy compliance or federation feasibility are tested in this fixture."
+            ]
+          },
+          {
+            "claim_ids": [
+              "C1"
+            ],
+            "heading": "Interpretation",
+            "paragraphs": [
+              "A policy gate is shown before any proposed external route. The diagram is only a rendering test."
+            ]
+          }
+        ],
+        "title": "A Fixture Study of Policy-First Campus AI Routing",
+        "validation_warnings": [
+          "Deterministic mocked artifact; not independently validated research."
+        ]
+      },
+      "generation": {
+        "call_limit": 1,
+        "diagram_count": 1,
+        "evidence_batch_count": 0,
+        "evidence_batch_limit": 0,
+        "evidence_conflict_note_count": 0,
+        "evidence_conflicts": [],
+        "evidence_fields_omitted": 0,
+        "evidence_note_compaction_events": 0,
+        "generation_elapsed_seconds": 0,
+        "include_claim_details": false,
+        "include_diagrams": true,
+        "include_research_details": false,
+        "include_research_excerpts": false,
+        "include_validation_notes": false,
+        "long_form": false,
+        "material_evidence_omissions": [],
+        "max_output_tokens_per_call": 12000,
+        "max_response_bytes": 1000000,
+        "mode": "api_key",
+        "model": "fixture-no-provider",
+        "omitted_evidence": [],
+        "progress_run_id": "03c13ae98e86408d87f4d858558314d6",
+        "provider": "openai",
+        "provider_calls_attempted": 1,
+        "provider_calls_lifetime_total": 1,
+        "provider_calls_prior_runs": 0,
+        "reasoning_effort": "low",
+        "reduction_source_refs_omitted": [],
+        "research_integrity_record_count": 0,
+        "section_limit": 0,
+        "snapshot_size_bytes": 8193,
+        "source_count": 4
+      },
+      "obligation_reconciliation": [
+        {
+          "source_refs": [],
+          "status": "Author-listed; no exact frozen-record match",
+          "text": "Conduct and save substantive research before evaluating actual campus costs, quality or governance."
+        }
+      ],
+      "paper_id": "ea1cd494385340bea96bd4494bfaa96a",
+      "pdf_sha256": "01d374bd3e469971246f56914e8671ed247746f1a48f98ddd1a41f9233ec0e19",
+      "pdf_size_bytes": 24531,
+      "project_id": "dc98d234-4b89-43e5-962f-aa0182ce9562",
+      "schema_version": 1,
+      "snapshot": {
+        "project_id": "dc98d234-4b89-43e5-962f-aa0182ce9562",
+        "schema": "sigma-paper-evidence-v2",
+        "sources": [
+          {
+            "data": {
+              "active_order": [
+                "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+                "c5f7d857-b963-457c-895c-d35554cc97c2",
+                "d08775d5-8907-48d6-bd6c-7039f07a2047"
+              ],
+              "ai_model": "gpt-6.1-sol",
+              "difficulty": "hard",
+              "events": [
+                {
+                  "kind": "project.initialized",
+                  "sequence": 1,
+                  "timestamp": "2026-10-31T00:00:00+00:00"
+                },
+                {
+                  "kind": "strategy.created",
+                  "sequence": 2,
+                  "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+                  "timestamp": "2026-10-31T00:00:00+00:00"
+                },
+                {
+                  "kind": "strategy.created",
+                  "sequence": 3,
+                  "strategy_id": "c5f7d857-b963-457c-895c-d35554cc97c2",
+                  "timestamp": "2026-10-31T00:00:00+00:00"
+                },
+                {
+                  "kind": "strategy.created",
+                  "sequence": 4,
+                  "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+                  "timestamp": "2026-10-31T00:00:00+00:00"
+                }
+              ],
+              "id": "dc98d234-4b89-43e5-962f-aa0182ce9562",
+              "investigation_type": "computer_science",
+              "problem": "Can universities with uneven GPU capacity provide useful, reliable AI research access while retaining control of sensitive data and staying within hard budgets? Compare four baselines: (1) campus-local inference only, (2) approved frontier API only, (3) a campus gateway with separately approved external access, and (4) a proposed cooperative federation among campuses. Treat federation and frontier routing as hypothetical extensions, not existing MindRouter features.\n\nGround the investigation in MindRouter's published campus gateway: protocol translation across OpenAI/Ollama/Anthropic clients and Ollama/vLLM backends; WDRR fair-share scheduling; per-user quotas; audit logging; and GPU telemetry. Its documentation describes an on-campus service, not a multi-institution federation. Start with its documentation (https://mindrouter.ai/documentation.html) and PEARC'26 short paper (https://ai4ra.uidaho.edu/wp-content/uploads/2026/04/Sheneman_MindRouter_PEARC26_Short_Paper.pdf); record access dates, distinguish published claims from independently measured facts, and verify any changed claims against current sources.\n\nDesign a policy-first admission and routing study for varied tasks: classroom coding, routine analysis, demanding scientific reasoning, multimodal/long-context work, agentic multi-call workflows, sensitive data, and reproducible batches. Each campus must retain authority over identity, data classification, approved destinations, retention, audit policy, contracts and quotas. Restricted, student, patient, controlled, sponsor-restricted and unpublished data—including derived prompts, outputs, logs, embeddings and cache—must remain inside approved domains by default. Ambiguous classification fails closed. Outage, overload, timeout, retry, cost exhaustion or a better score must never silently bypass policy.\n\nCompare task completion quality, provenance/version reproducibility, latency, throughput, availability and administrative burden. Include heterogeneous GPU memory/model fit, queues, cold starts, maintenance, peak demand, batch vs interactive service, per-campus autonomy, cross-campus agreements, fairness and starvation. Propose a minimal deployable architecture and routing rule, but test when campus-only service plus separately approved frontier access is simpler and safer than federation. Identify trust boundaries and adversarial cases: stale policy, malicious tenant, WAN partition, campus/provider outage, provider rejection, ambiguous charged timeout, cancellation, quota contention and unsafe fallback.\n\nBuild transparent total-cost models. For local capacity include GPU purchase and depreciation, replacement, utilization and idle capacity, power, cooling, storage, network, hardware support, procurement and staff operations. For APIs include current dated input/output/cached-token prices, repeated Investigator/Skeptic or agent calls, retries, tools/embeddings, egress and minimum commitments. Separate sunk, incremental and fully loaded cost. State every assumption, distinguish measured values from hypothetical scenarios, and report annual/monthly totals, cost per active researcher and cost per successfully completed useful research task at a stated quality and latency target. Explore break-even, utilization, quality, price, demand and capacity sensitivity. An illustrative $4,000/month shared frontier cap (sensitivities $2,000/$8,000) is a scenario only, not measured campus spending. Include zero/no-budget operation, reservations before calls, per-user/project/department limits, attribution, alerts, budget exhaustion and no paid retry escalation.\n\nDeliver a bounded comparison, uncertainty register, counterexamples, measurable 90-day pilot, stop/go thresholds and questions for campus computing, security, procurement, faculty and students. Do not invent prices, workload traces, evaluation results or university policy. An architecture proposal or agent consensus is not deployment evidence; report what would require real campus measurements and legal/security review.",
+              "reasoning_effort": "high",
+              "schema_version": 8,
+              "title": "Sovereign AI Federation v1"
+            },
+            "id": "project:dc98d234-4b89-43e5-962f-aa0182ce9562",
+            "kind": "project"
+          },
+          {
+            "data": {
+              "approach": "Map data classes and derived content from client through gateway, local backends, logs, caches, tools and any proposed partner/frontier destination. For each transition identify the campus authority, policy check, identity, retention, audit and failure behavior. Treat MindRouter's documented campus gateway as baseline; separately label every federation/cloud control as a proposal. Construct ambiguous-classification, stale-policy, compromised-tenant and partition counterexamples. Decide which invariants must hold before routing can be considered safe.",
+              "author_kind": "human",
+              "created_at": "2026-10-31T00:00:00+00:00",
+              "enabled": true,
+              "id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+              "provenance": null,
+              "removed_at": null,
+              "stage": "draft",
+              "summary": "Trace sovereignty decisions and adversarial trust-boundary failures.",
+              "title": "Sovereignty and trust boundaries"
+            },
+            "id": "strategy:e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+            "kind": "strategy"
+          },
+          {
+            "data": {
+              "approach": "Define representative research tasks, success/quality rubric, latency target and workload envelope before comparing infrastructure. Build campus-only, frontier-only, controlled hybrid and proposed federation baselines. Use dated public prices where available and explicitly hypothetical local capacity assumptions; include depreciation, energy/cooling, staffing, support, utilization, multi-call amplification and retries. Calculate total and marginal costs and cost per successful task. Sweep demand, GPU utilization, model quality, API prices and $0/$2k/$4k/$8k monthly frontier budgets. Identify which missing campus measurements could reverse the decision.",
+              "author_kind": "human",
+              "created_at": "2026-10-31T00:00:00+00:00",
+              "enabled": true,
+              "id": "c5f7d857-b963-457c-895c-d35554cc97c2",
+              "provenance": null,
+              "removed_at": null,
+              "stage": "draft",
+              "summary": "Compare quality-adjusted task costs under explicit assumptions and sensitivities.",
+              "title": "Ownership cost and task quality"
+            },
+            "id": "strategy:c5f7d857-b963-457c-895c-d35554cc97c2",
+            "kind": "strategy"
+          },
+          {
+            "data": {
+              "approach": "Specify policy-first eligibility before quality/cost ranking; then design admission, reservation, scheduling and fallback rules that preserve campus autonomy. Compare per-user/project/department fairness, interactive and batch service, starvation, peak queues, hardware maintenance, campus/WAN/provider failures, cancellation and ambiguous charged timeouts. Test minimal campus gateway plus separately approved frontier access against proposed federation. Propose a 90-day pilot with measurable task-quality, latency, availability, utilization, fairness, cost and security thresholds, named measurement owners, stop/go criteria and unresolved procurement/legal questions.",
+              "author_kind": "human",
+              "created_at": "2026-10-31T00:00:00+00:00",
+              "enabled": true,
+              "id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+              "provenance": null,
+              "removed_at": null,
+              "stage": "draft",
+              "summary": "Stress-test shared capacity and define a measurable pilot without assuming federation wins.",
+              "title": "Fairness, reliability and pilot"
+            },
+            "id": "strategy:d08775d5-8907-48d6-bd6c-7039f07a2047",
+            "kind": "strategy"
+          }
+        ]
+      },
+      "snapshot_sha256": "3dcae814d22543d99e4be11f89c0123f8a29d9c7958ca5147f48b7a187c2142e",
+      "tex_source": "\\documentclass[11pt]{article}\n\\title{A Fixture Study of Policy-First Campus AI Routing}\n\\date{}\n\\author{SIGMA AI-assisted research synthesis}\n\\usepackage[T1]{fontenc}\n\\usepackage[utf8]{inputenc}\n\\usepackage[margin=1in]{geometry}\n\\usepackage{amsmath,amssymb,booktabs,longtable}\n\\usepackage{microtype}\n\\usepackage{titlesec}\n\\usepackage{tikz}\n\\usetikzlibrary{fit}\n\\emergencystretch=2em\n\\raggedbottom\n\\linespread{1.07}\n\\usepackage{xcolor}\n\\definecolor{blue}{HTML}{24485E}\n\\titleformat{\\section}{\\Large\\bfseries\\sffamily\\color{blue}}{\\thesection}{0.8em}{}\n\\titleformat{\\subsection}{\\large\\bfseries\\sffamily}{\\thesubsection}{0.7em}{}\n\\setlength{\\parskip}{.6em}\n\\setlength{\\parindent}{0pt}\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nThis deterministic engineering fixture uses the sample project objective to exercise SIGMA paper rendering. It contains no independently conducted investigation, workload measurement, university policy finding, or provider-price analysis. Its diagram is an illustrative proposal and does not describe an implemented MindRouter federation.\n\\end{abstract}\n\\section{Introduction and problem statement}\nUniversities may compare campus-local, approved frontier, hybrid and cooperative service models under sovereignty and budget constraints. This sentence restates the sample question and is not an empirical finding.\n\n\\section{Methods and evidence}\nA mocked author response was passed through SIGMA validation, archive and Tectonic compilation. No live provider was contacted.\n\n\\begin{figure}[htbp]\n\\centering\n\\begin{tikzpicture}[>=stealth, every node/.style={draw, rounded corners, align=center, text width=3.6cm, minimum height=0.9cm, font=\\small, fill=blue!5}]\n\\node (researcher) at (0.0,0.0) {Researcher task};\n\\node (campus) at (5.0,0.0) {Campus gateway and policy check};\n\\node (local) at (0.0,-1.8) {Campus GPU pool};\n\\node (frontier) at (5.0,-1.8) {Approved frontier API};\n\\draw[->] (researcher) -- node[midway,fill=white,draw=none,font=\\scriptsize] {request} (campus);\n\\draw[->] (campus) -- node[midway,fill=white,draw=none,font=\\scriptsize] {eligible local task} (local);\n\\draw[->] (campus) -- node[midway,fill=white,draw=none,font=\\scriptsize] {approved class only} (frontier);\n\\node[draw,dashed,rounded corners,inner sep=7pt,fit=(campus)(local),label=above:{Campus controlled domain}] {};\n\\end{tikzpicture}\n\\caption{Illustrative proposal only: the campus decides which data may reach an approved external provider. This is not an implemented MindRouter federation.}\n\\end{figure}\n\\section{Fixture scope}\nNo claims about performance, price, policy compliance or federation feasibility are tested in this fixture.\n\n\\section{Interpretation}\nA policy gate is shown before any proposed external route. The diagram is only a rendering test.\n\n\\section{Limitations}\n\\begin{itemize}\n\\item No Investigator/Skeptic research session or external sources were saved.\n\\item The architecture is illustrative and unmeasured.\n\\end{itemize}\n\\section{Open obligations}\n\\begin{itemize}\n\\item Conduct and save substantive research before evaluating actual campus costs, quality or governance.\n\\end{itemize}\n\\section{Conclusions}\nThis fixture verifies safe diagram compilation only; it does not answer the sample research question.\n\n\\section*{Authorship note}\nAI-assisted synthesis from saved research; not independently peer reviewed.\n\\end{document}\n",
+      "validation_warnings": [
+        "Deterministic mocked artifact; not independently validated research.",
+        "C1 is labeled established while the frozen evidence contains counterexample or contradiction language; inspect the cited sources before accepting it.",
+        "The frozen evidence contains open proof/research obligation(s) requiring reconciliation: 0 item(s) are not listed by the author and are not presumed resolved; 1 author-listed item(s) have no exact frozen-record match. See the obligation reconciliation.",
+        "AI-authored analysis is not independent formal verification; model agreement does not establish proof."
+      ]
+    },
+    "papers/ea1cd494385340bea96bd4494bfaa96a.pdf": {
+      "$sigma_bundle_encoding": "base64",
+      "data": "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"
+    },
+    "project.json": {
+      "active_order": [
+        "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+        "c5f7d857-b963-457c-895c-d35554cc97c2",
+        "d08775d5-8907-48d6-bd6c-7039f07a2047"
+      ],
+      "ai_model": "gpt-6.1-sol",
+      "difficulty": "hard",
+      "events": [
+        {
+          "kind": "project.initialized",
+          "sequence": 1,
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        },
+        {
+          "kind": "strategy.created",
+          "sequence": 2,
+          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        },
+        {
+          "kind": "strategy.created",
+          "sequence": 3,
+          "strategy_id": "c5f7d857-b963-457c-895c-d35554cc97c2",
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        },
+        {
+          "kind": "strategy.created",
+          "sequence": 4,
+          "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        }
+      ],
+      "id": "dc98d234-4b89-43e5-962f-aa0182ce9562",
+      "investigation_type": "computer_science",
+      "problem": "Can universities with uneven GPU capacity provide useful, reliable AI research access while retaining control of sensitive data and staying within hard budgets? Compare four baselines: (1) campus-local inference only, (2) approved frontier API only, (3) a campus gateway with separately approved external access, and (4) a proposed cooperative federation among campuses. Treat federation and frontier routing as hypothetical extensions, not existing MindRouter features.\n\nGround the investigation in MindRouter's published campus gateway: protocol translation across OpenAI/Ollama/Anthropic clients and Ollama/vLLM backends; WDRR fair-share scheduling; per-user quotas; audit logging; and GPU telemetry. Its documentation describes an on-campus service, not a multi-institution federation. Start with its documentation (https://mindrouter.ai/documentation.html) and PEARC'26 short paper (https://ai4ra.uidaho.edu/wp-content/uploads/2026/04/Sheneman_MindRouter_PEARC26_Short_Paper.pdf); record access dates, distinguish published claims from independently measured facts, and verify any changed claims against current sources.\n\nDesign a policy-first admission and routing study for varied tasks: classroom coding, routine analysis, demanding scientific reasoning, multimodal/long-context work, agentic multi-call workflows, sensitive data, and reproducible batches. Each campus must retain authority over identity, data classification, approved destinations, retention, audit policy, contracts and quotas. Restricted, student, patient, controlled, sponsor-restricted and unpublished data—including derived prompts, outputs, logs, embeddings and cache—must remain inside approved domains by default. Ambiguous classification fails closed. Outage, overload, timeout, retry, cost exhaustion or a better score must never silently bypass policy.\n\nCompare task completion quality, provenance/version reproducibility, latency, throughput, availability and administrative burden. Include heterogeneous GPU memory/model fit, queues, cold starts, maintenance, peak demand, batch vs interactive service, per-campus autonomy, cross-campus agreements, fairness and starvation. Propose a minimal deployable architecture and routing rule, but test when campus-only service plus separately approved frontier access is simpler and safer than federation. Identify trust boundaries and adversarial cases: stale policy, malicious tenant, WAN partition, campus/provider outage, provider rejection, ambiguous charged timeout, cancellation, quota contention and unsafe fallback.\n\nBuild transparent total-cost models. For local capacity include GPU purchase and depreciation, replacement, utilization and idle capacity, power, cooling, storage, network, hardware support, procurement and staff operations. For APIs include current dated input/output/cached-token prices, repeated Investigator/Skeptic or agent calls, retries, tools/embeddings, egress and minimum commitments. Separate sunk, incremental and fully loaded cost. State every assumption, distinguish measured values from hypothetical scenarios, and report annual/monthly totals, cost per active researcher and cost per successfully completed useful research task at a stated quality and latency target. Explore break-even, utilization, quality, price, demand and capacity sensitivity. An illustrative $4,000/month shared frontier cap (sensitivities $2,000/$8,000) is a scenario only, not measured campus spending. Include zero/no-budget operation, reservations before calls, per-user/project/department limits, attribution, alerts, budget exhaustion and no paid retry escalation.\n\nDeliver a bounded comparison, uncertainty register, counterexamples, measurable 90-day pilot, stop/go thresholds and questions for campus computing, security, procurement, faculty and students. Do not invent prices, workload traces, evaluation results or university policy. An architecture proposal or agent consensus is not deployment evidence; report what would require real campus measurements and legal/security review.",
+      "reasoning_effort": "high",
+      "schema_version": 8,
+      "strategies": [
+        {
+          "approach": "Map data classes and derived content from client through gateway, local backends, logs, caches, tools and any proposed partner/frontier destination. For each transition identify the campus authority, policy check, identity, retention, audit and failure behavior. Treat MindRouter's documented campus gateway as baseline; separately label every federation/cloud control as a proposal. Construct ambiguous-classification, stale-policy, compromised-tenant and partition counterexamples. Decide which invariants must hold before routing can be considered safe.",
+          "author_kind": "human",
+          "created_at": "2026-10-31T00:00:00+00:00",
+          "enabled": true,
+          "id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "provenance": null,
+          "removed_at": null,
+          "stage": "draft",
+          "summary": "Trace sovereignty decisions and adversarial trust-boundary failures.",
+          "title": "Sovereignty and trust boundaries"
+        },
+        {
+          "approach": "Define representative research tasks, success/quality rubric, latency target and workload envelope before comparing infrastructure. Build campus-only, frontier-only, controlled hybrid and proposed federation baselines. Use dated public prices where available and explicitly hypothetical local capacity assumptions; include depreciation, energy/cooling, staffing, support, utilization, multi-call amplification and retries. Calculate total and marginal costs and cost per successful task. Sweep demand, GPU utilization, model quality, API prices and $0/$2k/$4k/$8k monthly frontier budgets. Identify which missing campus measurements could reverse the decision.",
+          "author_kind": "human",
+          "created_at": "2026-10-31T00:00:00+00:00",
+          "enabled": true,
+          "id": "c5f7d857-b963-457c-895c-d35554cc97c2",
+          "provenance": null,
+          "removed_at": null,
+          "stage": "draft",
+          "summary": "Compare quality-adjusted task costs under explicit assumptions and sensitivities.",
+          "title": "Ownership cost and task quality"
+        },
+        {
+          "approach": "Specify policy-first eligibility before quality/cost ranking; then design admission, reservation, scheduling and fallback rules that preserve campus autonomy. Compare per-user/project/department fairness, interactive and batch service, starvation, peak queues, hardware maintenance, campus/WAN/provider failures, cancellation and ambiguous charged timeouts. Test minimal campus gateway plus separately approved frontier access against proposed federation. Propose a 90-day pilot with measurable task-quality, latency, availability, utilization, fairness, cost and security thresholds, named measurement owners, stop/go criteria and unresolved procurement/legal questions.",
+          "author_kind": "human",
+          "created_at": "2026-10-31T00:00:00+00:00",
+          "enabled": true,
+          "id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "provenance": null,
+          "removed_at": null,
+          "stage": "draft",
+          "summary": "Stress-test shared capacity and define a measurable pilot without assuming federation wins.",
+          "title": "Fairness, reliability and pilot"
+        }
+      ],
+      "title": "Sovereign AI Federation v1"
+    }
+  },
+  "format": "sigma.project.bundle",
+  "version": 2
+}

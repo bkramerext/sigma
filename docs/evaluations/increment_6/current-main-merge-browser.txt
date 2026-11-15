@@ -1,0 +1,18 @@
+command=['uv', 'run', '--locked', '--no-sync', '--with', 'playwright', 'python', 'docs/evaluations/increment_6/release_browser.py']
+current_main_sha=afebf33f901f3662bcfc286c82693111a15416b7
+merged_candidate_sha=06cb8c46f460bdb041780845b0e95dbbbc2dd1be
+start_utc=2026-10-25T08:07:47.872318+00:00
+end_utc=2026-10-25T08:08:06.548233+00:00
+elapsed_seconds=18.7
+exit_code=0
+
+{
+  "result": "PASS",
+  "tested_sha": "06cb8c46f460bdb041780845b0e95dbbbc2dd1be",
+  "base_main_sha": "afebf33f901f3662bcfc286c82693111a15416b7",
+  "browser": "Google Chrome 156.0.8078.47",
+  "viewports": 12,
+  "page_errors": [],
+  "direct_artifact_focus": true,
+  "scratch": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-1w9i2_1_"
+}

@@ -1,0 +1,50 @@
+# A13: Project header layout and shared copper controls
+
+**Status:** Ready for Codex implementation. A12 is reserved for AI scenario generation and is not part of this work.
+
+## Objective
+
+Make a narrowly scoped change to the **existing project workspace header**, following the approved screenshot and the precise requested changes. **Do not generate, edit, crop, recolor, or replace artwork.** The current project-header raster at `frontend/public/sigma-project-header.png` is already approved and must be retained pixel-for-pixel.
+
+The existing workspace header currently has (left to right) the SIGMA image, the redundant `STRATEGY INVESTIGATION, GENERATION, MEASUREMENT & ASSESSMENT` tagline, and at the far right a truncated project title, a Close project control, and a ChatGPT connection control.
+
+Make the header read, logically and visually:
+
+**[Existing SIGMA project-header artwork] [FULL PROJECT NAME at the upper left, occupying the former tagline region] [Close project button] [ChatGPT connection pill]**
+
+The project name must not be stranded on the far right or artificially truncated.
+
+## Exact behavior and appearance
+
+1. **Remove only the workspace header tagline.** Remove `Strategy Investigation, Generation, Measurement & Assessment` from the project workspace header. Do not remove or change any Home branding/slogan.
+2. **Move the current project name into the freed left-side space, immediately to the right of the SIGMA artwork, aligned toward the top of the header.** Present its full text rather than truncating it with an ellipsis. Support long names with wrapping (or appropriate responsive reflow) and let header height adapt as necessary. Do not hide the project name at the 1100px breakpoint or any other width. Do not confuse the header label with the separate project page's main heading, which should remain unchanged.
+3. **Keep Close project to the left of ChatGPT connection**, both in the header's right-side controls area on desktop. On narrow displays, allow intentional wrapping/stacking that preserves the same logical/read order and keeps both controls usable.
+4. **Close project must be a real button with the same burnished-copper button design used on Home**, not the existing plain text/outline approximation. Reuse shared button styling/tokens/component implementation instead of copying an isolated `.close-project` gradient. Preserve its click handler, busy/disabled behavior, keyboard accessibility, and focus indication. Keep Home's approved design intact.
+5. **ChatGPT connected / Connect AI must render with the exact same pill implementation and styling as on Home**, with its normal live status label/dot, disclosure behavior, account actions, focus behavior and popover. Reuse the existing `ConnectionStatus` React component from `frontend/src/ai-connection.tsx`; do **not** create a separate static pill or fork the connection behavior. Refactor CSS so one common component/style, with only necessary positional layout differences, gives consistent appearance on Home and workspace.
+6. **Share UI primitives rather than visual copies.** Extract/use reusable copper button styles or a small shared component, shared design tokens, and shared connection-pill styles wherever needed. Avoid page-scoped overrides that silently give the same component different geometry, palette, border, or hover/focus states. Keep the implementation proportionate to this task; do not undertake a broad design-system rewrite. Coordinate with A11's copper Home controls, if those changes land during implementation.
+
+## Current code clues (inspect before editing)
+
+- `frontend/src/main.tsx`: `Header` renders `.brand-block` with the artwork followed by `<p className="expansion">…</p>`; the project title is currently rendered in `.header-controls` as `.current-project`; Close project currently uses `text-button close-project`; `ConnectionStatus` is already imported from `./ai-connection`.
+- `frontend/src/workspace.css`: `.current-project` is currently constrained by `max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`; a media query at max-width 1100px sets it to `display: none`. Both policies are contrary to this assignment.
+- `frontend/src/style.css`, `frontend/src/ai-connection.css`, and the Home styles: examine actual Home button and connection-pill styling, then centralize the common rules. Do not simply add more competing workspace-specific styles.
+- The approved image must continue to come from `/sigma-project-header.png`, backed by the tracked static asset in `frontend/public/`. Do not modify image dimensions or bytes.
+
+## Acceptance criteria
+
+- In a standard desktop-width project screenshot the SIGMA artwork remains on the far left, the **complete project title** appears near the top immediately to its right (in place of the removed tagline), the copper **Close project** button is on the right, directly left of the **ChatGPT connection** pill.
+- Long names such as `Nonconsecutive Subset Sums Modulo 3 Copy` are readable in full, either on one line when space permits or on multiple lines when space is constrained. No ellipsis, clipping, hiding, or horizontal overflow at desktop, laptop, or mobile widths.
+- The connection pill looks and behaves identically on Home and the project workspace. Connected, disconnected, loading, and error states use the same shared component and visual styles; the disclosure remains interactive and accessible.
+- Home buttons and workspace Close project share the same burnished copper component/style source, with the gradient, border, hover, disabled and focus states consistently applied.
+- The **Home page, approved artwork, workspace navigation and project content are otherwise unchanged**. No new visuals, no broad layout redesign.
+
+## Tests and delivery
+
+- Update relevant component/CSS tests or browser checks for title placement and wrapping, the tagline's absence in the workspace only, button actions/disabled state, and shared connection status across both pages.
+- Verify at typical desktop width, 1100px, 700px and a narrow mobile viewport. Ideally compare screenshots before and after to ensure there are no collateral visual changes.
+- Run the frontend production build and relevant tests; report results truthfully.
+- Commit the code changes and report the commit SHA.
+
+## Out of scope
+
+A12 scenario generation, changes to Home artwork or project logo artwork, critical-line/zero repairs, research features, backend changes, or redesigning other sections of the workspace.

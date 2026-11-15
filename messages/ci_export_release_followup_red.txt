@@ -1,0 +1,9 @@
+RED / CI follow-up for production export release
+
+Branch: red/fix-sample-copy-ci-session-ids, based on current main ba05bc44eb21fe5c321390f358c656b13e555367.
+
+CI on PR #275 merge commit 08f32fe and on the subsequent main merge ba05bc4 failed reproducibly in tests/make_sample.py: the test expected sample copies to retain source research-session IDs, while sample copies intentionally receive new UUIDs to avoid shared cloud-ledger collisions. Updated the test to verify fresh IDs and preserved successful/failed session behavior by status.
+
+Verification: tests/make_sample.py, tests/project_bundle.py, tests/project_reports.py, and full ./sigma test passed locally on the corrected current-main tree. The full command included Ruff, format check, Pyright, frontend typecheck and production build. No paid calls, production changes, or data changes.
+
+This test-only PR is needed to restore green CI before deploying the requested export release. It does not change production runtime behavior.

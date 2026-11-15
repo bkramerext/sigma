@@ -1,0 +1,17 @@
+T25 follow-up handoff — Outcome Markdown control
+
+The Render as Markdown control now flows immediately after the Outcome title
+and before its outcome label. It uses the existing compact SIGMA Markdown icon
+style, copper hover/active treatment, visible keyboard focus, and a 28 px
+target. The implementation removes stale Outcome toggle selectors from the
+previous markup and styles the current `.outcome-heading-title` structure.
+
+Validation:
+- `UV_CACHE_DIR=/tmp/sigma-codex-uv-cache ./sigma test` — passed.
+- Real Chrome `browser_checks/a17_research.py` — passed, including Outcome
+  control order/size at 1440, 1280, 390, and 320 px; Enter/Space keyboard
+  activation; focus visibility; no extra provider calls; and responsive layout.
+- Desktop and mobile screenshots were inspected.
+
+Current branch: `fix/outcome-markdown-flow`. No live or paid provider call was
+made. The change is ready for review.

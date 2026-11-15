@@ -1,0 +1,643 @@
+"""End-to-end conversion of an exported project into an editable Samples entry."""
+
+import asyncio
+import base64
+import copy
+import hashlib
+import json
+import shutil
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
+
+import httpx
+import pypdfium2
+from research_sessions import (
+    REAL_CLIENT,
+    execution_tool_fixture,
+    investigation,
+    provider_response,
+    skeptic,
+    wait_for,
+)
+
+from sigma import (
+    agentic_evidence,
+    cli,
+    paper_scores,
+    papers,
+    project_bundle,
+    research_sessions,
+    samples,
+)
+from sigma.api import export_project_view
+from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
+from sigma.recents import home_projects
+from sigma.zstd_codec import compress
+
+MODEL = "gpt-6.1-sol"
+PRIVATE_STRINGS = (
+    "fixture-secret-token-1234567890",
+    "Bearer very-secret-bearer-value-123456",
+    "sk-proj-0123456789abcdefghijklmnop",
+    "/Users/alice/private-projects/original.sigma",
+)
+
+
+def snapshot_tree(root: Path) -> dict[str, bytes]:
+    return {
+        str(item.relative_to(root)): item.read_bytes()
+        for item in root.rglob("*")
+        if item.is_file() and not item.is_symlink()
+    }
+
+
+def rejects(action, message: str) -> None:
+    try:
+        action()
+    except ProjectError as exc:
+        assert message in str(exc)
+    else:
+        raise AssertionError(f"Expected rejection containing {message!r}")
+
+
+async def create_source_project(root: Path) -> tuple[Path, str, str, str]:
+    source = root / "source.sigma"
+    view = initialize_project(
+        source,
+        "Exported research project",
+        "Investigate a testable question. Private note: synthetic internal fixture text.",
+        research_mode="mathematical",
+    )
+    first = create_strategy(
+        source,
+        "Numerical approach",
+        "Compute a finite sequence and compare against the recurrence.",
+    ).project.strategies[0]
+    second = create_strategy(
+        source,
+        "Structural approach",
+        "Prove the recurrence by partitioning objects into disjoint classes.",
+    ).project.strategies[1]
+
+    credential = {
+        "identity": "fixture-account",
+        "mode": "api_key",
+        "token": "fixture-secret-token-1234567890",
+        "status": "connected",
+    }
+    config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+    success_outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+    success_outputs[0]["python_code"] = "print(sum(i*i for i in range(5)))"
+    success_outputs[0]["evidence_status"] = "Finite numerical check; not a proof."
+    execution = {
+        "id": str(uuid4()),
+        "status": "completed",
+        "runtime": "python",
+        "source": success_outputs[0]["python_code"],
+        "stdout": "30\ncomputation fixture complete",
+        "stderr": "",
+        "exit_code": 0,
+        "duration_ms": 21,
+        "artifacts": [],
+        "private_config": {"token": PRIVATE_STRINGS[0]},
+    }
+
+    async def run_session(strategy_id: str, outputs: list[dict], failed: bool = False):
+        async def handler(request):
+            assert isinstance(json.loads(request.content), dict)
+            if failed:
+                return httpx.Response(
+                    400,
+                    json={"error": {"message": f"Rejected {PRIVATE_STRINGS[0]}"}},
+                )
+            if not outputs:
+                raise AssertionError("Unexpected additional research call")
+            return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+        limits = dict(research_sessions.DEFAULT_LIMITS)
+        limits.update(research_rounds=1, model_calls=2)
+        research_sessions.save_limits(str(source), limits)
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(
+                research_sessions,
+                "execution_capabilities",
+                return_value=execution_tool_fixture(True),
+            ),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+            patch.object(
+                research_sessions,
+                "execute_research_code",
+                new=AsyncMock(return_value=execution),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(source),
+                strategy_id,
+                str(uuid4()),
+                view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+            )
+            return await wait_for(source, started["id"])
+
+    successful = await run_session(first.id, success_outputs)
+    assert successful["status"] in {"ended", "completed"}
+    failed = await run_session(second.id, [], failed=True)
+    assert failed["status"] == "failed"
+
+    run_id = uuid4().hex
+    agentic_evidence.save(
+        source,
+        {
+            "schema_version": 1,
+            "run_id": run_id,
+            "project_id": view.project.id,
+            "started_at": "2026-10-23T12:00:00+00:00",
+            "finished_at": "2026-10-23T12:00:01+00:00",
+            "status": "completed",
+            "timeline": [{"type": "decision", "message": "Strategy accepted."}],
+            "steps": [{"output": {"title": "Generated approach"}}],
+            "private_config": {"access_token": PRIVATE_STRINGS[0]},
+            "note": PRIVATE_STRINGS[3],
+        },
+    )
+    return source, successful["id"], failed["id"], run_id
+
+
+async def main() -> None:
+    sample_evidence = json.loads(
+        Path("samples/nonconsecutive-subset-sums/sample-evidence.json").read_text(encoding="utf-8")
+    )
+    first_session = next(
+        item for item in sample_evidence["research_sessions"] if item["session_number"] == 1
+    )
+    first_artifact = first_session["artifacts"][0]
+    first_outcome = research_sessions._public(first_session)["outcome"]
+    assert first_artifact["coordinator_decision"] == "stop_budget_exhausted"
+    assert first_artifact["skeptic_output"]["stop_reason"] == "decisive_counterexample"
+    assert first_session["outcome"]["label"] == "Mixed · partial progress, unresolved"
+    assert first_outcome["assessment"] == "mixed"
+    assert first_outcome["label"] == "Mixed · partial progress, unresolved"
+    assert first_outcome["solution_review"]["status"] == "partial"
+    assert "general recurrence" in " ".join(first_outcome["solution_review"]["proof_obligations"])
+    assert "asymptotic limit" in " ".join(first_outcome["solution_review"]["proof_obligations"])
+    assert "a_(n+3)=a_(n+2)+a_n" in first_artifact["claim_or_question"]
+    assert "a_5=5" in first_artifact["skeptic_response"]
+    assert "a_4+a_2=3+1=4" in first_artifact["skeptic_response"]
+    assert first_artifact["skeptic_output"]["objections"] == [
+        "The proposed three-step recurrence has the explicit n=2 counterexample a_5=5 != a_4+a_2=4."
+    ]
+
+    with TemporaryDirectory(prefix="sigma-make-sample-") as temporary:
+        root = Path(temporary)
+        projects_root = root / "projects"
+        catalog = root / "samples"
+        state_root = root / "state"
+        for directory in (projects_root, catalog, state_root):
+            directory.mkdir(mode=0o700)
+        with (
+            patch.object(samples, "SAMPLES", catalog),
+            patch("sigma.projects.projects_root", lambda: projects_root),
+            patch("sigma.samples.projects_root", lambda: projects_root),
+            patch("sigma.recents.state_directory", lambda: state_root),
+        ):
+            source, success_id, failed_id, run_id = await create_source_project(projects_root)
+            paper_id = uuid4().hex
+            tex_fixture = Path("tests/fixtures/sigma-valid-sample-paper.tex").read_text(
+                encoding="utf-8"
+            )
+            paper_pdf = Path("tests/fixtures/sigma-valid-sample-paper.pdf").read_bytes()
+            pdf_document = pypdfium2.PdfDocument(paper_pdf)
+            assert len(pdf_document) == 1
+            pdf_document.close()
+            paper_record = {
+                "paper_id": paper_id,
+                "project_id": inspect_project(source).project.id,
+                "created_at": "2026-10-31T12:00:00+00:00",
+                "snapshot_sha256": "a" * 64,
+                "validation_warnings": [],
+                "generation": {"provider_calls": 1},
+                "draft": {"title": "Reusable fixture paper"},
+                "research_session_id": success_id,
+                "tex_source": tex_fixture,
+                "pdf_sha256": hashlib.sha256(paper_pdf).hexdigest(),
+                "pdf_size_bytes": len(paper_pdf),
+                "score": paper_scores._make_score(
+                    paper_scores.PaperJudgment.model_validate(
+                        {
+                            category: {
+                                "earned": 74,
+                                "explanation": "Synthetic scored paper acceptance test.",
+                            }
+                            for category in paper_scores.WEIGHTS
+                        }
+                    ),
+                    hashlib.sha256(paper_pdf).hexdigest(),
+                ),
+            }
+            paper_dir = source / "artifacts" / "papers"
+            paper_dir.mkdir(parents=True)
+            (paper_dir / f"{paper_id}.json").write_text(json.dumps(paper_record))
+            (paper_dir / f"{paper_id}.pdf").write_bytes(paper_pdf)
+            source_before = snapshot_tree(source)
+            complete_bundle = project_bundle.encode(source)
+            complete_file = root / "complete-project.json"
+            complete_file.write_bytes(complete_bundle)
+            samples.make_sample(complete_file, "t30-paper")
+            paper_copy = samples.open_sample_project("t30-paper")
+            assert papers.paper_tex(paper_copy.path, paper_id) == paper_record["tex_source"]
+            assert papers.get_pdf(paper_copy.path, paper_id) == paper_pdf
+            copied_paper = papers.get_paper(paper_copy.path, paper_id)
+            assert copied_paper["project_id"] == paper_copy.project.id
+            assert copied_paper["pdf_sha256"] == paper_record["pdf_sha256"]
+            assert papers.paper_tex(paper_copy.path, paper_id) == tex_fixture
+            copied_session_ids = {
+                json.loads(item.read_text(encoding="utf-8"))["id"]
+                for item in (Path(paper_copy.path) / "research-sessions").glob("*.json")
+            }
+            assert len(copied_session_ids) == 2
+            assert not copied_session_ids.intersection({success_id, failed_id})
+            assert copied_paper["research_session_id"] in copied_session_ids
+            second_copy = samples.open_sample_project("t30-paper")
+            second_session_ids = {
+                json.loads(item.read_text(encoding="utf-8"))["id"]
+                for item in (Path(second_copy.path) / "research-sessions").glob("*.json")
+            }
+            assert len(second_session_ids) == 2
+            assert copied_session_ids.isdisjoint(second_session_ids)
+
+            assert (
+                samples.sample_projects()["projects"][
+                    next(
+                        i
+                        for i, sample in enumerate(samples.sample_projects()["projects"])
+                        if sample["id"] == "t30-paper"
+                    )
+                ]["best_paper_score"]
+                == 74
+            )
+
+            # Reject malicious and incomplete bundle members before publishing
+            # anything into the existing sample catalog.
+            complete_bundle_value = json.loads(complete_bundle)
+
+            def write_bundle(name: str, value: dict) -> Path:
+                target = root / f"{name}.json"
+                target.write_text(json.dumps(value), encoding="utf-8")
+                return target
+
+            def mutate_bundle(mutation) -> dict:
+                changed = copy.deepcopy(complete_bundle_value)
+                mutation(changed["files"])
+                return changed
+
+            # Real saved .sigma projects use papers/, not artifacts/papers/.
+            # Both layouts must retain the actual scored metadata and PDF.
+            live_bundle = copy.deepcopy(complete_bundle_value)
+            for suffix in (".json", ".pdf"):
+                source_name = f"artifacts/papers/{paper_id}{suffix}"
+                live_bundle["files"][f"papers/{paper_id}{suffix}"] = live_bundle["files"].pop(
+                    source_name
+                )
+            samples.make_sample(write_bundle("live-papers", live_bundle), "t30-live-papers")
+            assert (
+                next(
+                    item["best_paper_score"]
+                    for item in samples.sample_projects()["projects"]
+                    if item["id"] == "t30-live-papers"
+                )
+                == 74
+            )
+            live_copy = samples.open_sample_project("t30-live-papers")
+            assert papers.get_pdf(live_copy.path, paper_id) == paper_pdf
+            assert paper_scores.cached_score(papers.get_paper(live_copy.path, paper_id))
+
+            duplicate_bundle = copy.deepcopy(complete_bundle_value)
+            duplicate_bundle["files"][f"papers/{paper_id}.json"] = duplicate_bundle["files"][
+                f"artifacts/papers/{paper_id}.json"
+            ]
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("duplicate-paper-path", duplicate_bundle),
+                    "t30-duplicate-paper-path",
+                ),
+                "duplicate paper",
+            )
+
+            catalog_before_rejections = snapshot_tree(catalog)
+
+            incomplete = mutate_bundle(lambda files: files.pop(f"artifacts/papers/{paper_id}.pdf"))
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("incomplete", incomplete), "t30-incomplete"
+                ),
+                "incomplete",
+            )
+            traversal = mutate_bundle(lambda files: files.__setitem__("../escape", "unsafe"))
+            rejects(
+                lambda: samples.make_sample(write_bundle("traversal", traversal), "t30-traversal"),
+                "valid complete",
+            )
+            invalid_pdf = b"%PDF-1.4\nnot a parseable PDF\n%%EOF\n"
+
+            def install_pdf(files: dict, data: bytes) -> None:
+                files[f"artifacts/papers/{paper_id}.pdf"] = {
+                    "$sigma_bundle_encoding": "zstd+base64",
+                    "size": len(data),
+                    "data": base64.b64encode(compress(data)).decode("ascii"),
+                }
+                metadata = files[f"artifacts/papers/{paper_id}.json"]
+                metadata["pdf_size_bytes"] = len(data)
+                metadata["pdf_sha256"] = hashlib.sha256(data).hexdigest()
+
+            invalid_pdf_bundle = mutate_bundle(lambda files: install_pdf(files, invalid_pdf))
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("invalid-pdf", invalid_pdf_bundle), "t30-invalid-pdf"
+                ),
+                "PDF is invalid",
+            )
+            wrong_identity = mutate_bundle(
+                lambda files: files[f"artifacts/papers/{paper_id}.json"].__setitem__(
+                    "project_id", "f" * 32
+                )
+            )
+            rejects(
+                lambda: samples.make_sample(
+                    write_bundle("wrong-owner", wrong_identity), "t30-wrong-owner"
+                ),
+                "provenance",
+            )
+            oversized = mutate_bundle(
+                lambda files: install_pdf(files, b"x" * (12 * 1024 * 1024 + 1))
+            )
+            rejects(
+                lambda: samples.make_sample(write_bundle("oversized", oversized), "t30-oversized"),
+                "safe storage limit",
+            )
+            assert snapshot_tree(catalog) == catalog_before_rejections
+
+            with TemporaryDirectory(prefix="sigma-sample-paper-link-") as outside:
+                target = Path(outside) / "target.json"
+                target.write_text("{}", encoding="utf-8")
+                paper_storage = catalog / "t30-paper" / samples.SAMPLE_PAPERS
+                link = paper_storage / f"{uuid4().hex}.json"
+                link.symlink_to(target)
+                rejects(lambda: samples._sample_papers("t30-paper"), "unsafe")
+                link.unlink()
+            assert snapshot_tree(catalog) == catalog_before_rejections
+
+            real_stage = samples._stage
+
+            def fail_during_paper_copy(directory: Path, contents: bytes) -> Path:
+                if directory.name == samples.SAMPLE_PAPERS:
+                    raise OSError("injected failure during paper copy")
+                return real_stage(directory, contents)
+
+            with patch.object(samples, "_stage", side_effect=fail_during_paper_copy):
+                rejects(
+                    lambda: samples.make_sample(complete_file, "t30-rollback"),
+                    "Cannot save sample",
+                )
+            assert not (catalog / "t30-rollback").exists()
+            assert snapshot_tree(catalog) == catalog_before_rejections
+            export = export_project_view(str(source))
+            export_file = root / "exported-project.json"
+            export_file.write_text(json.dumps(export, ensure_ascii=False), encoding="utf-8")
+
+            with patch.object(
+                sys,
+                "argv",
+                ["sigma", "make_sample", str(export_file), "--name", "t30-exported"],
+            ):
+                try:
+                    cli.main()
+                except SystemExit as exit_request:
+                    assert exit_request.code == 0
+                else:
+                    raise AssertionError("make_sample CLI did not return")
+            raw_sample = (catalog / "t30-exported" / "project.json").read_text(encoding="utf-8")
+            sidecar = (catalog / "t30-exported" / samples.SAMPLE_EVIDENCE).read_text(
+                encoding="utf-8"
+            )
+            for secret in PRIVATE_STRINGS:
+                assert secret not in raw_sample and secret not in sidecar
+            assert "$SIGMA_SAMPLE_PROJECT_PATH" not in raw_sample
+            assert samples.sample_projects()["projects"][0]["id"] == "t30-exported"
+            shutil.copytree(Path("samples/ai-agent-reliability"), catalog / "ai-agent-reliability")
+            reliability = samples.open_sample_project("ai-agent-reliability")
+            reliability_limits = research_sessions.get_limits(reliability.path)
+            assert reliability_limits["research_rounds"] == 3
+            assert reliability_limits["model_calls"] >= 18
+            assert reliability_limits["session_duration_minutes"] == 60
+            assert len(reliability.project.active_order) == 3
+            reliability_ids = list(reliability.project.active_order)
+            reliable_calls = []
+            sample_credential = {
+                "identity": "sample-fixture-member",
+                "mode": "api_key",
+                "token": "deterministic-sample-fixture",
+                "status": "connected",
+            }
+            sample_config = {
+                "available": True,
+                "model": reliability.project.ai_model,
+                "reasoning_effort": reliability.project.reasoning_effort,
+            }
+
+            async def reliability_handler(request):
+                payload = json.loads(request.content)
+                context = json.loads(payload["input"])
+                role = payload["text"]["format"]["name"]
+                cycle = context["cycle"]
+                reliable_calls.append((context["strategy"]["id"], cycle, role))
+                result = (
+                    investigation(cycle)
+                    if role == "research_investigator"
+                    else skeptic(
+                        cycle,
+                        "stop" if cycle == 3 else "continue",
+                        "no_progress" if cycle == 3 else "recoverable_objection",
+                    )
+                )
+                return httpx.Response(200, json=provider_response(result))
+
+            with (
+                patch.object(
+                    research_sessions, "auth_context", new=AsyncMock(return_value=sample_credential)
+                ),
+                patch.object(
+                    research_sessions, "configuration", new=AsyncMock(return_value=sample_config)
+                ),
+                patch(
+                    "sigma.research_sessions.httpx.AsyncClient",
+                    side_effect=lambda **kwargs: REAL_CLIENT(
+                        transport=httpx.MockTransport(reliability_handler), **kwargs
+                    ),
+                ),
+            ):
+                started_reliability = await research_sessions.start_session(
+                    reliability.path,
+                    reliability_ids[0],
+                    str(uuid4()),
+                    reliability.project.id,
+                    sample_credential["identity"],
+                    expected_limits=reliability_limits,
+                    strategy_ids=reliability_ids,
+                )
+                finished_reliability = await wait_for(reliability.path, started_reliability["id"])
+            assert finished_reliability["calls_used"] == len(reliable_calls) == 54
+            assert finished_reliability["cycle_limit"] == 9
+            assert finished_reliability["status"] == "ended"
+            assert {(strategy_id, cycle, role) for strategy_id, cycle, role in reliable_calls} == {
+                (strategy_id, cycle, role)
+                for strategy_id in reliability_ids
+                for cycle in range(1, 10)
+                for role in ("research_investigator", "research_skeptic")
+            }
+            limits_12 = research_sessions.save_limits(
+                reliability.path,
+                {**research_sessions.DEFAULT_LIMITS, "research_rounds": 3, "model_calls": 12},
+            )
+            reliable_calls.clear()
+            with (
+                patch.object(
+                    research_sessions, "auth_context", new=AsyncMock(return_value=sample_credential)
+                ),
+                patch.object(
+                    research_sessions, "configuration", new=AsyncMock(return_value=sample_config)
+                ),
+                patch(
+                    "sigma.research_sessions.httpx.AsyncClient",
+                    side_effect=lambda **kwargs: REAL_CLIENT(
+                        transport=httpx.MockTransport(reliability_handler), **kwargs
+                    ),
+                ),
+            ):
+                started_12 = await research_sessions.start_session(
+                    reliability.path,
+                    reliability_ids[0],
+                    str(uuid4()),
+                    reliability.project.id,
+                    sample_credential["identity"],
+                    expected_limits=limits_12,
+                    strategy_ids=reliability_ids,
+                )
+                finished_12 = await wait_for(reliability.path, started_12["id"])
+            assert finished_12["calls_used"] == len(reliable_calls) == 12
+            assert len(finished_12["artifacts"]) >= 6
+            assert finished_12["termination_reason_code"] == "turn_limit_reached"
+            rejects(lambda: samples.make_sample(export_file, "../escape"), "Sample name")
+            rejects(lambda: samples.make_sample(export_file, "t30-exported"), "already exists")
+            invalid_export = root / "invalid.json"
+            invalid_export.write_text('{"export_version": 1}', encoding="utf-8")
+            try:
+                samples.make_sample(invalid_export, "invalid-export")
+            except ProjectError as exc:
+                assert "SIGMA project export" in str(exc)
+            else:
+                raise AssertionError("Unsupported export was accepted")
+
+            opened = samples.open_sample_project("t30-exported")
+            assert opened.project.id != export["project"]["id"]
+            assert opened.project.title.endswith("v4")
+            assert len(opened.project.strategies) == 2
+            copied_sessions = research_sessions.list_sessions(opened.path)
+            assert len(copied_sessions) == 2
+            copied_success = next(
+                item for item in copied_sessions if item["status"] in {"ended", "completed"}
+            )
+            copied_failure = next(item for item in copied_sessions if item["status"] == "failed")
+            assert copied_success["id"] not in {success_id, failed_id}
+            assert copied_failure["id"] not in {success_id, failed_id}
+            by_id = {item["id"]: item for item in copied_sessions}
+            success = by_id[copied_success["id"]]
+            assert success["status"] in {"ended", "completed"}
+            assert copied_failure["status"] == "failed"
+            source_outcome = next(
+                item["outcome"] for item in export["research_sessions"] if item["id"] == success_id
+            )
+            assert {
+                key: value for key, value in success["outcome"].items() if key != "metrics"
+            } == {key: value for key, value in source_outcome.items() if key != "metrics"}
+            assert (
+                success["outcome"]["metrics"]["sources"]["execution_ids"]
+                == source_outcome["metrics"]["sources"]["execution_ids"]
+            )
+            computational = success["artifacts"][0]["investigator_output"]["python_execution"]
+            assert computational["status"] == "completed"
+            assert computational["source"] == "print(sum(i*i for i in range(5)))"
+            assert computational["stdout"].startswith("30")
+            assert success["project_id"] == opened.project.id
+            assert success["strategy_id"] in {item.id for item in opened.project.strategies}
+            assert agentic_evidence.list_runs(opened.path)[0]["run_id"] == run_id
+            assert home_projects()["projects"][0]["id"] == opened.project.id
+
+            create_strategy(
+                opened.path,
+                "Editable sample strategy",
+                "Add a new argument to the copied project.",
+            )
+            assert len(inspect_project(opened.path).project.strategies) == 3
+            assert snapshot_tree(source) == source_before
+            assert len(inspect_project(source).project.strategies) == 2
+
+            # Legacy Projects must export a canonical document the same
+            # sample-import path can validate; dataclass-only defaults are
+            # not fields in a v5 project document.
+            legacy_source = projects_root / "legacy-sample-source.sigma"
+            legacy_source.mkdir(mode=0o700)
+            # Keep an actual v5 stock project as the fixture. Nonconsecutive
+            # Subset Sums now carries explicit difficulty metadata in v8.
+            legacy_template = Path("samples/jesus-cannabis/project.json")
+            legacy_before = legacy_template.read_bytes()
+            # The installed Jesus sample now uses the three-field v13 schema.
+            # Derive a genuine historical v5 fixture rather than weakening
+            # the old import/export compatibility assertion.
+            legacy_raw = json.loads(legacy_before)
+            legacy_raw = {
+                "schema_version": 5,
+                "id": legacy_raw["id"],
+                "title": legacy_raw["title"],
+                "problem": legacy_raw["problem"],
+                "research_mode": legacy_raw["investigation_type"],
+                "events": legacy_raw["events"][:-1],
+                "strategies": legacy_raw["strategies"],
+                "active_order": legacy_raw["active_order"],
+            }
+            for strategy in legacy_raw["strategies"]:
+                strategy.pop("enabled", None)
+            (legacy_source / "project.json").write_text(json.dumps(legacy_raw, indent=2) + "\n")
+            legacy_export = export_project_view(str(legacy_source))
+            assert legacy_export["project"]["schema_version"] == 5
+            assert "ai_model" not in legacy_export["project"]
+            assert "reasoning_effort" not in legacy_export["project"]
+            legacy_export_path = root / "legacy-export.json"
+            legacy_export_path.write_text(
+                json.dumps(legacy_export, ensure_ascii=False), encoding="utf-8"
+            )
+            samples.make_sample(legacy_export_path, "t30-legacy-export")
+            legacy_copy = samples.open_sample_project("t30-legacy-export")
+            assert legacy_copy.project.problem == legacy_export["project"]["problem"]
+            assert [item.title for item in legacy_copy.project.strategies] == [
+                item["title"] for item in legacy_export["project"]["strategies"]
+            ]
+            assert legacy_template.read_bytes() == legacy_before
+
+    print(
+        "PASS exported project -> make_sample -> sample loader preserves sessions, outcomes, evidence and provenance safely"
+    )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -1,0 +1,18 @@
+{
+  "note": "Exact harness sources as executed; renamed to .txt so generated evidence is not treated as repository Python implementation during Ruff checks. No source edits were made after execution.",
+  "files": [
+    {
+      "executed_as": "run_trial.py",
+      "preserved_source": "run_trial.py.txt",
+      "sha256": "9a54678355b0068d9e1da046d3a5cb0a0f11743c97a491f01ae216bc312de319",
+      "bytes": 19597
+    },
+    {
+      "executed_as": "resume_sigma.py",
+      "preserved_source": "resume_sigma.py.txt",
+      "sha256": "b96311c3cbb0e3fd6a6e50d1d6956d4bdec6c86bcdcc59d510f85f95e5bb4592",
+      "bytes": 1499
+    }
+  ],
+  "provider_requests_performed_by_harness": "Responses research requests only under arm ledgers; exact request/response bodies are separately preserved."
+}

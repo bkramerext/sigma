@@ -1,0 +1,173 @@
+{
+  "app_revision": "373f564ab957a2f13db298c4190e2e29893328b9",
+  "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-causal-1b5ylrz4",
+  "transport": "httpx.MockTransport over actual SIGMA request/orchestration code; evaluator-authored scripted responses; no network",
+  "new_live_provider_calls": 0,
+  "actual_cost_usd": 0,
+  "usage_note": "Token/cost metrics in sessions are fabricated transport accounting inputs, not billed usage. No real credentials used.",
+  "projects": [
+    {
+      "slug": "nonconsecutive-subset-sums",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-causal-1b5ylrz4/projects/nonconsecutive-subset-sums.sigma",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "source": "Isolated path-rebound copy of actual Increment 2 five deterministic fixture sessions, preserving source IDs/text/history; includes one prior manually authored strategy, no prior session for it.",
+      "before": [
+        "docs/evaluations/increment_3/exports/subset.before.audit.json",
+        "docs/evaluations/increment_3/exports/subset.before.current-understanding.json",
+        "docs/evaluations/increment_3/exports/subset.before.report.txt",
+        "docs/evaluations/increment_3/exports/subset.before.report.html",
+        "docs/evaluations/increment_3/exports/subset.before.report.tex"
+      ],
+      "after": [
+        "docs/evaluations/increment_3/exports/subset.after.audit.json",
+        "docs/evaluations/increment_3/exports/subset.after.current-understanding.json",
+        "docs/evaluations/increment_3/exports/subset.after.report.txt",
+        "docs/evaluations/increment_3/exports/subset.after.report.html",
+        "docs/evaluations/increment_3/exports/subset.after.report.tex"
+      ],
+      "new_sessions": [
+        {
+          "case": "evidence_off",
+          "id": "eae3bc83-ff07-4325-89ff-6ae635d67f7b",
+          "strategy_id": "cfeb7e6f-c17a-42a6-87ed-f4e45a09c139",
+          "calls": 4,
+          "artifacts": [
+            "c6871ea4-908f-455e-a4a9-fe78803e7f52",
+            "dfdcc5e8-e4fa-4ef1-ba3d-7e308fd7665f"
+          ]
+        },
+        {
+          "case": "evidence_on",
+          "id": "d6e51a2f-5501-4813-9eb4-7805e9106a63",
+          "strategy_id": "b2c11cc2-e91c-4368-b767-d322e80aabef",
+          "calls": 4,
+          "artifacts": [
+            "2661c07f-b3e2-446a-9b89-c700b6a6243e",
+            "9a4f4e0f-bd64-4f73-b20f-59806d69b6fc"
+          ]
+        },
+        {
+          "case": "negative_transfer",
+          "id": "d4c4b994-f9ff-4319-a05b-b976a01c0e62",
+          "strategy_id": "3d4cc9f5-5bb3-49c7-a9c1-6216ef7dae79",
+          "calls": 4,
+          "artifacts": [
+            "9268427b-3877-4cf9-9b30-d2df9c96f58e",
+            "d4aa124d-f59a-497a-ae37-1b170c2961fa"
+          ]
+        },
+        {
+          "case": "stop_reload_restart",
+          "id": "63c41856-13d8-43fc-b4a1-84e51d72b6e6",
+          "strategy_id": "fadc42b3-a5d8-403c-a7f9-945797fbdf0f",
+          "calls": 3,
+          "artifacts": [
+            "06e018fe-b534-4aab-a0c5-2d07e5a72d04"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "riemann-hypothesis-research",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-causal-1b5ylrz4/projects/riemann-hypothesis-research.sigma",
+      "project_id": "7f377e9a-0ea4-4005-863c-a02819db09cd",
+      "source": "Fresh stock copy with original strategies and zero sessions. Evaluator-authored RH-SYM injection saved as separate strategy. Scripted objection, then researcher-approved follow-up.",
+      "before": [
+        "docs/evaluations/increment_3/exports/rh.before.audit.json",
+        "docs/evaluations/increment_3/exports/rh.before.current-understanding.json",
+        "docs/evaluations/increment_3/exports/rh.before.report.txt",
+        "docs/evaluations/increment_3/exports/rh.before.report.html",
+        "docs/evaluations/increment_3/exports/rh.before.report.tex"
+      ],
+      "after": [
+        "docs/evaluations/increment_3/exports/rh.after.audit.json",
+        "docs/evaluations/increment_3/exports/rh.after.current-understanding.json",
+        "docs/evaluations/increment_3/exports/rh.after.report.txt",
+        "docs/evaluations/increment_3/exports/rh.after.report.html",
+        "docs/evaluations/increment_3/exports/rh.after.report.tex"
+      ],
+      "new_sessions": [
+        {
+          "case": "evaluator_injection",
+          "id": "fb5852e7-80b6-448d-a5e9-297c25dcea8e",
+          "strategy_id": "f5d1e449-55f0-4295-90d3-82d925faead8",
+          "calls": 2,
+          "artifacts": [
+            "e3a01b7c-3731-4810-834d-7a06eb2d215c"
+          ]
+        },
+        {
+          "case": "approved_followup",
+          "id": "64ad9713-295c-46a6-9ce3-82290ab507b9",
+          "strategy_id": "b62c1232-84ae-491b-879c-e3947ceaa2ee",
+          "calls": 4,
+          "artifacts": [
+            "d905af55-748b-45a2-9c64-6c741151e23f",
+            "70873776-d542-4f76-adb4-bf68b097e70a"
+          ]
+        }
+      ]
+    }
+  ],
+  "checks": [
+    "Actual HTTP dispatch differs in cycle 2 with and without selected cross-strategy sources",
+    "Negative transfer rejection retained without accepted payload/citation",
+    "Stop/API restart/resume retains exact frozen packet and original session ID",
+    "Desktop/390px real Chrome approval, source navigation, actual session start, reload; no page errors; subset mobile no horizontal overflow",
+    "Original exercised project source bytes remain unchanged"
+  ],
+  "selected_original_obligation": {
+    "id": "c872d6e3cc125a00dd726debe44484ec9c59dca951b198c6de12836a527d722e",
+    "text": "Derive the order-12 recurrence from exact phase-ordered transfer-matrix products for every n.",
+    "kind": "obligation",
+    "strategy_id": "5c8ce76f-4965-434b-8862-841c92de89e4",
+    "status": "open_reported",
+    "actionable": true,
+    "sources": [
+      {
+        "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+        "session_id": "6c552b3c-44e4-4b57-8b93-e5a645d057d1",
+        "session_number": 4,
+        "strategy_id": "5c8ce76f-4965-434b-8862-841c92de89e4",
+        "artifact_id": "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "available": true
+      }
+    ],
+    "dispositions": [],
+    "narrative_resolution_sources": [],
+    "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+  },
+  "omissions": [
+    "No actual live model reasoning, new mathematical discovery, proof of recurrence/limit or RH",
+    "No sandbox computation dispatched; independent exact oracles are evaluator-only",
+    "Native Markdown report unsupported; native txt/html/tex and Markdown-valued Conclusions in actual audits retained",
+    "PDF and AI TeX paper generation untested; no paid calls authorized",
+    "Controlled semantic choice is scripted on exact source IDs; not evidence of generalization or autonomous discovery",
+    "Source archive contains historical unsupported assertions and incomplete duties; preservation is not endorsement"
+  ],
+  "offline_http_calls": 21,
+  "new_artifact_count": 10,
+  "completed_role_steps": 20,
+  "interrupted_role_steps": 1,
+  "observed_session_window_seconds": 13.44378,
+  "timing_scope": "Earliest new session creation to latest new session update from saved timestamps; excludes before-state exports, read-only inspection and test runs. Not a live provider latency measurement.",
+  "additional_inspection": "inspection-observations.json: read-only actual Chrome source navigation/reload at 1440/390/320px; no new sessions/calls.",
+  "new_session_count": 6,
+  "screenshots": [
+    "docs/evaluations/increment_3/nonconsecutive-subset-sums-evidence-1440.png",
+    "docs/evaluations/increment_3/nonconsecutive-subset-sums-evidence-320.png",
+    "docs/evaluations/increment_3/nonconsecutive-subset-sums-evidence-390.png",
+    "docs/evaluations/increment_3/rh-followup-desktop.png",
+    "docs/evaluations/increment_3/rh-followup-mobile.png",
+    "docs/evaluations/increment_3/riemann-hypothesis-research-evidence-1440.png",
+    "docs/evaluations/increment_3/riemann-hypothesis-research-evidence-320.png",
+    "docs/evaluations/increment_3/riemann-hypothesis-research-evidence-390.png",
+    "docs/evaluations/increment_3/subset-continuation-desktop.png",
+    "docs/evaluations/increment_3/subset-continuation-mobile.png",
+    "docs/evaluations/increment_3/subset-source-desktop.png"
+  ],
+  "exported_file_artifacts": "Historical five Python execution records retain source/stdout/result metadata in the actual audits; they list zero separate output files. No new agent sandbox execution/files in this increment.",
+  "harness_revision_note": "App source equals 373f564. Browser-response wait fix and evidence inspection/audit-check scripts are included in the following evidence commit; final response identifies its SHA."
+}

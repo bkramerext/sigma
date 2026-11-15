@@ -1,0 +1,93 @@
+{
+  "files": {
+    "project.json": {
+      "active_order": [
+        "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+        "c5f7d857-b963-457c-895c-d35554cc97c2",
+        "d08775d5-8907-48d6-bd6c-7039f07a2047"
+      ],
+      "ai_model": "gpt-6.1-sol",
+      "difficulty": "hard",
+      "events": [
+        {
+          "kind": "project.initialized",
+          "sequence": 1,
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        },
+        {
+          "kind": "strategy.created",
+          "sequence": 2,
+          "strategy_id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        },
+        {
+          "kind": "strategy.created",
+          "sequence": 3,
+          "strategy_id": "c5f7d857-b963-457c-895c-d35554cc97c2",
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        },
+        {
+          "kind": "strategy.created",
+          "sequence": 4,
+          "strategy_id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "timestamp": "2026-10-31T00:00:00+00:00"
+        }
+      ],
+      "id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+      "investigation_type": "computer_science",
+      "problem": "Can universities with uneven GPU capacity provide useful, reliable AI research access while retaining control of sensitive data and staying within hard budgets? Compare four baselines: (1) campus-local inference only, (2) approved frontier API only, (3) a campus gateway with separately approved external access, and (4) a proposed cooperative federation among campuses. Treat federation and frontier routing as hypothetical extensions, not existing MindRouter features.\n\nGround the investigation in MindRouter's published campus gateway: protocol translation across OpenAI/Ollama/Anthropic clients and Ollama/vLLM backends; WDRR fair-share scheduling; per-user quotas; audit logging; and GPU telemetry. Its documentation describes an on-campus service, not a multi-institution federation. Start with its documentation (https://mindrouter.ai/documentation.html) and PEARC'26 short paper (https://ai4ra.uidaho.edu/wp-content/uploads/2026/04/Sheneman_MindRouter_PEARC26_Short_Paper.pdf); record access dates (the starting references were reviewed on 2026-10-31), distinguish published claims from independently measured facts, and verify any changed claims against current sources.\n\nDesign a policy-first admission and routing study for varied tasks: classroom coding, routine analysis, demanding scientific reasoning, multimodal/long-context work, agentic multi-call workflows, sensitive data, and reproducible batches. Each campus must retain authority over identity, data classification, approved destinations, retention, audit policy, contracts and quotas. Restricted, student, patient, controlled, sponsor-restricted and unpublished data—including derived prompts, outputs, logs, embeddings and cache—must remain inside approved domains by default. Ambiguous classification fails closed. Outage, overload, timeout, retry, cost exhaustion or a better score must never silently bypass policy.\n\nCompare task completion quality, provenance/version reproducibility, latency, throughput, availability and administrative burden. Include heterogeneous GPU memory/model fit, queues, cold starts, maintenance, peak demand, batch vs interactive service, per-campus autonomy, cross-campus agreements, fairness and starvation. Propose a minimal deployable architecture and routing rule, but test when campus-only service plus separately approved frontier access is simpler and safer than federation. Identify trust boundaries and adversarial cases: stale policy, malicious tenant, WAN partition, campus/provider outage, provider rejection, ambiguous charged timeout, cancellation, quota contention and unsafe fallback.\n\nBuild transparent total-cost models. For local capacity include GPU purchase and depreciation, replacement, utilization and idle capacity, power, cooling, storage, network, hardware support, procurement and staff operations. For APIs include current dated input/output/cached-token prices, repeated Investigator/Skeptic or agent calls, retries, tools/embeddings, egress and minimum commitments. Separate sunk, incremental and fully loaded cost. State every assumption, distinguish measured values from hypothetical scenarios, and report annual/monthly totals, cost per active researcher and cost per successfully completed useful research task at a stated quality and latency target. Explore break-even, utilization, quality, price, demand and capacity sensitivity. An illustrative $4,000/month shared frontier cap (sensitivities $2,000/$8,000) is a scenario only, not measured campus spending. Include zero/no-budget operation, reservations before calls, per-user/project/department limits, attribution, alerts, budget exhaustion and no paid retry escalation.\n\nDeliver a bounded comparison, uncertainty register, counterexamples, measurable 90-day pilot, stop/go thresholds and questions for campus computing, security, procurement, faculty and students. Do not invent prices, workload traces, evaluation results or university policy. An architecture proposal or agent consensus is not deployment evidence; report what would require real campus measurements and legal/security review.",
+      "reasoning_effort": "high",
+      "schema_version": 8,
+      "strategies": [
+        {
+          "approach": "Map data classes and derived content from client through gateway, local backends, logs, caches, tools and any proposed partner/frontier destination. For each transition identify the campus authority, policy check, identity, retention, audit and failure behavior. Treat MindRouter's documented campus gateway as baseline; separately label every federation/cloud control as a proposal. Construct ambiguous-classification, stale-policy, compromised-tenant and partition counterexamples. Decide which invariants must hold before routing can be considered safe.",
+          "author_kind": "human",
+          "created_at": "2026-10-31T00:00:00+00:00",
+          "enabled": true,
+          "id": "e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+          "provenance": null,
+          "removed_at": null,
+          "stage": "draft",
+          "summary": "Trace sovereignty decisions and adversarial trust-boundary failures.",
+          "title": "Sovereignty and trust boundaries"
+        },
+        {
+          "approach": "Define representative research tasks, success/quality rubric, latency target and workload envelope before comparing infrastructure. Build campus-only, frontier-only, controlled hybrid and proposed federation baselines. Use dated public prices where available and explicitly hypothetical local capacity assumptions; include depreciation, energy/cooling, staffing, support, utilization, multi-call amplification and retries. Calculate total and marginal costs and cost per successful task. Sweep demand, GPU utilization, model quality, API prices and $0/$2k/$4k/$8k monthly frontier budgets. Identify which missing campus measurements could reverse the decision.",
+          "author_kind": "human",
+          "created_at": "2026-10-31T00:00:00+00:00",
+          "enabled": true,
+          "id": "c5f7d857-b963-457c-895c-d35554cc97c2",
+          "provenance": null,
+          "removed_at": null,
+          "stage": "draft",
+          "summary": "Compare quality-adjusted task costs under explicit assumptions and sensitivities.",
+          "title": "Ownership cost and task quality"
+        },
+        {
+          "approach": "Specify policy-first eligibility before quality/cost ranking; then design admission, reservation, scheduling and fallback rules that preserve campus autonomy. Compare per-user/project/department fairness, interactive and batch service, starvation, peak queues, hardware maintenance, campus/WAN/provider failures, cancellation and ambiguous charged timeouts. Test minimal campus gateway plus separately approved frontier access against proposed federation. Propose a 90-day pilot with measurable task-quality, latency, availability, utilization, fairness, cost and security thresholds, named measurement owners, stop/go criteria and unresolved procurement/legal questions.",
+          "author_kind": "human",
+          "created_at": "2026-10-31T00:00:00+00:00",
+          "enabled": true,
+          "id": "d08775d5-8907-48d6-bd6c-7039f07a2047",
+          "provenance": null,
+          "removed_at": null,
+          "stage": "draft",
+          "summary": "Stress-test shared capacity and define a measurable pilot without assuming federation wins.",
+          "title": "Fairness, reliability and pilot"
+        }
+      ],
+      "title": "Sovereign AI Federation v2"
+    },
+    "research-sessions/limits.json": {
+      "max_concurrent_sessions": 1,
+      "maximum_estimated_cost_usd": null,
+      "maximum_input_tokens_per_session": null,
+      "model_calls": 18,
+      "output_tokens_per_call": 4000,
+      "research_rounds": 3,
+      "session_duration_minutes": 60
+    }
+  },
+  "format": "sigma.project.bundle",
+  "version": 2
+}

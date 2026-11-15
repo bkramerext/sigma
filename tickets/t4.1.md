@@ -1,0 +1,33 @@
+# ASN-4.1: Cinematic Home entrance
+
+## Intent
+
+Implement a more dramatic, **one-time staged reveal** when entering the SIGMA Home page. The user liked the browser's natural image fade-in and explicitly requested a stronger version. This is an enhancement to ASN-4, **not a redesign**. Preserve the exact approved Home artwork, copper-metallic Sigma identity, layout, controls and project workspace.
+
+## Sequence (approximately 2.5 seconds)
+
+- **0–0.8 s — Logo emerges:** Start with the Home scene very dark. The existing metallic Σ/SIGMA in the approved background image becomes visible gradually, with copper-gold illumination.
+- **0.5–1.8 s — Atmosphere emerges:** The blue/gold mathematical waves and subtle luminous details appear, with a restrained brightness/glow ramp. No replacement imagery, drifting geometry, artificial extra mathematical symbols, or excessive bloom.
+- **1.3–2.5 s — Interface arrives:** The project-opening panel and supporting UI fade into place with a subtle rise. Keep content stable: avoid noticeable layout shifts.
+
+The timing is a visual target, not a demand for frame-perfect choreography. Favor a smooth, deliberate sense of discovery over flashy animation.
+
+## Engineering constraints
+
+- **Use the exact approved assets** in `assets/sigma-home-background.png` and the visual composition in `assets/sigma-home-and-project-pages.png`. Do not swap in the old SVG recreations.
+- The Home artwork is a **single composited bitmap** containing the Sigma and mathematical waves. Do not pretend its embedded logo and waves are independently animatable layers. If the staged effect needs independent masks, use carefully aligned CSS masks/overlays or derived crops of the *same source image*, with no visible seams or duplicated art. A simple unified fade with a convincing light progression is preferable to a brittle, misaligned split.
+- Play **once per Home entry**, not on React rerenders, form typing, state updates or data refreshes. Do not replay merely because a component changes.
+- Do not delay or disable interactive controls, focus, keyboard operation, assistive-technology access or navigation for the sake of the animation. The visual fade is progressive enhancement only.
+- Respect `prefers-reduced-motion: reduce`: display the completed scene immediately with no entrance animation.
+- Avoid network dependencies, heavyweight animation libraries and persistent animation loops. Keep animations GPU-friendly where possible and avoid excessive blur/filter cost on large images.
+- Keep the Project page quiet and functional; do not apply the dramatic Home entrance to the workspace.
+
+## Verification
+
+- Test first Home entry, subsequent rerender while on Home, navigation away and back, fast navigation during entrance, reduced-motion, slow asset loading, keyboard focus and narrow viewports.
+- Verify in a real browser that the **exact** artwork is retained and controls are usable throughout.
+- Run the existing frontend build/checks and `./sigma test`; record actual results in `docs/STATUS.md`. Do not claim tests were run if they were not.
+
+## Acceptance
+
+The Home page feels as though SIGMA is emerging from darkness: copper metallic identity first, mathematical atmosphere second, working UI last. The effect is dramatic but restrained, lasts around 2.5 seconds, and never compromises interaction or visual fidelity.

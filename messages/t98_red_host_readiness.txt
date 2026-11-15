@@ -1,0 +1,15 @@
+T98 — production host readiness, pre-cloud
+
+Branch: red/t98-host-readiness
+Base: current main at 2a6ca7d Add packaged Compose Chrome acceptance for T91 (#109)
+PR: pending
+
+Changes: Ubuntu 24.04 amd64 installer with pinned Docker package set; dedicated sigma-sandbox rootless daemon and mode-0660 group socket; rootless-only runner image build helper; app/sandbox systemd units with mount ordering and guarded startup; read-only PASS/FAIL/BLOCKED preflight covering deployment settings, secret metadata, disk mount/ownership, daemon/socket, runner tags, production Compose health/start configuration; Python/Sage runtime proof of no host-secret, host-state, network, or daemon-socket access. Added host preflight tests to ./sigma test.
+
+Passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (full suite); tests/gce_host.py (6); persistent-disk backup/restore/restart/isolation/Recent relocation; sponsored inference failures/limits/isolation; Docker and systemd preflight source checks; Ruff check/format; Pyright; frontend typecheck/build. The full-suite command clears the workstation bootstrap email so unrelated local OAuth configuration cannot alter UI startup tests.
+
+Local host outcomes: gce_preflight.py --json reports BLOCKED on unsupported macOS and exits 2; install-gce-host.sh reports BLOCKED and exits 2 before package operations; python -m sigma.cloud_runtime_check without --allow-nonrootless-dev rejects the selected daemon as non-rootless. No dev override was used for production validation.
+
+Linux-only acceptance: on a disposable Ubuntu 24.04 amd64 host, stage the branch at /opt/sigma/current; review disk UUID and mount it at /srv/sigma-state; run sudo /opt/sigma/current/deploy/install-gce-host.sh; inspect socket owner/group/mode and daemon security using `stat -c '%U:%G %a' /run/user/$(id -u sigma-sandbox)/docker.sock` and `sudo -u sigma-sandbox env DOCKER_HOST=unix:///run/user/$(id -u sigma-sandbox)/docker.sock docker info --format '{{json .SecurityOptions}}'`; then build with `sudo -u sigma-sandbox env XDG_RUNTIME_DIR=/run/user/$(id -u sigma-sandbox) /opt/sigma/current/deploy/build-sandbox-images.sh`. After authorized env/secrets/disk configuration, run `sudo /usr/local/libexec/sigma/gce_preflight.py --json`, `sudo systemd-analyze verify /etc/systemd/system/sigma.service /etc/systemd/system/sigma-sandbox.service`, enable the guarded service, and run `docker compose --env-file /etc/sigma/deploy.env -f deploy/compose.yaml -f deploy/compose.gce.yaml exec -T backend python -m sigma.cloud_runtime_check` without the development override. Test absent-mount refusal and service restart/reboot only on Linux; no cloud provisioning is part of this change.
+
+No GCP resources, DNS, OAuth, Secret Manager, credentials, or paid provider calls were used.

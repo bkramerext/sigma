@@ -1,0 +1,1 @@
+{"scope": "independent finite exact method, not a general recurrence or limit proof", "test": "sage_exact_weighted_polynomial_mod_z3_minus_1", "values": [1, 1, 1, 2, 3, 5, 8, 12, 19, 31, 49, 79, 128, 205, 331, 536, 864, 1397, 2261], "witness": {"actual": 8, "n": 0, "predicted": 9, "residual": -1}}

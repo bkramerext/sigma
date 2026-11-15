@@ -1,0 +1,8 @@
+# Blue Iteration 2 completion addendum
+
+- Branch: `report-quality-coordination`; implementation HEAD before this report: `e9fb2396` (`Reassemble complete indexed fields in fallback claims`). Changes include source-aware deterministic semantic candidate selection (`2469661d`) and complete-fragment reconstruction/conclusion safeguards (`e9fb2396`).
+- Completed full H2-A report and all three complete TXT/TeX/PDF runs from the exact I1 frozen snapshots; see [`docs/evaluations/report_quality/iteration_2/REPORT.md`](../docs/evaluations/report_quality/iteration_2/REPORT.md) for project IDs, snapshot hashes, A/B scorecard, timings, call counts, artifact hashes, tests and MET/UNMET/UNVERIFIED.
+- Exact snapshots were recovered from saved I1 paper records despite absence from compact metadata; no research reruns or source modifications. Source-gate checkpoint is resolved.
+- Important implementation/result boundary: all generated papers ran on `2469661d`; `e9fb2396` arrived after dispatch. Its exact-fragment reassembly and stronger conclusions passed focused/full tests but were not exercised in the runs. Sovereignty regressed substantially when planner fell back. No quality acceptance recommended.
+- Validation: focused paper tests, Ruff, Pyright and `./sigma test` passed. All output hashes and unresolved layout/proofreading issues are recorded in the report.
+- Handoff actual publication time will be recorded in commit/push metadata; the scheduled next coordinator wake is 06:45 PST (UTC−08:00), target 06:40 PST. Once this report is pushed and tree clean, resume 30-second fast-forward-only polling for `message_out_3.md`.

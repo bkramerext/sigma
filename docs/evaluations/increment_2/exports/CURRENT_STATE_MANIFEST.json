@@ -1,0 +1,32 @@
+{
+  "app_revision": "1750add2eeeff2d74e50dfc7cc67bf3f720cc298",
+  "baseline_export_commit": "322cf5593eb4a9dff3d5ccf0f97300d5294ddb29",
+  "new_provider_calls": 0,
+  "new_research_sessions": 0,
+  "format": "Actual SIGMA current-understanding GET response bytes; baseline audits/reports remain byte-identical",
+  "projects": [
+    {
+      "slug": "maximum-regions-archived",
+      "project_id": "9018b1fe-83a9-4027-a755-8f997b4f46b5",
+      "source_session_ids": [
+        "91e96112-27ce-412e-841f-5cbf67cbba75"
+      ],
+      "files": [
+        {
+          "path": "maximum-regions-archived.current-understanding.json",
+          "format": "SIGMA current-understanding API JSON",
+          "sha256": "0ca31e6cb3b8a48b1b88975c4b879d9de19fc002fd09f5c7fe61f71b770bb0c0",
+          "bytes": 19937
+        },
+        {
+          "path": "maximum-regions-archived.browser.audit.json",
+          "format": "SIGMA browser Project Audit JSON",
+          "sha256": "662156a3d549e46cc5795c23ea1c1935716d29e3ca32ca07e28527399178a977",
+          "bytes": 121311
+        }
+      ],
+      "audit_content_unchanged": true,
+      "research_activity": "Read-only current-state/evidence navigation, reload, viewport and real audit-export checks. No new session or provider work."
+    }
+  ]
+}

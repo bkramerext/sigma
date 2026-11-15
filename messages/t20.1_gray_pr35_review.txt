@@ -1,0 +1,24 @@
+PR #35 review follow-up — Gray
+
+The A17 0/30 stop was caused by a real UI regression in the session cost
+setting. A native number input accepted invalid `0`; after clearing it, the
+visible field was blank but the saved value remained `$0.01`. That cap then
+correctly prevented the mocked provider call. The field now uses decimal text
+input with existing explicit validation. A17 checks that the invalid draft is
+blocked, clearing restores Save, the persisted cost cap is null, and the
+three-round session completes using 6 of 30 allowed calls.
+
+The response-size guard now enforces reported output tokens independently of
+the UTF-8 byte count. A separate 1 MB streaming transport ceiling remains in
+place. Focused session tests verify that a valid response over four times the
+token limit is accepted when reported usage is within bounds and that the
+transport ceiling still rejects oversized bodies.
+
+Validation passed:
+- `uv run --locked --no-sync python tests/research_sessions.py`
+- Real Chrome `browser_checks/a17_research.py` against a fresh isolated
+  provider fixture
+- `./sigma test`
+
+No paid provider calls were made. PR #35 is updated for review and remains
+unmerged.

@@ -1,0 +1,227 @@
+# Green R4R — Issue #280 sponsored allowance and invitation flow
+
+- **Ticket:** Issue #280
+- **Branch:** `green/issue-280-invited-welcome`
+- **PR:** [#285](https://github.com/bkramerext/sigma/pull/285)
+- **Recovery implementation:** `d79a211` (later wording/documentation commits
+  remain on the same PR branch). The branch includes `origin/main` at
+  `e2f4f6e89ea4a83f9e01b74aa63ae3f1b267a910`.
+- **Production force flag:** unchanged and default-off. No production setting was changed.
+
+## Review scope
+
+This branch implements the sponsored allowance and local force-mode behavior,
+invitation/reload dialogs, welcome message, administration table changes,
+session progress text and toast cap. The sponsored pill displays the balance
+from the signed-in account's local ledger, with a custom hover/focus/mobile
+explanation. Server checks enforce eligibility, provider choice, and spending
+limits. Hosted `SIGMA_CLOUD_FORCE_SPONSORED_MODE` remains default-off.
+
+Local sponsored inference uses the designated `zetacontinuation@gmail.com`
+ChatGPT sponsor by default, even when `SIGMA_CLOUD_INFERENCE_PROVIDER` is
+unset. The signed-in member's ChatGPT session is not used. Connection checks,
+provider credential validation and ledger job records share this selection.
+Local spending is reserved against the member's configured grant. `--sponsored`
+does not enable `--mock-auth`; mock identities and the simulated `$25`
+allowance still require `--mock-auth` explicitly. At zero allowance, the pill
+offers **Reload me!**.
+
+The local Play expiry report exposed a saved `personal` mode for the eligible
+Google account `nontrivialzeero@gmail.com`, while its pill still displayed
+“Sponsored ChatGPT.” The designated sponsor record existed but had no usable
+access or refresh token. The current fix returns an expired personal choice to
+sponsored mode, makes the pill follow the selected mode, and uses the designated
+sponsor account even when another ChatGPT account is active. A sponsored pill
+click starts personal ChatGPT sign-in and selects personal mode only on success.
+The local administrator can renew the existing sponsor credential from **Admin
+Settings → Reconnect sponsor ChatGPT**. Member Google sign-in cannot renew it.
+Live Play remains blocked until that administrator sign-in completes.
+
+Follow-up after the reported reconnect guidance error: a metadata-only read
+found two designated sponsor registrations, both without access or refresh
+tokens. Rerunning the server alone cannot renew them. The shared local store
+also allowed an active sponsor registration to appear in personal mode or be
+revoked by the ordinary disconnect endpoint after an admin renewal. The server
+now reserves that registration for sponsored inference, blocks ordinary
+renew/disconnect operations on it, and selects a usable duplicate even when
+the shared billing mode is API-key. This prevents member personal inference
+from using the sponsor credential outside the sponsored spend ledger. The
+administrator must still complete the interactive ChatGPT renewal.
+
+The welcome appears on each fresh page entry for an eligible signed-in user,
+but not on browser refresh. It starts with “Welcome to SIGMA.” and one of 100
+distinct curiosity-themed lines. Invitation and reload requests remain
+administrator-reviewed. Other changes include Privacy Notice return paths,
+SIGMA action-button styling, invitation Add/Remove actions and row filtering,
+compact scrollable authorized-user rows, five visible toasts with oldest-first
+eviction, and the 50-word running-session summary with fallback text.
+
+The switchable local sponsored pill's custom tooltip now starts “Click to
+switch to your own ChatGPT account.” It retains the remaining allowance and
+connection explanation. Forced/hosted pills do not show a switch instruction.
+Real-Chrome sponsored acceptance and `./sigma test` passed after this wording
+change. A metadata-only recheck still found no designated sponsor tokens.
+
+The member-facing failure no longer asks the member to contact or act as an
+administrator. It reports temporary sponsored-service unavailability and
+preserved research. Token-free, rate-limited `sponsor_connection status=...`
+diagnostics and `sponsor_oauth status=...` events appear in backend logs for operator
+diagnosis. The designated sponsor still needs a valid server-side credential;
+the change does not use the member's ChatGPT account or an API-key fallback.
+Focused cloud-auth/sponsor tests, real-Chrome sponsored acceptance, and
+`./sigma test` passed on this correction. Live Play remains unverified until a
+designated sponsor credential exists on the server.
+
+Local diagnostics now also append fixed, token-free event codes to
+`sponsor-diagnostics.log` in the checkout root. The 0600 file is Git-ignored,
+64 KiB bounded, and rejects unsafe replacements. This lets a developer in the
+same checkout inspect the failure without asking a member to find terminal
+output. Hosted service logs remain unchanged.
+The developer read the resulting local file after an offline sponsor-status
+check: `sponsor_connection status=credential_missing`, two designated records,
+no token refresh/model call. The file was 0600 and 71 bytes. Focused tests,
+real-Chrome sponsored acceptance, and `./sigma test` passed.
+
+Launcher wiring follow-up: `./sigma start --sponsored` no longer implicitly
+enables `--mock-auth`. A CLI regression covers the sponsored-only and combined
+flag cases. This restores the requested distinction between live local
+eligibility testing and the simulated mock walkthrough.
+`tests/tooling.py`, real-Chrome sponsored connection acceptance, and `./sigma
+test` passed. The older T257 mock browser script stops at its stale Google
+pill locator and is not claimed as passing on this branch.
+
+Configuration and rollback are documented in `docs/GETTING_STARTED.md` and
+`docs/CLOUD_DEPLOYMENT.md`. Rollback disables the hosted flag and restarts using
+the guarded release procedure. Production was not enabled.
+
+## Verification evidence
+
+- `./sigma test` — passed, including Ruff, Pyright, frontend typecheck/build,
+  toast tests, research/session and cloud-sponsored API tests.
+- `uv run --with playwright python browser_checks/hosted_sponsored_connection.py`
+  — passed in real Chrome with deterministic API fixtures. Covered allowance
+  presentation/hover/focus/mobile interaction, sponsored selection and reload,
+  invitation welcome, reload request, hidden mock controls without mock auth,
+  zero-allowance **Reload me!**, and admin/invitation flows.
+- `tests/cloud_auth.py` — 54 passed. The local sponsored connection regression
+  omits `SIGMA_CLOUD_INFERENCE_PROVIDER`, verifies the designated sponsor
+  provider, and rejects use of the local member ChatGPT session.
+- `tests/cloud_sponsor.py` — 9 passed, including local default provider and
+  designated administrator identity.
+- Focused recovery checks: `tests/cloud_auth.py` — 55 passed, including expired
+  personal-mode fallback and administrator-only renewal; `tests/cloud_sponsor.py`
+  — 10 passed, including designated-account selection while a personal account
+  is active. The real-Chrome check passed after the pill/recovery UI update.
+- Latest focused checks: `tests/cloud_auth.py` — 56 passed, including personal
+  mode isolation and blocked ordinary sponsor renew/disconnect;
+  `tests/cloud_sponsor.py` — 11 passed, including duplicate selection and
+  sponsor use after an API-key billing choice. The real-Chrome sponsored check
+  and `./sigma test` passed on this follow-up tree. No live OAuth or provider
+  call was made.
+- `./sigma test` passed again after the recovery changes and formatting fix;
+  the real-Chrome sponsored connection check also passed on that final tree.
+- `git diff --check` — passed.
+- The branch was merged with current `origin/main` using a normal merge commit;
+  the ticket tracker conflict retained both the T279 entry and main's T277
+  update. `./sigma test` and the real-Chrome acceptance passed again on the
+  merged tree.
+- Restarted the local service with `./sigma start --nav` after backend changes.
+  Signed-in status, local allowance, and AI connection endpoints returned
+  HTTP 200. No live generation was attempted, so actual sponsored-session
+  dispatch and the account's exact remaining cents were not independently
+  observed in this verification.
+
+The separate `browser_checks/a17_research.py` still stops at its obsolete
+export-dialog assertion before the new running-session checks; this script is
+not claimed as passing. The browser acceptance above uses deterministic local
+fixtures. No paid inference, production changes, or self-merge occurred.
+
+**R4R:** Ready for independent review.
+
+## Local sponsored Play credential follow-up
+
+The local sponsor ChatGPT registration has no access or refresh token, which
+explains the reported temporary-unavailability error. This branch now supports
+an operator-selected local service API credential with
+`SIGMA_CLOUD_INFERENCE_PROVIDER=api_key` and a dedicated
+`SIGMA_CLOUD_OPENAI_API_KEY` or `_FILE` value. ChatGPT remains the local default;
+the checkout's `OPENAI_API_KEY` is never used implicitly for sponsored calls.
+The existing eligibility and allowance ledger gates still apply. Both dedicated
+secret forms are stripped from the frontend launch environment. Missing keys
+and invalid provider settings fail closed. See `docs/GETTING_STARTED.md` for
+configuration and rollback. No production flag was enabled or changed.
+
+The dedicated key has not been provisioned in this checkout. Live Play will
+still require either an operator-approved, funded service API key or an
+interactive renewal of the designated sponsor ChatGPT session. Real inference
+was not attempted, and live Play is not claimed as verified. The focused local
+provider/launcher regressions and real-Chrome sponsored connection check
+passed using fake credentials and deterministic API responses.
+`./sigma test` passed all steps after formatting, including Ruff, Pyright,
+frontend typecheck, and production build. `git diff --check` passed.
+
+Follow-up: the local `nontrivialzeero@gmail.com` grant is now `$0.25` effective
+and `$0.25` remaining, changed through SIGMA's allowance service and read back
+from the admin snapshot. It remains an eligible sponsored member. A local
+Google-member API regression completes a two-call session with a fake service
+key and provider outputs at this grant with the local force flag off. It also
+verifies the account does not use the personal API key. The service-key
+connection view no longer reads
+ChatGPT preferences. The live sponsor credential is still missing; this test
+does not establish live paid Play. No user rerun was requested.
+The real-Chrome sponsored connection check and `./sigma test` passed all steps
+on this follow-up, including Ruff, Pyright, frontend typecheck, and build.
+
+Sponsor identity check: OpenAI's metadata endpoint associates the checkout's
+`OPENAI_API_KEY` with API user `zetacontinuation@gmail.com` and the API
+organization named `Personal`; `/v1/models` returned the selected model. No
+inference was sent. API use would be billed through that API organization,
+separate from the ChatGPT subscription. The key was not copied into sponsored
+configuration or used for a paid call.
+
+Member reconnect correction: an authenticated, eligible local member can now
+start the sponsor OAuth flow by clicking the sponsored pill when the sponsor
+ChatGPT credential needs reauthorization. The server binds the flow to the
+existing designated sponsor registration; ineligible and unauthenticated
+members remain denied, and this does not grant admin settings access. The
+pill's normal click still starts a personal ChatGPT sign-in when the sponsor
+connection is healthy. Real-Chrome coverage verifies the member reconnect
+path. Live OAuth was initially pending; the completion evidence is below.
+
+Pill interaction correction: the allowance amount button stops propagation for
+its tooltip. While sponsor ChatGPT needs reauthorization, that button now
+starts sponsor reconnect too. Real Chrome verifies the amount click reaches
+`/api/ai/sponsor-auth/begin` and renders no stray text below the pill.
+`./sigma test` passed all steps on this fix.
+
+Live connection evidence: member sponsor OAuth completed successfully for
+`zetacontinuation@gmail.com` (`sponsor_oauth started`, then `connected`). The
+server auth context is `chatgpt/connected`; model catalog verification reports
+`gpt-6.1-sol` available. The `$0.25` member allowance remains fully available.
+No inference call has been made yet.
+
+## Local sponsored Play limit correction
+
+The user's project had five enabled strategies, so session preflight required
+ten calls. The local settings API returned six because `billing_enabled()` was
+being used to identify hosted policy; local sponsored requests also use the
+durable spending ledger, so this silently applied the hosted six-call cap. The
+local `prepare_job` gate separately rejected call limits above six.
+
+The settings service now distinguishes hosted workspace caps from local
+sponsored ledger enforcement. Local sponsored settings preserve the saved
+call count up to 30; the $0.25 per-session ceiling, 15-minute cap, and member
+allowance ledger remain enforced. Hosted sessions remain capped at six calls.
+
+Verification:
+- `tests/cloud_auth.py` — passed; authenticated local sponsored member saves,
+  re-reads, and starts a fake-provider session with `model_calls=12`.
+- `tests/cloud_research.py` — passed; hosted six-call cap and local 30-call
+  ceiling remain distinct.
+- `browser_checks/local_sponsored_limits.py` — passed in real Chrome; Limits
+  dialog saves 12 and reloads with 12 from deterministic fixture API.
+- `./sigma test` — passed all steps after the final regression assertion,
+  including Ruff, formatting, Pyright, frontend typecheck, and production build.
+- SIGMA was restarted from this branch; the authenticated browser reopened the
+  Xenopus project successfully, and its saved limit file reads 12. No live
+  provider call or production configuration change occurred.

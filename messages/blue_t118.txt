@@ -1,0 +1,57 @@
+Blue T118 implementation handoff
+
+Base: current main after merged PR #116, origin/main 950c810. Branch: blue/t118.
+State: ready for review; no provider calls, live shakedown, cost, browser exercise,
+cloud action, self-merge or issue close.
+
+Implemented:
+- Replaced the 12-pair draft with three stochastic repeats for each of six
+  tasks x two evidence variants (36 pairs / 72 arms), with six task clusters as
+  the only independent units. The audit computes paired weighted-score and
+  task-key pass differences, task-level 95% t intervals and exact sign-flip
+  sensitivity.
+- Added a common six-field output normalizer with matching field ceilings,
+  explicit clipping markers, upstream SIGMA truncation mapping, role-term
+  scrubbing and scorer-only packets without the internal schema or arm map.
+- Audit validates the frozen A/B assignment against execution records, two
+  distinct grader records, score dimensions, task-key pass fields, token/cost
+  limits, transcript and normalized-output digests. Offline 72-record run now
+  exercises the full proposed design.
+- Revised scoring to remove objection uptake, added a task-key pass endpoint,
+  documented external curator/key-custodian/grader separation and contamination
+  provenance, added a throwaway-task shakedown proposal, cost model and stop
+  rules. T114 explicitly limits the claim to within-session behavior and links
+  cumulative persistence to issue #119.
+- Preserved the newcomer summary in STATUS. PR #108 also edits STATUS and must
+  be integrated without removing that summary or this T118 record.
+
+Checks actually run:
+- `python3 tests/increment14_protocol.py` — PASS.
+- `python3 tests/increment14_audit.py` — PASS, including common-schema,
+  upstream truncation, scorer-blinding and six-cluster controls.
+- `python3 scripts/increment15_offline_pairs.py ...` — PASS, 72 synthetic
+  records / 36 pairs / zero model calls and cost.
+- Focused Ruff check and formatter check on changed Python — PASS.
+- `git diff --check` — PASS.
+- `./sigma test` — STOPPED at the existing `tests/tooling.py::check_ui`
+  assertion: expected mocked `stop_servers` once, observed zero; no later full
+  suite steps ran in this invocation. No browser surface changed, so no browser
+  check was relevant.
+- No project was opened or changed during this documentation/offline-harness
+  task; no project export or research session was created.
+
+Review limitations: this adds practical offline parsing, normalization and
+analysis checks, not a production live-evaluation runner, isolation proof,
+human curator, independent graders or experiment authorization. The current
+six public synthetic tasks remain high contamination/ceiling risk until an
+external curator documents otherwise. The live shakedown remains a proposal
+only. The STATUS.md newcomer summary and current-state record should survive
+integration with pending PR #108.
+
+Reconciliation after the PR was reported not mergeable: fetched current main
+`f5388d8` and merged it into `blue/t118`. Git reported no conflicts. The
+newcomer summary and T118 record remain in STATUS; the incoming main changes
+were confined to Increment 17 files. Re-ran protocol, audit, 72-record offline
+pair, blocked-readiness, Ruff check, Ruff format and `git diff --check`; all
+passed. GitHub now reports PR #123 mergeable against current main. This branch
+is R4R; no merge or paid inference was performed.

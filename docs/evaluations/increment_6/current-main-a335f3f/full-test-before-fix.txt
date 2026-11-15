@@ -1,0 +1,421 @@
+Using CPython 3.14.7
+Creating virtual environment at: .venv
+   Building sigma-research @ file:///private/tmp/sigma-blue-increment-6
+      Built sigma-research @ file:///private/tmp/sigma-blue-increment-6
+Installed 27 packages in 118ms
+
+> uv run --locked --no-sync python tests/lifecycle.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS seed initialization, close/reopen, identity, ordered immutable reads
+PASS explicit creation, invalid inputs, existing research protected
+PASS failed publication cleanup and no-replace collision handling
+PASS malformed JSON, incompatible schema, metadata and event validation
+PASS API open/inspect/events/close/init, errors, origin and host boundaries
+All lifecycle scenarios passed.
+
+> uv run --locked --no-sync python tests/project_creation.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS all research types serialized/reopened, destination preview, collision and strategy integrity
+PASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection
+PASS publication rollback, concurrent data preservation and exclusive name reservation
+PASS API create/preview/errors and both CLI research modes
+PASS v1/v2/v3 default-mode reads without rewriting and retained history on writes
+PASS explicit default/configured roots, missing parents, ownership and root symlinks
+All project-creation scenarios passed.
+
+> uv run --locked --no-sync python tests/recents.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and four-per-category recents
+
+> uv run --locked --no-sync python tests/test_sample_copies.py
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.174s
+
+OK
+
+> uv run --locked --no-sync python tests/make_sample.py
+{
+  "sample": "t30-exported",
+  "path": "/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-make-sample-w6rso8wc/samples/t30-exported"
+}
+PASS exported project -> make_sample -> sample loader preserves sessions, outcomes, evidence and provenance safely
+
+> uv run --locked --no-sync python tests/example_math.py
+PASS independent residue/adjacency DP and enumeration; a_12=128; initial values [1, 1, 1, 2, 3, 5, 8, 12, 19, 31, 49, 79]; recurrence through n=120
+PASS exact period-three traces/determinants/Cayley-Hamilton over Z[omega] in all three phases; independent recurrence/density proof is in docs/EXAMPLE_MATH_VERIFICATION.md
+
+> uv run --locked --no-sync python tests/research_ladder.py
+PASS five staged sample projects, independent copies, exact finite Euler/eta identities, and theta-transform spot checks
+NOTE finite computations validate examples only; they do not prove analytic continuation, the functional equation, or the Riemann Hypothesis
+
+> uv run --locked --no-sync python tests/rh_adversarial.py
+PASS exact degree-six polynomial countermodel: reflection/conjugation symmetry, finite-height on-line zeros, and a zero-free right half-plane coexist with off-critical zeros
+PASS exact finite eta identity for signed integer exponents and bounded m
+NOTE these are mathematical oracles, not RH results or agent judgment
+
+> uv run --locked --no-sync python tests/t39_evaluation.py
+PASS T39 manifest redaction, review provenance, score validation and transcript integrity
+
+> uv run --locked --no-sync python tests/project_settings.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS v1-v9 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen
+PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes
+PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior
+
+> uv run --locked --no-sync python tests/model_connection.py
+PASS bounded curated account intersection, coalesced initial requests, TTL, retry cooldown and refresh
+PASS missing/auth/permission/rate/provider/network/timeout/redirect/bad/oversized responses; no raw secret/error exposure or invented readiness
+PASS per-project model/actual effort request, changed-model draft rejection, signed acceptance, unavailable choice/no fallback and offline metadata edits
+
+> uv run --locked --no-sync python tests/chatgpt.py
+PASS public OSS registration/PKCE, exact real loopback exchange, signed OIDC, safe payloads, stable host, retained issued ID, welcome once, serial rotating refresh and earliest-refresh boundary
+PASS invalid state/origin/nonce/signature/issuer/audience/expiry/subject/client, missing tokens, declined/cancelled sign-in, duplicate callback race and endpoint mixup never replace credentials
+PASS scope decline/enable, multi-account isolation, mode-specific catalogs, strict streamed Responses completion/failures/limits, no generation/save on sign-in, no billing fallback, project/account intent binding, key mode without flag, terminal refresh and confirmed/unconfirmed revoke
+
+> uv run --locked --no-sync python tests/chatgpt_restart.py
+PASS restart/session reuse and real cross-process rotating refresh serialize to one exchange; stable host/account/client and private atomic storage
+
+> uv run --locked --no-sync python tests/strategy_tracking.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS v1/v2/v3/v4 no-write reads, creation-order/Draft defaults and exact v5 migration backups
+PASS active-only reorder, no-op, removed history, stable identities, reload, stale order and failed writes
+PASS concurrent order/stage/edit persistence and strict corrupt history/metadata rejection
+PASS API and CLI tracking through common services
+
+> uv run --locked --no-sync python tests/proposals.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS exact Responses request/strict schema/full context, empty/seed, nonmutation, human-edited acceptance and signed provenance
+PASS ASGI endpoint disconnection through middleware cancels transport and releases request slot
+PASS unavailable/invalid configuration, malformed/refused/incomplete/rate errors, duplicate, hard timeout, cancellation, concurrency and oversized-context nonmutation
+
+> uv run --locked --no-sync python tests/agentic.py
+PASS seeded sample, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source
+PASS settings-backed call budgets, extended candidate fields, narrow-passage sample flow, skeptical revision and no mutation
+PASS malformed provider output fails with terminal event and releases run gate
+PASS binding/identity changes, duplicate run, cancellation, timeout and clean gate release
+PASS ChatGPT-plan streamed Responses adapter preserves selected model/effort and request mode
+PASS ASGI browser disconnect cancels active agentic provider work
+PASS durable run evidence round-trip, failed/incomplete work, storage failure and immutable Sample source
+
+> uv run --locked --no-sync python tests/agentic_evidence.py
+PASS evidence persistence, cross-project isolation, private modes, run/byte retention, size cap and symlink rejection
+
+> uv run --locked --no-sync python tests/research_sessions.py
+PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.793s
+Persistent research session scenarios passed.
+
+> uv run --locked --no-sync python tests/epistemic_continuity.py
+PASS persisted parity step A → cycle step B → later session; exact source IDs, unchanged origin, foreign rejection
+PASS retracted and truncated source closures rejected through real Skeptic dispatch
+PASS graph real failed/completed execution, saved witness follow-up, withheld prose contradiction
+{
+  "parity": {
+    "project_id": "fa4f10bb-aa12-4cf6-990b-86161626c52b",
+    "first_session_id": "3677f1e2-8287-4ec2-9ff0-b34da08fcb71",
+    "later_session_id": "fdd7c166-9b33-413f-a0c1-ebc3ad85f0ad",
+    "foreign_session_id": "ac25911d-4eb9-4329-bbc7-6dd4eaf604be",
+    "first_artifact_id": "a8494e19-f568-4f60-b1b3-155a87eab99d",
+    "calls": 6,
+    "foreign_rejected_calls": 1,
+    "first_record_unchanged": true
+  },
+  "parity_retracted": {
+    "project_id": "fa4f10bb-aa12-4cf6-990b-86161626c52b",
+    "rejected_session_id": "738ebb79-609b-4c2e-8633-d45dffed79e2",
+    "tainted_source_artifact_id": "a8494e19-f568-4f60-b1b3-155a87eab99d",
+    "kind": "retracted",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "parity_truncated": {
+    "project_id": "fa4f10bb-aa12-4cf6-990b-86161626c52b",
+    "rejected_session_id": "c32051c6-ebd5-4f8f-99de-0a587f41cca6",
+    "tainted_source_artifact_id": "a8494e19-f568-4f60-b1b3-155a87eab99d",
+    "kind": "truncated",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "graph_present": {
+    "project_id": "188db65c-2f4d-4e68-9f48-a16d21bb7b4a",
+    "initial_session_id": "52cda3d2-127a-426f-8ee3-16b94551762f",
+    "followup_session_id": "80b699bf-8cce-411c-90a8-2da05c17bbf7",
+    "fork_session_id": "b5c56621-93e2-41ba-889f-16e9be37bf6b",
+    "approved_negative_source_id": "aafa513d-3b35-45f1-b4e5-2cc737b7331c",
+    "execution_ids": [
+      "66de2934-42b0-4898-897c-f0b4ea6b0b6f",
+      "cc7f7b73-8672-4b41-a3ad-6e00a192db42"
+    ],
+    "execution_statuses": [
+      "failed",
+      "completed"
+    ],
+    "current_finding_count": 4,
+    "initial_record_unchanged": true
+  },
+  "graph_withheld": {
+    "project_id": "530d78d7-dbc4-4a41-917b-fca02a219607",
+    "initial_session_id": "51a42668-e0d3-486f-8353-d46a27384202",
+    "followup_session_id": null,
+    "fork_session_id": null,
+    "approved_negative_source_id": null,
+    "execution_ids": [],
+    "execution_statuses": [],
+    "current_finding_count": 1,
+    "initial_record_unchanged": true
+  }
+}
+
+> uv run --locked --no-sync python tests/closure_basis.py
+PASS closure evidence checks
+
+> uv run --locked --no-sync python tests/research_state.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS read-only current understanding: original archives, explicit dispositions/relations, no semantic matching, stable ordering/IDs, path isolation, missing/failed history, no provider work
+
+> uv run --locked --no-sync python tests/continuations.py
+PASS continuation approval, mandatory refutation, foreign IDs, overflow, frozen cross-strategy dispatch, archive preservation, corrupt/edited approval and stale preview
+
+> uv run --locked --no-sync python tests/research_feedback.py
+PASS lossless evidence pooling, exact negative constraints and source coverage; missing/foreign/status/hash/citation/follow-up checks; execution failure cannot be a counterexample
+
+> uv run --locked --no-sync python tests/python_sandbox.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API
+
+> uv run --locked --no-sync python tests/sage_execution.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS Sage agent advertisement, typed selection, persisted evidence/API/artifacts/metrics, failure revision and crash-safe recovery
+
+> uv run --locked --no-sync python tests/computational_evidence.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+Computational evidence previews and cross-session citation scenarios passed.
+
+> uv run --locked --no-sync python tests/project_reports.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS empty and populated reports, lifecycle/outcome distinction, UTF-8 and escaping
+PASS report API formats and unchanged Project Audit export
+
+> uv run --locked --no-sync python tests/increment13_integrity.py
+PASS adversarial report status/provenance across TXT HTML TeX
+
+> uv run --locked --no-sync python tests/increment14_protocol.py
+Increment 14 adversarial offline checks passed
+
+> uv run --locked --no-sync python tests/increment14_audit.py
+Increment 14 blind normalization and audit adversarial checks passed
+
+> uv run --locked --no-sync python tests/increment22_budget.py
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.000s
+
+OK
+
+> uv run --locked --no-sync python scripts/increment15_offline_pairs.py --output /tmp/sigma-increment15-offline-pairs.json
+PASS 72 synthetic records, 36 matched pairs, zero model calls/cost
+
+> uv run --locked --no-sync python tests/papers.py
+Paper snapshots, citation validation, version retention and bounded rendering passed.
+
+> uv run --locked --no-sync python tests/text_views.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS AI Markdown conversion of immutable historical Conclusions with typed math
+PASS large strategy conversions above 128 KB and the explicit 1 MB response cap
+PASS v1-v6 read-only legacy access, lazy portable cache, sample source immutability, explicit two-way conversion, stale revision and no cached calls
+PASS in-flight source conflict, cancellation and gate release, unavailable model, truncated output and account change preserve source
+PASS ChatGPT HTTP rejection preserves source and suppresses provider error fields
+PASS ChatGPT plan untyped SSE recovery, partial/missing-text rejection, and malformed-body classification
+PASS ChatGPT-plan terminal text omission is recovered from complete streamed deltas
+PASS strategy approach shares the service and ChatGPT-plan preserves the selected billing path
+PASS ASGI browser disconnect interrupts conversion before companion publication
+
+> uv run --locked --no-sync python tests/strategies.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS read-only v1 access, first-save migration, exact backup, stable identity/history
+PASS validation, failed replacement/flush, unchanged state and staging cleanup
+PASS failed migration retry and existing backup protection
+PASS backup failure, external-edit conflict, unsafe lock and missing-project protection
+PASS concurrent writers preserve all strategies, stable IDs and ordered events
+PASS corrupt strategy records, unsupported authors and unmatched history rejected
+PASS API create/list, shared persistence, validation and safe error responses
+All strategy scenarios passed.
+
+> uv run --locked --no-sync python tests/strategy_changes.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS isolated strategy workflow leaves external Recent index byte-for-byte intact
+PASS edit audit trail, unchanged identity, no-op, exact v2 backup, durable pool removal
+PASS create after removal, validation, failed edits/removals leave state unchanged
+PASS both first-write migrations, backup/publication failure and retry
+PASS strategy edits retain approaches beyond the legacy 10,000-character bound
+PASS concurrent create/edit/remove preserve all records and ordered history
+PASS inconsistent edit/removal histories rejected without repair
+PASS strategy eligibility schema-v7 migration, durable toggles, audit consistency and no-op
+PASS API edit/remove/list and validation through the shared services
+All edit/removal scenarios passed.
+
+> uv run --locked --no-sync python tests/cli_smoke.py
+PASS CLI lifecycle, strategy create/edit/remove/list/reopen, agentic evidence list/export and safe failure
+
+> uv run --locked --no-sync python tests/tooling.py
+PASS maintenance, UI lifecycle, verified suspended-owner recovery and shutdown
+
+> uv run --locked --no-sync python tests/local_config.py
+PASS checkout dotenv syntax, missing file, environment precedence, no evaluation/expansion, atomic rejection and safe errors
+
+> uv run --locked --no-sync python tests/cloud_demo.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.071s
+
+OK
+
+> uv run --locked --no-sync python tests/cloud_auth.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+................
+----------------------------------------------------------------------
+Ran 16 tests in 0.363s
+
+OK
+
+> uv run --locked --no-sync python tests/cloud_workspaces.py
+PASS two isolated workspaces; traversal/symlink/export/report/session/execution/artifact/paper access denied across owners; restart and backup/restore preserved owner mappings, paper source/PDF, execution artifacts and Recent indexes
+
+> uv run --locked --no-sync python tests/storage.py
+PASS two isolated workspaces; traversal/symlink/export/report/session/execution/artifact/paper access denied across owners; restart and backup/restore preserved owner mappings, paper source/PDF, execution artifacts and Recent indexes
+PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation
+PASS persistent_disk: two-subject project/recent/export isolation, backend restart, relocated-root Recent/ownership preservation, full-root backup/restore, fail-closed roots and GCE startup, unchanged stock sample and LOCAL project directory
+
+> uv run --locked --no-sync python tests/cloud_research.py
+PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation
+
+> uv run --locked --no-sync python tests/cloud_research_api.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS authenticated cloud inference endpoints, sponsor selection, spend limits, concurrency, failure accounting, cancellation, restart recovery, workspace artifacts and cross-user isolation
+
+> uv run --locked --no-sync python tests/cloud_research_sponsored_api.py
+/private/tmp/sigma-blue-increment-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS authenticated HTTP sponsored inference through a deterministic fake OpenAI provider, including no personal account, budget exhaustion, uncertain failure holds, idempotency, and cross-workspace isolation
+
+> uv run --locked --no-sync python tests/deployment_package.py
+Traceback (most recent call last):
+  File "/private/tmp/sigma-blue-increment-6/tests/deployment_package.py", line 136, in <module>
+    main()
+    ~~~~^^
+  File "/private/tmp/sigma-blue-increment-6/tests/deployment_package.py", line 70, in main
+    assert "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+sigma test check failed: uv run --locked --no-sync python tests/deployment_package.py (exit 1).
+
+> uv run --locked --no-sync python tests/public_endpoint.py
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.514s
+
+OK
+
+> uv run --locked --no-sync python tests/gce_host.py
+...............F.
+======================================================================
+FAIL: test_systemd_templates_preserve_mount_gate_and_rootless_boundary (__main__.GceHostToolingTests.test_systemd_templates_preserve_mount_gate_and_rootless_boundary)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/sigma-blue-increment-6/tests/gce_host.py", line 461, in test_systemd_templates_preserve_mount_gate_and_rootless_boundary
+    self.assertIn(expected, app)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: 'Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount' not found in '[Unit]\nDescription=SIGMA production Compose stack\nRequires=docker.service sigma-sandbox.service\nAfter=docker.service sigma-sandbox.service\nRequiresMountsFor=/srv/sigma-state\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/sigma/current\nEnvironment=SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env\nEnvironment=SIGMA_STATE_DISK_MOUNT=/srv/sigma-state\nExecStartPre=/usr/bin/python3 /usr/local/libexec/sigma/gce_preflight.py --repository /opt/sigma/current\nExecStart=/opt/sigma/current/deploy/start-gce.sh\nExecStop=/usr/bin/docker compose --project-name sigma --env-file /etc/sigma/deploy.env -f /opt/sigma/current/deploy/compose.yaml -f /opt/sigma/current/deploy/compose.gce.yaml stop\nTimeoutStartSec=0\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n'
+
+----------------------------------------------------------------------
+Ran 17 tests in 0.022s
+
+FAILED (failures=1)
+sigma test check failed: uv run --locked --no-sync python tests/gce_host.py (exit 1).
+
+> uv run --locked --no-sync python tests/state_backup.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.025s
+
+OK
+
+> uv run --locked --no-sync python tests/host_monitor.py
+......F..
+======================================================================
+FAIL: test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks (__main__.HostMonitorTests.test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/sigma-blue-increment-6/tests/host_monitor.py", line 204, in test_unit_contracts_retain_mount_ordering_restart_and_periodic_checks
+    self.assertIn(
+    ~~~~~~~~~~~~~^
+        "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount", app_unit
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 'Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount' not found in '[Unit]\nDescription=SIGMA production Compose stack\nRequires=docker.service sigma-sandbox.service\nAfter=docker.service sigma-sandbox.service\nRequiresMountsFor=/srv/sigma-state\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/sigma/current\nEnvironment=SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env\nEnvironment=SIGMA_STATE_DISK_MOUNT=/srv/sigma-state\nExecStartPre=/usr/bin/python3 /usr/local/libexec/sigma/gce_preflight.py --repository /opt/sigma/current\nExecStart=/opt/sigma/current/deploy/start-gce.sh\nExecStop=/usr/bin/docker compose --project-name sigma --env-file /etc/sigma/deploy.env -f /opt/sigma/current/deploy/compose.yaml -f /opt/sigma/current/deploy/compose.gce.yaml stop\nTimeoutStartSec=0\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n'
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.011s
+
+FAILED (failures=1)
+sigma test check failed: uv run --locked --no-sync python tests/host_monitor.py (exit 1).
+
+> uv run --locked --no-sync python tests/instance_ownership.py
+PASS canonical checkout identity/symlink changes, private state, stale recovery, wrong handshake/no shutdown and unsafe lock rejection
+
+> uv run --locked --no-sync python tests/ui_registry.py
+Stopping existing SIGMA instance…
+Stopping existing SIGMA instance…
+Stopping existing SIGMA instance…
+PASS global cross-checkout shutdown, stale owner/socket/temp cleanup and no PID signaling
+
+> uv run --locked --no-sync python tests/ui_orphans.py
+Stopping orphaned SIGMA server on port 8000 (PID 123)…
+Stopping orphaned SIGMA server on port 5173 (PID 124)…
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmpyvhwp1_u/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmpyvhwp1_u/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+PASS cross-checkout orphan discovery, command/marker verification, occupied-port reporting and PID reuse protection
+
+> uv run --locked --no-sync ruff check src tests sigma deploy browser_checks scripts docs/evaluations
+All checks passed!
+
+> uv run --locked --no-sync ruff format --check src tests sigma deploy scripts browser_checks docs/evaluations
+238 files already formatted
+
+> uv run --locked --no-sync pyright
+0 errors, 0 warnings, 0 informations
+
+> npm --prefix frontend run typecheck
+
+> sigma-browser@0.1.0 typecheck
+> tsc --noEmit
+
+sh: tsc: command not found
+sigma test check failed: npm --prefix frontend run typecheck (exit 127).
+
+Skipping after earlier failure (not a read-only independent check): npm --prefix frontend run build
+
+sigma test: 4 step(s) failed:
+  exit 1: uv run --locked --no-sync python tests/deployment_package.py
+  exit 1: uv run --locked --no-sync python tests/gce_host.py
+  exit 1: uv run --locked --no-sync python tests/host_monitor.py
+  exit 127: npm --prefix frontend run typecheck
+sigma test: 1 non-read-only step(s) skipped after failures:
+  npm --prefix frontend run build

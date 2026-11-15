@@ -1,0 +1,24 @@
+command=['uv', 'run', '--locked', '--with', 'playwright', 'python', '/tmp/sigma-blue-main-release-6/docs/evaluations/increment_6/release_browser.py']
+release_root=/tmp/sigma-blue-main-baseline-6
+release_out=/tmp/sigma-blue-baseline-observed
+expected_direct_focus=false
+start_utc=2026-10-25T08:04:08.450699+00:00
+end_utc=2026-10-25T08:04:30.157891+00:00
+elapsed_seconds=21.7
+exit_code=0
+
+Using CPython 3.14.7
+Creating virtual environment at: .venv
+   Building sigma-research @ file:///private/tmp/sigma-blue-main-baseline-6
+      Built sigma-research @ file:///private/tmp/sigma-blue-main-baseline-6
+Installed 27 packages in 135ms
+{
+  "result": "PASS",
+  "tested_sha": "4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c",
+  "base_main_sha": "4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c",
+  "browser": "Google Chrome 156.0.8078.47",
+  "viewports": 12,
+  "page_errors": [],
+  "direct_artifact_focus": false,
+  "scratch": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-sjgegz3_"
+}

@@ -1,0 +1,134 @@
+{
+  "task_id": "custom-two-machine-schedule-v1",
+  "single_case_only": true,
+  "independent_checker": {
+    "checker": "eligible-machine assignments × machine permutations × DAG longest paths",
+    "enumerated_machine_assignment_order_cases": 2016,
+    "exact_minimum_makespan": 10,
+    "optimal_machine_orders": {
+      "M1": [
+        "D",
+        "F",
+        "G"
+      ],
+      "M2": [
+        "A",
+        "B",
+        "E",
+        "C"
+      ]
+    },
+    "proposed_makespan": 13,
+    "proposed_schedule_valid": true
+  },
+  "arm_order": [
+    "baseline",
+    "sigma"
+  ],
+  "correctness": {
+    "sigma": {
+      "proposed_schedule_valid": true,
+      "minimum_found": 10,
+      "valid_10_unit_witness": true,
+      "valid_10_unit_lower_bound": true,
+      "optimality_argument_score": 3,
+      "evidence": "Analytic M1-only workload bound plus schedule and isolated exhaustive search; external checker confirms exact minimum 10."
+    },
+    "baseline": {
+      "proposed_schedule_valid_per_checker": true,
+      "minimum_found": 10,
+      "valid_10_unit_witness": true,
+      "valid_10_unit_lower_bound": true,
+      "optimality_argument_score": 3,
+      "final_conclusion_regressed": true,
+      "unsupported_or_false_claim": "Turn 2 and turn 4 claim the eligibility table, complete precedence graph, or proposed schedule were absent; all are present in frozen task."
+    }
+  },
+  "collaboration": {
+    "sigma_skeptic_objection": "none",
+    "sigma_skeptic_specificity_score": 0,
+    "sigma_evidence_transfer": "Skeptic request body contains saved Investigator schedule, successful local computation result, and execution status.",
+    "sigma_material_improvement": false,
+    "baseline_self_critique": "Specific but invalid concern that task inputs were missing.",
+    "baseline_critique_specificity_score": 2,
+    "baseline_next_turn": "Adopted the false concern and weakened the conclusion; turn 4 withdrew the correct unconditional optimum claim."
+  },
+  "evidence_preservation": {
+    "baseline_raw_requests_and_responses": 4,
+    "sigma_raw_requests_and_responses": 2,
+    "sigma_production_session_export": true,
+    "sigma_saved_project_strategy_outcome": true,
+    "computation_source_result_status_hash": true,
+    "budget_ledgers_settled": true,
+    "clipped_responses": 0,
+    "unknown_provider_outcomes": 0,
+    "authorization_values_persisted": false,
+    "initial_models_api_401_preserved": true,
+    "local_setup_failure_preserved": true
+  },
+  "resources": {
+    "generation_calls": 6,
+    "input_tokens": 18586,
+    "output_tokens": 9948,
+    "total_tokens": 28534,
+    "reasoning_tokens": 4654,
+    "usage_derived_cost_usd": 0.1451,
+    "conservative_usage_cost_usd": 0.145945,
+    "full_frozen_reservation_max_usd": 1.32768,
+    "project_hard_limit_usd": 1.4,
+    "project_dashboard_export_available": false,
+    "overall_elapsed_seconds": 232.236,
+    "overall_elapsed_basis": "cross-process UTC delta reconciled with current monotonic timer; SIGMA-arm elapsed is directly monotonic"
+  },
+  "arm_resources": {
+    "baseline": {
+      "status": "completed",
+      "turns": 4,
+      "input_tokens": 4264,
+      "output_tokens": 3449,
+      "total_tokens": 7713,
+      "reasoning_tokens": 1787,
+      "usage_derived_cost_usd": 0.044308,
+      "conservative_usage_cost_usd": 0.04515,
+      "ledger": {
+        "calls_including_unknown": 4,
+        "input_tokens_used_or_reserved": 4264,
+        "output_tokens_used_or_reserved": 3449,
+        "cost_usd_used_or_reserved": 0.04515,
+        "blocked_reason": null
+      },
+      "elapsed_seconds": 79.678
+    },
+    "sigma": {
+      "status": "ended",
+      "cycles_completed": 1,
+      "calls": 2,
+      "input_tokens": 14322,
+      "output_tokens": 6499,
+      "total_tokens": 20821,
+      "reasoning_tokens": 2867,
+      "usage_derived_cost_usd": 0.100792,
+      "conservative_usage_cost_usd": 0.100795,
+      "elapsed_seconds": 104.935,
+      "coordinator_decision": "stop_productive_conclusion"
+    }
+  },
+  "session_state": {
+    "id": "805fcd85-4591-4dc9-885a-4623a9acce1d",
+    "status": "ended",
+    "calls": 2,
+    "call_limit": 4,
+    "cycles_completed": 1,
+    "cycle_limit": 2,
+    "coordinator_decision": "stop_productive_conclusion",
+    "skeptic_assessment": "stop",
+    "skeptic_stop_reason": "unresolved",
+    "skeptic_strategy_contribution": "solution",
+    "objective_review": "achieved",
+    "unresolved_objections": null,
+    "open_obligations": []
+  },
+  "billing_dashboard_amount_observed": false,
+  "t147_recommended": true,
+  "t147_reason": "Investigate inconsistent saved stop fields: Skeptic says stop/unresolved/solution, while coordinator says stop_productive_conclusion, objective review achieved, and no open obligations. Do not begin without user instruction."
+}

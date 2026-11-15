@@ -1,0 +1,39 @@
+T131 Google OAuth browser acceptance harness repair
+
+State: R4R
+Branch: red/t131-google-oauth-harness
+Base: origin/main at 803a62d (PR #156 already merged)
+Scope: repair browser_checks/t23_1_google_signin.py as a self-starting,
+deterministic local Chrome check. This does not complete hosted T131 acceptance.
+
+Implementation:
+- Starts isolated loopback API and Vite servers on dynamically selected ports.
+- Places projects, application state, and cloud workspaces under a temporary
+  directory, and stops both servers on completion or failure.
+- Intercepts only auth status/login/logout/denied routes and the budget fixture
+  in the browser. Protected project requests are forwarded to the real API,
+  using tests/cloud_workspace_test_app.py's test-only X-Test identity adapter.
+- Exercises sign-in, reload persistence, logout, anonymous/revoked identity
+  401s, rejected-identity UI, account switching, per-account project isolation,
+  and project header rendering at desktop and mobile widths.
+- Updates browser_checks/README.md, docs/STATUS.md, and tickets/t131.md with the
+  command, fixture boundary, local evidence, and remaining hosted limitation.
+
+Validation actually run:
+- `uv run --with playwright python browser_checks/t23_1_google_signin.py` —
+  PASS in installed real Chrome. The browser harness starts its own API and UI.
+- `./sigma test` — PASS: all scenarios, Ruff, format, Pyright, frontend
+  typecheck, and production build.
+- `git diff --check` — PASS.
+
+No real Google credentials, Google endpoint, production OAuth setting, paid
+provider call, or cost was used. No production authentication behavior/code was
+changed. The deterministic browser identity survives reload because the local
+fixture retains it; this is not evidence for production cookie persistence.
+Production callback/session behavior remains covered only by the existing
+deterministic cloud_auth tests. Hosted sign-in, real Google identities, and
+deployed cookie behavior remain UNVERIFIED pending T131 operator prerequisites.
+
+Implementation/validation elapsed time: approximately 20 minutes.
+Implementation commit: 424ca3aa2cac5ba01a35c9dc11e58c1e251c83ae.
+PR: https://github.com/bkramerext/sigma/pull/158 (open, unmerged, R4R).

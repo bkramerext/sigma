@@ -1,0 +1,24 @@
+{
+  "run_started_at": "2026-11-02T06:03:46.976126+00:00",
+  "run_finished_at": "2026-11-02T06:21:28.893820+00:00",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider_mode": "chatgpt",
+  "completed": 2,
+  "failed": [
+    {
+      "name": "sovereign-ai-federation-v2",
+      "type": "ProjectError",
+      "error": "Long-paper stage exceeded its streamed-response bound. No paper was saved."
+    },
+    {
+      "name": "nonconsecutive-subset-sums-modulo-3",
+      "type": "ProjectError",
+      "error": "Paper generation capacity is full; please try again shortly"
+    },
+    {
+      "name": "warp-drive-design",
+      "type": "ProjectError",
+      "error": "Paper generation capacity is full; please try again shortly"
+    }
+  ]
+}

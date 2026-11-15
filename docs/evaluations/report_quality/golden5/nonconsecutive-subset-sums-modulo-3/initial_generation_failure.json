@@ -1,0 +1,24 @@
+{
+  "status": "failed_no_paper_published",
+  "project_id": "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a",
+  "session_id": "6ce6a07a-c844-4681-a6ec-ede98aa923ea",
+  "source_archive_sha256": "cbd1eb4c09f11445361bcd00851b46d3fed10618781db481c54f5e153c8ae8c1",
+  "frozen_snapshot_sha256": "71b345c5dd63be6e1ba38e011d7274bb6a36dbb0e1d3aba70ea46c2968b84bae",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider": {
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "started_at": "2026-11-02T06:12:34.146147+00:00",
+  "elapsed_seconds": 249,
+  "provider_calls": 6,
+  "stage": "sections",
+  "stage_progress": {
+    "current": 1,
+    "total": 5
+  },
+  "failure_reason": "Provider returned malformed long-paper stage content. No paper was published.",
+  "checkpoint_run_id": "19b74d5eea47415a9267215c2a0f1893",
+  "checkpoint_updated_at": "2026-11-02T06:16:44.462625+00:00"
+}

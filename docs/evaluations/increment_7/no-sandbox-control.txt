@@ -1,0 +1,44 @@
+PASS persisted parity step A → cycle step B → later session; exact source IDs, unchanged origin, foreign rejection
+PASS retracted and truncated source closures rejected through real Skeptic dispatch
+SKIP graph-present local execution: existing Python sandbox image unavailable; graph-withheld still checked
+{
+  "parity": {
+    "project_id": "0569d4e4-9161-4e0a-8c8e-6d8a2e3832c8",
+    "first_session_id": "30820cfc-3a38-4448-b916-0a22f76a6265",
+    "later_session_id": "55f85701-80b8-4e56-80ea-118b9379b356",
+    "foreign_session_id": "f6059916-40b8-4646-870b-ef3746ec92d9",
+    "first_artifact_id": "650c154d-c848-4fd6-ad4c-9ef8cee2d499",
+    "calls": 6,
+    "foreign_rejected_calls": 1,
+    "first_record_unchanged": true
+  },
+  "parity_retracted": {
+    "project_id": "0569d4e4-9161-4e0a-8c8e-6d8a2e3832c8",
+    "rejected_session_id": "6dceeb11-532a-445a-b41b-33343084a8d7",
+    "tainted_source_artifact_id": "650c154d-c848-4fd6-ad4c-9ef8cee2d499",
+    "kind": "retracted",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "parity_truncated": {
+    "project_id": "0569d4e4-9161-4e0a-8c8e-6d8a2e3832c8",
+    "rejected_session_id": "85b05bb2-5419-4337-a22b-ee20a0d3ee0b",
+    "tainted_source_artifact_id": "650c154d-c848-4fd6-ad4c-9ef8cee2d499",
+    "kind": "truncated",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "graph_present": {
+    "skipped": "Local Python sandbox image unavailable; no graph-present computation was claimed"
+  },
+  "graph_withheld": {
+    "project_id": "94ed031e-93dc-42ef-9bb2-6b94d5e9001c",
+    "initial_session_id": "83a2ed07-90b0-45ba-b9fd-8bd94fd86116",
+    "followup_session_id": null,
+    "fork_session_id": null,
+    "approved_negative_source_id": null,
+    "execution_ids": [],
+    "execution_statuses": [],
+    "current_finding_count": 1,
+    "initial_record_unchanged": true
+  }
+}
+exit_code=0

@@ -1,0 +1,312 @@
+{
+  "scope": "Paired deterministic encoding/render baseline; actual dispatched calls and actual new Conclusions on the other side. Exact text expansion and all selected sources verified. No semantic source selection or truncation.",
+  "contexts": [
+    {
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "step_id": "99a038f3-1816-4c8e-ba19-494738e92361",
+      "actual_dispatch_bytes": 40689,
+      "exact_expanded_baseline_bytes": 49008,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "step_id": "ba19f103-82ed-41d1-94dd-6e5e7d8eae8e",
+      "actual_dispatch_bytes": 48080,
+      "exact_expanded_baseline_bytes": 56399,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "step_id": "9aa3b9d0-7bb3-45fd-a6d5-872b7a21aac4",
+      "actual_dispatch_bytes": 56033,
+      "exact_expanded_baseline_bytes": 64352,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "step_id": "1d7900dc-a8d2-47f7-aba7-3c83a6c307d8",
+      "actual_dispatch_bytes": 63599,
+      "exact_expanded_baseline_bytes": 71918,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "affc2221-f821-4abe-8ab1-d74224dbc614",
+      "step_id": "428b0a80-83c0-4c80-b17b-dc140d8b38b3",
+      "actual_dispatch_bytes": 40993,
+      "exact_expanded_baseline_bytes": 49312,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "affc2221-f821-4abe-8ab1-d74224dbc614",
+      "step_id": "5c7322a6-7266-4768-90ce-c2b884c6fcb0",
+      "actual_dispatch_bytes": 44368,
+      "exact_expanded_baseline_bytes": 52687,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "affc2221-f821-4abe-8ab1-d74224dbc614",
+      "step_id": "aac4e251-fa37-41d8-a172-b2462d1de205",
+      "actual_dispatch_bytes": 51945,
+      "exact_expanded_baseline_bytes": 60264,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "affc2221-f821-4abe-8ab1-d74224dbc614",
+      "step_id": "7a5d9f6e-a5f9-46f3-b42e-a00de45a37e5",
+      "actual_dispatch_bytes": 55324,
+      "exact_expanded_baseline_bytes": 63643,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "dbd49c0a-2318-4b53-bcb7-b1ec0f7c7a97",
+      "step_id": "a886aba0-97cf-4e75-a76e-c9413c142a2c",
+      "actual_dispatch_bytes": 41289,
+      "exact_expanded_baseline_bytes": 49608,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "dbd49c0a-2318-4b53-bcb7-b1ec0f7c7a97",
+      "step_id": "3aa1deca-d634-42da-ad50-3d2f122aa0b6",
+      "actual_dispatch_bytes": 46139,
+      "exact_expanded_baseline_bytes": 54458,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "7cf01b4b-d70f-4fd5-94c9-872c3fd89ef3",
+      "step_id": "1519eab7-64b1-4bc2-ae90-28536eced13e",
+      "actual_dispatch_bytes": 41552,
+      "exact_expanded_baseline_bytes": 49871,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "7cf01b4b-d70f-4fd5-94c9-872c3fd89ef3",
+      "step_id": "d693661c-b063-40c2-a852-4d7152a5251d",
+      "actual_dispatch_bytes": 46126,
+      "exact_expanded_baseline_bytes": 54445,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "6095289e-599d-4765-856a-dc745b1380db",
+      "step_id": "94df095f-7bae-4750-822d-824b65e86592",
+      "actual_dispatch_bytes": 41807,
+      "exact_expanded_baseline_bytes": 50126,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "6095289e-599d-4765-856a-dc745b1380db",
+      "step_id": "b8cabb44-c89c-4df9-b3ba-eee9f5aea52f",
+      "actual_dispatch_bytes": 49024,
+      "exact_expanded_baseline_bytes": 57343,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "e4bcb378-e61c-4d9c-b5c5-88f7d93b7d2d",
+      "step_id": "13662819-0139-40ab-9dad-772888d2a61d",
+      "actual_dispatch_bytes": 42089,
+      "exact_expanded_baseline_bytes": 50408,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "e4bcb378-e61c-4d9c-b5c5-88f7d93b7d2d",
+      "step_id": "07ba8120-fac3-4c35-a8bc-1a6ba24e8968",
+      "actual_dispatch_bytes": 49480,
+      "exact_expanded_baseline_bytes": 57799,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "step_id": "70322f25-a226-4a25-ace1-666391929c91",
+      "actual_dispatch_bytes": 42829,
+      "exact_expanded_baseline_bytes": 51148,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "step_id": "991edb6c-f63b-4f5b-96d5-53c82d884275",
+      "actual_dispatch_bytes": 49051,
+      "exact_expanded_baseline_bytes": 57370,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "step_id": "0fae4b75-d4e0-4cfd-b120-dfbb2488460b",
+      "actual_dispatch_bytes": 56159,
+      "exact_expanded_baseline_bytes": 64478,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    },
+    {
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "step_id": "74ff5633-8d39-4128-9293-52efcb535282",
+      "actual_dispatch_bytes": 64029,
+      "exact_expanded_baseline_bytes": 72348,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call."
+    }
+  ],
+  "summaries": [
+    {
+      "session_id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+      "actual": 2904,
+      "legacy_baseline": 7416
+    },
+    {
+      "session_id": "affc2221-f821-4abe-8ab1-d74224dbc614",
+      "actual": 2466,
+      "legacy_baseline": 6396
+    },
+    {
+      "session_id": "dbd49c0a-2318-4b53-bcb7-b1ec0f7c7a97",
+      "actual": 2833,
+      "legacy_baseline": 4810
+    },
+    {
+      "session_id": "7cf01b4b-d70f-4fd5-94c9-872c3fd89ef3",
+      "actual": 2690,
+      "legacy_baseline": 4670
+    },
+    {
+      "session_id": "6095289e-599d-4765-856a-dc745b1380db",
+      "actual": 2794,
+      "legacy_baseline": 4909
+    },
+    {
+      "session_id": "e4bcb378-e61c-4d9c-b5c5-88f7d93b7d2d",
+      "actual": 1638,
+      "legacy_baseline": 2482
+    },
+    {
+      "session_id": "a2809a29-2622-40d8-b667-517b43a58e20",
+      "actual": 2961,
+      "legacy_baseline": 7437
+    },
+    {
+      "session_id": "ad6ce991-3451-4698-b2ef-64a6b34f3cf2",
+      "actual": 1749,
+      "legacy_baseline": 1749
+    },
+    {
+      "session_id": "4e48ec17-0565-4c82-9929-3272347c70e7",
+      "actual": 1265,
+      "legacy_baseline": 1265
+    }
+  ]
+}

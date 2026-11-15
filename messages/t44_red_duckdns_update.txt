@@ -1,0 +1,56 @@
+T44 follow-up handoff — selected hostname and staged launch gates
+
+Branch: codex/t44-gcp-provisioning-runbook
+Pull request: #64 (existing PR; leave open and unmerged)
+Base: current main 042485464e2396b8b8497aed8883dbb71f03bbd8
+
+MET
+- Recorded the selected/registered hostname sigma-research.duckdns.org in the
+  runbook, deployment guide, and deploy/env.example.
+- Documented updating its DuckDNS A record to the reserved static IPv4 when
+  allocated. No Cloud DNS managed zone/API or Cloud DNS charges are planned.
+- Public ingress and Compose startup remain gated on DNS resolving to that IP,
+  production Google OAuth configuration, both approved secrets, and required
+  operator approvals. The VM and private host preparation may precede these.
+- Reconciled costs with docs/GCP-DEPLOYMENT.md: before public launch the always-
+  on VM, attached disks, and static IPv4 estimate is $125.49/month and $371.31
+  for 90 days; post-launch with separately approved snapshots, backup copy, and
+  illustrative egress is $132.57/month and $392.34 for 90 days. The estimated
+  $300 trial credit is exceeded by about $71.31 and $92.34 respectively over
+  90 days. Setup image/package egress is unmeasured and excluded.
+- Reviewed commands and deployment invocation against the checked-in GCE
+  Compose override, env example, secret-fetch script, and official `gcloud`
+  references. Launch uses compose.yaml plus compose.gce.yaml so persistent
+  auth/workspace state binds to the mounted disk. Commands passed shell syntax
+  validation; no command was sent to Google.
+- No launcher or UI files changed.
+
+UNMET
+- None for the requested documentation follow-up.
+
+UNVERIFIED
+- Actual project/account/billing/trial eligibility and dates, API enablement,
+  zone capacity/quota, IAM permissions, reserved IP, DuckDNS propagation,
+  production OAuth, secret contents/availability, HTTPS certificate, and actual
+  spend remain operator checks after approval.
+- The listed GCP prices and egress/backup assumptions are planning estimates,
+  not a current project quote. No cloud provisioning, billing/trial activation,
+  purchase, or paid provider call was performed.
+
+Checks actually performed
+- Fetched origin/main; it is unchanged at 042485464e2396b8b8497aed8883dbb71f03bbd8,
+  the PR base. The existing branch is already based there; no rebase/conflict
+  resolution was needed.
+- All 13 shell code fences in docs/GCP-PROVISIONING-RUNBOOK.md passed `bash -n`.
+- `uv run --locked --no-sync python tests/deployment_package.py` passed.
+- `DOCKER_CONFIG=/tmp/sigma-t42-docker-config DOCKER_CONTEXT=colima env -u
+  SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./deploy/validate-local.sh` passed. The
+  local backend/frontend images built, health checks passed, and auth SQLite
+  persisted across restart and container recreation. Only local HTTP and dummy
+  secret files were used; no Google or provider endpoint was called.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all project
+  scenarios, Ruff/format, Pyright (zero diagnostics), frontend typecheck, and
+  production build. Existing Starlette/httpx deprecation warnings remain.
+- `git diff --check` passed.
+
+R4R: ready for coordinator review. Do not merge from this handoff.

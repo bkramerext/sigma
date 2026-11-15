@@ -1,0 +1,2132 @@
+"""Typed project commands shared by every adapter; reads never change history."""
+
+import asyncio
+import fcntl
+import hashlib
+import json
+import os
+import re
+import stat
+import tempfile
+import threading
+import unicodedata
+from collections.abc import Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, Literal
+from uuid import UUID, uuid4
+
+from sigma.build_info import build_commit
+from sigma.model_catalog import EFFORTS, legacy_model, validate_pair, validate_stored
+
+MAX_STRATEGY_APPROACH = 50_000
+
+
+class ProjectError(ValueError):
+    """An invalid request or a project that cannot safely be used."""
+
+
+class WorkspaceAccessError(ProjectError):
+    """A cloud request addressed a project outside its private workspace."""
+
+
+class ResearchMode(str, Enum):
+    DEFAULT = "default"
+    BIOLOGY = "biology"
+    CHEMISTRY = "chemistry"
+    COMPUTER_SCIENCE = "computer_science"
+    ECONOMICS = "economics"
+    ENGINEERING = "engineering"
+    LAW = "law"
+    MATHEMATICAL = "mathematical"
+    MILITARY = "military"
+    PHILOSOPHY = "philosophy"
+    PHYSICS = "physics"
+    RELIGION = "religion"
+
+
+class Difficulty(str, Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
+def _difficulty(value: str | None) -> Difficulty | None:
+    if value is None:
+        return None
+    try:
+        return Difficulty(value)
+    except (ValueError, TypeError) as exc:
+        raise ProjectError("Difficulty must be Easy, Medium, or Hard") from exc
+
+
+def _research_mode(value: str) -> ResearchMode | str:
+    """Catalog driven identities; retired IDs remain readable for old projects."""
+    if not isinstance(value, str) or not value.strip() or len(value) > 100:
+        raise ProjectError("Project type identity must be nonempty text")
+    if any(ord(char) < 32 for char in value):
+        raise ProjectError("Project type identity contains a control character")
+    cleaned = value.strip()
+    try:
+        return ResearchMode(cleaned)
+    except ValueError:
+        return cleaned
+
+
+@dataclass(frozen=True)
+class StrategyChange:
+    previous_title: str
+    previous_approach: str
+    title: str
+    approach: str
+
+
+class Stage(str, Enum):
+    DRAFT = "draft"
+    READY = "ready"
+    EXPLORING = "exploring"
+    HOLD = "hold"
+
+
+@dataclass(frozen=True)
+class Provenance:
+    provider: str
+    model: str
+    reasoning_effort: str | None = None
+    inference_request_id: str | None = None
+
+
+@dataclass(frozen=True)
+class StageChange:
+    previous: str
+    stage: str
+
+
+@dataclass(frozen=True)
+class StrategyEnabledChange:
+    previous: bool
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class ProjectSettings:
+    title: str
+    problem: str
+    investigation_type: str
+    ai_model: str
+    reasoning_effort: str
+    difficulty: Difficulty | None = None
+    show_advanced_outcome_details: bool = False
+    desired_outcomes: str = ""
+    paper_requirements: str = ""
+
+    @property
+    def research_mode(self) -> str:
+        """Compatibility alias for existing integrations."""
+        return self.investigation_type
+
+
+@dataclass(frozen=True)
+class ProjectChange:
+    previous: ProjectSettings
+    current: ProjectSettings
+
+
+def _settings(raw: Any) -> ProjectSettings:
+    if isinstance(raw, dict) and "research_mode" in raw and "investigation_type" not in raw:
+        raw = {**raw, "investigation_type": raw["research_mode"]}
+        del raw["research_mode"]
+    required = {
+        "title",
+        "problem",
+        "investigation_type",
+        "ai_model",
+        "reasoning_effort",
+    }
+    if (
+        not isinstance(raw, dict)
+        or not required <= set(raw)
+        or set(raw)
+        - required
+        - {"difficulty", "show_advanced_outcome_details", "desired_outcomes", "paper_requirements"}
+    ):
+        raise ProjectError("Invalid project settings fields")
+    advanced_outcome = raw.get("show_advanced_outcome_details", False)
+    if type(advanced_outcome) is not bool:
+        raise ProjectError("Advanced Outcome preference must be a boolean")
+    try:
+        validate_stored(raw["ai_model"], raw["reasoning_effort"])
+    except (ValueError, TypeError) as exc:
+        raise ProjectError(str(exc)) from exc
+    return ProjectSettings(
+        _text(raw["title"], "Project name", 200),
+        _text(raw["problem"], "Research problem", 20000),
+        _research_mode(raw["investigation_type"]),
+        raw["ai_model"],
+        raw["reasoning_effort"],
+        _difficulty(raw.get("difficulty")),
+        advanced_outcome,
+        _optional_project_text(raw.get("desired_outcomes", ""), "Desired outcomes"),
+        _optional_project_text(raw.get("paper_requirements", ""), "Paper requirements"),
+    )
+
+
+@dataclass(frozen=True)
+class Event:
+    sequence: int
+    kind: str
+    timestamp: str
+    strategy_id: str | None = None
+    change: StrategyChange | None = None
+    stage_change: StageChange | None = None
+    order: tuple[str, ...] | None = None
+    project_change: ProjectChange | None = None
+    enabled_change: StrategyEnabledChange | None = None
+
+
+@dataclass(frozen=True)
+class Strategy:
+    id: str
+    title: str
+    approach: str
+    author_kind: Literal["human"]
+    created_at: str
+    removed_at: str | None = None
+    stage: Stage = Stage.DRAFT
+    summary: str = ""
+    provenance: Provenance | None = None
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
+class Project:
+    schema_version: int
+    id: str
+    title: str
+    problem: str
+    events: tuple[Event, ...]
+    strategies: tuple[Strategy, ...] = ()
+    investigation_type: str = ResearchMode.DEFAULT.value
+    active_order: tuple[str, ...] = ()
+    ai_model: str = "gpt-6.1-sol"
+    reasoning_effort: str = "high"
+    difficulty: Difficulty | None = None
+    show_advanced_outcome_details: bool = False
+    backend_build_commit: str | None = None
+    project_type_snapshot: dict[str, Any] | None = None
+    desired_outcomes: str = ""
+    paper_requirements: str = ""
+    source_material_links: tuple[dict[str, Any], ...] = ()
+
+    @property
+    def research_mode(self) -> str:
+        """Compatibility alias for existing integrations."""
+        return self.investigation_type
+
+
+@dataclass(frozen=True)
+class ProjectView:
+    path: str
+    project: Project
+
+
+def _current_build_commit() -> str | None:
+    """Record the process build, not a checkout HEAD that may change mid-run."""
+    value = build_commit()
+    return value if re.fullmatch(r"[0-9a-f]{7,40}", value) else None
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SEED = ROOT / "projects/rh.sigma"
+STATE = "project.json"
+
+
+def project_path(value: str | Path) -> Path:
+    try:
+        path = Path(value).expanduser().absolute()
+        if path.is_symlink():
+            from sigma import cloud_workspaces
+
+            if cloud_workspaces.current() is not None:
+                raise WorkspaceAccessError("Project not found or access denied.")
+            raise ProjectError("Project directory must not be a symbolic link")
+        path = path.resolve()
+        from sigma import cloud_workspaces
+
+        try:
+            cloud_workspaces.assert_project_path(value, path)
+        except ValueError as exc:
+            raise WorkspaceAccessError("Project not found or access denied.") from exc
+        if path.suffix not in (".sigma", ".json"):
+            raise ProjectError("Project path must end in .sigma or .json")
+        return path
+    except WorkspaceAccessError:
+        raise
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise ProjectError(f"Invalid project path: {exc}") from exc
+
+
+class _HeldFileLock:
+    """Reentrant only within the owning thread/task, never inherited workers."""
+
+    def __init__(self, path: str, owner: tuple[int, int | None]):
+        self.path = path
+        self.owner = owner
+        self.active = True
+
+
+_PROJECT_FILE_LOCK: ContextVar[_HeldFileLock | None] = ContextVar(
+    "sigma_project_file_write_lock", default=None
+)
+
+
+def _file_lock_owner() -> tuple[int, int | None]:
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        task = None
+    return threading.get_ident(), id(task) if task is not None else None
+
+
+@contextmanager
+def project_write_lock(
+    value: str | Path, *, advance_revision: bool = True, allow_project_edit: bool = False
+):
+    """Serialize per-project writes before acquiring the global SQLite writer.
+
+    Nested checkpoints in one task reuse the lock; child tasks and worker
+    threads cannot inherit permission to bypass a held file lock.
+    """
+    path = project_path(value)
+    from sigma import project_collaboration
+
+    held = _PROJECT_FILE_LOCK.get()
+    if (
+        held is not None
+        and held.active
+        and held.path == str(path)
+        and held.owner == _file_lock_owner()
+    ):
+        with project_collaboration.write_guard(
+            str(path), advance_revision=advance_revision, allow_project_edit=allow_project_edit
+        ):
+            yield path
+        return
+
+    lock_path = (
+        path.with_name(f".{path.name}.sigma-write.lock")
+        if path.suffix == ".json"
+        else path / ".write.lock"
+    )
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "rb") as lock:
+            if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
+                raise ProjectError("Project write lock must be a regular file")
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            state = _HeldFileLock(str(path), _file_lock_owner())
+            token = _PROJECT_FILE_LOCK.set(state)
+            try:
+                with project_collaboration.write_guard(
+                    str(path),
+                    advance_revision=advance_revision,
+                    allow_project_edit=allow_project_edit,
+                ):
+                    yield path
+            finally:
+                state.active = False
+                _PROJECT_FILE_LOCK.reset(token)
+                fcntl.flock(lock, fcntl.LOCK_UN)
+    except OSError as exc:
+        raise ProjectError(f"Cannot lock project state: {exc}") from exc
+
+
+def _timestamp(value: Any) -> datetime:
+    if not isinstance(value, str):
+        raise ProjectError("Timestamp must be a string")
+    stamp = datetime.fromisoformat(value)
+    if stamp.tzinfo is None:
+        raise ProjectError("Timestamps must include a timezone")
+    return stamp
+
+
+def _text(value: Any, name: str, limit: int) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > limit:
+        raise ProjectError(f"{name} must contain 1–{limit} characters")
+    return value.strip()
+
+
+def _optional_project_text(value: Any, name: str) -> str:
+    """Empty is valid for legacy projects; never fabricate requirements."""
+    if not isinstance(value, str) or len(value.strip()) > 20000:
+        raise ProjectError(f"{name} must be Markdown of at most 20000 characters")
+    return value.strip()
+
+
+def _type_snapshot(identifier: str) -> dict[str, Any] | None:
+    if isinstance(identifier, ResearchMode):
+        identifier = identifier.value
+    if identifier == "default":
+        return None
+    from sigma.project_types import get_type
+
+    item = get_type(identifier)
+    if item is None:
+        raise ProjectError("Choose an available project type")
+    return item.record()
+
+
+def _decode(raw: Any) -> Project:
+    if (
+        not isinstance(raw, dict)
+        or type(raw.get("schema_version")) is not int
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+    ):
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 13)")
+    version = raw["schema_version"]
+    fields = {"schema_version", "id", "title", "problem", "events"}
+    if version >= 2:
+        fields.add("strategies")
+    if version >= 4:
+        fields.add("investigation_type" if "investigation_type" in raw else "research_mode")
+    if version >= 5:
+        fields.add("active_order")
+    if 6 <= version < 12:
+        fields.update({"ai_model", "reasoning_effort"})
+    if version >= 8:
+        fields.add("difficulty")
+    if version >= 13:
+        fields.update({"desired_outcomes", "paper_requirements"})
+    if 9 <= version < 12:
+        fields.add("show_advanced_outcome_details")
+    if "project_type_snapshot" in raw:
+        fields.add("project_type_snapshot")
+    if "source_material_links" in raw:
+        fields.add("source_material_links")
+        links = raw["source_material_links"]
+        if not isinstance(links, list) or len(links) > 20:
+            raise ProjectError("Invalid Source Material links")
+        ids = set()
+        for link in links:
+            mandatory = {"id", "kind", "url", "uploaded_by", "uploaded_at"}
+            if (
+                not isinstance(link, dict)
+                or not mandatory <= set(link)
+                or set(link) - mandatory - {"enabled"}
+            ):
+                raise ProjectError("Invalid Source Material link entry")
+            if (
+                link["kind"] != "link"
+                or not isinstance(link["id"], str)
+                or re.fullmatch(r"[0-9a-f]{32}", link["id"]) is None
+                or link["id"] in ids
+                or not isinstance(link["url"], str)
+                or not 1 <= len(link["url"]) <= 2048
+                or not link["url"].startswith(("https://", "http://"))
+                or type(link.get("enabled", True)) is not bool
+                or (link["uploaded_by"] is not None and not isinstance(link["uploaded_by"], str))
+            ):
+                raise ProjectError("Invalid Source Material link metadata")
+            _timestamp(link["uploaded_at"])
+            ids.add(link["id"])
+    # Optional in all schema versions: existing exported projects must remain readable.
+    if "backend_build_commit" in raw:
+        commit = raw["backend_build_commit"]
+        if commit is not None and (
+            not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{7,40}", commit)
+        ):
+            raise ProjectError("Invalid project backend build commit")
+        fields.add("backend_build_commit")
+    if set(raw) != fields:
+        raise ProjectError("Invalid project fields")
+    if version == 8 and raw["difficulty"] is None:
+        raise ProjectError("Schema v8 projects must have an Easy, Medium, or Hard difficulty")
+    if 9 <= version < 12 and type(raw["show_advanced_outcome_details"]) is not bool:
+        raise ProjectError("Advanced Outcome preference must be a boolean")
+    for key in ("id", "title", "problem"):
+        if not isinstance(raw[key], str) or not raw[key].strip():
+            raise ProjectError(f"Project {key} must be a nonempty string")
+    UUID(raw["id"])
+    mode = _research_mode(raw.get("investigation_type", raw.get("research_mode", "default")))
+    snapshot = raw.get("project_type_snapshot")
+    if snapshot is not None and not isinstance(snapshot, dict):
+        raise ProjectError("Project type snapshot must be an object or null")
+    if snapshot is None and mode != "default":
+        try:
+            from sigma.project_types import get_type
+
+            type_record = get_type(mode)
+            snapshot = type_record.record() if type_record else None
+        except ProjectError:
+            snapshot = None
+    if snapshot is not None:
+        from sigma.project_types import normalize_project_snapshot
+
+        snapshot = normalize_project_snapshot(
+            snapshot, mode.value if isinstance(mode, ResearchMode) else mode
+        )
+    settings = (
+        _settings(
+            {
+                "title": raw["title"],
+                "problem": raw["problem"],
+                "desired_outcomes": raw.get("desired_outcomes", ""),
+                "paper_requirements": raw.get("paper_requirements", ""),
+                "investigation_type": mode,
+                "ai_model": raw.get("ai_model", legacy_model()),
+                "reasoning_effort": raw.get("reasoning_effort", "high"),
+                "difficulty": raw.get("difficulty"),
+                "show_advanced_outcome_details": raw.get("show_advanced_outcome_details", False),
+            }
+        )
+        if version >= 6
+        else ProjectSettings(raw["title"], raw["problem"], mode, legacy_model(), "high", None)
+    )
+    if version >= 6 and (raw["title"] != settings.title or raw["problem"] != settings.problem):
+        raise ProjectError("Project settings text must be canonical")
+    strategies: list[Strategy] = []
+    seen: set[str] = set()
+    if version >= 2:
+        if not isinstance(raw["strategies"], list):
+            raise ProjectError("Strategies must be a list")
+        for item in raw["strategies"]:
+            strategy_fields = {"id", "title", "approach", "author_kind", "created_at"}
+            if version >= 3:
+                strategy_fields.add("removed_at")
+            if version >= 5:
+                strategy_fields.update({"stage", "summary", "provenance"})
+            if version >= 7:
+                strategy_fields.add("enabled")
+            if not isinstance(item, dict) or set(item) != strategy_fields:
+                raise ProjectError("Invalid strategy fields")
+            if not isinstance(item["id"], str) or item["id"] in seen:
+                raise ProjectError("Strategy identities must be unique strings")
+            UUID(item["id"])
+            seen.add(item["id"])
+            _text(item["title"], "Strategy title", 200)
+            _text(item["approach"], "Hypothesis / approach", MAX_STRATEGY_APPROACH)
+            if item["author_kind"] != "human":
+                raise ProjectError("Only human-authored strategies are supported")
+            _timestamp(item["created_at"])
+            if item.get("removed_at") is not None:
+                _timestamp(item["removed_at"])
+            values = dict(item)
+            values.setdefault("enabled", True)
+            if type(values["enabled"]) is not bool:
+                raise ProjectError("Strategy enabled state must be a boolean")
+            if version >= 5:
+                try:
+                    values["stage"] = Stage(item["stage"])
+                except (ValueError, TypeError) as exc:
+                    raise ProjectError("Invalid manual stage") from exc
+                if (
+                    not isinstance(item["summary"], str)
+                    or len(item["summary"]) > 300
+                    or "\n" in item["summary"]
+                    or "\r" in item["summary"]
+                ):
+                    raise ProjectError("Summary must be one line, at most 300 characters")
+                provenance = item["provenance"]
+                if provenance is not None:
+                    if (
+                        not isinstance(provenance, dict)
+                        or set(provenance)
+                        != (
+                            {"provider", "model", "reasoning_effort", "inference_request_id"}
+                            if version >= 10
+                            else {"provider", "model", "reasoning_effort"}
+                            if version >= 6
+                            else {"provider", "model"}
+                        )
+                        or provenance["provider"] != "openai"
+                    ):
+                        raise ProjectError("Invalid generation provenance")
+                    _text(provenance["model"], "Model", 100)
+                    if (
+                        provenance.get("reasoning_effort") is not None
+                        and provenance["reasoning_effort"] not in EFFORTS
+                    ):
+                        raise ProjectError("Invalid generation reasoning effort")
+                    request_id = provenance.get("inference_request_id")
+                    if request_id is not None and str(UUID(request_id)) != request_id:
+                        raise ProjectError("Invalid inference request provenance")
+                    values["provenance"] = Provenance(**provenance)
+            strategies.append(Strategy(**values))
+    if not isinstance(raw["events"], list) or not raw["events"]:
+        raise ProjectError("Project requires an initialization event")
+    created: set[str] = set()
+    removed: set[str] = set()
+    edits: dict[str, StrategyChange] = {}
+    by_id = {strategy.id: strategy for strategy in strategies}
+    events: list[Event] = []
+    previous = None
+    active_order: list[str] = []
+    stages: dict[str, str] = {}
+    enabled_states = {strategy.id: True for strategy in strategies}
+    project_change: ProjectChange | None = None
+    for index, item in enumerate(raw["events"], 1):
+        if not isinstance(item, dict):
+            raise ProjectError("Invalid event")
+        expected = {"sequence", "kind", "timestamp"}
+        if index > 1 and item.get("kind") not in {"strategies.reordered", "project.updated"}:
+            expected.add("strategy_id")
+        if item.get("kind") == "strategies.reordered":
+            expected.add("order")
+        if item.get("kind") == "strategy.stage_changed":
+            expected.add("stage_change")
+        if item.get("kind") == "project.updated":
+            expected.add("project_change")
+        if item.get("kind") == "strategy.updated":
+            expected.add("change")
+        if item.get("kind") == "strategy.enabled_changed":
+            expected.add("enabled_change")
+        if set(item) != expected:
+            raise ProjectError("Invalid event fields")
+        if type(item["sequence"]) is not int or item["sequence"] != index:
+            raise ProjectError("Event sequence must be contiguous and ordered")
+        stamp = _timestamp(item["timestamp"])
+        if previous is not None and stamp < previous:
+            raise ProjectError("Event timestamps must be ordered")
+        previous = stamp
+        if index == 1:
+            if item["kind"] != "project.initialized":
+                raise ProjectError("First event must initialize the project")
+        elif item["kind"] == "strategy.created":
+            if len(created) >= len(strategies):
+                raise ProjectError("Unexpected strategy creation event")
+            strategy = strategies[len(created)]
+            if (
+                item["strategy_id"] != strategy.id
+                or strategy.id in created
+                or item["timestamp"] != strategy.created_at
+            ):
+                raise ProjectError("Strategy creation event does not match its record")
+            created.add(strategy.id)
+            active_order.append(strategy.id)
+            stages[strategy.id] = "draft"
+        elif item["kind"] == "strategy.updated" and version >= 3:
+            strategy_id = item["strategy_id"]
+            change = item["change"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in created
+                or strategy_id in removed
+                or not isinstance(change, dict)
+                or set(change) != {"previous_title", "previous_approach", "title", "approach"}
+            ):
+                raise ProjectError("Invalid strategy edit event")
+            for field, limit in (
+                ("previous_title", 200),
+                ("title", 200),
+                ("previous_approach", MAX_STRATEGY_APPROACH),
+                ("approach", MAX_STRATEGY_APPROACH),
+            ):
+                _text(change[field], field, limit)
+            previous_edit = edits.get(strategy_id)
+            if previous_edit and (
+                previous_edit.title != change["previous_title"]
+                or previous_edit.approach != change["previous_approach"]
+            ):
+                raise ProjectError("Strategy edit history is inconsistent")
+            edits[strategy_id] = StrategyChange(**change)
+        elif item["kind"] == "strategy.removed" and version >= 3:
+            strategy_id = item["strategy_id"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in created
+                or strategy_id in removed
+                or by_id[strategy_id].removed_at != item["timestamp"]
+            ):
+                raise ProjectError("Strategy removal event does not match its record")
+            removed.add(strategy_id)
+            active_order.remove(strategy_id)
+        elif item["kind"] == "strategies.reordered" and version >= 5:
+            order = item["order"]
+            if (
+                not isinstance(order, list)
+                or any(not isinstance(i, str) for i in order)
+                or len(order) != len(active_order)
+                or set(order) != set(active_order)
+                or order == active_order
+            ):
+                raise ProjectError("Invalid active strategy order event")
+            active_order = order.copy()
+        elif item["kind"] == "strategy.stage_changed" and version >= 5:
+            strategy_id = item["strategy_id"]
+            change = item["stage_change"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in active_order
+                or not isinstance(change, dict)
+                or set(change) != {"previous", "stage"}
+            ):
+                raise ProjectError("Invalid manual stage event")
+            if (
+                change["previous"] != stages[strategy_id]
+                or change["stage"] not in {s.value for s in Stage}
+                or change["stage"] == change["previous"]
+            ):
+                raise ProjectError("Manual stage history is inconsistent")
+            stages[strategy_id] = change["stage"]
+        elif item["kind"] == "strategy.enabled_changed" and version >= 7:
+            strategy_id = item["strategy_id"]
+            change = item["enabled_change"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in active_order
+                or not isinstance(change, dict)
+                or set(change) != {"previous", "enabled"}
+                or type(change["previous"]) is not bool
+                or type(change["enabled"]) is not bool
+                or change["previous"] != enabled_states[strategy_id]
+                or change["enabled"] == change["previous"]
+            ):
+                raise ProjectError("Strategy enabled-state history is inconsistent")
+            enabled_states[strategy_id] = change["enabled"]
+        elif item["kind"] == "project.updated" and version >= 6:
+            change = item["project_change"]
+            if not isinstance(change, dict) or set(change) != {"previous", "current"}:
+                raise ProjectError("Invalid project edit event")
+            next_change = ProjectChange(_settings(change["previous"]), _settings(change["current"]))
+            # Normalize legacy event keys before checking their canonical contents.
+            normalized_change = {}
+            for key, value in change.items():
+                normalized = {
+                    ("investigation_type" if field == "research_mode" else field): val
+                    for field, val in value.items()
+                }
+                normalized.setdefault("difficulty", None)
+                normalized.setdefault("desired_outcomes", "")
+                normalized.setdefault("paper_requirements", "")
+                normalized_change[key] = normalized
+            if asdict(next_change) != normalized_change:
+                raise ProjectError("Project change text must be canonical")
+            if next_change.previous == next_change.current or (
+                project_change and project_change.current != next_change.previous
+            ):
+                raise ProjectError("Project settings edit chain is inconsistent")
+            project_change = next_change
+        else:
+            raise ProjectError("Unsupported strategy event")
+        event = Event(
+            **{
+                key: value
+                for key, value in item.items()
+                if key not in {"change", "stage_change", "order", "project_change"}
+            }
+        )
+        if "change" in item:
+            event = replace(event, change=StrategyChange(**item["change"]))
+        if "stage_change" in item:
+            event = replace(event, stage_change=StageChange(**item["stage_change"]))
+        if "order" in item:
+            event = replace(event, order=tuple(item["order"]))
+        if "project_change" in item:
+            event = replace(event, project_change=project_change)
+        if "enabled_change" in item:
+            event = replace(event, enabled_change=StrategyEnabledChange(**item["enabled_change"]))
+        events.append(event)
+    if created != seen or removed != {s.id for s in strategies if s.removed_at is not None}:
+        raise ProjectError("Strategy records and history do not match")
+    for strategy_id, change in edits.items():
+        strategy = by_id[strategy_id]
+        if strategy.title != change.title or strategy.approach != change.approach:
+            raise ProjectError("Latest edit does not match the strategy record")
+    if version >= 5 and (
+        raw["active_order"] != active_order or any(s.stage != stages[s.id] for s in strategies)
+    ):
+        raise ProjectError("Strategy order/stages do not match history")
+    if version >= 7 and any(
+        strategy.enabled != enabled_states[strategy.id] for strategy in strategies
+    ):
+        raise ProjectError("Strategy enabled states do not match history")
+    if project_change and project_change.current != settings:
+        raise ProjectError("Latest project edit does not match settings")
+    return Project(
+        version,
+        raw["id"],
+        raw["title"],
+        raw["problem"],
+        tuple(events),
+        tuple(strategies),
+        mode,
+        tuple(active_order),
+        settings.ai_model,
+        settings.reasoning_effort,
+        settings.difficulty,
+        settings.show_advanced_outcome_details,
+        raw.get("backend_build_commit"),
+        snapshot,
+        settings.desired_outcomes,
+        settings.paper_requirements,
+        tuple(raw.get("source_material_links", [])),
+    )
+
+
+def _document(project: Project) -> bytes:
+    raw = asdict(project)
+    if raw["backend_build_commit"] is None:
+        del raw["backend_build_commit"]
+    if project.schema_version < 13:
+        del raw["desired_outcomes"]
+        del raw["paper_requirements"]
+    if not raw["source_material_links"]:
+        del raw["source_material_links"]
+    if project.schema_version < 8:
+        del raw["difficulty"]
+    if project.schema_version < 9 or project.schema_version >= 12:
+        del raw["show_advanced_outcome_details"]
+    if project.schema_version < 10:
+        for strategy in raw["strategies"]:
+            if strategy["provenance"] is not None:
+                strategy["provenance"].pop("inference_request_id", None)
+    if project.schema_version >= 11:
+        raw["project_type_snapshot"] = project.project_type_snapshot
+    if project.schema_version < 7:
+        for strategy in raw["strategies"]:
+            del strategy["enabled"]
+    if project.schema_version < 6 or project.schema_version >= 12:
+        del raw["ai_model"]
+        del raw["reasoning_effort"]
+    if project.schema_version < 6:
+        for strategy in raw["strategies"]:
+            if strategy["provenance"] is not None:
+                del strategy["provenance"]["reasoning_effort"]
+    if project.schema_version < 5:
+        del raw["active_order"]
+        for strategy in raw["strategies"]:
+            for key in ("stage", "summary", "provenance"):
+                del strategy[key]
+    if project.schema_version < 4:
+        del raw["investigation_type"]
+    if project.schema_version < 3:
+        for strategy in raw["strategies"]:
+            del strategy["removed_at"]
+    for event in raw["events"]:
+        if project.schema_version < 13 and event.get("project_change") is not None:
+            for settings in event["project_change"].values():
+                settings.pop("desired_outcomes", None)
+                settings.pop("paper_requirements", None)
+        if project.schema_version < 8 and event.get("project_change") is not None:
+            for settings in event["project_change"].values():
+                settings.pop("difficulty", None)
+        for key in ("stage_change", "order", "project_change", "enabled_change"):
+            if event[key] is None:
+                del event[key]
+        if event["change"] is None:
+            del event["change"]
+        if event["strategy_id"] is None:
+            del event["strategy_id"]
+    return (json.dumps(raw, indent=2) + "\n").encode("utf-8")
+
+
+def _stage(path: Path, contents: bytes) -> Path:
+    fd, name = tempfile.mkstemp(prefix=".sigma-write-", dir=path)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        return temporary
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def inspect_project(value: str | Path) -> ProjectView:
+    path = project_path(value)
+    state = path / STATE
+    try:
+        if path.suffix == ".json":
+            from sigma.project_bundle import read_file
+
+            project = _decode(json.loads(read_file(path, STATE)))
+            return ProjectView(str(path), project)
+        if state.is_symlink() or not state.is_file():
+            raise ProjectError("Project has no regular project.json; initialize it explicitly")
+        project = _decode(json.loads(state.read_text(encoding="utf-8")))
+        return ProjectView(str(path), project)
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise ProjectError(f"Cannot open {path}: {exc}") from exc
+
+
+def initialize_project(
+    value: str | Path,
+    title: str,
+    problem: str,
+    research_mode: str = "default",
+    ai_model: str | None = None,
+    reasoning_effort: str = "high",
+    difficulty: str = "medium",
+    show_advanced_outcome_details: bool = False,
+    desired_outcomes: str = "",
+    paper_requirements: str = "",
+) -> ProjectView:
+    mode = _research_mode(research_mode)
+    selected_difficulty = _difficulty(difficulty)
+    if selected_difficulty is None:
+        raise ProjectError("New projects must have a difficulty")
+    resolved_model = legacy_model() if ai_model is None else ai_model
+    try:
+        validate_pair(resolved_model, reasoning_effort)
+    except ValueError as exc:
+        raise ProjectError(str(exc)) from exc
+    path = project_path(value)
+    title = _text(title, "Project name", 200)
+    problem = _text(problem, "Research problem", 20000)
+    if path.suffix == ".json":
+        from sigma.project_bundle import stored_bundle
+
+        if os.path.lexists(path):
+            raise ProjectError("Project destination already exists")
+        if not path.parent.is_dir() or path.parent.is_symlink():
+            raise ProjectError("Project destination parent is unavailable")
+        project = Project(
+            13,
+            str(uuid4()),
+            title.strip(),
+            problem.strip(),
+            (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
+            investigation_type=mode,
+            ai_model=legacy_model(),
+            reasoning_effort="high",
+            difficulty=selected_difficulty,
+            show_advanced_outcome_details=False,
+            backend_build_commit=_current_build_commit(),
+            project_type_snapshot=_type_snapshot(mode),
+            desired_outcomes=_optional_project_text(desired_outcomes, "Desired outcomes"),
+            paper_requirements=_optional_project_text(paper_requirements, "Paper requirements"),
+        )
+        bundle = stored_bundle({STATE: _document(project)})
+        fd, staged_name = tempfile.mkstemp(prefix=".sigma-init-", dir=path.parent)
+        staged = Path(staged_name)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write((json.dumps(bundle, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.link(staged, path)
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+            return ProjectView(str(path), project)
+        except OSError as exc:
+            raise ProjectError(f"Cannot initialize {path}: {exc}") from exc
+        finally:
+            staged.unlink(missing_ok=True)
+    created = False
+    temporary: str | None = None
+    try:
+        if not path.exists():
+            path.mkdir()  # Parent must exist; do not create unrelated directories.
+            created = True
+        if not path.is_dir():
+            raise ProjectError("Project path is not a directory")
+        if any(p.name != ".gitkeep" for p in path.iterdir()):
+            raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
+        project = Project(
+            13,
+            str(uuid4()),
+            title.strip(),
+            problem.strip(),
+            (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
+            investigation_type=mode,
+            ai_model=legacy_model(),
+            reasoning_effort="high",
+            difficulty=selected_difficulty,
+            show_advanced_outcome_details=False,
+            backend_build_commit=_current_build_commit(),
+            project_type_snapshot=_type_snapshot(mode),
+            desired_outcomes=_optional_project_text(desired_outcomes, "Desired outcomes"),
+            paper_requirements=_optional_project_text(paper_requirements, "Paper requirements"),
+        )
+        # Stage and fsync before atomic, no-replace publication. Concurrent initializers
+        # cannot overwrite one another; the final link fails if project.json exists.
+        fd, temporary = tempfile.mkstemp(prefix=".sigma-init-", dir=path)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(_document(project).decode("utf-8"))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path / STATE)
+        return ProjectView(str(path), project)
+    except OSError as exc:
+        raise ProjectError(f"Cannot initialize {path}: {exc}") from exc
+    finally:
+        if temporary is not None:
+            Path(temporary).unlink(missing_ok=True)
+        if created:
+            try:
+                path.rmdir()  # Only remove an empty directory owned by this attempt.
+            except OSError:
+                pass
+
+
+def _open_project(value: str | Path) -> ProjectView:
+    path = project_path(value)
+    # Only the checked-in RH seed has implicit initialization. Unknown/corrupt
+    # directories always require an explicit init command and are never repaired.
+    if path == SEED and path.is_dir() and not (path / STATE).exists():
+        try:
+            return initialize_project(
+                path,
+                "Riemann Hypothesis",
+                (
+                    "Investigate approaches to the Riemann Hypothesis. "
+                    "Evidence and finite experiments are not proofs."
+                ),
+            )
+        except ProjectError:
+            if (path / STATE).is_file():
+                return inspect_project(path)
+            raise
+    return inspect_project(path)
+
+
+def open_project(value: str | Path) -> ProjectView:
+    view = _open_project(value)
+    from sigma.recents import record_access
+
+    record_access(view)
+    return view
+
+
+def list_events(value: str | Path) -> tuple[Event, ...]:
+    return inspect_project(value).project.events
+
+
+def close_project() -> None:
+    """Release the caller's view; services retain no handles or global session."""
+
+
+def list_strategies(value: str | Path) -> tuple[Strategy, ...]:
+    """List the active pool; inspect retains removed records and their history."""
+    project = inspect_project(value).project
+    by_id = {s.id: s for s in project.strategies}
+    return tuple(by_id[i] for i in project.active_order)
+
+
+def create_strategy(
+    value: str | Path,
+    title: str,
+    approach: str,
+    summary: str = "",
+    provenance: Provenance | None = None,
+    *,
+    _continuation_writer: Callable[[Project, Strategy], None] | None = None,
+    _expected_strategy_snapshot: tuple[tuple[str, str, str, bool, str | None], ...] | None = None,
+    _commit_guard: Callable[[Project], bool | None] | None = None,
+    _after_commit: Callable[[ProjectView], None] | None = None,
+) -> ProjectView:
+    """Append a human strategy and event together; migrate legacy projects on write."""
+    title = _text(title, "Strategy title", 200)
+    approach = _text(approach, "Hypothesis / approach", MAX_STRATEGY_APPROACH)
+
+    if not isinstance(summary, str) or len(summary) > 300 or "\n" in summary or "\r" in summary:
+        raise ProjectError("Summary must be one line, at most 300 characters")
+
+    def append(project: Project) -> Project:
+        if _commit_guard is not None and _commit_guard(project) is False:
+            return project
+        if _expected_strategy_snapshot is not None:
+            current = tuple(
+                (item.id, item.title, item.approach, item.enabled, item.removed_at)
+                for item in project.strategies
+            )
+            if current != _expected_strategy_snapshot:
+                raise ProjectError(
+                    "Strategy history changed during inference. Reopen the project and retry."
+                )
+        timestamp = _next_timestamp(project)
+        strategy = Strategy(
+            str(uuid4()),
+            title,
+            approach,
+            "human",
+            timestamp,
+            summary=summary.strip(),
+            provenance=provenance,
+        )
+        if _continuation_writer is not None:
+            _continuation_writer(project, strategy)
+        return replace(
+            project,
+            schema_version=max(
+                project.schema_version,
+                10 if provenance and provenance.inference_request_id else 0,
+                6
+                if provenance and provenance.reasoning_effort
+                else 5
+                if summary or provenance
+                else 2,
+            ),
+            active_order=(*project.active_order, strategy.id),
+            strategies=(*project.strategies, strategy),
+            events=(
+                *project.events,
+                Event(len(project.events) + 1, "strategy.created", timestamp, strategy.id),
+            ),
+        )
+
+    return _update_project(value, append, _after_commit=_after_commit)
+
+
+def set_strategy_enabled(value: str | Path, strategy_id: str, enabled: bool) -> ProjectView:
+    """Persist a strategy's eligibility without changing its content or history."""
+    if type(enabled) is not bool:
+        raise ProjectError("Strategy enabled state must be a boolean")
+
+    def update(project: Project) -> Project:
+        strategy = next((item for item in project.strategies if item.id == strategy_id), None)
+        if strategy is None or strategy.removed_at is not None:
+            raise ProjectError("Strategy not found in this project")
+        if strategy.enabled is enabled:
+            return project
+        timestamp = _next_timestamp(project)
+        return replace(
+            project,
+            schema_version=max(7, project.schema_version),
+            strategies=tuple(
+                replace(item, enabled=enabled) if item.id == strategy_id else item
+                for item in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategy.enabled_changed",
+                    timestamp,
+                    strategy_id,
+                    enabled_change=StrategyEnabledChange(strategy.enabled, enabled),
+                ),
+            ),
+        )
+
+    return _update_project(value, update)
+
+
+def remove_strategy(value: str | Path, strategy_id: str) -> ProjectView:
+    """Remove from the active pool, retaining research and an explicit audit event."""
+
+    def remove(project: Project) -> Project:
+        strategy = next((s for s in project.strategies if s.id == strategy_id), None)
+        if strategy is None:
+            raise ProjectError("Strategy not found in this project")
+        if strategy.removed_at is not None:
+            raise ProjectError("Strategy has already been removed")
+        timestamp = _next_timestamp(project)
+        return replace(
+            project,
+            schema_version=max(3, project.schema_version),
+            active_order=tuple(i for i in project.active_order if i != strategy_id),
+            strategies=tuple(
+                replace(s, removed_at=timestamp) if s.id == strategy_id else s
+                for s in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(len(project.events) + 1, "strategy.removed", timestamp, strategy_id),
+            ),
+        )
+
+    return _update_project(value, remove)
+
+
+def edit_strategy(
+    value: str | Path,
+    strategy_id: str,
+    title: str,
+    approach: str,
+    text_format: str | None = None,
+    expected_digest: str | None = None,
+) -> ProjectView:
+    """Update name/description while preserving identity and earlier text in history."""
+    title = _text(title, "Strategy name", 200)
+    approach = _text(approach, "Strategy description", MAX_STRATEGY_APPROACH)
+
+    def edit(project: Project) -> Project:
+        strategy = next((s for s in project.strategies if s.id == strategy_id), None)
+        if strategy is None:
+            raise ProjectError("Strategy not found in this project")
+        if strategy.removed_at is not None:
+            raise ProjectError("Removed strategies cannot be edited")
+        if (
+            expected_digest is not None
+            and hashlib.sha256(strategy.approach.encode()).hexdigest() != expected_digest
+        ):
+            raise ProjectError("Strategy description changed elsewhere. Reopen it before saving")
+        if (title, approach) == (strategy.title, strategy.approach):
+            return project
+        change = StrategyChange(strategy.title, strategy.approach, title, approach)
+        return replace(
+            project,
+            schema_version=max(3, project.schema_version),
+            strategies=tuple(
+                replace(
+                    s,
+                    title=title,
+                    approach=approach,
+                    summary="" if approach != s.approach else s.summary,
+                )
+                if s.id == strategy_id
+                else s
+                for s in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategy.updated",
+                    _next_timestamp(project),
+                    strategy_id,
+                    change,
+                ),
+            ),
+        )
+
+    return _update_project(
+        value, edit, (f"strategy:{strategy_id}", text_format) if text_format else None
+    )
+
+
+def _next_timestamp(project: Project) -> str:
+    return (
+        max(datetime.now(UTC), _timestamp(project.events[-1].timestamp)).astimezone(UTC).isoformat()
+    )
+
+
+def _update_project(
+    value: str | Path,
+    update: Callable[[Project], Project],
+    text_edit: tuple[str, str] | None = None,
+    *,
+    _after_commit: Callable[[ProjectView], None] | None = None,
+    _expected_revision: int | None = None,
+    _allow_project_edit: bool = False,
+) -> ProjectView:
+    from sigma import project_collaboration
+
+    view = inspect_project(value)
+    path = Path(view.path)
+    if path.suffix == ".json":
+        if text_edit is not None:
+            raise ProjectError("Text-view editing is not yet supported for single-file projects")
+        from sigma.project_bundle import transform_file
+
+        try:
+            with (
+                project_write_lock(path, allow_project_edit=_allow_project_edit),
+                project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
+            ):
+
+                def transform(previous: bytes) -> bytes:
+                    project = _decode(json.loads(previous))
+                    updated = update(project)
+                    if updated != project:
+                        updated = replace(updated, backend_build_commit=_current_build_commit())
+                    return _document(updated)
+
+                contents = transform_file(path, STATE, transform)
+                project_collaboration.note_project_published(str(path), contents)
+                result = ProjectView(str(path), _decode(json.loads(contents)))
+                if _after_commit is not None:
+                    _after_commit(result)
+                return result
+        except OSError as exc:
+            raise ProjectError(f"Cannot save strategy change: {exc}") from exc
+    temporary: Path | None = None
+    backup_temporary: Path | None = None
+    try:
+        with (
+            project_write_lock(path, allow_project_edit=_allow_project_edit),
+            project_collaboration.write_guard(str(path), expected_revision=_expected_revision),
+        ):
+            before = (path / STATE).read_bytes()
+            project = inspect_project(path).project
+            updated = update(project)
+            if updated != project:
+                updated = replace(updated, backend_build_commit=_current_build_commit())
+            from sigma.text_views import sync_source_changes
+
+            if updated != project or text_edit is not None:
+                sync_source_changes(path, project, updated, text_edit)
+            if updated == project:
+                result = ProjectView(str(path), project)
+                if _after_commit is not None:
+                    _after_commit(result)
+                return result
+            contents = _document(updated)
+            _decode(json.loads(contents))  # Validate the complete next document before publication.
+            temporary = _stage(path, contents)
+            if project.schema_version != updated.schema_version:
+                backup = path / f"project.v{project.schema_version}.json"
+                backup_temporary = _stage(path, before)
+                try:
+                    os.link(backup_temporary, backup)
+                except FileExistsError:
+                    if backup.is_symlink() or backup.read_bytes() != before:
+                        raise ProjectError("Version backup already exists with different contents")
+            if (path / STATE).is_symlink() or (path / STATE).read_bytes() != before:
+                raise ProjectError("Project changed during save; reopen and retry")
+            os.replace(temporary, path / STATE)
+            project_collaboration.note_project_published(str(path), contents)
+            result = ProjectView(str(path), updated)
+            if _after_commit is not None:
+                _after_commit(result)
+            return result
+    except OSError as exc:
+        raise ProjectError(f"Cannot save strategy change: {exc}") from exc
+    finally:
+        for staged in (temporary, backup_temporary):
+            if staged is not None:
+                staged.unlink(missing_ok=True)
+
+
+@dataclass(frozen=True)
+class ProjectDestination:
+    root: str
+    path: str | None
+    exists: bool
+
+
+def projects_root() -> Path:
+    """Explicit server-side location, independent of the browser or current directory."""
+    from sigma import cloud_workspaces
+
+    workspace = cloud_workspaces.current()
+    if workspace is not None:
+        return workspace.path
+    return local_projects_root()
+
+
+def local_projects_root() -> Path:
+    """Validate the single local backend root, not a request-bound workspace."""
+    from sigma.storage import persistent_disk_enabled
+
+    if persistent_disk_enabled():
+        raise ProjectError("Authenticated persistent workspace is unavailable.")
+    try:
+        configured = Path(
+            os.environ.get("SIGMA_PROJECTS_ROOT", str(ROOT / "projects"))
+        ).expanduser()
+        if not configured.is_absolute() or configured.is_symlink():
+            raise ProjectError("SIGMA_PROJECTS_ROOT must be an absolute directory, not a symlink")
+        root = configured.resolve()
+        if not root.is_dir() or root.stat().st_uid != os.geteuid():
+            raise ProjectError("Projects root must already exist and be owned by the server user")
+        return root
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise ProjectError(f"Projects location unavailable: {exc}") from exc
+
+
+def _project_name(title: str) -> tuple[str, str]:
+    title = _text(title, "Project name", 200)
+    if any(char in "/\\" or ord(char) < 32 or ord(char) == 127 for char in title):
+        raise ProjectError("Project name cannot contain path separators or control characters")
+    slug = re.sub(r"[^\w]+", "-", unicodedata.normalize("NFKC", title).casefold()).strip("-_")[:80]
+    while len(slug.encode("utf-8")) > 180:
+        slug = slug[:-1]
+    slug = slug.rstrip("-_")
+    if not slug or not any(char.isalnum() for char in slug):
+        raise ProjectError("Project name must contain a letter or number")
+    return title, slug + ".sigma"
+
+
+@contextmanager
+def _title_registry_lock(root: Path):
+    """Serialize naming changes across copies, creates and renames."""
+    descriptor = os.open(root / ".names.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            raise ProjectError("Project naming lock is unsafe")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def _title_key(title: str) -> str:
+    return unicodedata.normalize("NFKC", title).strip().casefold()
+
+
+def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
+    """Check owner titles without loading paper/status data or event histories."""
+    from sigma import cloud_workspaces
+    from sigma.samples import sample_project_titles
+
+    names = {_title_key(title) for title in sample_project_titles()}
+    # Once migration has completed, authenticated owners' projects reside in
+    # their workspace. Never enumerate Saved or acquire its lock under .names.lock.
+    if cloud_workspaces.current() is None:
+        from sigma.recents import recent_projects
+
+        for item in recent_projects(lightweight=True)["projects"]:
+            if item["available"] and item["id"] != exclude_id:
+                names.add(_title_key(item["title"]))
+    for candidate in root.iterdir():
+        if candidate.is_symlink() or not (
+            (candidate.suffix == ".sigma" and candidate.is_dir())
+            or (candidate.suffix == ".json" and candidate.is_file())
+        ):
+            continue
+        try:
+            if candidate.suffix == ".json":
+                from sigma.project_bundle import read_file
+
+                raw = json.loads(read_file(candidate, STATE))
+            else:
+                source = candidate / STATE
+                if source.is_symlink():
+                    continue
+                raw = json.loads(source.read_bytes())
+            if not isinstance(raw, dict) or not isinstance(raw.get("title"), str):
+                continue
+            if str(UUID(raw["id"])) != exclude_id:
+                names.add(_title_key(raw["title"]))
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return names
+
+
+def _require_available_title(title: str, root: Path, exclude_id: str | None = None) -> None:
+    if _title_key(title) in _occupied_titles(root, exclude_id):
+        raise ProjectError(
+            "A sample, recent, or saved project already uses that name. Choose another name."
+        )
+
+
+def project_destination(title: str = "") -> ProjectDestination:
+    root = projects_root()
+    if not title:
+        return ProjectDestination(str(root), None, False)
+    _, name = _project_name(title)
+    path = root / name
+    json_path = path.with_suffix(".json")
+    taken = (
+        os.path.lexists(path)
+        or os.path.lexists(json_path)
+        or _title_key(title) in _occupied_titles(root)
+    )
+    return ProjectDestination(str(root), str(path), taken)
+
+
+def create_project(
+    title: str,
+    problem: str,
+    research_mode: str = "default",
+    ai_model: str | None = None,
+    reasoning_effort: str = "high",
+    difficulty: str = "medium",
+    show_advanced_outcome_details: bool = False,
+    desired_outcomes: str = "",
+    paper_requirements: str = "",
+) -> ProjectView:
+    """Create a directory-backed project, with artifacts stored as files.
+
+    Portable project bundles are produced only when explicitly exporting.
+    """
+    from sigma.recents import record_access
+
+    title, name = _project_name(title)
+    root = projects_root()
+    with _title_registry_lock(root):
+        _require_available_title(title, root)
+        destination = root / name
+        if os.path.lexists(destination) or os.path.lexists(destination.with_suffix(".json")):
+            raise ProjectError("A project already uses that destination name.")
+        view = initialize_project(
+            destination,
+            title,
+            problem,
+            research_mode,
+            ai_model,
+            reasoning_effort,
+            difficulty,
+            show_advanced_outcome_details,
+            desired_outcomes,
+            paper_requirements,
+        )
+    record_access(view)
+    return view
+
+
+def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
+    try:
+        chosen = Stage(stage)
+    except (ValueError, TypeError) as exc:
+        raise ProjectError(
+            "Stage must be draft, ready, exploring or hold (manually tracked)"
+        ) from exc
+
+    def update(project: Project) -> Project:
+        strategy = next(
+            (s for s in project.strategies if s.id == strategy_id and not s.removed_at), None
+        )
+        if strategy is None:
+            raise ProjectError("Active strategy not found")
+        if strategy.stage == chosen:
+            return project
+        return replace(
+            project,
+            schema_version=max(5, project.schema_version),
+            strategies=tuple(
+                replace(s, stage=chosen) if s.id == strategy_id else s for s in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategy.stage_changed",
+                    _next_timestamp(project),
+                    strategy_id,
+                    stage_change=StageChange(strategy.stage, chosen),
+                ),
+            ),
+        )
+
+    return _update_project(value, update)
+
+
+def reorder_strategies(
+    value: str | Path, order: list[str], expected_order: list[str]
+) -> ProjectView:
+    def update(project: Project) -> Project:
+        if (
+            not isinstance(order, list)
+            or any(not isinstance(i, str) for i in order)
+            or len(order) != len(project.active_order)
+            or set(order) != set(project.active_order)
+        ):
+            raise ProjectError("Order must contain every active strategy exactly once")
+        if expected_order != list(project.active_order):
+            raise ProjectError("Strategy order changed elsewhere; reopen the project and retry")
+        if order == list(project.active_order):
+            return project
+        return replace(
+            project,
+            schema_version=max(5, project.schema_version),
+            active_order=tuple(order),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategies.reordered",
+                    _next_timestamp(project),
+                    order=tuple(order),
+                ),
+            ),
+        )
+
+    return _update_project(value, update)
+
+
+def project_settings(project: Project) -> ProjectSettings:
+    return ProjectSettings(
+        project.title,
+        project.problem,
+        project.investigation_type,
+        project.ai_model,
+        project.reasoning_effort,
+        project.difficulty,
+        project.show_advanced_outcome_details,
+        project.desired_outcomes,
+        project.paper_requirements,
+    )
+
+
+def update_project(
+    value: str | Path,
+    title: str,
+    problem: str,
+    research_mode: str,
+    ai_model: str,
+    reasoning_effort: str,
+    expected: dict[str, Any],
+    text_format: str | None = None,
+    difficulty: str | None = None,
+    show_advanced_outcome_details: bool | None = None,
+    desired_outcomes: str | None = None,
+    paper_requirements: str | None = None,
+    expected_revision: int | None = None,
+    collaborators: list[str] | None = None,
+    semantic_update: bool = False,
+) -> ProjectView:
+    from sigma import cloud_workspaces, project_collaboration
+
+    if (expected_revision is None) != (collaborators is None):
+        raise ProjectError("Shared settings require both the collaborator list and revision.")
+    shared_edit = expected_revision is not None and collaborators is not None
+    if collaborators is not None:
+        from sigma.model_catalog import validate_pair
+
+        try:
+            emails = [project_collaboration.normalize_collaborator(item) for item in collaborators]
+            validate_pair(ai_model, reasoning_effort)
+        except (TypeError, ValueError) as exc:
+            raise ProjectError(str(exc)) from exc
+        if len(set(emails)) != len(emails):
+            raise ProjectError("Each collaborator may appear only once.")
+        if cloud_workspaces.current() is not None:
+            metadata = project_collaboration.summary(str(value))
+            if metadata["owner"] in emails:
+                raise ProjectError("The owner is already included automatically.")
+    wanted = _settings(
+        {
+            "title": title,
+            "problem": problem,
+            "desired_outcomes": (
+                desired_outcomes
+                if desired_outcomes is not None
+                else expected.get("desired_outcomes", "")
+            ),
+            "paper_requirements": (
+                paper_requirements
+                if paper_requirements is not None
+                else expected.get("paper_requirements", "")
+            ),
+            "investigation_type": research_mode,
+            "ai_model": ai_model,
+            "reasoning_effort": reasoning_effort,
+            "difficulty": difficulty if difficulty is not None else expected.get("difficulty"),
+            "show_advanced_outcome_details": (
+                show_advanced_outcome_details
+                if show_advanced_outcome_details is not None
+                else expected.get("show_advanced_outcome_details", False)
+            ),
+        }
+    )
+    prior = _settings(expected)
+
+    # Membership is SQLite ACL metadata rather than a project-document edit.
+    # Owner revocation must not have to acquire the running worker's lease.
+    # Any project-local changes still use the normal fenced path below.
+    if shared_edit and text_format is None and cloud_workspaces.current() is not None:
+        existing = inspect_project(value)
+        current = project_settings(existing.project)
+        prior_authored = replace(
+            prior,
+            desired_outcomes=(
+                prior.desired_outcomes
+                if "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                prior.paper_requirements
+                if "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+        wanted_authored = replace(
+            wanted,
+            desired_outcomes=(
+                wanted.desired_outcomes
+                if desired_outcomes is not None or "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                wanted.paper_requirements
+                if paper_requirements is not None or "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+
+        def authored_fields(settings: Any) -> tuple[Any, ...]:
+            return (
+                settings.title,
+                settings.problem,
+                settings.desired_outcomes,
+                settings.paper_requirements,
+                settings.investigation_type,
+                settings.difficulty,
+            )
+
+        if (
+            authored_fields(current)
+            == authored_fields(prior_authored)
+            == authored_fields(wanted_authored)
+        ):
+            assert expected_revision is not None and collaborators is not None
+            project_collaboration.save_settings(
+                existing.path,
+                expected_revision,
+                collaborators,
+                ai_model,
+                reasoning_effort,
+                existing.project.title,
+                allow_active_lease=True,
+            )
+            return inspect_project(value)
+
+    def update(project: Project) -> Project:
+        if not semantic_update:
+            project_collaboration.require_edit_revision(str(value), expected_revision)
+        current = project_settings(project)
+        # These values were moved to user settings in schema 12. Ignore them
+        # in project optimistic-lock checks and edits, including older callers.
+        # Title, three description fields, type and difficulty are project-local.
+        project_only = lambda setting: (
+            setting.title,
+            setting.problem,
+            setting.desired_outcomes,
+            setting.paper_requirements,
+            setting.investigation_type,
+            setting.difficulty,
+        )
+        # Older API/CLI clients did not know the new fields. They may edit
+        # title/type/subject without clobbering or racing an unknown field.
+        # Modern clients supply both explicitly and get full stale-edit checks.
+        effective_prior = replace(
+            prior,
+            desired_outcomes=(
+                prior.desired_outcomes
+                if "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                prior.paper_requirements
+                if "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+        effective_wanted = replace(
+            wanted,
+            desired_outcomes=(
+                wanted.desired_outcomes
+                if desired_outcomes is not None or "desired_outcomes" in expected
+                else current.desired_outcomes
+            ),
+            paper_requirements=(
+                wanted.paper_requirements
+                if paper_requirements is not None or "paper_requirements" in expected
+                else current.paper_requirements
+            ),
+        )
+        if project_only(current) != project_only(effective_prior):
+            raise ProjectError(
+                "Project settings changed elsewhere. Refresh/reopen before editing again; your changes have not been saved"
+            )
+        if project_only(current) == project_only(effective_wanted):
+            return project
+        if semantic_update and (
+            effective_wanted.investigation_type != current.investigation_type
+            or effective_wanted.difficulty != current.difficulty
+        ):
+            raise ProjectError("This edit changes only the project title and research text.")
+        if (
+            effective_wanted.investigation_type != current.investigation_type
+            or effective_wanted.difficulty != current.difficulty
+        ):
+            project_collaboration.require_project_classification_owner(str(value))
+        if effective_wanted.title != current.title:
+            project_collaboration.require_project_title_owner(str(value))
+            _require_available_title(effective_wanted.title, projects_root(), exclude_id=project.id)
+        wanted_type_id = str(
+            getattr(
+                effective_wanted.investigation_type, "value", effective_wanted.investigation_type
+            )
+        )
+        current_type_id = str(
+            getattr(current.investigation_type, "value", current.investigation_type)
+        )
+        snapshot = (
+            _type_snapshot(wanted_type_id)
+            if wanted_type_id != current_type_id
+            else project.project_type_snapshot
+        )
+        persisted = replace(
+            effective_wanted,
+            ai_model=legacy_model(),
+            reasoning_effort="high",
+            show_advanced_outcome_details=False,
+        )
+        return replace(
+            project,
+            schema_version=max(13, project.schema_version),
+            title=effective_wanted.title,
+            problem=effective_wanted.problem,
+            desired_outcomes=effective_wanted.desired_outcomes,
+            paper_requirements=effective_wanted.paper_requirements,
+            investigation_type=wanted_type_id,
+            project_type_snapshot=snapshot,
+            # Version 12 never persists user-wide model/Thinking/Outcome choices.
+            ai_model=legacy_model(),
+            reasoning_effort="high",
+            difficulty=effective_wanted.difficulty,
+            show_advanced_outcome_details=False,
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "project.updated",
+                    _next_timestamp(project),
+                    project_change=ProjectChange(current, persisted),
+                ),
+            ),
+        )
+
+    def after_commit(view: ProjectView) -> None:
+        if shared_edit:
+            assert expected_revision is not None and collaborators is not None
+            project_collaboration.save_settings(
+                view.path,
+                expected_revision,
+                collaborators,
+                ai_model,
+                reasoning_effort,
+                view.project.title,
+            )
+
+    edit = ("project", text_format) if text_format else None
+    if wanted.title != prior.title:
+        from sigma.recents import assert_project_unpinned
+
+        assert_project_unpinned(inspect_project(value).project.id)
+        with _title_registry_lock(projects_root()):
+            return _update_project(
+                value,
+                update,
+                edit,
+                _after_commit=after_commit,
+                _expected_revision=expected_revision if shared_edit else None,
+                _allow_project_edit=semantic_update,
+            )
+    return _update_project(
+        value,
+        update,
+        edit,
+        _after_commit=after_commit,
+        _expected_revision=expected_revision if shared_edit else None,
+        _allow_project_edit=semantic_update,
+    )
+
+
+def export_complete_project(value: str | Path) -> bytes:
+    """Download all project data, including research evidence and artifacts.
+
+    Legacy directory exports are snapshots. Stop active research writers before
+    using a snapshot as a migration source.
+    """
+    path = project_path(value)
+    inspect_project(path)
+    from sigma.project_bundle import download_bytes, encode
+
+    if path.suffix == ".json":
+        return download_bytes(path)
+    return encode(path)
+
+
+def save_project_as(value: str | Path, title: str) -> ProjectView:
+    """Create a separately identified, complete copy without modifying the source.
+
+    Keep historical session/artifact identifiers for internal evidence links, but
+    give the project a new identity and rebind sessions to it. Record the new
+    title as a genuine project edit so existing settings history stays valid.
+    """
+    from sigma.project_bundle import BundleError
+    from sigma.project_bundle import _decode as decode_bundle_members
+    from sigma.project_transfer import export_project, import_project, make_bundle
+    from sigma.recents import record_access
+
+    title, name = _project_name(title)
+    source = project_path(value)
+    root = projects_root()
+    destination = root / name
+    try:
+        with _title_registry_lock(root):
+            _require_available_title(title, root)
+            if os.path.lexists(destination) or os.path.lexists(root / name):
+                raise ProjectError("A project already uses that destination name.")
+            with project_write_lock(source):
+                original = inspect_project(source).project
+                payload = json.loads(export_project(source))
+                new_id = str(uuid4())
+                renamed = replace(
+                    original,
+                    id=new_id,
+                    title=title,
+                    schema_version=max(11, original.schema_version),
+                )
+                renamed = replace(
+                    renamed,
+                    events=(
+                        *original.events,
+                        Event(
+                            len(original.events) + 1,
+                            "project.updated",
+                            _next_timestamp(original),
+                            project_change=ProjectChange(
+                                project_settings(original), project_settings(renamed)
+                            ),
+                        ),
+                    ),
+                )
+                payload["files"]["project.json"] = json.loads(_document(renamed))
+                from sigma.project_copy import rebase_copy
+
+                session_ids: dict[str, str] = {}
+                session_numbers: dict[str, int] = {}
+                from sigma.project_bundle import portable_bundle
+                from sigma.project_transfer import decode_bundle
+
+                independent = rebase_copy(
+                    portable_bundle(decode_bundle(payload)),
+                    source_id=original.id,
+                    new_id=new_id,
+                    source_path=str(source),
+                    destination_path=str(destination),
+                    session_ids_out=session_ids,
+                    session_numbers_out=session_numbers,
+                )
+                imported = import_project(
+                    make_bundle(decode_bundle_members(independent)),
+                    destination,
+                    independent=False,
+                )
+                from sigma.project_copy_logs import clone_project_logs
+
+                try:
+                    clone_project_logs(
+                        source,
+                        destination,
+                        original.id,
+                        new_id,
+                        session_ids,
+                        session_numbers,
+                    )
+                except Exception:
+                    # The bundle has been imported, but Save As is not
+                    # complete until its external diagnostic history exists.
+                    # This file was exclusively created by this operation.
+                    from shutil import rmtree
+
+                    rmtree(destination)
+                    raise
+        view = inspect_project(imported)
+        record_access(view)
+        return view
+    except (OSError, ValueError, UnicodeDecodeError, KeyError, TypeError, BundleError) as exc:
+        if isinstance(exc, ProjectError):
+            raise
+        raise ProjectError(f"Could not save a copy of this project: {exc}") from exc
+
+
+def copy_project_between_workspaces(
+    value: str | Path,
+    source_workspace: Any | None,
+    target_workspace: Any | None,
+) -> str:
+    """Copy a complete project snapshot across an explicit workspace boundary.
+
+    The source remains intact. Project identity, session history, evidence and
+    artifacts are preserved by the portable bundle importer.
+    """
+    from sigma import cloud_workspaces
+    from sigma.project_bundle import BundleError
+    from sigma.project_transfer import bundle_document, import_project
+
+    source_token = (
+        cloud_workspaces.bind_workspace(source_workspace) if source_workspace is not None else None
+    )
+    try:
+        source = project_path(value)
+        if source.suffix not in {".sigma", ".json"}:
+            raise ProjectError("Unsupported project storage format")
+        from sigma.research_sessions import list_sessions
+
+        if any(
+            session.get("status") in {"queued", "running", "paused"}
+            for session in list_sessions(str(source))
+        ):
+            raise ProjectError(
+                "Stop or finish the active research session before changing account access."
+            )
+        payload = json.loads(export_complete_project(source))
+    except (OSError, ValueError, BundleError) as exc:
+        raise ProjectError("Project could not be safely copied to this account.") from exc
+    finally:
+        if source_token is not None:
+            cloud_workspaces.reset(source_token)
+
+    target_token = (
+        cloud_workspaces.bind_workspace(target_workspace) if target_workspace is not None else None
+    )
+    try:
+        document = bundle_document(payload)
+        original_title = document["title"]
+        root = projects_root()
+        imported: Path | None = None
+        with _title_registry_lock(root):
+            for number in range(1, 1001):
+                suffix = (
+                    ""
+                    if number == 1
+                    else " (continued)"
+                    if number == 2
+                    else f" (continued {number})"
+                )
+                title = original_title[: 200 - len(suffix)].rstrip() + suffix
+                _, name = _project_name(title)
+                destination = root / name
+                if _title_key(title) in _occupied_titles(root):
+                    continue
+                bundle_destination = destination.with_suffix(".json")
+                if os.path.lexists(destination) or os.path.lexists(bundle_destination):
+                    continue
+                imported = import_project(
+                    payload,
+                    destination,
+                    independent=False,
+                    preserve_identity=True,
+                    title_override=title if title != original_title else None,
+                )
+                break
+        if imported is None:
+            raise ProjectError("A unique destination for the copied project is unavailable.")
+        view = inspect_project(imported)
+        from sigma.recents import record_access
+
+        record_access(view)
+        return str(imported)
+    except (KeyError, TypeError, ValueError, OSError, BundleError) as exc:
+        raise ProjectError("Project could not be safely copied to this account.") from exc
+    finally:
+        if target_token is not None:
+            cloud_workspaces.reset(target_token)
+
+
+def migrate_project(value: str | Path, destination: str | Path | None = None) -> ProjectView:
+    """Copy a legacy project into one JSON file without deleting its source.
+
+    Research must be stopped before migration: independent legacy file writers
+    cannot be frozen by the bundle's destination lock.
+    """
+    source = project_path(value)
+    if source.suffix != ".sigma":
+        raise ProjectError("Only legacy .sigma directories can be migrated")
+    existing = inspect_project(source)
+    target = project_path(destination if destination is not None else source.with_suffix(".json"))
+    if target.suffix != ".json":
+        raise ProjectError("Migration destination must end in .json")
+    from sigma.project_bundle import migrate
+
+    try:
+        migrate(source, target)
+        result = inspect_project(target)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot migrate project: {exc}") from exc
+    if result.project != existing.project:
+        raise ProjectError("Migrated project did not match its source")
+    return result
+
+
+def create_json_project(
+    title: str,
+    problem: str,
+    research_mode: str = "default",
+    ai_model: str | None = None,
+    reasoning_effort: str = "high",
+    difficulty: str = "medium",
+    show_advanced_outcome_details: bool = False,
+    desired_outcomes: str = "",
+    paper_requirements: str = "",
+) -> ProjectView:
+    """Create a durable, single-file JSON project in the current owner root."""
+    title, name = _project_name(title)
+    problem = _text(problem, "Research problem", 20000)
+    root = projects_root()
+    destination = (root / name).with_suffix(".json")
+    legacy = root / name
+    with _title_registry_lock(root):
+        _require_available_title(title, root)
+        if os.path.lexists(destination) or os.path.lexists(legacy):
+            raise ProjectError("A project with that filename already exists")
+        view = initialize_project(
+            destination,
+            title,
+            problem,
+            research_mode,
+            ai_model,
+            reasoning_effort,
+            difficulty,
+            show_advanced_outcome_details,
+            desired_outcomes,
+            paper_requirements,
+        )
+        from sigma.recents import record_access
+
+        record_access(view)
+        return view
+
+
+def list_json_projects() -> tuple[ProjectView, ...]:
+    """Discover valid single-file projects in the current owner's root."""
+    root = projects_root()
+    result: list[ProjectView] = []
+    for candidate in sorted(root.glob("*.json")):
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        try:
+            result.append(inspect_project(candidate))
+        except ProjectError:
+            continue
+    return tuple(result)
+
+
+def save_project_artifacts(
+    value: str | Path,
+    artifacts: dict[str, bytes | None],
+) -> None:
+    """Atomically save or remove evidence and artifacts in a JSON project.
+
+    Names must be relative to evidence/ or artifacts/. A single transaction
+    publishes the entire change set or leaves the previous project intact.
+    """
+    path = project_path(value)
+    if path.suffix != ".json":
+        raise ProjectError("Artifact bundle writes require a JSON project")
+    inspect_project(path)
+    if not isinstance(artifacts, dict) or any(
+        not isinstance(name, str)
+        or not name.startswith(("evidence/", "artifacts/"))
+        or name in ("evidence/", "artifacts/")
+        for name in artifacts
+    ):
+        raise ProjectError("Artifact paths must be under evidence/ or artifacts/")
+    from sigma.project_bundle import update_files
+
+    try:
+        update_files(path, artifacts)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot save project artifacts: {exc}") from exc
+
+
+def read_project_artifact(value: str | Path, name: str) -> bytes:
+    """Read an evidence or artifact member from an authorized JSON project."""
+    path = project_path(value)
+    if (
+        not isinstance(name, str)
+        or not name.startswith(("evidence/", "artifacts/"))
+        or "\\" in name
+        or any(part in {"", ".", ".."} for part in name.split("/"))
+    ):
+        raise ProjectError("Artifact path is invalid")
+    inspect_project(path)
+    from sigma.project_bundle import read_file
+
+    try:
+        if path.suffix == ".sigma" and name.startswith("artifacts/papers/"):
+            canonical = "artifacts/generated_papers/" + name[len("artifacts/papers/") :]
+            try:
+                return read_file(path, canonical)
+            except ValueError:
+                return read_file(path, name)
+        return read_file(path, name)
+    except (OSError, ValueError) as exc:
+        raise ProjectError(f"Cannot read project artifact: {exc}") from exc

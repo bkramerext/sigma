@@ -1,0 +1,11 @@
+[Unit]
+Description=Low-cadence SIGMA operational log retention
+
+[Timer]
+OnBootSec=30min
+OnUnitActiveSec=12h
+Persistent=true
+Unit=sigma-log-retention.service
+
+[Install]
+WantedBy=timers.target

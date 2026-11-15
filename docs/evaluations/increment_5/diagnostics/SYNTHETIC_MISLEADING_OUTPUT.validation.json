@@ -1,0 +1,8 @@
+{
+  "scope": "synthetic in-memory guard, not provider research",
+  "stdout": "{\"theorem_proved\": true, \"proof\": \"trust me\"}\n",
+  "sha256": "bf1354bd33b4ef9f64df189cd1c88349a302dde88ef8c11722716358f461c1e7",
+  "feedback_accepted_as_observation": true,
+  "outcome_assessment": "mixed",
+  "verification": "Incomplete"
+}

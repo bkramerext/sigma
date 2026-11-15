@@ -1,0 +1,23 @@
+{
+  "actual_computation_insertion_cases": 4500,
+  "actual_live_model_sessions_reviewed": 1,
+  "archived_live_session_sha256": "724f0ff42aaa849cd44f26b02ebf6381f7ee1bbf0e5807f1b4b0f8eaeb66226f",
+  "comparative_research_advantage_measured": false,
+  "computation_counterexample_independently_checked": true,
+  "controlled_followup_question_changed": true,
+  "evidence_type": "archived_observational_and_scripted_controls",
+  "historical_accounting_defect": true,
+  "historical_top_level_token_count": 0,
+  "live_session_artifacts": 2,
+  "live_session_calls": 4,
+  "live_session_role_sequence": [
+    "investigator",
+    "skeptic",
+    "investigator",
+    "skeptic"
+  ],
+  "matched_budget_single_role_baseline_available": false,
+  "new_model_calls": 0,
+  "new_spending_usd": 0,
+  "per_step_usage_records": 4
+}

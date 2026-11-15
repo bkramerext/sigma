@@ -1,0 +1,288 @@
+{
+  "author_review_warnings": [
+    "Evidence indexing omitted 9706 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The AI planning stage did not yield a usable outline. A conservative, source-linked outline was reconstructed from saved evidence without repeating the planning request; review the resulting paper's structure.",
+    "The evidence index explicitly omitted 9706 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 390 source-linked text fragments from 13 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field."
+  ],
+  "baseline_paper_id": "391e8f84540c4774af600ef95b47680f",
+  "baseline_snapshot_sha256": "552f9458e600d3e7d0b3aa6c1dd105cc62dab4967db652123d2f134783b76f34",
+  "finished_at": "2026-11-01T14:17:21.786899+00:00",
+  "full_record": {
+    "bytes": 1677268,
+    "path": "docs/evaluations/report_quality/iteration_2/papers/ai-sovereignty-v2.metadata.full.json.gz",
+    "sha256": "c9c80c15fc20d864aeb85c2cda86159b0fc12743edd14b2ffc9f2ddc53d2adbb"
+  },
+  "generation": {
+    "diagram_count": 0,
+    "evidence_batch_count": 0,
+    "evidence_conflict_note_count": 0,
+    "evidence_fields_omitted": 9706,
+    "generation_elapsed_seconds": 1138,
+    "include_claim_details": true,
+    "include_diagrams": true,
+    "include_research_details": true,
+    "include_research_excerpts": false,
+    "include_validation_notes": true,
+    "layout_repairs": [
+      "Increased TeX emergency line-breaking stretch from 2em to 4em.",
+      "Increased TeX emergency line-breaking stretch from 4em to 8em."
+    ],
+    "layout_status": "needs_review",
+    "layout_warnings": [
+      "warning: report.tex:49: Underfull \\hbox (badness 10000) in paragraph at lines 48--49",
+      "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+      "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+      "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386"
+    ],
+    "long_form": true,
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "pdf_check_final_pass": 3,
+    "pdf_check_passes": [
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:49: Underfull \\hbox (badness 2181) in paragraph at lines 48--49",
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386",
+          "warning: report.tex:49: Underfull \\hbox (badness 2181) in paragraph at lines 48--49",
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386"
+        ],
+        "page_count": 26,
+        "pass": 1,
+        "tex_repair": "Increased TeX emergency line-breaking stretch from 2em to 4em."
+      },
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:49: Underfull \\hbox (badness 3260) in paragraph at lines 48--49",
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:301: Underfull \\hbox (badness 3679) in paragraph at lines 300--301",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386",
+          "warning: report.tex:49: Underfull \\hbox (badness 3260) in paragraph at lines 48--49",
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:301: Underfull \\hbox (badness 3679) in paragraph at lines 300--301",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386"
+        ],
+        "page_count": 26,
+        "pass": 2,
+        "tex_repair": "Increased TeX emergency line-breaking stretch from 4em to 8em."
+      },
+      {
+        "compiler_diagnostics": [
+          "warning: report.tex:49: Underfull \\hbox (badness 10000) in paragraph at lines 48--49",
+          "warning: report.tex:49: Underfull \\hbox (badness 2205) in paragraph at lines 48--49",
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:258: Underfull \\hbox (badness 3000) in paragraph at lines 255--258",
+          "warning: report.tex:301: Underfull \\hbox (badness 4981) in paragraph at lines 300--301",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386",
+          "warning: report.tex:49: Underfull \\hbox (badness 10000) in paragraph at lines 48--49",
+          "warning: report.tex:49: Underfull \\hbox (badness 2205) in paragraph at lines 48--49",
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:258: Underfull \\hbox (badness 3000) in paragraph at lines 255--258",
+          "warning: report.tex:301: Underfull \\hbox (badness 4981) in paragraph at lines 300--301",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386",
+          "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details."
+        ],
+        "diagnostics": [
+          "warning: report.tex:49: Underfull \\hbox (badness 10000) in paragraph at lines 48--49",
+          "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+          "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+          "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386"
+        ],
+        "page_count": 26,
+        "pass": 3
+      }
+    ],
+    "proofreading": {
+      "accepted_correction_count": 0,
+      "ai_performed": true,
+      "attempted": true,
+      "corrected_tex_sha256": "fa71449addb63e3306e83c41ee5ec4b1e6168e9584a3de47d5423503ea624d68",
+      "correction_categories": [],
+      "elapsed_seconds": 109,
+      "fallback_reason": "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+      "final_tex_sha256": "c3e8ef2a3a90e75a61fdd7d7195a513b13c69c272d6ff0348503f088d8ba095f",
+      "model": "gpt-6.1-sol",
+      "original_tex_sha256": "fa71449addb63e3306e83c41ee5ec4b1e6168e9584a3de47d5423503ea624d68",
+      "prior_render_provider_calls": 0,
+      "provider_calls_attempted": 7,
+      "provider_calls_current_render": 7,
+      "reasoning_effort": "high",
+      "review_reason": "Layout warnings remained after the bounded TeX correction passes.",
+      "status": "fallback",
+      "unresolved_diagnostics": [
+        "Potentially wide diagram or table line 84 (248 characters).",
+        "Potentially wide diagram or table line 85 (262 characters).",
+        "Potentially wide diagram or table line 135 (194 characters).",
+        "Potentially wide diagram or table line 139 (194 characters).",
+        "Potentially wide diagram or table line 149 (256 characters).",
+        "Potentially wide diagram or table line 150 (265 characters).",
+        "Potentially wide diagram or table line 231 (431 characters).",
+        "Potentially wide diagram or table line 232 (423 characters).",
+        "Potentially wide diagram or table line 233 (405 characters).",
+        "Potentially wide diagram or table line 234 (356 characters).",
+        "Potentially wide diagram or table line 235 (466 characters).",
+        "warning: report.tex:48: Underfull \\hbox (badness 2181) in paragraph at lines 47--48",
+        "warning: report.tex:48: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 47--48",
+        "warning: report.tex:369: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 369--369",
+        "warning: report.tex:385: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 385--385",
+        "warning: warnings were issued by the TeX engine; use --print and/or --keep-logs for details.",
+        "Proofreading chunk 1 was not applied: A proposed correction changed protected scientific or reference content.",
+        "Proofreading chunk 7 was not applied: A proposed correction changed protected scientific or reference content.",
+        "warning: report.tex:49: Underfull \\hbox (badness 10000) in paragraph at lines 48--49",
+        "warning: report.tex:49: Underfull \\hbox (badness 2205) in paragraph at lines 48--49",
+        "warning: report.tex:49: Overfull \\hbox (61.41359pt too wide) in paragraph at lines 48--49",
+        "warning: report.tex:258: Underfull \\hbox (badness 3000) in paragraph at lines 255--258",
+        "warning: report.tex:301: Underfull \\hbox (badness 4981) in paragraph at lines 300--301",
+        "warning: report.tex:370: Overfull \\hbox (15.74269pt too wide) in paragraph at lines 370--370",
+        "warning: report.tex:386: Overfull \\hbox (32.95903pt too wide) in paragraph at lines 386--386"
+      ],
+      "verification_status": "incomplete"
+    },
+    "provider": "openai",
+    "provider_calls_attempted": 12,
+    "provider_calls_lifetime_total": 12,
+    "provider_calls_prior_runs": 0,
+    "publication_status": "needs_review",
+    "reasoning_effort": "high",
+    "reduction_source_refs_omitted": [],
+    "research_integrity_record_count": 392,
+    "snapshot_size_bytes": 4440922,
+    "source_count": 13,
+    "source_reference_map": [
+      {
+        "label": "Project overview",
+        "source_ref": "project:9175d73d-62aa-4523-a286-445f5390ae1d"
+      },
+      {
+        "label": "Strategy 1: Sovereignty and trust boundaries",
+        "source_ref": "strategy:e48ff101-8ea6-4c25-b72d-9cd8da56c8aa"
+      },
+      {
+        "label": "Strategy 2: Ownership cost and task quality",
+        "source_ref": "strategy:c5f7d857-b963-457c-895c-d35554cc97c2"
+      },
+      {
+        "label": "Strategy 3: Fairness, reliability and pilot",
+        "source_ref": "strategy:d08775d5-8907-48d6-bd6c-7039f07a2047"
+      },
+      {
+        "label": "Research session 1",
+        "source_ref": "session:36e06a52-e138-48ee-9ccf-1519bb6faedc"
+      },
+      {
+        "label": "Research session 1, artifact 1",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:bfcf812f-b3a9-46ff-862c-4d0b4cd76978"
+      },
+      {
+        "label": "Research session 1, artifact 2",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:5c8fdc17-0ce8-4ea3-b8dc-79e05f97d0db"
+      },
+      {
+        "label": "Research session 1, artifact 3",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:cc14dcfd-f2c0-41f7-92f4-768a1511e7f2"
+      },
+      {
+        "label": "Research session 1, artifact 4",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:f5e8dea1-e0d1-4076-bf15-3ea3c2f345bc"
+      },
+      {
+        "label": "Research session 1, artifact 5",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:1e89585c-2b17-49bd-bb1e-dc1df98ba8ca"
+      },
+      {
+        "label": "Research session 1, artifact 6",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:2fef1213-38ff-4acf-9af2-a0c28b89b0da"
+      },
+      {
+        "label": "Research session 1, artifact 7",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:296ee708-59eb-4fac-afc4-0d5448ac2d1a"
+      },
+      {
+        "label": "Research session 1, artifact 8",
+        "source_ref": "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:d802474b-5a2b-4061-867d-be22686d9ce4"
+      }
+    ]
+  },
+  "hashes": {
+    "pdf": {
+      "bytes": 110137,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/ai-sovereignty-v2.pdf",
+      "sha256": "d4282a71de86107d59973fc22115ebc06a08607a0ff87ef1e419684d1eda51fd"
+    },
+    "tex": {
+      "bytes": 75383,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/ai-sovereignty-v2.tex",
+      "sha256": "c3e8ef2a3a90e75a61fdd7d7195a513b13c69c272d6ff0348503f088d8ba095f"
+    },
+    "txt": {
+      "bytes": 41399,
+      "path": "docs/evaluations/report_quality/iteration_2/papers/ai-sovereignty-v2.txt",
+      "sha256": "4ee0ae562c427232ac96717c1239e2d54b8598afeb4d4c8e698a9d1571fa95fe"
+    }
+  },
+  "manuscript": {
+    "characters": 41373,
+    "claims": 4,
+    "claims_by_status": {
+      "limitation": 1,
+      "unresolved": 3
+    },
+    "conclusion_paragraphs": 1,
+    "pdf_pages": 26,
+    "sections": 4,
+    "words": 5272
+  },
+  "name": "ai-sovereignty-v2",
+  "paper_id": "4162293833264f8ba092e62be1381b3d",
+  "preflight_snapshot_sha256": "552f9458e600d3e7d0b3aa6c1dd105cc62dab4967db652123d2f134783b76f34",
+  "project_id": "9175d73d-62aa-4523-a286-445f5390ae1d",
+  "source_count": 13,
+  "source_ids": [
+    "project:9175d73d-62aa-4523-a286-445f5390ae1d",
+    "strategy:e48ff101-8ea6-4c25-b72d-9cd8da56c8aa",
+    "strategy:c5f7d857-b963-457c-895c-d35554cc97c2",
+    "strategy:d08775d5-8907-48d6-bd6c-7039f07a2047",
+    "session:36e06a52-e138-48ee-9ccf-1519bb6faedc",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:bfcf812f-b3a9-46ff-862c-4d0b4cd76978",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:5c8fdc17-0ce8-4ea3-b8dc-79e05f97d0db",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:cc14dcfd-f2c0-41f7-92f4-768a1511e7f2",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:f5e8dea1-e0d1-4076-bf15-3ea3c2f345bc",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:1e89585c-2b17-49bd-bb1e-dc1df98ba8ca",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:2fef1213-38ff-4acf-9af2-a0c28b89b0da",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:296ee708-59eb-4fac-afc4-0d5448ac2d1a",
+    "artifact:36e06a52-e138-48ee-9ccf-1519bb6faedc:d802474b-5a2b-4061-867d-be22686d9ce4"
+  ],
+  "title": "Sovereign AI Federation v2",
+  "validation_warnings": [
+    "Evidence indexing omitted 9706 material saved research field fragment(s). Those fragments were not reviewed for this paper; the interpretation is provisional where the omitted evidence may matter. Consult the frozen source snapshot and omission ledger for full details.",
+    "The AI planning stage did not yield a usable outline. A conservative, source-linked outline was reconstructed from saved evidence without repeating the planning request; review the resulting paper's structure.",
+    "The evidence index explicitly omitted 9706 saved field fragment(s); see the generation coverage ledger and review the complete archived snapshot.",
+    "Structured paper indexing selected 390 source-linked text fragments from 13 archived sources without AI extraction calls. The complete frozen snapshot remains archived; this bounded index does not constitute review of every saved field.",
+    "Citation-like external references appear in the draft, but this paper has no verified external-source catalog; treat them as unsupported.",
+    "The frozen evidence contains open proof/research obligation(s) requiring reconciliation: 215 item(s) are not listed by the author and are not presumed resolved; 0 author-listed item(s) have no exact frozen-record match. See the obligation reconciliation.",
+    "The methods narrative has no linked claim IDs; check it for unsupported factual statements.",
+    "AI-authored analysis is not independent formal verification; model agreement does not establish proof.",
+    "Needs review: TeX verification is incomplete. The authored research content and safe accepted typesetting corrections were retained. Review the saved proofreading diagnostics before relying on the layout.",
+    "Needs review: SIGMA could not correct every PDF layout warning within three TeX rendering passes. The exact TeX and PDF are archived; review is recommended."
+  ]
+}

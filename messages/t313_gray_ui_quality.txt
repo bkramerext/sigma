@@ -1,0 +1,119 @@
+T313 — Gray UI Quality and Consistency Pass Handoff
+
+Status: R4R — ready for independent review. Do not self-merge.
+
+Ticket: T313 (`tickets/t313.md`)
+PR: #316 — https://github.com/bkramerext/sigma/pull/316
+Branch: `gray/ui-quality-pass`
+Base: `main` at `2cf878a3290e697b408ebdb5d58871690e2c030b`
+Implementation HEAD when PR #316 was opened: `60b57146864b62caba1e9d02bf9bfbb58766d616`
+The committed handoff and tracker follow that implementation commit on the
+same PR branch; check the PR link above for the current branch HEAD.
+PR target: `main`
+
+Complete list of UI defects corrected or addressed:
+- Home's large copper slogan and high-contrast background art competed with
+  project/sample content on narrow screens. At widths up to 900px the slogan is
+  hidden and existing artwork is dimmed; the desktop composition is retained.
+- The ChatGPT connected tooltip disclosed the provider account label/email.
+  It now uses generic connection text, preserving visible status and click
+  behavior.
+- Admin Sponsorship Allowance alignment was already fixed in base main by
+  PR #232. This change adds a real-browser regression check for $2, $15, and
+  Unlimited at desktop/narrow widths; accounting and its existing styling were
+  not changed.
+- Other inspected areas: Project About disclosure/dialog at desktop and narrow
+  widths, New Project dialog at narrow width, and disconnected/connected/
+  sponsored indicators. No additional defects were found in exercised states.
+
+Files changed:
+- `browser_checks/issue228_sponsorship_allowance.py`
+- `browser_checks/project_about.py`
+- `browser_checks/t313_connection_status.py`
+- `docs/STATUS.md`
+- `docs/TICKET_TRACKING.md`
+- `docs/evaluations/t313/README.md`
+- `docs/evaluations/t313/evidence/admin-allowance-after-1440.png`
+- `docs/evaluations/t313/evidence/admin-allowance-after-390.png`
+- `docs/evaluations/t313/evidence/admin-allowance-before-1440.png`
+- `docs/evaluations/t313/evidence/admin-allowance-before-390.png`
+- `docs/evaluations/t313/evidence/home-before.png`
+- `docs/evaluations/t313/evidence/home-connection-after.png`
+- `docs/evaluations/t313/evidence/home-connection-before.png`
+- `docs/evaluations/t313/evidence/home-disconnected-1440.png`
+- `docs/evaluations/t313/evidence/home-disconnected-320.png`
+- `docs/evaluations/t313/evidence/home-disconnected-390.png`
+- `docs/evaluations/t313/evidence/home-disconnected-before-320.png`
+- `docs/evaluations/t313/evidence/home-disconnected-before-390.png`
+- `docs/evaluations/t313/evidence/home-sponsored-1440.png`
+- `docs/evaluations/t313/evidence/home-sponsored-320.png`
+- `docs/evaluations/t313/evidence/home-sponsored-390.png`
+- `docs/evaluations/t313/evidence/new-project-dialog-390.png`
+- `docs/evaluations/t313/evidence/project-about-1440.png`
+- `docs/evaluations/t313/evidence/project-about-390.png`
+- `frontend/src/ai-connection.tsx`
+- `frontend/src/style.css`
+- `tickets/t313.md`
+
+Tests and checks actually executed:
+- `uv run --with playwright python browser_checks/issue228_sponsorship_allowance.py`
+  — PASS (real Chrome, 1440px and 390px; $2, $15, Unlimited; generic tooltip).
+- `SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8026 uv run --with playwright
+  python browser_checks/t313_connection_status.py` — PASS (real Chrome,
+  disconnected/connected/sponsored states, Home overflow at 1440/390/320,
+  New Project dialog at 390).
+- `SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8026 uv run --with playwright
+  python browser_checks/project_about.py` — PASS (real Chrome, 1440/390,
+  disclosure, Escape close and focus restoration).
+- Exploratory A17 project/session browser flow — PARTIAL; it reached a local
+  project and status controls, then the deterministic fixture rejected an
+  account-change action with HTTP 403.
+- `npm run typecheck` — PASS.
+- `./sigma test` — PASS, all steps including Ruff, Pyright, typecheck, and
+  frontend build. Existing warnings included Starlette/httpx deprecation,
+  Python resource warning, skipped graph-present local execution because its
+  sandbox image is unavailable, and the frontend bundle size advisory.
+- `uv run --locked --no-sync ruff check` on the three changed Python browser
+  checks — PASS.
+- `uv run --locked --no-sync ruff format --check` on those browser checks — PASS.
+- `git diff --check` — PASS.
+
+Browser verification evidence:
+- Before/after Admin alignment screenshots and allowance values:
+  `docs/evaluations/t313/evidence/admin-allowance-{before,after}-{1440,390}.png`.
+- Tooltip: `home-connection-before.png` and `home-connection-after.png`.
+  The before image uses a synthetic fixture identity, not a real account.
+- Home narrow contrast: `home-disconnected-before-320.png` versus
+  `home-disconnected-320.png`; desktop/narrow and sponsored/disconnected state
+  screenshots are in the same evidence directory.
+- New Project dialog: `new-project-dialog-390.png`.
+- Project About: `project-about-1440.png`, `project-about-390.png`.
+- Audit narrative and screen/viewport details:
+  `docs/evaluations/t313/README.md`.
+
+Known limitations / unresolved dependencies:
+- Account-change action in the local fixture responds HTTP 403. Authentication,
+  account-change, membership, invitation, and sponsorship implementation is
+  Green-owned; this PR intentionally does not change it. Reported to the
+  coordinator through this handoff for dependency tracking.
+- Session configuration, playback/progress, completed/failed session results,
+  and research-output browser presentation remain UNVERIFIED in real Chrome.
+  They were not reachable after the account-change fixture rejection.
+- Blue-owned mathematical Markdown interpretation/rendering and research
+  transformation were not changed.
+- No paid provider calls were made.
+
+Acceptance criteria:
+- MET — Allowance group alignment verified at desktop/narrow for finite and
+  unlimited values; existing main fix preserved.
+- MET — Connected tooltip omits account identity; connected, disconnected, and
+  sponsored status remain visible and were browser-checked.
+- MET — Representative Home, Admin, About, New Project dialog, and responsive
+  states exercised in real Chrome; screenshots captured.
+- MET — Demonstrated narrow Home legibility defect corrected; browser
+  regression coverage added.
+- MET — Frontend typecheck and complete `./sigma test` passed.
+- UNVERIFIED — Session configuration/playback/progress/results and research
+  output in real Chrome due to Green-owned account-change fixture rejection.
+- MET — Isolated branch created from updated main; one PR opened against main;
+  handoff and ticket tracking committed. No self-merge.

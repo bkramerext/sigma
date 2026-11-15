@@ -1,0 +1,260 @@
+"""Offline adversarial checks for the Increment 22 shared hard-budget ledger."""
+
+from __future__ import annotations
+
+import unittest
+
+from sigma.increment22_baseline import dispatch_turn, new_arm_budget
+from sigma.research_budget import (
+    BudgetExceeded,
+    mark_unknown,
+    new_ledger,
+    reserve_before_dispatch,
+    settle_after_response,
+    totals,
+)
+from sigma.research_sessions import (
+    MODEL_OUTPUT_LIMITS,
+    TOKEN_PRICES_PER_MILLION,
+    _estimate_cost,
+)
+
+
+def ledger(
+    *, calls: int = 4, input_tokens: int = 200_000, output_tokens: int = 4096, cost: float = 0.67
+):
+    return new_ledger(
+        call_limit=calls,
+        input_token_limit=input_tokens,
+        output_tokens_per_call=output_tokens,
+        cost_limit_usd=cost,
+        input_price_per_million=2.5,
+        output_price_per_million=10.0,
+    )
+
+
+class Increment22BudgetTests(unittest.TestCase):
+    def test_pre_dispatch_reserves_request_bytes_overhead_output_and_cost(self):
+        budget = ledger()
+        reservation = reserve_before_dispatch(budget, call_id="call-1", request_body=b"x" * 1000)
+        self.assertEqual(reservation["input_token_bound"], 1000 + 8192)
+        self.assertEqual(reservation["output_token_reservation"], 4096)
+        self.assertEqual(reservation["cost_bound_usd"], (9192 * 2.5 + 4096 * 10) / 1_000_000)
+        self.assertEqual(totals(budget)["input_tokens_used_or_reserved"], 9192)
+
+    def test_settled_usage_releases_bound_and_keeps_cost_upper_bound(self):
+        budget = ledger()
+        reserve_before_dispatch(budget, call_id="call-1", request_body=b"x" * 1000)
+        settle_after_response(budget, call_id="call-1", input_tokens=7000, output_tokens=500)
+        self.assertEqual(totals(budget)["input_tokens_used_or_reserved"], 7000)
+        self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 500)
+        self.assertEqual(totals(budget)["cost_usd_used_or_reserved"], 0.0225)
+
+    def test_completed_output_above_estimate_is_settled_and_blocks_future_spend(self):
+        budget = ledger(calls=4, output_tokens=4096, cost=0.08)
+        reserve_before_dispatch(budget, call_id="call-1", request_body=b"x")
+        settle_after_response(budget, call_id="call-1", input_tokens=100, output_tokens=7000)
+        self.assertEqual(budget["calls"][0]["status"], "settled")
+        self.assertEqual(budget["calls"][0]["output_tokens"], 7000)
+        self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 7000)
+        with self.assertRaisesRegex(BudgetExceeded, "cost limit"):
+            reserve_before_dispatch(budget, call_id="call-2", request_body=b"x")
+
+    def test_model_max_output_is_reserved_under_worst_case_pricing(self):
+        self.assertEqual(
+            MODEL_OUTPUT_LIMITS,
+            {
+                "gpt-6-astra": 128_000,
+                "gpt-6-sol": 128_000,
+                "gpt-6.1-sol": 128_000,
+                "gpt-6.1-terra": 128_000,
+                "gpt-6-luna": 128_000,
+            },
+        )
+        model = "gpt-6-astra"
+        output_bound = MODEL_OUTPUT_LIMITS[model]
+        prices = TOKEN_PRICES_PER_MILLION[model]
+        request = b"x" * 4000
+        input_bound = len(request) + 8192
+        worst_case = (
+            input_bound * prices["cache_write"] + output_bound * prices["output"]
+        ) / 1_000_000
+        budget = new_ledger(
+            call_limit=1,
+            input_token_limit=200_000,
+            output_tokens_per_call=4000,
+            cost_limit_usd=worst_case,
+            input_price_per_million=prices["cache_write"],
+            output_price_per_million=prices["output"],
+        )
+        reservation = reserve_before_dispatch(
+            budget,
+            call_id="max-output",
+            request_body=request,
+            output_token_reservation=output_bound,
+        )
+        self.assertEqual(reservation["output_token_reservation"], 128_000)
+        self.assertAlmostEqual(reservation["cost_bound_usd"], worst_case)
+        # Reasoning tokens are part of output usage and are charged once with
+        # the same settled usage; the unused reservation is released.
+        settle_after_response(
+            budget, call_id="max-output", input_tokens=4000, output_tokens=128_000
+        )
+        settled = totals(budget)["cost_usd_used_or_reserved"]
+        actual_cost = (4000 * prices["cache_write"] + 128_000 * prices["output"]) / 1_000_000
+        self.assertAlmostEqual(settled, actual_cost)
+        self.assertLessEqual(settled, worst_case)
+        self.assertEqual(budget["calls"][0]["output_tokens"], 128_000)
+
+        refused = new_ledger(
+            call_limit=1,
+            input_token_limit=200_000,
+            output_tokens_per_call=4000,
+            cost_limit_usd=worst_case - 0.001,
+            input_price_per_million=prices["cache_write"],
+            output_price_per_million=prices["output"],
+        )
+        with self.assertRaisesRegex(BudgetExceeded, "cost limit"):
+            reserve_before_dispatch(
+                refused,
+                call_id="insufficient-cap",
+                request_body=request,
+                output_token_reservation=output_bound,
+            )
+        self.assertEqual(refused["calls"], [])
+
+    def test_long_context_settlement_uses_published_surcharges(self):
+        model = "gpt-6.1-sol"
+        prices = TOKEN_PRICES_PER_MILLION[model]
+        input_tokens = 272_001
+        cached_tokens = 100_000
+        output_tokens = 128_000
+        usage: dict[str, int | None] = {
+            "input_tokens": input_tokens,
+            "cached_input_tokens": cached_tokens,
+            "output_tokens": output_tokens,
+        }
+        cost = _estimate_cost(model, usage)
+        assert cost is not None
+        expected = (
+            (input_tokens - cached_tokens) * prices["input"] * 2
+            + cached_tokens * prices["cached_input"] * 2
+            + output_tokens * prices["output"] * 1.5
+        ) / 1_000_000
+        self.assertAlmostEqual(cost, expected)
+
+    def test_input_cap_is_checked_before_any_dispatch(self):
+        budget = ledger(input_tokens=9191)
+        before = totals(budget)
+        with self.assertRaisesRegex(BudgetExceeded, "input-token limit"):
+            reserve_before_dispatch(budget, call_id="call-1", request_body=b"x" * 1000)
+        self.assertEqual(totals(budget), before)
+        self.assertEqual(budget["calls"], [])
+
+    def test_cost_cap_is_checked_before_dispatch(self):
+        budget = ledger(input_tokens=100_000, cost=0.01)
+        before = totals(budget)
+        with self.assertRaisesRegex(BudgetExceeded, "cost limit"):
+            reserve_before_dispatch(budget, call_id="call-1", request_body=b"x" * 1000)
+        self.assertEqual(totals(budget), before)
+
+    def test_unknown_call_retains_full_reservation_and_blocks_retry(self):
+        budget = ledger()
+        reserve_before_dispatch(budget, call_id="call-1", request_body=b"x" * 1000)
+        mark_unknown(budget, call_id="call-1")
+        self.assertEqual(totals(budget)["input_tokens_used_or_reserved"], 9192)
+        self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 4096)
+        self.assertIsNotNone(totals(budget)["blocked_reason"])
+        with self.assertRaisesRegex(BudgetExceeded, "blocked"):
+            reserve_before_dispatch(budget, call_id="retry", request_body=b"x")
+
+    def test_unsettled_inflight_call_blocks_a_second_dispatch(self):
+        budget = ledger()
+        reserve_before_dispatch(budget, call_id="call-1", request_body=b"x")
+        with self.assertRaisesRegex(BudgetExceeded, "still in flight"):
+            reserve_before_dispatch(budget, call_id="call-2", request_body=b"y")
+
+    def test_usage_outside_reservation_blocks_future_calls_and_keeps_hold(self):
+        budget = ledger()
+        reserve_before_dispatch(budget, call_id="call-1", request_body=b"x")
+        with self.assertRaisesRegex(BudgetExceeded, "exceeded"):
+            settle_after_response(budget, call_id="call-1", input_tokens=9000, output_tokens=1)
+        self.assertEqual(totals(budget)["input_tokens_used_or_reserved"], 8193)
+        with self.assertRaises(BudgetExceeded):
+            reserve_before_dispatch(budget, call_id="call-2", request_body=b"y")
+
+    def test_call_and_output_ceilings_are_frozen(self):
+        budget = ledger(calls=1, output_tokens=32)
+        reserve_before_dispatch(budget, call_id="call-1", request_body=b"x")
+        settle_after_response(budget, call_id="call-1", input_tokens=10, output_tokens=32)
+        with self.assertRaisesRegex(BudgetExceeded, "call limit"):
+            reserve_before_dispatch(budget, call_id="call-2", request_body=b"x")
+
+    def test_trial_caps_have_cost_headroom_for_both_arms(self):
+        per_arm = ledger()
+        for index in range(4):
+            reserve_before_dispatch(per_arm, call_id=f"call-{index}", request_body=b"x" * 41_808)
+            settle_after_response(
+                per_arm, call_id=f"call-{index}", input_tokens=50_000, output_tokens=4096
+            )
+        upper = totals(per_arm)["cost_usd_used_or_reserved"]
+        self.assertEqual(upper, 0.66384)
+        self.assertLessEqual(upper, 0.67)
+
+    def test_baseline_adapter_uses_same_actual_pre_dispatch_guard(self):
+        baseline = new_arm_budget()
+        self.assertEqual(baseline["call_limit"], 4)
+        self.assertEqual(baseline["input_token_limit"], 200_000)
+        self.assertEqual(baseline["output_tokens_per_call"], 4096)
+        self.assertEqual(baseline["cost_limit_usd"], 0.67)
+        dispatched = []
+
+        def fake_transport(body):
+            dispatched.append(body)
+            return {"usage": {"input_tokens": 8000, "output_tokens": 800}}
+
+        response = dispatch_turn(
+            baseline, "turn-1", b"exact serialized baseline request", fake_transport
+        )
+        self.assertEqual(response["usage"]["input_tokens"], 8000)
+        self.assertEqual(dispatched, [b"exact serialized baseline request"])
+        self.assertEqual(totals(baseline)["input_tokens_used_or_reserved"], 8000)
+        self.assertEqual(baseline["calls"][0]["status"], "settled")
+
+        too_large = new_ledger(
+            call_limit=4,
+            input_token_limit=4096,
+            output_tokens_per_call=4096,
+            cost_limit_usd=0.67,
+            input_price_per_million=2.5,
+            output_price_per_million=10.0,
+        )
+        transport_invocations = []
+
+        def forbidden_transport(body):
+            transport_invocations.append(body)
+            return {}
+
+        with self.assertRaises(BudgetExceeded):
+            dispatch_turn(
+                too_large,
+                "turn-over-limit",
+                b"x",
+                forbidden_transport,
+            )
+        self.assertEqual(transport_invocations, [])
+
+    def test_baseline_ambiguous_dispatch_retains_reservation_and_stops(self):
+        budget = new_arm_budget()
+
+        def timed_out(_body):
+            raise TimeoutError("ambiguous provider outcome")
+
+        with self.assertRaisesRegex(TimeoutError, "ambiguous"):
+            dispatch_turn(budget, "turn-timeout", b"x", timed_out)
+        self.assertEqual(budget["calls"][0]["status"], "unknown")
+        self.assertIsNotNone(totals(budget)["blocked_reason"])
+
+
+if __name__ == "__main__":
+    unittest.main()

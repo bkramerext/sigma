@@ -1,0 +1,105 @@
+SYNTHETIC ADVERSARIAL TEST; NOT AN ACTUAL SIGMA RESEARCH SESSION
+
+SYNTHETIC MISLEADING ROLE AGREEMENT
+===================================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Prove a universal mathematical statement.
+
+Project ID: synthetic
+
+Research type: Mathematics
+
+Strategies
+----------
+No strategies are recorded.
+
+Research sessions
+-----------------
+Session #1
+Execution status: ended
+Outcome: Positive · solution candidate (unverified)
+Strategy: Test a purported proof
+Started: Not recorded
+
+Outcome summary: The printout proves the universal claim.
+
+Conclusion
+~~~~~~~~~~
+### Complete reviewed candidate answer
+
+The printout proves the universal claim.
+
+The program printed theorem_proved=true.
+
+### Unresolved points
+- Supply a derivation and inspect every inference.
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The argument is a convincing but unverified candidate; no formal proof checker or independent external verification was used.
+
+**Evidence:** Artifact 1
+
+### Verification and scope
+
+Verification: Convincing but unverified.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.
+
+Outcome caveats:
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The argument is a convincing but unverified candidate; no formal proof checker or independent external verification was used.
+
+Verification: Convincing but unverified
+Structured argument steps are recorded; review their evidence and objections.
+
+Claim scope: not recorded
+Solution claim: The printout proves the universal claim.
+Argument: The program printed theorem_proved=true.
+Skeptic response: The output is an assertion. No universal proof follows.
+Assumptions reviewed: Not recorded
+Proof obligations considered: Not recorded
+Still open: Supply a derivation and inspect every inference.
+Solution evidence references: synthetic-artifact
+Unresolved objections: None recorded
+Resolved review notes: None recorded
+
+Skeptic objection: The program did not derive the claim.
+Saved verification code: convincing_unverified
+
+Reviewed reasoning
+~~~~~~~~~~~~~~~~~
+Step 1: Printed assertion
+Epistemic status: computation
+The JSON flag is true.
+Research artifact: Not recorded
+Source artifacts: synthetic-artifact
+Skeptic disposition: accepted
+Skeptic rationale: The printout was observed.
+
+Strategy finding: Test a purported proof · achieved
+Strategy execution status: unknown
+Strategy failure detail: Not recorded
+Claim: The printout proves the universal claim.
+Source artifacts: synthetic-artifact
+Objection: The program did not derive the claim.
+Open obligation: Supply a derivation and inspect every inference.
+
+Artifact 1 · Not recorded
+Claim: A program printed a proof flag but no proof.
+Method: Print a JSON assertion.
+Assumptions: Not recorded
+Evidence status: incomplete
+Skeptic response: The output is an assertion. No universal proof follows.
+Objections: The program did not derive the claim.
+Decision: revise
+Open obligations: Supply a derivation and inspect every inference.
+Next question: Supply a derivation and inspect each claimed inference independently.
+
+Agentic runs
+------------
+No agentic runs are recorded.

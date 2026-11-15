@@ -1,0 +1,13 @@
+{
+  "off_second_question": "Build the residue and last-bit 6 by 6 transition baseline and check n=0,1,2 boundary vectors before choosing a spectral reduction.",
+  "on_second_question": "Derive the three-phase product of weighted 2 by 2 matrices at cube roots; verify the n=0,1,2 boundary vectors. Do not infer the global recurrence or limit from finite checks.",
+  "stop_reloaded_same_packet": true,
+  "original_ids_preserved": true,
+  "first_rh_context_answer_free": true,
+  "browser_errors": [],
+  "stop_session": {
+    "id": "63c41856-13d8-43fc-b4a1-84e51d72b6e6",
+    "status": "ended",
+    "calls_used": 3
+  }
+}

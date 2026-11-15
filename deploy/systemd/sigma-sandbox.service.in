@@ -1,0 +1,17 @@
+[Unit]
+Description=SIGMA rootless Docker daemon activation
+Requires=user@__SANDBOX_UID__.service
+After=user@__SANDBOX_UID__.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/runuser -u sigma-sandbox -- /usr/bin/env XDG_RUNTIME_DIR=/run/user/__SANDBOX_UID__ DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/__SANDBOX_UID__/bus /usr/bin/systemctl --user start docker.service
+ExecStop=/usr/sbin/runuser -u sigma-sandbox -- /usr/bin/env XDG_RUNTIME_DIR=/run/user/__SANDBOX_UID__ DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/__SANDBOX_UID__/bus /usr/bin/systemctl --user stop docker.service
+TimeoutStartSec=60
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

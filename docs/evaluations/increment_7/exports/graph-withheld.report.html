@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DAG insertion control — Research Report</title><style>
+      *{box-sizing:border-box}
+      :root{color-scheme:light;--ink:#23313b;--muted:#65737d;--navy:#0b1b29;--blue:#24485e;--copper:#b77943;--line:#dbe2e5;--paper:#fff;--canvas:#edf1f2}
+      body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.72 Georgia,"Iowan Old Style","Palatino Linotype",serif}
+      .report{width:min(960px,calc(100% - 40px));margin:42px auto;background:var(--paper);border:1px solid #d6dfe2;border-radius:12px;box-shadow:0 18px 60px #18304018;overflow:hidden}
+      .report-header{position:relative;padding:52px 68px 46px;background:linear-gradient(125deg,#0a1927,#183348 72%,#24475c);border-bottom:4px solid var(--copper);color:#f7f2ea}
+      .report-header:after{position:absolute;right:68px;bottom:22px;width:76px;height:1px;background:linear-gradient(90deg,transparent,#d7a36d);content:""}
+      .report-kicker{margin:0 0 16px;color:#e3b37d;font:600 11px/1.4 system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase}
+      h1{max-width:760px;margin:0;color:#fff8ee;font:400 clamp(2rem,4vw,3rem)/1.12 Georgia,"Iowan Old Style",serif;letter-spacing:-.025em;overflow-wrap:anywhere}
+      .report-subtitle{margin:18px 0 0;color:#bfd0d9;font:13px/1.5 system-ui,sans-serif;letter-spacing:.04em}
+      .report-content{padding:12px 68px 64px}
+      .report-section{padding:24px 0 12px;border-bottom:1px solid var(--line)}
+      .report-section:last-child{border-bottom:0}
+      .report-heading{color:var(--navy);font-family:Georgia,"Iowan Old Style",serif;font-weight:400;line-height:1.25}
+      h2.report-heading{margin:0 0 22px;padding:0 0 13px;border-bottom:1px solid var(--line);font-size:1.65rem;letter-spacing:-.015em}
+      h2.report-heading:before{display:block;width:34px;height:3px;margin:0 0 13px;background:var(--copper);content:""}
+      h3.report-heading,.report-record-heading{margin:28px 0 10px;color:var(--blue);font:600 1.08rem/1.4 system-ui,sans-serif;overflow-wrap:anywhere}
+      h3.report-heading{padding-bottom:8px;border-bottom:1px solid #e7ecee}
+      .report-session{margin:26px 0 34px;padding:0 22px 20px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,#fbfcfc,#fff);box-shadow:0 3px 12px #18304008}
+      .report-session-header{display:block;margin:0 -22px 20px;padding:16px 20px 17px;border-bottom:1px solid var(--line);border-left:3px solid var(--copper);border-radius:9px 9px 0 0;background:#f4f6f6}
+      .report-session .report-record-heading{margin:0 0 14px;color:var(--navy);font:600 1.18rem/1.3 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 24px;margin:0}
+      .report-outcome-metrics{margin:8px 0 18px;font:13px/1.5 system-ui,sans-serif}
+      .report-outcome-metrics div{margin:8px 0;overflow-wrap:anywhere}
+      .report-outcome-metrics dt{color:var(--muted);font-weight:600}
+      .report-outcome-metrics dd{margin:2px 0 0}
+      .report-session-fact{min-width:0}
+      .report-session-fact-wide{grid-column:1/-1}
+      .report-session-fact dt{margin:0 0 3px;color:var(--muted);font:700 10px/1.4 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+      .report-session-value{margin:0;color:var(--ink);font:500 13px/1.5 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-value.report-status-ended{color:#426d5a}
+      .report-session-value.report-status-active{color:#825b28}
+      .report-session-value.report-outcome-positive{color:#286447;font-weight:700}
+      .report-session-value.report-outcome-negative{color:#9b403c;font-weight:700}
+      .report-session-value.report-outcome-mixed{color:#825b28;font-weight:700}
+      .report-subheading{margin:25px 0 9px;padding-top:14px;border-top:1px solid #e7ecee;color:#775532;font:700 .74rem/1.4 system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+      .report-artifact-heading{margin:28px 0 8px;padding-top:12px;border-top:1px solid var(--line);color:var(--blue);font:600 .95rem/1.45 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-paragraph,.report-field{margin:10px 0;overflow-wrap:anywhere}
+      .report-field strong{display:inline-block;margin-right:.35em;color:#5b4937;font:700 .76em/1.5 system-ui,sans-serif;letter-spacing:.06em}
+      .report-note{margin:0 0 24px;padding:14px 18px;border-left:3px solid #6d94a5;background:#f1f6f7;color:#455762;font:13px/1.6 system-ui,sans-serif}
+      p{orphans:3;widows:3}
+      ul{margin:10px 0 18px;padding-left:1.4em}
+      li{margin:.4em 0;padding-left:.2em}
+      li::marker{color:var(--copper)}
+      code{padding:.12em .35em;border:1px solid #e2e7e9;border-radius:4px;background:#f4f6f6;color:#274052;font: .88em/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+      .report-math{color:#183a50;font:italic 1.06em Georgia,serif;white-space:normal}
+      .table-scroll{max-width:100%;margin:18px 0 24px;overflow-x:auto;border:1px solid var(--line);border-radius:7px}
+      table{width:100%;border-collapse:collapse;font:13px/1.55 system-ui,sans-serif}
+      .report-assessment-table{min-width:680px;table-layout:fixed}
+      .report-assessment-table col:nth-child(1){width:17%}
+      .report-assessment-table col:nth-child(2){width:15%}
+      .report-assessment-table col:nth-child(3){width:44%}
+      .report-assessment-table col:nth-child(4){width:24%}
+      th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+      th{background:var(--navy);color:#f1c58d;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+      tbody tr:nth-child(even){background:#f6f8f8}
+      tbody tr:last-child td{border-bottom:0}
+      @media(max-width:640px){.report{width:100%;margin:0;border:0;border-radius:0;box-shadow:none}.report-header{padding:36px 25px 32px}.report-header:after{right:25px}.report-content{padding:8px 25px 40px}.report-section{padding-top:20px}.report-session{padding:0 16px 14px}.report-session-header{margin-inline:-16px;padding-inline:16px}.report-session-meta{gap:10px 14px}.report-session-fact-wide{grid-column:1/-1}h2.report-heading{font-size:1.45rem}}
+      @media print{body{background:#fff;color:#111;font-size:10.5pt}.report{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;overflow:visible}.report-header{padding:0 0 20pt;background:#fff;color:#111;border-bottom:2pt solid #a76d3d;print-color-adjust:exact;-webkit-print-color-adjust:exact}.report-header:after{display:none}.report-kicker{color:#76502f}.report-header h1{color:#111;font-size:25pt}.report-subtitle{color:#555}.report-content{padding:0}.report-section{padding:18pt 0 8pt;break-inside:auto}.report-session{break-inside:auto;border-color:#aaa;background:#fff}.report-heading,.report-record-heading,.report-subheading,.report-artifact-heading{break-after:avoid}.report-note,.report-record-heading,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.table-scroll{overflow:visible;border:0}table{font-size:9pt}th{background:#e8edf0;color:#162d3b}.report-record-heading{break-after:avoid}}
+    </style></head><body><main class="report"><header class="report-header"><p class="report-kicker">SIGMA · Research report</p><h1>DAG insertion control</h1><p class="report-subtitle">Project record and research evidence</p></header><div class="report-content"><section class="report-section">
+<h2 class="report-heading">Project</h2>
+<p class="report-note"><strong>Interpretation:</strong> Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.</p>
+<p class="report-field"><strong>Research problem:</strong> Does checking only for the immediate reverse edge keep a DAG acyclic after insertion? Find a bounded counterexample or report what remains unresolved.</p>
+<p class="report-field"><strong>Project ID:</strong> 2f44bea5-45b7-424d-aa91-dab0038d23d3</p>
+<p class="report-field"><strong>Research type:</strong> Other</p>
+<p class="report-field"><strong>Difficulty:</strong> Medium</p>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Strategies</h2>
+<h3 class="report-heading">Test the local guard (saved)</h3>
+<p class="report-paragraph">Test a three-vertex witness, then investigate a reachability repair and proof duty.</p>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Research sessions</h2>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #1</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value report-status-ended">ended</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value report-outcome-mixed">Mixed · partial progress, unresolved</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Test the local guard</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:15:36.248855+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> Only a bounded computational observation supports the local candidate.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Partial finding
+
+Only a bounded computational observation supports the local candidate.
+
+No execution is attached; the scripted assertion cannot be independently checked.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Finite checks cannot prove the arbitrary-size claim.
+- Prove the arbitrary-size insertion condition and characterize update cost.
+- Run a bounded graph check before claiming evidence.
+- General proof and complexity remain open.
+- Check boundary case 1
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Finite checks cannot prove the arbitrary-size claim.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+<strong>Evidence:</strong> Artifact 1
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>Agent-reported evidence is unverified; agreement is not independent verification.</li><li>The saved argument remains incomplete; no solution is claimed.</li><li>Finite checks cannot prove the arbitrary-size claim.</li><li>Open obligations remain; inspect the saved artifacts before relying on this result.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps are recorded; review their evidence and objections.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator, Skeptic</dd></div><div><dt>Model calls by status</dt><dd>2 dispatched · 2 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>240 / 160 / 40 / 400</dd></div><div><dt>Wall-clock / agent call time</dt><dd>0s wall · Investigator 0s across 1 call(s) · Skeptic 0s across 1 call(s)</dd></div><div><dt>Python runs by status</dt><dd>0 executions</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>1 finding(s) · 0 Python file(s) (0 B) · session record 47,761 B</dd></div><div><dt>Provider failures / retries</dt><dd>0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>$0.002004 estimated (rates checked 2026-10-23)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Test the local guard</dd></div><div><dt>Research cycles</dt><dd>1 completed / 1 started</dd></div><div><dt>Outcome classification</dt><dd>Mixed · partial progress, unresolved</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>6 · Prove the general insertion invariant and complexity.; Prove the arbitrary-size insertion condition and characterize update cost. (+4 more)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>1 conclusion(s) · 1 cited finding(s)</dd></div><div><dt>Strategy contribution</dt><dd>productive: 1</dd></div><div><dt>Unresolved objections</dt><dd>1 · Finite checks cannot prove the arbitrary-size claim.</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> unconditional</p>
+<p class="report-field"><strong>Solution claim:</strong> Only a bounded computational observation supports the local candidate.</p>
+<p class="report-field"><strong>Argument:</strong> No execution is attached; the scripted assertion cannot be independently checked.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT ASSERTION: bounded computation supports the guard, but no execution is recorded.</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Prove the general insertion invariant and complexity.</p>
+<p class="report-field"><strong>Still open:</strong> Prove the arbitrary-size insertion condition and characterize update cost.; Run a bounded graph check before claiming evidence.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.</p>
+<p class="report-field"><strong>Solution evidence references:</strong> 0c71ccc5-6624-44e6-a44c-1deaac7b611d</p>
+<p class="report-field"><strong>Unresolved objections:</strong> Finite checks cannot prove the arbitrary-size claim.</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Skeptic objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<h3 class="report-heading">Reviewed reasoning</h3>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test</p>
+<p class="report-field"><strong>Epistemic status:</strong> conjecture</p>
+<p class="report-paragraph">A proposed local graph test requires a saved execution before drawing an inference.</p>
+<p class="report-field"><strong>Research artifact:</strong> 0c71ccc5-6624-44e6-a44c-1deaac7b611d</p>
+<p class="report-field"><strong>Source artifacts:</strong> Current research artifact</p>
+<p class="report-field"><strong>Skeptic disposition:</strong> accepted</p>
+<p class="report-field"><strong>Skeptic rationale:</strong> The scripted review retains the exact execution scope and the unsolved general invariant.</p>
+<p class="report-field"><strong>Strategy finding:</strong> Test the local guard · partial</p>
+<p class="report-field"><strong>Strategy execution status:</strong> ended</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> Stop budget exhausted</p>
+<p class="report-field"><strong>Claim:</strong> Only a bounded computational observation supports the local candidate.</p>
+<p class="report-field"><strong>Source artifacts:</strong> 0c71ccc5-6624-44e6-a44c-1deaac7b611d</p>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test (conjecture)</p>
+<p class="report-paragraph">A proposed local graph test requires a saved execution before drawing an inference.</p>
+<p class="report-field"><strong>Skeptic review:</strong> accepted · The scripted review retains the exact execution scope and the unsolved general invariant.</p>
+<p class="report-field"><strong>Objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Prove the arbitrary-size insertion condition and characterize update cost.</p>
+<p class="report-field"><strong>Open obligation:</strong> Run a bounded graph check before claiming evidence.</p>
+<p class="report-field"><strong>Open obligation:</strong> General proof and complexity remain open.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Finite checks cannot prove the arbitrary-size claim.</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Test the local guard</td><td>Productive</td><td>The saved derivation advances the objective through the linked strategy.</td><td>0c71ccc5-6624-44e6-a44c-1deaac7b611d</td></tr></tbody></table></div>
+<h4 class="report-artifact-heading">Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> OFFLINE SCRIPT ASSERTION: a graph computation supports the guard, despite no saved execution.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: compare immediate reverse-edge checking with actual acyclicity on a bounded graph.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role output; actual local execution, if any, is separate evidence.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT ASSERTION: bounded computation supports the guard, but no execution is recorded.</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Decision:</strong> stop_budget_exhausted</p>
+<p class="report-field"><strong>Open obligations:</strong> Prove the arbitrary-size insertion condition and characterize update cost.; Run a bounded graph check before claiming evidence.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.</p>
+<p class="report-field"><strong>Next question:</strong> Not recorded</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 1948969e-a810-43da-b9ea-76c5897b545f · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 4739 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;215809fb-dabe-41d1-9578-475a18349024&quot;] · bounded portfolio overview for strategy and domain context</li></ul>
+<p class="report-field"><strong>Step d253bd7e-aed5-4776-b866-938415eacc31 · skeptic:</strong> 0 selected, 0 current-session artifacts omitted, 6698 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 1, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;215809fb-dabe-41d1-9578-475a18349024&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected current_investigator_obligation: [&quot;1948969e-a810-43da-b9ea-76c5897b545f&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+<p class="report-field"><strong>Terminal reason:</strong> stop_budget_exhausted</p>
+</article>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Agentic runs</h2>
+<p class="report-paragraph">No agentic runs are recorded.</p>
+</section></div></main></body></html>

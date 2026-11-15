@@ -1,0 +1,353 @@
+{
+  "source_commit": "0f6e86e5201a4f3339dcff9592f6e7a7e1ec035c",
+  "method": "Coordinator JS mirror of claim_provenance_gate.py on actual baseline TeX; locator specificity, not support validity",
+  "papers": {
+    "ai-agent-reliability-v1": {
+      "claim_count": 5,
+      "coarse_only_claim_ids": [
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+      ],
+      "missing_claim_ids": [],
+      "claims": [
+        {
+          "id": "C1",
+          "kind": "Unresolved",
+          "labels": [
+            "Project overview"
+          ],
+          "specificity": "coarse_only"
+        },
+        {
+          "id": "C2",
+          "kind": "Unresolved",
+          "labels": [
+            "Project overview"
+          ],
+          "specificity": "coarse_only"
+        },
+        {
+          "id": "C3",
+          "kind": "Unresolved",
+          "labels": [
+            "Research session 2"
+          ],
+          "specificity": "coarse_only"
+        },
+        {
+          "id": "C4",
+          "kind": "Limitation",
+          "labels": [
+            "Research session 1"
+          ],
+          "specificity": "coarse_only"
+        },
+        {
+          "id": "C5",
+          "kind": "Unresolved",
+          "labels": [
+            "Research session 1, artifact 1"
+          ],
+          "specificity": "artifact_or_step"
+        }
+      ]
+    },
+    "ai-sovereignty-v2": {
+      "claim_count": 19,
+      "coarse_only_claim_ids": [
+        "C18"
+      ],
+      "missing_claim_ids": [],
+      "claims": [
+        {
+          "id": "C1",
+          "kind": "Limitation",
+          "labels": [
+            "Research session 1, artifact 2",
+            "Research session 1"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C2",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 5",
+            "Project overview"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C3",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 2",
+            "Research session 1, artifact 8",
+            "Research session 1"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C4",
+          "kind": "Conjecture",
+          "labels": [
+            "Research session 1, artifact 3",
+            "Project overview"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C5",
+          "kind": "Conjecture",
+          "labels": [
+            "Research session 1, artifact 1"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C6",
+          "kind": "Conjecture",
+          "labels": [
+            "Research session 1, artifact 4",
+            "Research session 1, artifact 3"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C7",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 4",
+            "Research session 1, artifact 7"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C8",
+          "kind": "Conjecture",
+          "labels": [
+            "Research session 1, artifact 7"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C9",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 7"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C10",
+          "kind": "Limitation",
+          "labels": [
+            "Research session 1, artifact 3",
+            "Research session 1",
+            "Project overview"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C11",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 2"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C12",
+          "kind": "Unresolved",
+          "labels": [
+            "Research session 1",
+            "Research session 1, artifact 5",
+            "Project overview"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C13",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 5",
+            "Research session 1, artifact 8"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C14",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 8",
+            "Research session 1, artifact 5"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C15",
+          "kind": "Established",
+          "labels": [
+            "Research session 1, artifact 5",
+            "Research session 1, artifact 8"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C16",
+          "kind": "Conjecture",
+          "labels": [
+            "Research session 1, artifact 6",
+            "Research session 1"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C17",
+          "kind": "Limitation",
+          "labels": [
+            "Research session 1, artifact 6",
+            "Research session 1"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C18",
+          "kind": "Conjecture",
+          "labels": [
+            "Research session 1"
+          ],
+          "specificity": "coarse_only"
+        },
+        {
+          "id": "C19",
+          "kind": "Unresolved",
+          "labels": [
+            "Research session 1",
+            "Research session 1, artifact 8",
+            "Research session 1, artifact 4"
+          ],
+          "specificity": "artifact_or_step"
+        }
+      ]
+    },
+    "xenopus-tadpoles-v9": {
+      "claim_count": 12,
+      "coarse_only_claim_ids": [],
+      "missing_claim_ids": [],
+      "claims": [
+        {
+          "id": "C1",
+          "kind": "Limitation",
+          "labels": [
+            "Project overview",
+            "Research session 21, artifact 1",
+            "Research session 21, artifact 4"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C2",
+          "kind": "Unresolved",
+          "labels": [
+            "Project overview",
+            "Research session 21, artifact 5",
+            "Research session 21, artifact 3"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C3",
+          "kind": "Established",
+          "labels": [
+            "Research session 21, artifact 2",
+            "Research session 21, artifact 5",
+            "Research session 21, artifact 1"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C4",
+          "kind": "Established",
+          "labels": [
+            "Research session 21, artifact 2"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C5",
+          "kind": "Conjecture",
+          "labels": [
+            "Research session 21, artifact 4"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C6",
+          "kind": "Established",
+          "labels": [
+            "Research session 21, artifact 4"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C7",
+          "kind": "Limitation",
+          "labels": [
+            "Research session 21, artifact 5",
+            "Research session 21"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C8",
+          "kind": "Limitation",
+          "labels": [
+            "Research session 21, artifact 2"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C9",
+          "kind": "Unresolved",
+          "labels": [
+            "Research session 21, artifact 3"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C10",
+          "kind": "Unresolved",
+          "labels": [
+            "Project overview",
+            "Research session 21, artifact 1",
+            "Research session 21, artifact 3",
+            "Research session 21, artifact 4"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C11",
+          "kind": "Unresolved",
+          "labels": [
+            "Research session 21, artifact 1",
+            "Research session 21, artifact 4",
+            "Research session 21, artifact 5"
+          ],
+          "specificity": "artifact_or_step"
+        },
+        {
+          "id": "C12",
+          "kind": "Limitation",
+          "labels": [
+            "Research session 21, artifact 5",
+            "Research session 21"
+          ],
+          "specificity": "artifact_or_step"
+        }
+      ]
+    }
+  }
+}

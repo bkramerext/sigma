@@ -1,0 +1,22 @@
+volumes:
+  sigma-state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SIGMA_STATE_DISK_MOUNT:?set mounted persistent state disk}/auth
+
+services:
+  edge:
+    environment:
+      SIGMA_CADDY_SCHEME: http
+      SIGMA_CADDY_UPSTREAM_SCHEME: https
+    ports: !override
+      - "127.0.0.1:18080:80/tcp"
+  backend:
+    environment:
+      SIGMA_STORAGE_BACKEND: persistent_disk
+      SIGMA_MEMORY_REQUIRE_METRICS: "true"
+      SIGMA_STORAGE_ROOT: /var/lib/sigma-auth
+      SIGMA_CLOUD_AUTH_HOME: /var/lib/sigma-auth
+      SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces

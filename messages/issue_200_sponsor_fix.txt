@@ -1,0 +1,85 @@
+Issue #200: hosted model discovery and explicit ChatGPT sponsor
+
+Owner: this ChatGPT/Codex session, directly assigned by Brian.
+Branch: fix/200-hosted-chatgpt-sponsor
+Base: main e62d808c78573dc2e6289fcbf4b461a2ad739c28
+
+Authenticated production evidence: Google admin access succeeded as the approved
+zetacontinuation account; Home returned HTTP 403 "AI provider authorization is
+unavailable in cloud mode." The source confirms middleware blanket-blocked
+/api/ai/ even though the UI requests model discovery there.
+
+Changes:
+- Allow only authenticated GET connection/model checks through that guard.
+  Hosted OAuth, account selection, disconnect and mutations remain denied.
+- Explicit ChatGPT sponsor configuration, isolated persistent credential store,
+  pinned verified email, protected VM importer, existing serialized refresh.
+  No personal/local credential reuse and no API-key fallback in ChatGPT mode.
+- Non-sensitive status guidance and precise provisioning/deployment notes.
+- Shared explicit-provider validation now gates research, proposals, agentic
+  generation, paper generation/revision and text conversion. API request bindings
+  and readiness recognize the provisioned sponsor identity.
+- ChatGPT cloud research records retain estimated-cost accounting and durable
+  cloud budget/concurrency/token guards; local ChatGPT behavior is unchanged.
+
+Verification:
+- tests/cloud_sponsor.py: 8 passed. Private import/atomic rejection, selected
+  registration only, VM host ID retention, verified email/scope checks,
+  sponsor-token catalog discovery, no identity/token in public response,
+  rotating-token refresh and terminal-revocation/no-fallback paths.
+- tests/cloud_auth.py: 24 passed, including authenticated catalog access,
+  unauthenticated denial and blocked hosted auth mutations.
+- tests/cloud_research_sponsored_api.py: passed in BOTH API-key and ChatGPT SSE
+  modes, including six-call sessions, saved outcomes/exports, no personal key,
+  durable budgets, failure holds, idempotency and cross-workspace isolation.
+- tests/gce_host.py: 21 passed, including explicit provider/email validation.
+- Ruff check and format passed; Pyright 0 diagnostics; frontend build passed.
+- Full ./sigma test attempted with proxy variables removed for localhost tests.
+  Two AF_UNIX tests cannot create sockets in this environment. Both failures
+  reproduced on unchanged main e62d808 (instance_ownership.py, ui_registry.py).
+- Real Chrome for this branch: UNVERIFIED. Browser installation download failed.
+  The authenticated production observation above is pre-fix browser evidence.
+
+No production deployment, existing credential access/transfer, paid calls,
+plan-consuming inference, emails, or safety/budget bypasses occurred.
+
+UNVERIFIED: protected sponsor authorization/provisioning on GCE, deployed
+catalog success, actual ChatGPT plan inference, #201/#202 original-project
+acceptance. The new SIGMA account has no Recent projects. Keep #200 open until
+hosted acceptance; this PR must not auto-close #201/#202.
+
+## Reconciliation with current main (2026-10-26)
+
+Validated code head: aea3365434a3c5fb708749724c132d303649815b
+Merged main: 6a607a488106f9c9233336eb940f0458024e527b
+Merge commit on PR: f9a56ea47919bc0a47f8e9883994bfe2491f1f29
+
+The only textual conflict was the concurrent append to docs/STATUS.md. Both
+#200 sponsor evidence and main's #228 sponsorship-allowance evidence were
+retained. The merged Google authentication code preserves the main invitation
+and guest flows and the #200 read-only model access guard; hosted personal
+ChatGPT credential selection remains out of scope for Green's T88.
+
+Current-main regressions encountered during verification were reconciled without
+changing guest behavior: the launcher test now asserts main's guest-by-default
+configuration; pre-existing Ruff formatting and Gmail fixture lint/type errors
+were corrected. Gmail tests pass and the error remains sanitized.
+
+Focused tests: cloud sponsor 8/8, cloud auth 28/28, GCE host 21/21, Gmail 3/3,
+and hosted sponsored API fixtures passed in API-key and ChatGPT streaming modes.
+Frontend typecheck and production build passed (existing chunk-size advisory).
+Ruff and formatting passed; Pyright reported 0 diagnostics. No real provider
+calls, paid work, production provisioning, or user credential access occurred.
+
+GitHub real Chromium acceptance passed for T200 model availability and T92
+Recent Projects on the validated code head. Research Outcome acceptance passed
+on the merge tree before the later launcher-test/format-only corrections.
+The local full suite was run; this execution environment denies AF_UNIX socket
+creation, affecting instance_ownership.py and ui_registry.py. Both failures
+were reproduced on unchanged main in this environment. GitHub SIGMA verification
+run 40399333103 passed on the validated code head, including the full suite.
+The final handoff-only commit is the PR head shown by GitHub and does not alter
+the validated code tree.
+
+Hosted sponsor OAuth provisioning, deployed catalog verification and real plan
+inference remain UNVERIFIED. No merge, deployment, or ticket closure is claimed.

@@ -1,0 +1,83 @@
+T98 Red cloud-deployment checkpoint — current-main readiness
+=============================================================
+
+Branch: red/t98-cloud-readiness-20261025
+Base inspected: origin/main at f76d834 (2026-10-25)
+Scope: highest-priority unblocked deployment readiness work; no GCP provisioning,
+DNS writes, OAuth changes, secrets, or live inference.
+
+Disposition
+-----------
+
+The deployment scaffolding and T98 host-readiness tooling are already on current
+main (including PR #111). The T99 Python/Sage/TeX runtime and sponsored
+non-session API paths are also present. This checkpoint records current
+verification and the remaining live-deployment gates; it does not claim that
+SIGMA is deployed or launch-ready. No implementation change was needed in this
+iteration.
+
+Checks actually run
+-------------------
+
+- `./sigma setup` — passed in the clean current-main worktree.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — passed all
+  scenarios, Ruff, formatting, Pyright, frontend typecheck and production
+  build. This includes `tests/gce_host.py`, deployment package, workspace
+  isolation/backup, sponsored inference and Python/Sage API checks. These are
+  local/fake-provider checks, not hosted service evidence.
+- `DOCKER_CONFIG=/tmp/sigma-red-t98-docker-config
+  DOCKER_HOST=unix:///Users/admin/.colima/default/docker.sock
+  ./deploy/validate-persistent-local.sh` — passed: built the backend image;
+  hosted-mode auth readiness and persistent auth SQLite survived backend restart
+  and container recreation. Used disposable local volume, fixture-only Google
+  configuration; no OAuth exchange or provider requests. This was Docker
+  Desktop/Colima, not the dedicated production rootless daemon.
+- `./deploy/validate-local.sh` — blocked before build/start because Docker
+  Compose v2 is absent (`docker: unknown command: docker compose`), confirmed
+  with the existing Colima context. The packaged Chrome/Caddy matrix did not
+  run.
+- `python3 deploy/gce_preflight.py --json` — correctly reported BLOCKED on this
+  macOS 14.6 ARM64 host because Ubuntu/Linux host identity is unavailable.
+- Read-only hosted URL check: DNS resolved `sigma-research.duckdns.org` to
+  `50.47.237.240`; HTTP port 80 returned `406 Not Acceptable`; HTTPS port 443
+  refused the connection. Neither response verifies the SIGMA app. No login or
+  state-changing request was made.
+- `gcloud` is not installed in this environment and no GCP integration tool is
+  available. No cloud resources, billing settings, OAuth config, DNS records,
+  cloud secrets, or paid services were touched.
+
+Required owner actions / live gates
+-----------------------------------
+
+1. Provide an authorized operator path to the selected GCP project (project ID
+   and authenticated gcloud/console access), confirm the trial/billing state,
+   and approve the exact GCE VM, retained state disk, static IPv4, VPC/firewall,
+   service account/IAM, and Secret Manager resources with an explicit spend
+   ceiling. The existing trial allowance is not a billing cap.
+2. Confirm the approved deployment budget limits and backup/restore mechanism,
+   including any separately billed snapshot or backup storage. Do not silently
+   skip actual restore testing.
+3. Configure the production Google OAuth web client for
+   `https://sigma-research.duckdns.org` and
+   `https://sigma-research.duckdns.org/api/cloud-auth/callback`; place the
+   client secret in the approved secret store. Confirm initial administrator
+   and contact addresses, consent/test-user policy, and supply a second
+   non-admin Google test account for real isolation/revocation checks.
+4. Provide DuckDNS operator access so its A record can be pointed to the
+   reserved static IP after creation. Approve public ingress on TCP 80/443 only
+   when DNS, OAuth and secret prerequisites are ready.
+5. Provision the approved server-side sponsored inference credential in
+   Secret Manager and confirm the maximum live test spend and per-user/global
+   research ceilings. No key should be sent in chat or committed. A real paid
+   inference test needs explicit live-call consent.
+6. Make the authorized Ubuntu 24.04 amd64 host available for the rootless
+   Docker, disk mount, health/recovery, Python/Sage isolation and full hosted
+   workflow checks. Current local Colima evidence does not satisfy these gates.
+
+Once these actions are available, Red can continue with provisioning, public
+HTTPS/OAuth, durable workspace/research exports, health/recovery/rollback, and
+real hosted smoke tests. Blue owns cloud research-engine dependencies and the
+T99 inference implementation; this checkpoint makes no request to change
+Blue-owned code.
+
+No artifacts were fabricated. No PR was merged.

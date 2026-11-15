@@ -1,0 +1,24 @@
+{
+  "status": "failed_no_paper_published",
+  "project_id": "e8211dc4-b70f-49d1-a514-671f44ed7e8c",
+  "session_id": "71bc9990-fab0-4c1a-b03c-1d6daa976a3e",
+  "source_archive_sha256": "f879967a078e2154bb704e8e2429f5300eba0b7ef49a36ce390f492b5494bc1e",
+  "frozen_snapshot_sha256": "9b033b73625eb28e37cebc0e76b5aac3944309079008f06e3a5f87c0b59d74bd",
+  "authoring_commit": "a8a4891fb21352d8467594e976224426f80132ae",
+  "provider": {
+    "mode": "chatgpt",
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "started_at": "2026-11-02T06:16:53.998395+00:00",
+  "elapsed_seconds": 529,
+  "provider_calls": 8,
+  "stage": "sections",
+  "stage_progress": {
+    "current": 3,
+    "total": 7
+  },
+  "failure_reason": "A table in A local stability gate for nonlinear scalar sources cites claims outside its section outline",
+  "checkpoint_run_id": "20d06d47a1924b9086b516a482cdb33d",
+  "checkpoint_updated_at": "2026-11-02T06:25:44.128772+00:00"
+}

@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="413" viewBox="0 0 1024 413" role="img" aria-labelledby="title desc">
+<title id="title">SIGMA workflow</title>
+<desc id="desc">Project, Strategies, Research, then a long curved arrow to Refine, Optional paper, Review/export. Both rows flow left to right.</desc>
+<defs>
+<linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#06111e"/><stop offset=".5" stop-color="#050c16"/><stop offset="1" stop-color="#080e18"/></linearGradient>
+<linearGradient id="burnished" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#34241f"/><stop offset=".45" stop-color="#180f12"/><stop offset=".9" stop-color="#23151a"/><stop offset="1" stop-color="#3b231c"/></linearGradient>
+<linearGradient id="copper" x1="0" y1="0" x2="1" y2=".35"><stop stop-color="#b65d27"/><stop offset=".17" stop-color="#ffb768"/><stop offset=".4" stop-color="#e48d42"/><stop offset=".71" stop-color="#ffce86"/><stop offset="1" stop-color="#b45c2c"/></linearGradient>
+<linearGradient id="arrow" x1="0" y1="0" x2=".95" y2=".6"><stop stop-color="#cf7339"/><stop offset=".49" stop-color="#ffb86c"/><stop offset="1" stop-color="#ffcc85"/></linearGradient>
+<linearGradient id="brush" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#29506d" stop-opacity="0"/><stop offset=".35" stop-color="#30628e" stop-opacity=".33"/><stop offset=".7" stop-color="#dd7a37" stop-opacity=".8"/><stop offset="1" stop-color="#ffc47a" stop-opacity=".8"/></linearGradient>
+<radialGradient id="brilliance"><stop stop-color="#fff7c7" stop-opacity=".85"/><stop offset=".2" stop-color="#ffb85e" stop-opacity=".6"/><stop offset="1" stop-color="#ff8c32" stop-opacity="0"/></radialGradient>
+<filter id="copperGlow" x="-.1" y="-.25" width="1.2" height="1.5"><feGaussianBlur stdDeviation="2.8"/></filter>
+<marker id="tip" markerWidth="8" markerHeight="8" refX="7.3" refY="4" orient="auto" viewBox="0 0 8 8"><path d="M0 0L8 4 0 8z" fill="#ffb76d"/></marker>
+</defs>
+<rect width="1024" height="413" rx="11" fill="url(#background)"/>
+<g fill="none" stroke-linecap="round">
+<path d="M665 -16 Q788 3 849 8 T1050 87" stroke="url(#brush)" stroke-width="2" opacity=".55"/>
+<path d="M772 -26 Q875 26 930 11 T1032 54" stroke="url(#brush)" stroke-width="1.8" opacity=".70"/>
+<path d="M830 -27 Q955 38 1041 45" stroke="#e58b42" stroke-width="1.4" opacity=".62"/>
+<path d="M784 -25 Q898 50 1051 36" stroke="#19446b" stroke-width="1.3" opacity=".6"/>
+<path d="M-42 325 Q51 382 167 434" stroke="url(#brush)" stroke-width="2.2" opacity=".8"/>
+<path d="M-30 343 Q76 411 199 433" stroke="#e69d56" stroke-width="1.6" opacity=".7"/>
+<path d="M-16 373 Q49 401 157 434" stroke="#1f5884" stroke-width="1.5" opacity=".65"/>
+<path d="M-30 386 Q83 421 211 443" stroke="#ffb063" stroke-width="1.1" opacity=".55"/>
+</g>
+<circle cx="957" cy="20" r="31" fill="url(#brilliance)" opacity=".5"/>
+<circle cx="75" cy="395" r="29" fill="url(#brilliance)" opacity=".42"/>
+<g fill="none" stroke="url(#arrow)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#tip)">
+<path d="M291 94H344"/>
+<path d="M600 94H653"/>
+<path d="M909 94H936 Q968 94 968 126V163 Q968 205 927 205H82 Q20 205 20 267V313 Q20 315 35 315"/>
+<path d="M291 316H344"/>
+<path d="M600 316H653"/>
+</g>
+<g><title>Project — Define the research question and scope.</title>
+<rect x="46" y="48" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="46" y="48" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M60 50 H278" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M62 138 H276" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="168.5" y="104" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Project</text>
+</g>
+<g><title>Strategies — Develop and compare approaches.</title>
+<rect x="355" y="48" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="355" y="48" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M369 50 H587" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M371 138 H585" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="477.5" y="104" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Strategies</text>
+</g>
+<g><title>Research — Investigator and Skeptic examine each strategy.</title>
+<rect x="664" y="48" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="664" y="48" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M678 50 H896" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M680 138 H894" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="786.5" y="104" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Research</text>
+</g>
+<g><title>Refine — Review findings and revise the approach.</title>
+<rect x="46" y="270" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="46" y="270" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M60 272 H278" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M62 360 H276" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="168.5" y="326" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Refine</text>
+</g>
+<g><title>Optional paper — Draft a paper from saved research.</title>
+<rect x="355" y="270" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="355" y="270" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M369 272 H587" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M371 360 H585" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="477.5" y="326" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Optional paper</text>
+</g>
+<g><title>Review/export — Inspect results and export for review.</title>
+<rect x="664" y="270" width="245" height="92" rx="11" fill="none" stroke="#b86a38" stroke-width="5" opacity=".40" filter="url(#copperGlow)"/>
+<rect x="664" y="270" width="245" height="92" rx="11" fill="url(#burnished)" stroke="url(#copper)" stroke-width="2.1"/>
+<path d="M678 272 H896" stroke="#ffe0a7" stroke-width="1" opacity=".43"/>
+<path d="M680 360 H894" stroke="#f9a45b" stroke-width="1" opacity=".56"/>
+<text x="786.5" y="326" fill="#f0cba3" font-family="Georgia,serif" font-size="26" text-anchor="middle">Review/export</text>
+</g>
+</svg>

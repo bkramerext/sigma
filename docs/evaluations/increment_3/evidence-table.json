@@ -1,0 +1,128 @@
+{
+  "completed_or_interrupted_steps_matched_to_transport": 21,
+  "all_five_original_sessions_export_equal": true,
+  "rows": [
+    {
+      "project": "nonconsecutive-subset-sums",
+      "case": "evidence_off",
+      "session_id": "eae3bc83-ff07-4325-89ff-6ae635d67f7b",
+      "approved_strategy_id": "cfeb7e6f-c17a-42a6-87ed-f4e45a09c139",
+      "prior_artifact_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b"
+      ],
+      "selected_call_step_id": "39bfc1b8-be56-479d-bd00-c7173d0de24c",
+      "request_body_sha256": "a4638a591e432f2d286e4d011f2c08ffe9431a2a70fcb33b70aa2472d465a9c1",
+      "dispatched_question": "Build the residue and last-bit 6 by 6 transition baseline and check n=0,1,2 boundary vectors before choosing a spectral reduction.",
+      "new_artifact_id": "dfdcc5e8-e4fa-4ef1-ba3d-7e308fd7665f",
+      "calls_used": 4,
+      "status": "ended",
+      "remaining_obligations": [
+        "Build the residue and last-bit 6 by 6 transition baseline and check n=0,1,2 boundary vectors before choosing a spectral reduction.",
+        "The short recurrence is locally refuted (a5=5, a4+a2=4); a12=128 is a finite count, not a proof of the candidate order-12 recurrence or 1/3 limit. The k squared normalization correction is recorded, not new work."
+      ]
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "case": "evidence_on",
+      "session_id": "d6e51a2f-5501-4813-9eb4-7805e9106a63",
+      "approved_strategy_id": "b2c11cc2-e91c-4368-b767-d322e80aabef",
+      "prior_artifact_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "ccc1045f-479d-4018-b8ed-42a60b94e567",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "selected_call_step_id": "992698f1-dd89-4eb8-bb36-c0cb9623467e",
+      "request_body_sha256": "f219e8e40525ff11ce661ed8010094ed8605478e49f412bdc181851caddf5fb5",
+      "dispatched_question": "Derive the three-phase product of weighted 2 by 2 matrices at cube roots; verify the n=0,1,2 boundary vectors. Do not infer the global recurrence or limit from finite checks.",
+      "new_artifact_id": "9a4f4e0f-bd64-4f73-b20f-59806d69b6fc",
+      "calls_used": 4,
+      "status": "ended",
+      "remaining_obligations": [
+        "Derive the three-phase product of weighted 2 by 2 matrices at cube roots; verify the n=0,1,2 boundary vectors. Do not infer the global recurrence or limit from finite checks.",
+        "The short recurrence is locally refuted (a5=5, a4+a2=4); a12=128 is a finite count, not a proof of the candidate order-12 recurrence or 1/3 limit. The k squared normalization correction is recorded, not new work."
+      ]
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "case": "negative_transfer",
+      "session_id": "d4c4b994-f9ff-4319-a05b-b976a01c0e62",
+      "approved_strategy_id": "3d4cc9f5-5bb3-49c7-a9c1-6216ef7dae79",
+      "prior_artifact_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "ccc1045f-479d-4018-b8ed-42a60b94e567",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "selected_call_step_id": "d89acb8b-0251-4358-98cc-959462e592c6",
+      "request_body_sha256": "5716aa58293f9ce1933148435ab384ace34a116afda61783edbfbe3cef25768a",
+      "dispatched_question": "Derive the three-phase product of weighted 2 by 2 matrices at cube roots; verify the n=0,1,2 boundary vectors. Do not infer the global recurrence or limit from finite checks.",
+      "new_artifact_id": "d4aa124d-f59a-497a-ae37-1b170c2961fa",
+      "calls_used": 4,
+      "status": "ended",
+      "remaining_obligations": [
+        "Derive the three-phase product of weighted 2 by 2 matrices at cube roots; verify the n=0,1,2 boundary vectors. Do not infer the global recurrence or limit from finite checks.",
+        "The short recurrence is locally refuted (a5=5, a4+a2=4); a12=128 is a finite count, not a proof of the candidate order-12 recurrence or 1/3 limit. The k squared normalization correction is recorded, not new work."
+      ]
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "case": "stop_reload_restart",
+      "session_id": "63c41856-13d8-43fc-b4a1-84e51d72b6e6",
+      "approved_strategy_id": "fadc42b3-a5d8-403c-a7f9-945797fbdf0f",
+      "prior_artifact_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "ccc1045f-479d-4018-b8ed-42a60b94e567",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "selected_call_step_id": "43ba4c0f-406e-46ec-bcd4-2da02007d2e6",
+      "request_body_sha256": "81dc04cbff145e9da2e11e64b25046e9c8a4addb86d1fe3dfaf620eaf07046e2",
+      "dispatched_question": "Derive the exact three-phase matrix product and verify n=0,1,2 boundary vectors. Keep the global order-12 recurrence and limiting density open.",
+      "new_artifact_id": "06e018fe-b534-4aab-a0c5-2d07e5a72d04",
+      "calls_used": 3,
+      "status": "ended",
+      "remaining_obligations": [
+        "Derive the three-phase product of weighted 2 by 2 matrices at cube roots; verify the n=0,1,2 boundary vectors. Do not infer the global recurrence or limit from finite checks.",
+        "The short recurrence is locally refuted (a5=5, a4+a2=4); a12=128 is a finite count, not a proof of the candidate order-12 recurrence or 1/3 limit. The k squared normalization correction is recorded, not new work."
+      ]
+    },
+    {
+      "project": "riemann-hypothesis-research",
+      "case": "evaluator_injection",
+      "session_id": "fb5852e7-80b6-448d-a5e9-297c25dcea8e",
+      "approved_strategy_id": "f5d1e449-55f0-4295-90d3-82d925faead8",
+      "prior_artifact_ids": [],
+      "selected_call_step_id": "f951870c-83c5-42be-8041-12e0119e6436",
+      "request_body_sha256": "f793c4a28604dcaa6fa60f534d2a7b74e372415830e9aefaa0286285e6d64454",
+      "dispatched_question": "Advance this strategy with one specific claim, lemma, calculation, counterexample candidate, or discriminating test.",
+      "new_artifact_id": "e3a01b7c-3731-4810-834d-7a06eb2d215c",
+      "calls_used": 2,
+      "status": "ended",
+      "remaining_obligations": [
+        "Separate invariance of a zero set under reflection from pointwise fixation; test the inference on an abstract reflected pair. This is not an RH proof.",
+        "Reflection invariance of a set does not entail pointwise fixation. The stated inference lacks that implication; RH is not established."
+      ]
+    },
+    {
+      "project": "riemann-hypothesis-research",
+      "case": "approved_followup",
+      "session_id": "64ad9713-295c-46a6-9ce3-82290ab507b9",
+      "approved_strategy_id": "b62c1232-84ae-491b-879c-e3947ceaa2ee",
+      "prior_artifact_ids": [
+        "e3a01b7c-3731-4810-834d-7a06eb2d215c"
+      ],
+      "selected_call_step_id": "11de16f6-daa4-4bf6-b514-cca0e31b3f28",
+      "request_body_sha256": "f0487dbec383a6aa4a5ff4b4a15ca8d1f9eaa9b3c541887c56bd1fdd5860c6b9",
+      "dispatched_question": "Separate invariance of a zero set under reflection from pointwise fixation; test the inference on an abstract reflected pair. This is not an RH proof.",
+      "new_artifact_id": "70873776-d542-4f76-adb4-bf68b097e70a",
+      "calls_used": 4,
+      "status": "ended",
+      "remaining_obligations": [
+        "Separate invariance of a zero set under reflection from pointwise fixation; test the inference on an abstract reflected pair. This is not an RH proof.",
+        "Reflection invariance of a set does not entail pointwise fixation. The stated inference lacks that implication; RH is not established."
+      ]
+    }
+  ]
+}

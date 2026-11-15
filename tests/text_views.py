@@ -1,0 +1,1487 @@
+"""A15 offline representation, conversion and safe source-edit scenarios."""
+
+import asyncio
+import json
+import subprocess
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
+
+import httpx
+from fastapi.testclient import TestClient
+
+from sigma.api import app
+from sigma.projects import (
+    ProjectError,
+    create_strategy,
+    initialize_project,
+    inspect_project,
+    remove_strategy,
+)
+from sigma.text_conversion import (
+    FORMAT_EFFORT,
+    FORMAT_MODEL,
+    MAX_CONVERSION_RESPONSE_BYTES,
+    _unwrap_redundant_numeric_math,
+    convert_text,
+)
+from sigma.text_views import digest, inspect_text, save_source
+
+SOURCE = Path("samples/jesus-cannabis/project.json")
+MODEL = FORMAT_MODEL
+REAL_CLIENT = httpx.AsyncClient
+
+
+def provider_output(body: str, model: str = MODEL):
+    return {
+        "status": "completed",
+        "model": model,
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {"type": "output_text", "text": json.dumps({"body": body, "warnings": []})}
+                ],
+            }
+        ],
+    }
+
+
+async def main_async(root: Path):
+    source_before = SOURCE.read_bytes()
+    path = root / "sample.sigma"
+    path.mkdir()
+    (path / "project.json").write_bytes(source_before)
+    project_before = (path / "project.json").read_bytes()
+    conclusion_path = root / "conclusion-session.sigma"
+    initialize_project(conclusion_path, "Conclusion conversion", "Review a saved result.")
+    conclusion_source = (
+        "Preliminary finding\n\nFor the meromorphic continuation "
+        "zeta(s)=s/(s-1)-s integral_1^infinity {x}^(-s-1) dx on Re(s)>0, "
+        "the argument gives a conditional zero-free region. This does not prove RH.\n\n"
+        "The investigation is paused; this is not a completed conclusion."
+    )
+    conclusion_markdown = (
+        "### Preliminary finding\n\n"
+        "For the meromorphic continuation\n\n"
+        "$$\\zeta(s)=\\frac{s}{s-1}-s\\int_1^\\infty\\{x\\}s^{-s-1}\\,dx$$\n\n"
+        "on $\\operatorname{Re}(s)>0$, the argument gives a conditional zero-free region. "
+        "This does not prove RH.\n\n"
+        "The investigation is paused; this is not a completed conclusion."
+    )
+    reasoning_source = (
+        "The proposed recurrence follows only under the bounded assumption. "
+        "The skeptic has not independently checked the base case."
+    )
+    reasoning_markdown = (
+        "The proposed recurrence follows only under the **bounded assumption**. "
+        "The skeptic has not independently checked the base case."
+    )
+    conclusion_session_id = str(uuid4())
+    session_dir = conclusion_path / "research-sessions"
+    session_dir.mkdir()
+    session_path = session_dir / f"{conclusion_session_id}.json"
+    session_path.write_text(
+        json.dumps(
+            {
+                "id": conclusion_session_id,
+                "project_id": inspect_project(conclusion_path).project.id,
+                "project_path": str(conclusion_path.resolve()),
+                "outcome": {
+                    "conclusion": conclusion_source,
+                    "solution_review": {"argument_summary": reasoning_source},
+                },
+                "artifacts": [{"method": reasoning_source}],
+                "strategy_assessments": [{"rationale": reasoning_source}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    session_before_conversion = session_path.read_bytes()
+    plain = inspect_text(path, "project")
+    assert (
+        plain["source_format"] == "plain"
+        and plain["plain"]["body"] == inspect_project(path).project.problem
+    )
+    assert plain["markdown"] is None and not (path / "text-representations.json").exists()
+    markdown = (
+        plain["plain"]["body"]
+        .replace("a_n/F_{n+2}", r"$\frac{a_n}{F_{n+2}}$")
+        .replace("n >= 0", r"$n \ge 0$")
+        .replace("a_12", "$a_{12}$")
+        .replace("a_n", "$a_n$")
+    )
+    calls = []
+
+    async def handler(request):
+        body = json.loads(request.content)
+        context = json.loads(body["input"])
+        calls.append(context)
+        assert body["model"] == MODEL and body["reasoning"]["effort"] == FORMAT_EFFORT
+        assert "good/better" in body["instructions"]
+        assert "1/2 the people in this room" in body["instructions"]
+        wire_schema = body["text"]["format"]["schema"]
+        assert wire_schema == {
+            "type": "object",
+            "properties": {
+                "body": {"type": "string"},
+                "warnings": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["body", "warnings"],
+            "additionalProperties": False,
+        }
+        if context["text"] == reasoning_source:
+            output = reasoning_markdown
+        elif context["text"] == conclusion_source:
+            assert context["target_format"] == "markdown"
+            assert "standalone display-math blocks" in body["instructions"]
+            output = conclusion_markdown
+        else:
+            assert context["text"] == inspect_project(path).project.problem
+            output = markdown if context["target_format"] == "markdown" else plain["plain"]["body"]
+        return httpx.Response(200, json=provider_output(output))
+
+    def client(**kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
+
+    binding = {"identity": "fixture-account", "mode": "api_key", "token": "fixture-only"}
+    config = {
+        "available": True,
+        "model": MODEL,
+        "reasoning_effort": FORMAT_EFFORT,
+        "message": "ready",
+    }
+
+    async def cheap_configuration(**kwargs):
+        assert kwargs["frozen_model"] == FORMAT_MODEL
+        assert kwargs["frozen_effort"] == FORMAT_EFFORT
+        return config
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch("sigma.text_conversion.httpx.AsyncClient", side_effect=client),
+    ):
+        converted = await convert_text(
+            str(path), "project", "markdown", expected_digest=plain["source_digest"]
+        )
+        assert converted["markdown"]["current"] and converted["markdown"]["kind"] == "ai_derived"
+        assert converted["plain"]["body"] == plain["plain"]["body"]
+        assert (path / "project.json").read_bytes() == project_before
+        assert SOURCE.read_bytes() == source_before
+        assert len(calls) == 1
+        assert (await convert_text(str(path), "project", "markdown"))["markdown"]["current"]
+        assert len(calls) == 1
+        assert inspect_text(path, "project")["markdown"]["body"] == markdown
+        assert len(calls) == 1
+
+        edited = markdown + "\n\nKeep the stated proof obligations."
+        save_source(path, "project", edited, "markdown", plain["source_digest"])
+        after = inspect_text(path, "project")
+        assert after["source_format"] == "markdown" and after["markdown"]["body"] == edited
+        assert after["plain"] and not after["plain"]["current"]
+        assert after["plain"]["body"] == plain["plain"]["body"]
+        assert inspect_project(path).project.problem == edited
+        assert inspect_project(path).project.schema_version == 13
+        assert not (path / "project.v5.json").exists()
+        assert inspect_project(path).project.desired_outcomes
+        assert inspect_project(path).project.paper_requirements
+        assert inspect_text(path, "project")["source_format"] == "markdown"
+        try:
+            save_source(path, "project", "stale", "plain", plain["source_digest"])
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("Stale source edit succeeded")
+        reverse = await convert_text(str(path), "project", "plain", expected_digest=digest(edited))
+        assert reverse["plain"]["current"] and "\\frac" not in reverse["plain"]["body"]
+        assert len(calls) == 2
+        assert (await convert_text(str(path), "project", "plain"))["plain"]["current"]
+        assert len(calls) == 2
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch("sigma.text_conversion.httpx.AsyncClient", side_effect=client),
+    ):
+        converted_conclusion = await convert_text(
+            str(conclusion_path),
+            "research-conclusion",
+            "markdown",
+            expected_digest=digest(conclusion_source),
+            session_id=conclusion_session_id,
+        )
+        assert converted_conclusion["body"] == conclusion_markdown
+        assert converted_conclusion["source_digest"] == digest(conclusion_source)
+        assert converted_conclusion["provenance"]["provider"] == "openai"
+        assert session_path.read_bytes() == session_before_conversion
+        assert not (conclusion_path / "text-representations.json").exists()
+
+        with TestClient(app) as api:
+            response = api.post(
+                "/api/projects/text/convert",
+                json={
+                    "path": str(conclusion_path),
+                    "scope": "research-conclusion",
+                    "session_id": conclusion_session_id,
+                    "target": "markdown",
+                    "expected_digest": digest(conclusion_source),
+                    "expected_binding": binding["identity"],
+                },
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["body"] == conclusion_markdown
+        assert session_path.read_bytes() == session_before_conversion
+        conversion = await convert_text(
+            str(conclusion_path),
+            "research-block",
+            "markdown",
+            expected_digest=digest(reasoning_source),
+            session_id=conclusion_session_id,
+            field_path="outcome.solution_review.argument_summary",
+        )
+        assert conversion["body"] == reasoning_markdown
+        assert conversion["source_digest"] == digest(reasoning_source)
+        assert session_path.read_bytes() == session_before_conversion
+        assert not (conclusion_path / "text-representations.json").exists()
+
+        with TestClient(app) as api:
+            conversion_response = api.post(
+                "/api/projects/text/convert",
+                json={
+                    "path": str(conclusion_path),
+                    "scope": "research-block",
+                    "session_id": conclusion_session_id,
+                    "field_path": "artifacts.0.method",
+                    "target": "markdown",
+                    "expected_digest": digest(reasoning_source),
+                    "expected_binding": binding["identity"],
+                },
+            )
+            blocked = api.post(
+                "/api/projects/text/convert",
+                json={
+                    "path": str(conclusion_path),
+                    "scope": "research-block",
+                    "session_id": conclusion_session_id,
+                    "field_path": "outcome.metrics.operational",
+                    "target": "markdown",
+                    "expected_digest": digest(reasoning_source),
+                    "expected_binding": binding["identity"],
+                },
+            )
+        assert conversion_response.status_code == 200, conversion_response.text
+        assert conversion_response.json()["body"] == reasoning_markdown
+        assert blocked.status_code != 200
+        assert session_path.read_bytes() == session_before_conversion
+        print("PASS immutable saved research text Markdown, per-block API and metrics exclusion")
+
+    # Regression: elementary integer equalities are prose; actual TeX is kept.
+    moonshine_source = (
+        "Investigate the construction of the moonshine module V♮ from the Leech lattice.\n\n"
+        "Establish why its graded dimension is J(τ) = j(τ) − 744.\n\n"
+        "Derive 196884 = 196883 + 1 and examine higher graded components."
+    )
+    moonshine_path = root / "moonshine-markdown.sigma"
+    initialize_project(moonshine_path, "Moonshine", moonshine_source)
+    generated = moonshine_source.replace("J(τ) = j(τ) − 744", r"$J(\tau) = j(\tau) - 744$").replace(
+        "196884 = 196883 + 1", "$196884 = 196883 + 1$"
+    )
+    expected = generated.replace("$196884 = 196883 + 1$", "196884 = 196883 + 1")
+
+    def moonshine_handler(request):
+        payload = json.loads(request.content)
+        assert "196884 = 196883 + 1" in payload["instructions"]
+        assert json.loads(payload["input"])["text"] == moonshine_source
+        return httpx.Response(200, json=provider_output(generated))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(moonshine_handler), **kwargs
+            ),
+        ),
+    ):
+        moonshine_result = await convert_text(str(moonshine_path), "project", "markdown")
+    assert moonshine_result["markdown"]["body"] == expected
+    assert inspect_text(moonshine_path, "project")["markdown"]["body"] == expected
+    assert inspect_project(moonshine_path).project.problem == moonshine_source
+
+    source_identity = "Keep 196884 = 196883 + 1 and 2 + 2 = 4."
+    assert (
+        _unwrap_redundant_numeric_math(
+            "Keep $196884 = 196883 + 1$ and $2 + 2 = 4$.", source_identity
+        )
+        == source_identity
+    )
+    assert (
+        _unwrap_redundant_numeric_math("$196884 = 196883 + 1$", "$196884 = 196883 + 1$")
+        == "$196884 = 196883 + 1$"
+    )
+    assert (
+        _unwrap_redundant_numeric_math(
+            "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$.",
+            source_identity,
+        )
+        == "Keep $x = 2 + 2$ and $$196884 = 196883 + 1$$."
+    )
+    code_sample = (
+        "`$196884 = 196883 + 1$`\n~~~text\n$196884 = 196883 + 1$\n~~~\n$196884 = 196883 + 1$"
+    )
+    assert _unwrap_redundant_numeric_math(code_sample, source_identity) == (
+        code_sample.rsplit("$196884 = 196883 + 1$", 1)[0] + "196884 = 196883 + 1"
+    )
+    print("PASS moonshine numeric equality stays prose; math and Markdown code preserved")
+
+    # Large strategy descriptions can produce a response envelope above the
+    # smaller proposal limit even though the converted body remains bounded.
+    large_api_path = root / "large-api-conversion.sigma"
+    initialize_project(large_api_path, "Large API conversion", "Review the generated strategy.")
+    long_source = " ".join(["Analyze a_n for n >= 0; preserve every assumption."] * 150)
+    long_markdown = long_source.replace("a_n", "$a_n$").replace("n >= 0", "$n \\ge 0$")
+    long_strategy = create_strategy(
+        large_api_path, "Generated long approach", long_source
+    ).project.strategies[0]
+
+    def large_json_handler(request):
+        raw = provider_output(long_markdown)
+        raw["diagnostic_metadata"] = "x" * 140_000
+        return httpx.Response(200, json=raw)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(large_json_handler), **kwargs
+            ),
+        ),
+    ):
+        large_api_result = await convert_text(
+            str(large_api_path), "strategy", "markdown", long_strategy.id
+        )
+    assert large_api_result["markdown"]["current"]
+    assert large_api_result["markdown"]["body"] == long_markdown
+    assert inspect_project(large_api_path).project.strategies[0].approach == long_source
+    oversized_path = root / "oversized-conversion.sigma"
+    initialize_project(oversized_path, "Oversized conversion", "Review the response bound.")
+
+    def oversized_json_handler(request):
+        raw = provider_output("Review the response bound.")
+        raw["diagnostic_metadata"] = "x" * (MAX_CONVERSION_RESPONSE_BYTES + 100)
+        return httpx.Response(200, json=raw)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(oversized_json_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(oversized_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "response exceeded the limit" in str(exc)
+        else:
+            raise AssertionError("An over-limit provider response was accepted")
+    assert not (oversized_path / "text-representations.json").exists()
+    print("PASS large strategy conversions above 128 KB and the explicit 1 MB response cap")
+
+    # Legacy v1-v6 documents read without writes, and first representation save
+    # only adds the portable companion rather than rewriting project history.
+    for version in range(1, 7):
+        legacy = root / f"legacy{version}.sigma"
+        initialize_project(legacy, "Legacy", "Count a_n for n >= 0")
+        raw = json.loads((legacy / "project.json").read_bytes())
+        raw["schema_version"] = version
+        raw.pop("desired_outcomes", None)
+        raw.pop("paper_requirements", None)
+        raw.pop("show_advanced_outcome_details", None)
+        raw.pop("difficulty", None)
+        if version < 6:
+            raw.pop("ai_model", None)
+            raw.pop("reasoning_effort", None)
+        else:
+            raw["ai_model"] = "gpt-6.1-sol"
+            raw["reasoning_effort"] = "high"
+        if version < 5:
+            raw.pop("active_order", None)
+        if version < 4:
+            raw.pop("research_mode", None)
+            raw.pop("investigation_type", None)
+        if version < 2:
+            raw.pop("strategies", None)
+        (legacy / "project.json").write_text(json.dumps(raw))
+        before = (legacy / "project.json").read_bytes()
+        snapshot = inspect_text(legacy, "project")
+        assert snapshot["plain"]["body"] == "Count a_n for n >= 0"
+        assert (legacy / "project.json").read_bytes() == before
+        with (
+            patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+            patch(
+                "sigma.text_conversion.configuration",
+                new=AsyncMock(side_effect=cheap_configuration),
+            ),
+            patch(
+                "sigma.text_conversion.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(
+                        lambda request: httpx.Response(
+                            200, json=provider_output("Count $a_n$ for $n \\ge 0$")
+                        )
+                    ),
+                    **kwargs,
+                ),
+            ),
+        ):
+            result = await convert_text(str(legacy), "project", "markdown")
+        assert result["markdown"]["current"]
+        assert (legacy / "project.json").read_bytes() == before
+        assert inspect_text(legacy, "project")["markdown"]["current"]
+    print(
+        "PASS v1-v6 read-only legacy access, lazy portable cache, sample source immutability, explicit two-way conversion, stale revision and no cached calls"
+    )
+
+    # A pending conversion must never attach to a later human edit.
+    race = root / "race.sigma"
+    initialize_project(race, "Race", "Count a_n for n >= 0")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def pending_handler(request):
+        started.set()
+        await release.wait()
+        return httpx.Response(200, json=provider_output("Count $a_n$ for $n \\ge 0$"))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(pending_handler), **kwargs
+            ),
+        ),
+    ):
+        pending = asyncio.create_task(convert_text(str(race), "project", "markdown"))
+        await asyncio.wait_for(started.wait(), 2)
+        save_source(
+            race, "project", "Count b_n for n >= 0", "plain", digest("Count a_n for n >= 0")
+        )
+        release.set()
+        try:
+            await pending
+        except ProjectError as exc:
+            assert "Source changed" in str(exc)
+        else:
+            raise AssertionError("Stale conversion was persisted")
+        assert inspect_text(race, "project")["markdown"] is None
+
+    # Markdown formatting is pinned to Cheap/Medium across changes in the user's
+    # independent research Model/Thinking selections.
+    live_path = root / "live-model-thinking.sigma"
+    initialize_project(live_path, "Live model selection", "Count e_n for n >= 0")
+    live_strategy = create_strategy(
+        live_path, "Next selection", "Count f_n for n >= 0"
+    ).project.strategies[0]
+    live_source_before = (live_path / "project.json").read_bytes()
+    active_selection = {"model": "gpt-6-luna", "effort": "low"}
+    request_started = asyncio.Event()
+    allow_response = asyncio.Event()
+    dispatched: list[tuple[str, str]] = []
+
+    async def live_configuration(*, view, context, frozen_model, frozen_effort):
+        assert frozen_model == FORMAT_MODEL and frozen_effort == FORMAT_EFFORT
+        return {**config, "model": frozen_model, "reasoning_effort": frozen_effort}
+
+    async def live_handler(request):
+        payload = json.loads(request.content)
+        dispatched.append((payload["model"], payload["reasoning"]["effort"]))
+        source_text = json.loads(payload["input"])["text"]
+        if len(dispatched) == 1:
+            request_started.set()
+            await allow_response.wait()
+        output = (
+            "Count $e_n$ for $n \\ge 0$" if "e_n" in source_text else "Count $f_n$ for $n \\ge 0$"
+        )
+        return httpx.Response(200, json=provider_output(output, model=payload["model"]))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", side_effect=live_configuration),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(live_handler), **kwargs
+            ),
+        ),
+    ):
+        pending = asyncio.create_task(convert_text(str(live_path), "project", "markdown"))
+        await asyncio.wait_for(request_started.wait(), 2)
+        active_selection.update(model=MODEL, effort="high")
+        allow_response.set()
+        first = await pending
+        assert first["markdown"]["current"]
+        assert first["markdown"]["provenance"] == {
+            "provider": "openai",
+            "model": "gpt-6-luna",
+            "reasoning_effort": "medium",
+        }
+        second = await convert_text(str(live_path), "strategy", "markdown", live_strategy.id)
+        assert second["markdown"]["current"]
+        assert second["markdown"]["provenance"]["model"] == MODEL
+        assert second["markdown"]["provenance"]["reasoning_effort"] == FORMAT_EFFORT
+    assert dispatched == [(MODEL, FORMAT_EFFORT), (MODEL, FORMAT_EFFORT)]
+    assert (live_path / "project.json").read_bytes() == live_source_before
+    print("PASS Markdown formatting is always Cheap/Medium and records fixed provenance")
+
+    # Current Understanding allows only the authoritative, digest-bound narrative.
+    from sigma.research_state import current_understanding
+
+    snapshot = current_understanding(str(live_path))
+    scope_text = snapshot["scope_note"]
+
+    def understanding_handler(request):
+        payload = json.loads(request.content)
+        assert payload["model"] == MODEL
+        assert payload["reasoning"]["effort"] == FORMAT_EFFORT
+        source = json.loads(payload["input"])["text"]
+        assert source == scope_text
+        return httpx.Response(200, json=provider_output(source))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(understanding_handler), **kwargs
+            ),
+        ),
+    ):
+        formatted = await convert_text(
+            str(live_path),
+            "current-understanding",
+            "markdown",
+            expected_digest=digest(scope_text),
+            expected_project_id=inspect_project(live_path).project.id,
+            field_path="scope_note",
+        )
+        assert formatted["body"] == scope_text
+        assert formatted["provenance"]["model"] == FORMAT_MODEL
+        assert formatted["provenance"]["reasoning_effort"] == FORMAT_EFFORT
+        try:
+            await convert_text(
+                str(live_path),
+                "current-understanding",
+                "markdown",
+                expected_digest=digest("stale"),
+                expected_project_id=inspect_project(live_path).project.id,
+                field_path="scope_note",
+            )
+        except ProjectError as exc:
+            assert "changed" in str(exc).lower()
+        else:
+            raise AssertionError("Stale Current Understanding text was formatted")
+        try:
+            await convert_text(
+                str(live_path),
+                "current-understanding",
+                "markdown",
+                expected_digest=digest(scope_text),
+                expected_project_id=inspect_project(live_path).project.id,
+                field_path="project_status",
+            )
+        except ProjectError as exc:
+            assert "cannot be converted" in str(exc)
+        else:
+            raise AssertionError("Operational Current Understanding field was converted")
+    assert (live_path / "project.json").read_bytes() == live_source_before
+    print("PASS Current Understanding scope allowlist, digest and immutability")
+
+    # A cancelled transport releases the run gate, with no companion publication.
+    cancellation = root / "cancel.sigma"
+    initialize_project(cancellation, "Cancel", "Count c_n for n >= 0")
+    started.clear()
+    release.clear()
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(pending_handler), **kwargs
+            ),
+        ),
+    ):
+        pending = asyncio.create_task(convert_text(str(cancellation), "project", "markdown"))
+        await asyncio.wait_for(started.wait(), 2)
+        pending.cancel()
+        try:
+            await pending
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("Cancellation did not interrupt the conversion")
+        assert not (cancellation / "text-representations.json").exists()
+
+    # Failures and changed connection state leave the source untouched.
+    failure_path = root / "failure.sigma"
+    initialize_project(failure_path, "Failure", "Count d_n for n >= 0")
+    before = (failure_path / "project.json").read_bytes()
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration",
+            new=AsyncMock(
+                return_value={**config, "available": False, "message": "Selected model unavailable"}
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(failure_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "unavailable" in str(exc)
+        else:
+            raise AssertionError("Unavailable model was used")
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, json=provider_output("x"))
+                ),
+                **kwargs,
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(failure_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "incomplete" in str(exc)
+        else:
+            raise AssertionError("Truncated conversion was persisted")
+    with (
+        patch(
+            "sigma.text_conversion.auth_context",
+            new=AsyncMock(side_effect=[binding, {**binding, "identity": "other"}]),
+        ),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(
+                        200, json=provider_output("Count $d_n$ for $n \\ge 0$")
+                    )
+                ),
+                **kwargs,
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(failure_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "account/billing" in str(exc)
+        else:
+            raise AssertionError("Changed account conversion was persisted")
+    assert (failure_path / "project.json").read_bytes() == before
+    assert not (failure_path / "text-representations.json").exists()
+
+    timeout_path = root / "timeout.sigma"
+    initialize_project(timeout_path, "Timeout", "Count t_n for n >= 0")
+
+    async def timeout_handler(request):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json=provider_output("Count $t_n$ for $n \\ge 0$"))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch("sigma.text_conversion.CALL_SECONDS", 0.01),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(timeout_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(timeout_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "timed out" in str(exc)
+        else:
+            raise AssertionError("Timed-out conversion was accepted")
+    assert (timeout_path / "project.json").is_file()
+    assert not (timeout_path / "text-representations.json").exists()
+
+    # Markdown conversion must have a real long-running budget rather than the
+    # previous 60-second cutoff. Exercise the same code with a compressed clock
+    # so the regression runs without provider calls or a ten-minute delay.
+    from sigma import text_conversion
+
+    assert text_conversion.CALL_SECONDS >= 600
+    slow_path = root / "slow-conversion.sigma"
+    initialize_project(slow_path, "Slow conversion", "Count t_n for n >= 0")
+
+    async def slower_handler(request):
+        await asyncio.sleep(0.07)
+        return httpx.Response(200, json=provider_output("Count $t_n$ for $n \\ge 0$"))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch("sigma.text_conversion.CALL_SECONDS", 0.3),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(slower_handler), **kwargs
+            ),
+        ),
+    ):
+        converted = await convert_text(str(slow_path), "project", "markdown")
+    assert converted["markdown"]["current"]
+    assert converted["markdown"]["body"] == "Count $t_n$ for $n \\ge 0$"
+
+    malformed = provider_output("unused")
+    malformed["output"][0]["content"][0]["text"] = "{"
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(lambda request: httpx.Response(200, json=malformed)),
+                **kwargs,
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(failure_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "malformed" in str(exc)
+        else:
+            raise AssertionError("Malformed provider output was persisted")
+    assert not (failure_path / "text-representations.json").exists()
+    print(
+        "PASS in-flight source conflict, cancellation and gate release, unavailable model, truncated output and account change preserve source"
+    )
+
+    strategy_path = root / "strategy.sigma"
+    initialize_project(strategy_path, "Strategy", "Analyze a_n")
+    strategy = create_strategy(
+        strategy_path, "Counting route", "Partition a_n by the final digit and check n >= 0"
+    ).project.strategies[0]
+    original_strategy = strategy.approach
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(
+                        200,
+                        json=provider_output(
+                            "Partition $a_n$ by the final digit and check $n \\ge 0$"
+                        ),
+                    )
+                ),
+                **kwargs,
+            ),
+        ),
+    ):
+        approach = await convert_text(str(strategy_path), "strategy", "markdown", strategy.id)
+    assert approach["markdown"]["current"]
+    assert inspect_project(strategy_path).project.strategies[0].approach == original_strategy
+    save_source(
+        strategy_path,
+        "strategy",
+        "Partition $a_n$ into two disjoint cases.",
+        "markdown",
+        digest(original_strategy),
+        strategy.id,
+    )
+    strategy_after = inspect_project(strategy_path).project.strategies[0]
+    assert strategy_after.id == strategy.id and strategy_after.title == strategy.title
+    assert strategy_after.approach == "Partition $a_n$ into two disjoint cases."
+    assert inspect_text(strategy_path, "strategy", strategy.id)["plain"]["current"] is False
+    remove_strategy(strategy_path, strategy.id)
+    assert inspect_text(strategy_path, "project")["plain"]["current"]
+
+    manual_path = root / "manual.sigma"
+    initialize_project(manual_path, "Manual", "Count a_n")
+    save_source(manual_path, "project", "Count $a_n$", "markdown", digest("Count a_n"))
+    manual = inspect_text(manual_path, "project")
+    assert manual["markdown"]["current"] and manual["markdown"]["kind"] == "authored"
+    assert manual["plain"] and not manual["plain"]["current"]
+    assert manual["plain"]["body"] == "Count a_n"
+    cli = await asyncio.to_thread(
+        subprocess.run,
+        [sys.executable, "-m", "sigma.cli", "text", str(manual_path), "--scope", "project"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(cli.stdout)["source_format"] == "markdown"
+    symlinked = root / "symlink.sigma"
+    initialize_project(symlinked, "Symlink", "Count e_n")
+    (symlinked / "text-representations.json").symlink_to(manual_path / "text-representations.json")
+    try:
+        inspect_text(symlinked, "project")
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("A linked companion was trusted")
+
+    # ChatGPT-plan mode uses the same strict streamed Responses adapter as proposals.
+    plan_path = root / "plan.sigma"
+    initialize_project(plan_path, "Plan", "Count a_n for n >= 0")
+    plan_binding = {"identity": "plan-fixture", "mode": "chatgpt", "token": "fixture-token"}
+
+    # Connected model discovery does not prove a generation request can succeed.
+    # Provider error fields can echo credentials, so expose local status/shape only.
+    rejected_path = root / "rejected-plan.sigma"
+    initialize_project(rejected_path, "Rejected plan", "Count a_n for n >= 0")
+    synthetic_credential = "synthetic-oauth-access-token-must-not-escape"
+
+    def rejected_handler(request):
+        payload = json.loads(request.content)
+        assert payload["stream"] is True
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "code": synthetic_credential,
+                    "type": synthetic_credential,
+                    "param": synthetic_credential,
+                    "message": synthetic_credential,
+                }
+            },
+        )
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(rejected_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(rejected_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "HTTP 400" in str(exc)
+            assert "response shape: responses-error" in str(exc)
+            assert synthetic_credential not in str(exc)
+        else:
+            raise AssertionError("Rejected ChatGPT request was accepted")
+    assert not (rejected_path / "text-representations.json").exists()
+    print("PASS ChatGPT HTTP rejection preserves source and suppresses provider error fields")
+
+    def plan_handler(request):
+        payload = json.loads(request.content)
+        assert payload["stream"] is True and "max_output_tokens" not in payload
+        assert "good/better" in payload["instructions"]
+        assert "maxLength" not in json.dumps(payload["text"]["format"]["schema"])
+        assert "maxItems" not in json.dumps(payload["text"]["format"]["schema"])
+        assert isinstance(payload["input"], list)
+        assert request.headers.get("accept") == "text/event-stream"
+        raw = {**provider_output("Count $a_n$ for $n \\ge 0$"), "id": "resp-text-fixture"}
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": "resp-text-fixture", "status": "in_progress"},
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 1,
+                "delta": raw["output"][0]["content"][0]["text"],
+            },
+            {"type": "response.completed", "sequence_number": 2, "response": raw},
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(plan_handler), **kwargs
+            ),
+        ),
+    ):
+        plan = await convert_text(str(plan_path), "project", "markdown")
+    assert plan["markdown"]["current"] and plan["markdown"]["provenance"]["model"] == MODEL
+
+    # A connected plan bridge was observed to omit Content-Type on a response.
+    # If its body is SSE, dispatch by framing and still require the normal
+    # response identity, sequence and terminal-completion checks.
+    untyped_path = root / "untyped-plan-stream.sigma"
+    initialize_project(untyped_path, "Untyped plan stream", "Count u_n for n >= 0")
+
+    def untyped_plan_handler(request):
+        assert request.headers.get("accept") == "text/event-stream"
+        text = json.dumps({"body": "Count $u_n$ for $n \\ge 0$", "warnings": []})
+        response_id = "resp-untyped-plan"
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {"type": "response.output_text.delta", "sequence_number": 1, "delta": text},
+            {
+                "type": "response.completed",
+                "sequence_number": 2,
+                "response": {
+                    "id": response_id,
+                    "status": "completed",
+                    "model": MODEL,
+                    "output": [],
+                },
+            },
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(untyped_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        untyped_plan = await convert_text(str(untyped_path), "project", "markdown")
+    assert untyped_plan["markdown"]["current"]
+    assert untyped_plan["markdown"]["body"] == "Count $u_n$ for $n \\ge 0$"
+
+    # Untyped SSE is buffered to identify framing. Keep that path at the same
+    # one-megabyte cap as the strict stream parser, and handle large strategy
+    # text without dropping or truncating the delta.
+    large_plan_path = root / "large-plan-conversion.sigma"
+    initialize_project(large_plan_path, "Large plan conversion", "Review the generated strategy.")
+    large_plan_strategy = create_strategy(
+        large_plan_path, "Generated long plan approach", long_source
+    ).project.strategies[0]
+
+    def large_untyped_plan_handler(request):
+        output_text = json.dumps({"body": long_markdown, "warnings": []})
+        response_id = "resp-large-untyped-plan"
+        terminal = {
+            **provider_output(long_markdown),
+            "id": response_id,
+        }
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {
+                "type": "response.metadata",
+                "sequence_number": 1,
+                "metadata": "x" * 140_000,
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 2,
+                "delta": output_text,
+            },
+            {
+                "type": "response.completed",
+                "sequence_number": 3,
+                "response": terminal,
+            },
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        assert len(content.encode()) > 128_000
+        return httpx.Response(200, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(large_untyped_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        large_plan_result = await convert_text(
+            str(large_plan_path), "strategy", "markdown", large_plan_strategy.id
+        )
+    assert large_plan_result["markdown"]["current"]
+    assert large_plan_result["markdown"]["body"] == long_markdown
+    assert inspect_project(large_plan_path).project.strategies[0].approach == long_source
+
+    partial_path = root / "partial-plan-stream.sigma"
+    initialize_project(partial_path, "Partial plan stream", "Count p_n for n >= 0")
+
+    def partial_plan_handler(request):
+        response_id = "resp-partial-plan"
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {"type": "response.output_text.delta", "sequence_number": 1, "delta": "partial"},
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(partial_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(partial_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "without a valid response.completed" in str(exc)
+        else:
+            raise AssertionError("Partial plan stream was accepted")
+    assert not (partial_path / "text-representations.json").exists()
+
+    missing_output_path = root / "missing-output-text.sigma"
+    initialize_project(missing_output_path, "Missing output text", "Count o_n for n >= 0")
+
+    def missing_output_handler(request):
+        response_id = "resp-missing-output"
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {
+                "type": "response.completed",
+                "sequence_number": 1,
+                "response": {
+                    "id": response_id,
+                    "status": "completed",
+                    "model": MODEL,
+                    "output": [],
+                },
+            },
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(missing_output_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(missing_output_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "malformed conversion output" in str(exc)
+        else:
+            raise AssertionError("Completed plan stream without output_text was accepted")
+    assert not (missing_output_path / "text-representations.json").exists()
+    print(
+        "PASS ChatGPT plan untyped SSE recovery, partial/missing-text rejection, and malformed-body classification"
+    )
+
+    # The reported sanitized shape `other-object` came from replacing a
+    # non-JSON body with `{}` before classifying it as provider rejection.
+    # Malformed bodies now stay parse errors and cannot publish a conversion.
+    malformed_plan_path = root / "malformed-plan-envelope.sigma"
+    initialize_project(malformed_plan_path, "Malformed plan envelope", "Count m_n for n >= 0")
+    malformed_source = (malformed_plan_path / "project.json").read_bytes()
+
+    def malformed_plan_handler(request):
+        return httpx.Response(200, content=b"<redacted non-JSON provider body>")
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(malformed_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(malformed_plan_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "malformed conversion output" in str(exc)
+            assert "ChatGPT rejected the request" not in str(exc)
+        else:
+            raise AssertionError("Malformed HTTP 200 body was classified as a completion")
+    assert (malformed_plan_path / "project.json").read_bytes() == malformed_source
+    assert not (malformed_plan_path / "text-representations.json").exists()
+
+    # The API reports that parser failure once as a local 400 and leaves the
+    # source and companion store untouched. Known provider errors remain errors.
+    api_failure_path = root / "api-malformed-plan.sigma"
+    initialize_project(api_failure_path, "API malformed plan", "Count q_n for n >= 0")
+    api_source = (api_failure_path / "project.json").read_bytes()
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(malformed_plan_handler), **kwargs
+            ),
+        ),
+        TestClient(app) as api,
+    ):
+        api_response = api.post(
+            "/api/projects/text/convert",
+            json={
+                "path": str(api_failure_path),
+                "scope": "project",
+                "target": "markdown",
+                "expected_digest": digest("Count q_n for n >= 0"),
+            },
+        )
+    assert api_response.status_code == 400
+    assert "malformed conversion output" in api_response.json()["error"]
+    assert (api_failure_path / "project.json").read_bytes() == api_source
+    assert not (api_failure_path / "text-representations.json").exists()
+
+    # If the plan bridge answers with JSON rather than SSE, accept a complete
+    # result and surface a structured provider error without leaking input.
+    json_plan_path = root / "json-plan.sigma"
+    initialize_project(json_plan_path, "JSON plan", "Count j_n for n >= 0")
+
+    def json_plan_handler(request):
+        assert request.headers.get("accept") == "text/event-stream"
+        assert json.loads(request.content)["stream"] is True
+        return httpx.Response(200, json=provider_output("Count $j_n$ for $n \\ge 0$"))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(json_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        json_plan = await convert_text(str(json_plan_path), "project", "markdown")
+    assert json_plan["markdown"]["current"]
+    assert json_plan["markdown"]["body"] == "Count $j_n$ for $n \\ge 0$"
+
+    json_error_path = root / "json-plan-error.sigma"
+    initialize_project(json_error_path, "JSON plan error", "Count k_n for n >= 0")
+
+    def json_error_handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "error": {
+                    "code": "subscription_sharing_unsupported_capability",
+                    "message": "private source text must stay hidden",
+                }
+            },
+        )
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(json_error_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(json_error_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "does not support" in str(exc)
+            assert "private source text" not in str(exc)
+        else:
+            raise AssertionError("JSON ChatGPT plan error was treated as converted text")
+    assert not (json_error_path / "text-representations.json").exists()
+
+    # A streaming adapter can omit the assembled text from response.completed,
+    # even when all text deltas arrived and the final status is completed.
+    # Exercise the actual conversion service, not just a streaming mock helper.
+    delta_path = root / "delta-only.sigma"
+    initialize_project(delta_path, "Delta-only", "Count a_n for n >= 0")
+
+    def delta_only_handler(request):
+        payload = json.loads(request.content)
+        assert payload["stream"] is True
+        text = json.dumps({"body": "Count $a_n$ for $n \\ge 0$", "warnings": []})
+        response_id = "resp-delta-only"
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 1,
+                "delta": text[: len(text) // 2],
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 2,
+                "delta": text[len(text) // 2 :],
+            },
+            {
+                "type": "response.completed",
+                "sequence_number": 3,
+                "response": {
+                    "id": response_id,
+                    "status": "completed",
+                    "model": MODEL,
+                    "output": [],
+                },
+            },
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(delta_only_handler), **kwargs
+            ),
+        ),
+    ):
+        delta_conversion = await convert_text(str(delta_path), "project", "markdown")
+    assert delta_conversion["markdown"]["current"]
+    assert delta_conversion["markdown"]["body"] == "Count $a_n$ for $n \\ge 0$"
+    print("PASS ChatGPT-plan terminal text omission is recovered from complete streamed deltas")
+    print(
+        "PASS strategy approach shares the service and ChatGPT-plan preserves the selected billing path"
+    )
+
+    # Exercise the real API conversion route with representative mixed prose.
+    # The provider response is deterministic fixture data; no live inference runs.
+    math_path = root / "markdown-math-api.sigma"
+    math_source = (
+        "The probability is 1/2. We obtain f(x) = x^2 + 3x. Einstein's equation "
+        "E = mc^2 relates mass and energy. The sequence has terms a_n = a_(n-1) + d.\n\n"
+        "The value of x_i is stored in MAX_RETRY_COUNT. Keep DATABASE_URL and "
+        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL unchanged. Date 2026/10/28, version v1/2, "
+        "path /var/data/a_b, URL https://example.com/a_b, and price $5 stay literal.\n\n"
+        "| Kind | Value |\n| --- | --- |\n| Probability | 3/4 |\n\n"
+        "Inline `a_n = 2` and fenced identifiers remain literal.\n\n"
+        "```python\nMAX_RETRY_COUNT = 3\n```\n\n"
+        r"Escaped \(x_i\); unmatched $x_i stays text." + "\n\n"
+        "Ordinary assignments x = value, x = y, x = 3, and let x = value, plus configuration "
+        "RETRY_LIMIT = 5 remain prose. Multiple prices are $5 and $100. "
+        "Currency before explicit $x+1$ and math before currency $y$ costs $100; "
+        "independent formulas $x$ and $y$ stay distinct. Escaped \\$10 and unmatched $x_i stay text.\n\n"
+        "Inline `cost = $5` and fenced code remain literal.\n\n"
+        "```text\nPRICE = $100\nformula = $x+1$\n```"
+    )
+    math_markdown = (
+        Path("docs/evaluations/t301/markdown-regression-output.md")
+        .read_text(encoding="utf-8")
+        .rstrip()
+    )
+    initialize_project(math_path, "Markdown math pipeline", math_source)
+    math_original = (math_path / "project.json").read_bytes()
+    math_calls = []
+
+    async def math_handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        math_calls.append(context)
+        assert context["text"] == math_source and context["target_format"] == "markdown"
+        assert "UPPER_SNAKE_CASE" in payload["instructions"]
+        assert "sentence meaning supports that reading" in payload["instructions"]
+        return httpx.Response(200, json=provider_output(math_markdown))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(math_handler), **kwargs
+            ),
+        ),
+        TestClient(app) as api,
+    ):
+        math_response = api.post(
+            "/api/projects/text/convert",
+            json={
+                "path": str(math_path),
+                "scope": "project",
+                "target": "markdown",
+                "expected_digest": digest(math_source),
+            },
+        )
+    assert math_response.status_code == 200, math_response.text
+    assert math_response.json()["markdown"]["body"] == math_markdown
+    assert inspect_text(math_path, "project")["markdown"]["body"] == math_markdown
+    assert (math_path / "project.json").read_bytes() == math_original
+    assert len(math_calls) == 1
+    print(
+        "PASS actual Markdown conversion API route with mixed math/prose regression corpus (mock provider)"
+    )
+
+    # The actual ASGI endpoint cancels its provider transport on browser disconnect.
+    started.clear()
+    release.clear()
+    queue: asyncio.Queue[dict] = asyncio.Queue()
+    await queue.put(
+        {
+            "type": "http.request",
+            "body": json.dumps(
+                {
+                    "path": str(cancellation),
+                    "scope": "project",
+                    "target": "markdown",
+                    "expected_digest": digest("Count c_n for n >= 0"),
+                }
+            ).encode(),
+            "more_body": False,
+        }
+    )
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/api/projects/text/convert",
+        "raw_path": b"/api/projects/text/convert",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"host", b"testserver"), (b"content-type", b"application/json")],
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 1234),
+    }
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch(
+            "sigma.text_conversion.configuration", new=AsyncMock(side_effect=cheap_configuration)
+        ),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(pending_handler), **kwargs
+            ),
+        ),
+    ):
+        serving = asyncio.create_task(app(scope, queue.get, send))
+        await asyncio.wait_for(started.wait(), 2)
+        await queue.put({"type": "http.disconnect"})
+        await asyncio.wait_for(serving, 2)
+    assert not (cancellation / "text-representations.json").exists()
+    print("PASS ASGI browser disconnect interrupts conversion before companion publication")
+
+
+def main():
+    with TemporaryDirectory() as directory:
+        asyncio.run(main_async(Path(directory)))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-26T00:20:03.109867+00:00",
+  "origin": "https://example.invalid",
+  "deployed_release_sha": "NOT-RECORDED-ILLUSTRATIVE",
+  "evidence_boundary": "Hosted rows require evidence from the deployed release. Local and mocked evidence do not satisfy hosted acceptance.",
+  "checks": [
+    {
+      "id": "https_redirect_tls_api",
+      "area": "Public HTTPS, certificate, redirects, API routing",
+      "status": "NOT RUN",
+      "evidence_kind": "automated_hosted",
+      "evidence": ""
+    },
+    {
+      "id": "oauth_signin_authorization",
+      "area": "Google OAuth sign-in and authorization",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_browser_owner",
+      "evidence": ""
+    },
+    {
+      "id": "workspace_isolation",
+      "area": "Two-account workspace isolation",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_browser_owner",
+      "evidence": ""
+    },
+    {
+      "id": "project_persistence",
+      "area": "Project creation and persistence",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_browser",
+      "evidence": ""
+    },
+    {
+      "id": "provider_research",
+      "area": "Research session using real provider inference",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_paid_authorized",
+      "evidence": ""
+    },
+    {
+      "id": "python_sage_isolation",
+      "area": "Python/Sage sandbox execution and isolation",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_owner",
+      "evidence": ""
+    },
+    {
+      "id": "outcomes_reports_exports",
+      "area": "Outcomes, reports, TeX and PDF exports",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_browser",
+      "evidence": ""
+    },
+    {
+      "id": "restart_persistence",
+      "area": "Application restart and state persistence",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_operator",
+      "evidence": ""
+    },
+    {
+      "id": "backup_restore_rollback",
+      "area": "Backup, restore and rollback evidence",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_operator",
+      "evidence": ""
+    },
+    {
+      "id": "monitoring_recovery",
+      "area": "Monitoring and recovery behavior",
+      "status": "NOT RUN",
+      "evidence_kind": "hosted_operator",
+      "evidence": ""
+    }
+  ],
+  "summary": {
+    "NOT RUN": 10,
+    "BLOCKED": 0,
+    "FAIL": 0,
+    "PASS": 0,
+    "decision": "NO-GO / INCOMPLETE \u2014 blocked or unrun acceptance evidence"
+  }
+}

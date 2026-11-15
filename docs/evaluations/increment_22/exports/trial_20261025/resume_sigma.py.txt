@@ -1,0 +1,21 @@
+import asyncio, json, runpy, time
+from datetime import datetime, timezone
+from pathlib import Path
+
+base=Path(__file__).resolve().parent
+namespace=runpy.run_path(str(base/'run_trial.py'))
+start=json.loads((base/'trial-start.json').read_text())
+start_wall=datetime.fromisoformat(start['started_at_utc'])
+if start_wall.tzinfo is None: start_wall=start_wall.replace(tzinfo=timezone.utc)
+wall_elapsed=max(0.0,(datetime.now(timezone.utc)-start_wall.astimezone(timezone.utc)).total_seconds())
+overall_start=time.monotonic()-wall_elapsed
+async def main():
+ result=await namespace['run_sigma'](overall_start)
+ previous=json.loads((base/'trial-result.json').read_text())
+ arms=[a for a in previous['arms'] if a.get('arm')!='sigma']+[result]
+ total=max(time.monotonic()-overall_start, (datetime.now(timezone.utc)-start_wall.astimezone(timezone.utc)).total_seconds())
+ out={'arms':arms,'total_elapsed_seconds':round(total,3),'finished_at_utc':datetime.now(timezone.utc).isoformat(),'overall_elapsed_basis':'cross-process UTC delta reconciled with current monotonic timer; SIGMA-arm elapsed is directly monotonic'}
+ (base/'trial-result.json').write_text(json.dumps(out,indent=2)+'\n')
+ (base/'trial-progress.json').write_text(json.dumps(out,indent=2)+'\n')
+ print(json.dumps({'sigma_status':result['status'],'calls':result.get('calls'),'elapsed_seconds':result.get('elapsed_seconds'),'session_id':result.get('session_id'),'overall_elapsed_seconds':out['total_elapsed_seconds']}),flush=True)
+asyncio.run(main())

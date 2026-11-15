@@ -1,0 +1,72 @@
+SIGMA local launcher reliability — coordinator handoff
+
+Branch: gray/local-launcher-reliability
+Base: current main 2f1dbc3
+PR: https://github.com/bkramerext/sigma/pull/60
+Status: R4R
+
+Changes
+
+- `./sigma shutdown` now scans the private per-user instance registry and uses
+  each verifiable launcher's existing private control socket, including
+  instances started from other checkout directories. New owner records include
+  the canonical checkout root; older records derive it from the recorded
+  launcher command and validate the checkout identity.
+- `./sigma start --nav` stops other registered launchers and then scans fixed
+  ports for verified orphan SIGMA servers before binding. Startup still refuses
+  to signal unknown listeners and keeps the fixed 8000/5173 ports.
+- Recovery removes dead owner records, refused control sockets, and partial
+  owner temp files under the per-checkout lock. Kernel flock ownership releases
+  when a process exits; the lock-file inode remains stable to avoid lock-file
+  replacement races.
+- Orphan ownership requires same OS user, a valid checkout, exact server
+  command, unchanged process birth identity, a per-launch environment marker,
+  and the same marker served by the candidate endpoint. Unverified port
+  occupants are reported with port, PID, executable and working directory when
+  available.
+- `docs/GETTING-STARTED.md` and `docs/DECISIONS.md` describe the updated local
+  behavior and ownership boundary. `tests/ui_registry.py` and
+  `tests/ui_orphans.py` cover cross-checkout, stale state, unrelated listeners,
+  and PID reuse; `tests/ui_lifecycle.py` now covers actual cross-checkout
+  shutdown/start replacement when run in an isolated free-port environment.
+
+Acceptance matrix
+
+MET — Deterministic registry tests send orderly shutdown to multiple checkout
+instances, including a legacy owner record without a root field.
+
+MET — Startup calls global registered-instance cleanup before checking the
+fixed ports; identified crash-orphan servers are cleaned across checkouts.
+
+MET — Stale owner metadata, refused sockets, and partial temp records are
+removed. A regression confirms the kernel lock can be reacquired after stale
+cleanup. The lock file itself remains as a stable synchronization inode.
+
+MET — Tests require exact process/checkout/launch evidence and reject changed
+PID identity. Port occupancy alone never grants signal authority.
+
+MET — Unknown listeners are left untouched and produce port/PID diagnostics.
+
+UNVERIFIED — The opt-in real-process `tests/ui_lifecycle.py` cross-checkout
+scenario was not run. At test time, ports 8000 and 5173 belonged to an active
+SIGMA instance in the Red checkout; the harness's preflight refused to disturb
+it. That live checkout was left running. The test now includes cross-checkout
+shutdown from a second checkout, cross-checkout startup replacement, unrelated
+occupied ports, stale-socket recovery, and repeated launch cycles.
+
+No paid provider calls or cloud provisioning were performed.
+
+Validation on the final branch head:
+
+- `./sigma test` — passed, including cloud/auth, launcher, registry, orphan,
+  lint, format, Pyright, frontend typecheck and production build.
+- `uv run --project . python tests/ui_registry.py` — passed.
+- `uv run --project . python tests/ui_orphans.py` — passed.
+- `uv run --project . python tests/tooling.py` — passed.
+- `uv run --project . ruff check ...` and `ruff format --check ...` — passed.
+- `uv run --project . pyright` — zero diagnostics.
+- `tests/ui_lifecycle.py` — not run because standard ports were occupied as
+  described above.
+
+No self-merge. Please integrate and arrange the isolated real-process
+cross-checkout acceptance run after the standard ports are available.
