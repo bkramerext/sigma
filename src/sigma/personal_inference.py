@@ -8,7 +8,9 @@ provider-eligibility gates are satisfied. No provider URL is caller-controlled.
 
 from __future__ import annotations
 
+import hmac
 import json
+import os
 import re
 from typing import Any
 
@@ -31,14 +33,25 @@ def _current_principal() -> cloud_auth.Principal:
     """Both independently verified context bindings must identify the same user."""
     principal = cloud_auth.current_principal()
     workspace = cloud_workspaces.current()
+    local_admin_preview = (
+        workspace is None
+        and isinstance(principal, cloud_auth.Principal)
+        and principal.role == "admin"
+        and principal.subject.startswith("local-admin:")
+        and personal_browser.sign_in_preview_enabled()
+    )
     if (
         not isinstance(principal, cloud_auth.Principal)
         or principal.role not in {"admin", "member"}
         or principal.subject.startswith("mock:")
-        or workspace is None
-        or workspace.guest
-        or not workspace.verified_subject
-        or workspace.verified_subject != principal.subject
+        or (
+            not local_admin_preview
+            and (
+                workspace is None
+                or workspace.guest
+                or workspace.verified_subject != principal.subject
+            )
+        )
     ):
         raise PersonalInferenceUnavailable("A verified personal workspace is required.")
     try:
@@ -64,6 +77,18 @@ async def _request(
     if (method, endpoint) not in {("GET", "/v1/account"), ("POST", "/v1/response")}:
         raise PersonalInferenceUnavailable("Unsupported model operation.")
     socket_path = await _socket(principal)
+    headers: dict[str, str] = {}
+    if personal_browser.sign_in_preview_enabled():
+        seed = os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")
+        if not _BINDING.fullmatch(seed):
+            raise PersonalInferenceUnavailable("Local Personal worker authentication is unavailable.")
+        try:
+            workspace_id = await personal_browser._workspace_id(principal)
+        except personal_browser.PersonalBrowserUnavailable as exc:
+            raise PersonalInferenceUnavailable("Personal model worker is unavailable.") from exc
+        headers["X-Sigma-Worker-Key"] = hmac.digest(
+            bytes.fromhex(seed), workspace_id.encode("ascii"), "sha256"
+        ).hex()
     transport = httpx.AsyncHTTPTransport(uds=socket_path)
     try:
         async with httpx.AsyncClient(
@@ -72,6 +97,7 @@ async def _request(
             trust_env=False,
             follow_redirects=False,
             timeout=65,
+            headers=headers,
         ) as client:
             if method == "GET":
                 response = await client.get(endpoint)

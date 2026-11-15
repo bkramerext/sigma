@@ -8,6 +8,7 @@ commands, select other volumes/images, or accept caller-provided paths.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
@@ -154,6 +155,13 @@ def compose_env(workspace_id: str) -> dict[str, str]:
         env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"] = (
             "1" if os.environ.get("SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN") == "1" else "0"
         )
+        if env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"] == "1":
+            seed = os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")
+            if not re.fullmatch(r"[0-9a-f]{64}", seed):
+                raise ValueError("Local Personal worker authentication is unavailable")
+            env["SIGMA_AUTH_POC_RPC_KEY"] = hmac.digest(
+                bytes.fromhex(seed), workspace_id.encode("ascii"), "sha256"
+            ).hex()
         env["SIGMA_AUTH_POC_LOCAL_UID"] = str(os.geteuid())
         env["SIGMA_AUTH_POC_LOCAL_GID"] = str(os.getegid())
     return env

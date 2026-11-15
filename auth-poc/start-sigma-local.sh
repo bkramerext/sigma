@@ -5,6 +5,7 @@ set -Eeuo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
 export SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN=0
+unset SIGMA_AUTH_POC_RPC_SEED
 if [[ ${1:-} == "--real-signin-preview" ]]; then
   export SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN=1
   shift
@@ -52,6 +53,8 @@ mkdir -m 0711 "$runtime/broker" "$runtime/gateways"
 state_root="$HOME/.sigma/personal-poc-state"
 if [[ "$SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN" == "1" ]]; then
   state_root="$HOME/.sigma/personal-signin-preview-state"
+  SIGMA_AUTH_POC_RPC_SEED=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+  export SIGMA_AUTH_POC_RPC_SEED
 fi
 mkdir -p "$state_root"
 chmod 0700 "$state_root"
@@ -103,7 +106,7 @@ done
 [[ -S "$SIGMA_AUTH_BROKER_SOCKET" ]] || { echo "Private Docker broker unavailable." >&2; exit 1; }
 echo "Open SIGMA, then click its existing ChatGPT pill while in Sponsored mode."
 if [[ "$SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN" == "1" ]]; then
-  echo "Local ChatGPT connection preview. You can run one explicit test request."
+  echo "Local Personal ChatGPT is available after authorization and selection."
 else
   echo "Synthetic ChatGPT sign-in only."
 fi

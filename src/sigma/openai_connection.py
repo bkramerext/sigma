@@ -341,6 +341,19 @@ async def auth_context() -> AuthContext:
 
         workspace = cloud_workspaces.current()
         if (
+            workspace is None
+            and local_google_principal is not None
+            and local_google_principal.role == "admin"
+            and local_google_principal.subject.startswith("local-admin:")
+            and personal_browser.sign_in_preview_enabled()
+        ):
+            try:
+                workspace = cloud_workspaces.workspace_for_subject(local_google_principal.subject)
+            except (cloud_workspaces.WorkspaceUnavailable, OSError, RuntimeError):
+                pass
+            if workspace is not None:
+                return await cloud_personal.auth_context(workspace.subject_hash)
+        if (
             local_google_principal is None
             or workspace is None
             or workspace.verified_subject != local_google_principal.subject

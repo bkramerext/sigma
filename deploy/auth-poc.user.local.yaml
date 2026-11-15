@@ -5,6 +5,7 @@ services:
   auth-poc:
     environment:
       SIGMA_AUTH_POC_LOCAL_DOCKER: "1"
+      SIGMA_AUTH_POC_RPC_KEY: "${SIGMA_AUTH_POC_RPC_KEY:-}"
       SIGMA_AUTH_POC_REAL_SIGNIN: "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}"
     user: "${SIGMA_AUTH_POC_LOCAL_UID:?local POC UID required}:${SIGMA_AUTH_POC_LOCAL_GID:?local POC GID required}"
     tmpfs:

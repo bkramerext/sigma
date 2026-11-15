@@ -5,13 +5,10 @@ This service is intentionally not a hosted multi-user authorization broker.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 import time
 from urllib.parse import urlsplit
 
-import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
@@ -19,8 +16,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import synthetic_signin
 
-from sigma import ai_store, chat, chatgpt_auth, openai_connection, plan_stream
-from sigma.model_catalog import CATALOG
+from sigma import ai_store, chatgpt_auth
 from sigma.projects import ProjectError
 
 if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
@@ -31,7 +27,6 @@ app.include_router(synthetic_signin.router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
 _ATTEMPT_ID: str | None = None
 _LAB_PAINTED = False
-_INFERENCE_TEST_LOCK = asyncio.Lock()
 
 
 def real_signin_enabled() -> bool:
@@ -67,8 +62,6 @@ code{color:#d7b58e}</style></head>
 holds credentials in another container. They share a localhost network only.
 <strong>Real ChatGPT sign-in is disabled for this synthetic test.</strong></p>
 <button id="start" disabled>Open ChatGPT account chooser (disabled)</button>
-<button id="verify" disabled>Verify model catalog (disabled)</button>
-<button id="infer" disabled>Test one real model response (disabled)</button>
 <p id="status" role="status">No sign-in started.</p>
 <script>
 const status=document.getElementById('status');
@@ -98,19 +91,6 @@ start.onclick=async()=>{
   else status.textContent='Popup blocked. Enable popups for this browser.';
  }catch(e){if(popup)popup.close();status.textContent=String(e);}
 };
-const infer=document.querySelector('[data-plan-test]');
-const testStatus=document.getElementById('test-status');
-let testRunning=false;
-if(infer)infer.onclick=async()=>{
- testRunning=true;
- infer.disabled=true;
- testStatus.textContent='Sending one test request through your ChatGPT plan…';
- try{
-  const result=await req('/inference');
-  testStatus.textContent='ChatGPT plan test passed ('+result.model+').';
- }catch(e){testStatus.textContent=e.message;}
- finally{testRunning=false;void poll();}
-};
 let last='';
 async function poll(){
  try{const r=await fetch('/status',{cache:'no-store'}).then(r=>r.json());
@@ -118,11 +98,10 @@ async function poll(){
   last=r.attempt;
   status.textContent=r.message||('OAuth: '+r.attempt);
  }
- if(infer&&!testRunning){
+ if(!r.attempt&&start.dataset.preview==='1'){
   const preview=await fetch('/preview-state',{cache:'no-store'});
-  const state=preview.ok?await preview.json():null;
-  if(!testRunning)infer.disabled=state?.phase!=='connected';
-  if(!r.attempt&&state?.phase==='connected')status.textContent='Using your saved ChatGPT authorization.';
+  if(preview.ok&&(await preview.json()).phase==='connected')
+   status.textContent='Using your saved ChatGPT authorization.';
  }
  }catch{}
 }
@@ -143,11 +122,6 @@ setInterval(poll,1800);
         ).replace(
             '<button id="start" disabled>Open ChatGPT account chooser (disabled)</button>',
             '<button id="start" data-preview="1" disabled>Continue with ChatGPT</button>',
-        ).replace(
-            '<button id="verify" disabled>Verify model catalog (disabled)</button>\n'
-            '<button id="infer" disabled>Test one real model response (disabled)</button>',
-            '<button type="button" data-plan-test disabled>Run one test request</button>'
-            '<p id="test-status" role="status"></p>',
         )
     return HTMLResponse(
         html,
@@ -236,79 +210,10 @@ async def status() -> dict[str, str | None]:
 
 
 @app.post("/verify")
-async def verify_disabled(request: Request) -> None:
-    same_origin(request)
-    raise HTTPException(403, "Use Run one test request in the local preview.")
-
-
 @app.post("/inference")
-async def test_personal_inference(request: Request) -> dict[str, str]:
+async def inference_disabled(request: Request) -> None:
     same_origin(request)
-    require_real_signin()
-    if _INFERENCE_TEST_LOCK.locked():
-        raise HTTPException(409, "A ChatGPT test request is already running.")
-
-    async with _INFERENCE_TEST_LOCK:
-        try:
-            async with asyncio.timeout(65):
-                # Read only this worker's OAuth account. The general SIGMA
-                # dispatcher can resolve Sponsored credentials and is not used.
-                session = await chatgpt_auth.session()
-                account = session.get("account")
-                if (
-                    session.get("mode") != "chatgpt"
-                    or session.get("status") != "connected"
-                    or not isinstance(account, dict)
-                    or not account.get("plan_authorized")
-                    or not isinstance(account.get("access_token"), str)
-                    or not account["access_token"]
-                ):
-                    raise HTTPException(403, "Authorize ChatGPT plan usage before running the test.")
-                token = account["access_token"]
-                catalog = await openai_connection._check(token, "chatgpt")
-                if catalog.result["status"] != "connected":
-                    raise HTTPException(502, "Could not read the models available on this ChatGPT plan.")
-                model = min(
-                    (identifier for identifier in catalog.order if identifier in CATALOG),
-                    key=lambda identifier: len(CATALOG[identifier]["relative_cost"]),
-                    default=None,
-                )
-                if model is None:
-                    raise HTTPException(409, "This ChatGPT plan returned no model supported by SIGMA.")
-
-                async with (
-                    httpx.AsyncClient(timeout=60, trust_env=False, follow_redirects=False) as client,
-                    client.stream(
-                        "POST",
-                        "https://api.openai.com/v1/responses",
-                        headers={"Authorization": "Bearer " + token, "Accept": "text/event-stream"},
-                        json={
-                            "model": model,
-                            "input": [{"role": "user", "content": "Reply with the single word OK."}],
-                            "store": False,
-                            "stream": True,
-                        },
-                    ) as response,
-                ):
-                    if response.status_code != 200:
-                        error_body = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            if len(error_body) + len(chunk) > 8192:
-                                error_body.clear()
-                                break
-                            error_body.extend(chunk)
-                        try:
-                            error = json.loads(error_body)
-                        except ValueError:
-                            error = None
-                        plan_stream.failure(response.status_code, error, "chatgpt")
-                    result = await plan_stream.completed(response, max_text_bytes=1024)
-                chat._response_text(result, model)
-                return {"model": model}
-        except plan_stream.ChatGPTProviderRejection as exc:
-            raise HTTPException(502, str(exc)) from exc
-        except (OSError, TimeoutError, httpx.HTTPError, ProjectError, ValueError, TypeError) as exc:
-            raise HTTPException(502, "The ChatGPT plan test did not return a completed response.") from exc
+    raise HTTPException(403, "Use Personal ChatGPT from the main SIGMA window.")
 
 
 @app.get("/health")
