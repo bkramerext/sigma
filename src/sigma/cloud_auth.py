@@ -81,6 +81,16 @@ _WINDOW_ID = re.compile(r"^[a-f0-9]{32}$")
 
 
 def _window_id(request: Request) -> str | None:
+    # Browser-proxy ESM modules and WebSockets cannot inherit fetch headers
+    # or query strings from their parent document. Keep each asset bound to the
+    # same Google window by using its immutable URL path prefix instead.
+    prefix = "/api/ai/personal-browser/window/"
+    path = request.url.path
+    if path.startswith(prefix):
+        identifier = path[len(prefix):].split("/", 1)[0]
+        if identifier != "unscoped":
+            return identifier if _WINDOW_ID.fullmatch(identifier) else None
+        return None
     value = request.headers.get("x-sigma-window") or request.query_params.get("sigma_window")
     return value if value and _WINDOW_ID.fullmatch(value) else None
 
