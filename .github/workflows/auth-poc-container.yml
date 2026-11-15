@@ -97,8 +97,6 @@ jobs:
           docker compose -f deploy/auth-poc.compose.yaml exec -d auth-poc \
             /opt/venv/bin/python /opt/sigma/auth-poc/test_cross_container.py
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser python3 - <<'PY'
-          import os
-          import signal
           import subprocess
           import time
           import urllib.error
@@ -115,56 +113,36 @@ jobs:
           else:
               raise AssertionError("OAuth test worker never started")
 
-          # Use REAL sandboxed Chromium (not a Python HTTP client) to navigate
-          # through the ephemeral localhost callback from another container.
-          # There is no OpenAI page, account, code, verifier, or valid state.
+          # Send the synthetic callback URL to the ALREADY-RUNNING GUI
+          # Chromium instance via its existing profile/remote command.
+          # This tests the actual POC browser, not a second headless browser.
           assert callback_url.startswith("http://127.0.0.1:")
-          browser = subprocess.Popen(
+          forwarded = subprocess.run(
               [
                   "/usr/bin/chromium",
-                  "--headless",
-                  "--disable-gpu",
-                  "--disable-dev-shm-usage",
                   "--no-first-run",
-                  "--user-data-dir=/tmp/callback-chrome",
-                  "--dump-dom",
-                  callback_url,
+                  "--user-data-dir=/tmp/chromium",
+                  "--app=" + callback_url,
               ],
-              stdout=subprocess.DEVNULL,
-              stderr=subprocess.DEVNULL,
-              start_new_session=True,
+              capture_output=True,
+              text=True,
+              timeout=12,
+              check=False,
           )
-          try:
-              for _ in range(120):
-                  try:
-                      with urllib.request.urlopen(base + "/done", timeout=1) as response:
-                          assert response.read() == b"PASS", "Invalid state was consumed"
-                      break
-                  except urllib.error.HTTPError as error:
-                      if error.code != 425:
-                          raise
-                  if browser.poll() is not None:
-                      raise AssertionError("Chromium exited before invoking OAuth callback")
-                  time.sleep(0.25)
-              else:
-                  raise AssertionError("Chromium never invoked the OAuth callback")
-          finally:
-              # Chromium may stay resident after a successful navigation.
-              # Stop its entire disposable test process group.
-              if browser.poll() is None:
-                  try:
-                      os.killpg(browser.pid, signal.SIGTERM)
-                  except ProcessLookupError:
-                      pass
+          assert forwarded.returncode == 0, forwarded.stderr[-2000:]
+
+          for _ in range(120):
               try:
-                  browser.wait(timeout=5)
-              except subprocess.TimeoutExpired:
-                  try:
-                      os.killpg(browser.pid, signal.SIGKILL)
-                  except ProcessLookupError:
-                      pass
-                  browser.wait(timeout=5)
-          print("PASS: sandboxed Chromium invoked worker's OAuth callback")
+                  with urllib.request.urlopen(base + "/done", timeout=1) as response:
+                      assert response.read() == b"PASS", "Invalid state was consumed"
+                  break
+              except urllib.error.HTTPError as error:
+                  if error.code != 425:
+                      raise
+              time.sleep(0.25)
+          else:
+              raise AssertionError("GUI Chromium never invoked the OAuth callback")
+          print("PASS: existing sandboxed Chromium GUI invoked OAuth callback")
           PY
       - name: Verify Chromium sandbox under restricted namespace seccomp profile
         shell: bash
