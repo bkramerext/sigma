@@ -5,6 +5,9 @@ import os
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
+
+from fastapi import Request
 from unittest.mock import patch
 
 import test_environment as _test_environment  # noqa: F401
@@ -29,9 +32,8 @@ def rejected(code: int, callback) -> None:
 def main() -> None:
     admin = SimpleNamespace(role="admin", subject="google-admin")
     member = SimpleNamespace(role="member", subject="google-member")
-    request = lambda principal: SimpleNamespace(
-        state=SimpleNamespace(cloud_principal=principal)
-    )
+    def request(principal: object) -> Request:
+        return cast(Request, SimpleNamespace(state=SimpleNamespace(cloud_principal=principal)))
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("SIGMA_AUTH_BROWSER_POC_ENABLED", None)
         rejected(404, lambda: proxy._authorize(request(admin)))
@@ -72,11 +74,11 @@ def main() -> None:
     assert Pointer(kind="click", x=1279, y=799)
     for coords in ({"x": -1}, {"y": 800}, {"value": "x" * 201}):
         try:
-            Pointer(kind="click", **coords)
+            Pointer.model_validate({"kind": "click", **coords})
         except ValidationError:
             continue
         raise AssertionError("Unbounded remote browser action was accepted")
-    routes = {route.path for route in app.routes}
+    routes = {getattr(route, "path", "") for route in app.routes}
     for suffix in ("/ui", "/begin", "/status", "/frame", "/input", "/test"):
         assert "/api/auth-browser-poc" + suffix in routes
     root = Path(__file__).resolve().parents[1]

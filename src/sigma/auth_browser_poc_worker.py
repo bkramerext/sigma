@@ -22,7 +22,7 @@ from sigma.projects import ProjectError
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 _attempt: str | None = None
-_chrome: subprocess.Popen | None = None
+_chrome: asyncio.subprocess.Process | None = None
 _lock = asyncio.Lock()
 
 
@@ -73,20 +73,20 @@ async def begin(x_sigma_poc_key: str | None = Header(default=None)):
             raise HTTPException(503, "Could not initiate OpenAI sign-in") from None
         _attempt = attempt_id
         # Never pass the authorization URL to the API or write it to logs.
-        if _chrome is not None and _chrome.poll() is None:
+        if _chrome is not None and _chrome.returncode is None:
             _chrome.terminate()
         environment = {**os.environ, "DISPLAY": ":99"}
         try:
-            _chrome = subprocess.Popen(
-                [
+            _chrome = await asyncio.create_subprocess_exec(
+                *[
                     "/usr/bin/chromium", "--no-first-run", "--no-default-browser-check",
                     "--disable-dev-shm-usage", "--disable-gpu", "--no-sandbox",
                     "--user-data-dir=/tmp/sigma-auth-browser-profile",
                     "--window-size=1280,800", "--window-position=0,0",
                     "--new-window", destination,
                 ],
-                env=environment, stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL, start_new_session=True,
+                env=environment, stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL, start_new_session=True,
             )
         except OSError:
             chatgpt_auth.cancel(attempt_id)
