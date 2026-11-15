@@ -24,7 +24,9 @@ services:
     tmpfs:
       - /tmp:rw,nosuid,size=512m,uid=10001,gid=10001,mode=0700
     volumes:
-      - auth-browser-poc-state:/var/lib/sigma-auth
+      - type: bind
+        source: ${SIGMA_STATE_DISK_MOUNT:?set mounted state disk}/auth/auth-browser-poc-state
+        target: /var/lib/sigma-auth
     secrets:
       - auth_browser_poc_key
     environment:
@@ -43,5 +45,3 @@ services:
 secrets:
   auth_browser_poc_key:
     file: ${SIGMA_STATE_DISK_MOUNT:?set state mount}/auth/auth-browser-poc.key
-volumes:
-  auth-browser-poc-state:

@@ -23,8 +23,10 @@ desktop-installed companion.
   screenshots to an internal HTTP worker using a private shared key. The
   cloud service has **no published port**. The local worker is bound to
   `127.0.0.1:18765` only. Ordinary users cannot invoke the experiment.
-- The worker's ChatGPT credential store is in its own Docker volume; it is
-  never the sponsor account store or a research project. The backend does not
+- The worker's ChatGPT credential store is isolated in its own Docker
+  volume locally and a separate directory on SIGMA's persistent GCE state
+  disk in production; it is never the sponsor account store or a research
+  project. The backend does not
   import those credentials.
 - The viewer is deliberately rudimentary (PNG snapshots and keyboard/mouse
   forwarding) to avoid a publicly reachable VNC or WebSocket service.

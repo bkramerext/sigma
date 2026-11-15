@@ -65,6 +65,14 @@ python3 /opt/sigma/current/deploy/release_image.py record "$release" \
   [ -f "$key" ] || { echo "Authentication experiment key unavailable." >&2; exit 1; }
   chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$key"
   chmod 0600 "$key"
+  poc_state="$disk/auth/auth-browser-poc-state"
+  if [ -L "$poc_state" ]; then
+    echo "Authentication experiment state path is unsafe." >&2
+    exit 1
+  fi
+  mkdir -p "$poc_state"
+  chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$poc_state"
+  chmod 0700 "$poc_state"
 fi
 release=$(sed -n 's/^SIGMA_RELEASE=//p' "$env_file")
 release_count=$(grep -c '^SIGMA_RELEASE=' "$env_file" || true)
