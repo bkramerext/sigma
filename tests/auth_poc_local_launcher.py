@@ -58,7 +58,11 @@ class LocalBrokerTests(unittest.TestCase):
     def test_production_broker_never_uses_local_uid_overlay(self) -> None:
         with patch.dict(
             os.environ,
-            {"SIGMA_AUTH_BROKER_LOCAL_POC": "0", "SIGMA_RELEASE": "c" * 40},
+            {
+                "SIGMA_AUTH_BROKER_LOCAL_POC": "0",
+                "SIGMA_RELEASE": "c" * 40,
+                "SIGMA_AUTH_BROKER_STATE_ROOT": "/tmp/sigma-test-state",
+            },
         ):
             self.assertNotIn(
                 str(ROOT / "deploy/auth-poc.user.local.yaml"),
