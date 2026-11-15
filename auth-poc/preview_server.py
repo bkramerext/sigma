@@ -182,6 +182,13 @@ async def start(request: Request) -> dict[str, str | bool | None]:
         raise HTTPException(503, "Synthetic browser is unavailable.") from exc
 
 
+@app.get(PREFIX + "/health", include_in_schema=False)
+async def health(request: Request) -> dict[str, str]:
+    """Liveness probe for the actual preview app, independent of broker state."""
+    _require_preview_path(request)
+    return {"status": "ok", "service": "sigma-personal-lab-preview"}
+
+
 @app.get(PREFIX + "/api/status", include_in_schema=False)
 async def status(request: Request) -> dict[str, str | bool | None]:
     _require_preview_path(request)

@@ -4,8 +4,10 @@ services:
   preview:
     container_name: sigma-personal-lab-preview
     image: sigma-auth-poc:${SIGMA_RELEASE:?set exact release SHA}
+    # The image entrypoint intentionally starts the per-user worker. Override
+    # it only for this standalone preview so this service runs preview_server.
+    entrypoint: [/opt/venv/bin/uvicorn]
     command:
-      - /opt/venv/bin/uvicorn
       - preview_server:app
       - --host
       - 0.0.0.0
@@ -40,15 +42,15 @@ services:
       SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT: /run/sigma-personal-gateways
     volumes:
       - type: bind
-        source: /run/sigma-personal-broker
+        source: ${SIGMA_PERSONAL_LAB_BROKER_DIR:-/run/sigma-personal-broker}
         target: /run/sigma-personal-broker
         read_only: true
       - type: bind
-        source: /run/sigma-personal-gateways
+        source: ${SIGMA_PERSONAL_LAB_GATEWAY_DIR:-/run/sigma-personal-gateways}
         target: /run/sigma-personal-gateways
         read_only: true
       - type: bind
-        source: /srv/sigma-state/auth/personal-lab/app/workspaces
+        source: ${SIGMA_PERSONAL_LAB_WORKSPACES_DIR:-/srv/sigma-state/auth/personal-lab/app/workspaces}
         target: /var/lib/sigma-preview-workspaces
     networks: [personal-lab]
     healthcheck:
@@ -59,7 +61,7 @@ services:
         - >-
           import os,urllib.request;
           request=urllib.request.Request(
-          'http://127.0.0.1:8002/__personal_lab__/api/status',
+          'http://127.0.0.1:8002/__personal_lab__/health',
           headers={'Host':os.environ['SIGMA_PERSONAL_LAB_HOST'],
           'X-Sigma-Personal-Lab-Edge':os.environ['SIGMA_PERSONAL_LAB_EDGE_KEY']});
           urllib.request.urlopen(request, timeout=3)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, cast
@@ -87,6 +88,12 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(
             self.client.get("/api/cloud-auth/admin/grants", headers=EDGE_HEADERS).status_code, 404
         )
+
+    def test_runtime_health_is_a_preview_identity_probe(self) -> None:
+        response = self.client.get(PREFIX + "/health", headers=EDGE_HEADERS)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok", "service": "sigma-personal-lab-preview"})
+        self.assertEqual(self.client.get("/health", headers=EDGE_HEADERS).status_code, 404)
 
     def test_lifecycle_uses_only_the_fixed_server_principal_and_same_origin(self) -> None:
         result = {"browser_status": "ready", "personal_chatgpt_connected": False, "account": None}
@@ -177,11 +184,34 @@ class CaddyRouteTests(unittest.TestCase):
         baseline = (ROOT / "deploy/Caddyfile").read_bytes()
         snippet = (ROOT / "deploy/auth-poc.preview.caddy").read_bytes()
         rendered = caddy_route.render(baseline, snippet, EDGE)
-        self.assertEqual(rendered.count(b"@personal_lab path"), 1)
-        self.assertIn(b"uri /api/cloud-auth/admin/grants", rendered)
+        self.assertIn(b"import /etc/caddy/personal-lab.caddy", rendered)
         self.assertIn(b"/api /api/*", rendered)
-        self.assertIn(EDGE.encode(), rendered)
-        self.assertNotIn(b"{$SIGMA_PERSONAL_LAB_EDGE_KEY}", rendered)
+        self.assertNotIn(EDGE.encode(), rendered)
+        self.assertNotIn(b"@personal_lab path", rendered)
+        self.assertEqual(rendered.count(b"handle @api"), 1)
+
+    def test_runtime_config_stays_outside_the_release_checkout_and_rolls_back(self) -> None:
+        baseline_path = ROOT / "deploy/Caddyfile"
+        baseline = baseline_path.read_bytes()
+        baseline_mode = baseline_path.stat().st_mode
+        snippet = (ROOT / "deploy/auth-poc.preview.caddy").read_bytes()
+        with tempfile.TemporaryDirectory() as temporary:
+            temp_root = Path(temporary) / "runtime"
+            caddy_route.write_runtime_config(baseline, snippet, EDGE, temp_root)
+            self.assertEqual(baseline_path.read_bytes(), baseline)
+            self.assertEqual(baseline_path.stat().st_mode, baseline_mode)
+            self.assertNotIn(EDGE.encode(), (temp_root / "Caddyfile").read_bytes())
+            self.assertNotIn(EDGE.encode(), (temp_root / "personal-lab.caddy").read_bytes())
+            manifest = (temp_root / caddy_route.MANIFEST).read_text(encoding="ascii")
+            self.assertIn("release_caddyfile_sha256", manifest)
+            self.assertEqual(
+                {path.name for path in temp_root.iterdir()},
+                {"Caddyfile", "personal-lab.caddy", caddy_route.MANIFEST},
+            )
+            caddy_route.rollback(temp_root, require_root=False)
+            self.assertFalse(temp_root.exists())
+            self.assertEqual(baseline_path.read_bytes(), baseline)
+            self.assertEqual(baseline_path.stat().st_mode, baseline_mode)
 
     def test_render_rejects_unreviewed_or_duplicate_baseline(self) -> None:
         baseline = (ROOT / "deploy/Caddyfile").read_bytes()
@@ -225,16 +255,22 @@ def deployment_invariants() -> None:
     worker_network = (ROOT / "deploy/auth-poc.preview.worker.gce.yaml").read_text(encoding="utf-8")
     assert "default:\n    internal: true" in worker_network
     production_caddy = (ROOT / "deploy/Caddyfile").read_bytes()
+    edge_key = "test-edge-key-" + "x" * 40
     rendered = caddy_route.render(
         production_caddy,
         (ROOT / "deploy/auth-poc.preview.caddy").read_bytes(),
-        "test-edge-key-" + "x" * 40,
+        edge_key,
     )
     assert rendered != production_caddy
-    assert b"@personal_lab path" in rendered
-    assert b"SIGMA_PERSONAL_LAB_EDGE_KEY" not in rendered
-    assert b"header_up X-Sigma-Personal-Lab-Edge test-edge-key-" in rendered
-    assert rendered.index(b"@personal_lab path") < rendered.index(b"@api path /api /api/*")
+    assert b"import /etc/caddy/personal-lab.caddy" in rendered
+    assert edge_key.encode() not in rendered
+    assert b"@personal_lab path" in (ROOT / "deploy/auth-poc.preview.caddy").read_bytes()
+    assert (
+        b"{$SIGMA_PERSONAL_LAB_EDGE_KEY}" in (ROOT / "deploy/auth-poc.preview.caddy").read_bytes()
+    )
+    assert rendered.index(b"import /etc/caddy/personal-lab.caddy") < rendered.index(
+        b"@api path /api /api/*"
+    )
     assert b"handle @api" in rendered
     try:
         caddy_route.render(
@@ -246,6 +282,20 @@ def deployment_invariants() -> None:
         pass
     else:
         raise AssertionError("Duplicate private route was accepted")
+    edge_overlay = (ROOT / "deploy/auth-poc.preview.edge.gce.yaml").read_text(encoding="utf-8")
+    assert "SIGMA_PERSONAL_LAB_EDGE_KEY: ${SIGMA_PERSONAL_LAB_EDGE_KEY:?" in edge_overlay
+    assert "/var/lib/sigma-personal-lab/runtime/Caddyfile" in edge_overlay
+    assert "/opt/sigma/current/deploy/Caddyfile" not in edge_overlay
+    lifecycle = (ROOT / "deploy/manage-auth-poc-preview-route.sh").read_text(encoding="utf-8")
+    for expected in (
+        "restore_production_edge",
+        "up -d --no-deps --force-recreate edge",
+        'route_tool" rollback --runtime-root',
+        'git -C "$production" status --porcelain',
+        "SIGMA_PERSONAL_LAB_EDGE_KEY",
+        "SIGMA_AUTH_BROKER_ISOLATED_NETWORK=1",
+    ):
+        assert expected in lifecycle, expected
 
 
 def main() -> None:

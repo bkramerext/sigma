@@ -3,6 +3,18 @@ services:
   edge:
     networks:
       personal-lab: {}
+    environment:
+      SIGMA_PERSONAL_LAB_EDGE_KEY: ${SIGMA_PERSONAL_LAB_EDGE_KEY:?set protected preview edge key}
+    volumes:
+      # Runtime-owned copies live outside the exact-SHA production checkout.
+      - type: bind
+        source: /var/lib/sigma-personal-lab/runtime/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+      - type: bind
+        source: /var/lib/sigma-personal-lab/runtime/personal-lab.caddy
+        target: /etc/caddy/personal-lab.caddy
+        read_only: true
 
 networks:
   personal-lab:

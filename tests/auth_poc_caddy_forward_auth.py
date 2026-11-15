@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import http.server
+import importlib.util
 import os
 import socket
 import subprocess
@@ -20,12 +21,15 @@ from typing import ClassVar
 ROOT = Path(__file__).resolve().parents[1]
 EDGE = "ci-edge-key-" + "x" * 40
 AUTH_GRANTS_BODY = b"PRIVATE_ADMIN_GRANTS_MUST_NOT_LEAK"
+PRODUCTION_API_BODY = b"PRODUCTION_API_UNCHANGED"
+PRODUCTION_FRONTEND_BODY = b"PRODUCTION_FRONTEND_UNCHANGED"
 
 
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     auth_records: ClassVar[list[tuple[str, str]]] = []
     preview_records: ClassVar[list[dict[str, str]]] = []
+    production_records: ClassVar[list[str]] = []
 
     def log_message(self, format: str, *args: object) -> None:
         pass
@@ -46,8 +50,24 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        self.preview_records.append(dict(self.headers.items()))
+        if self.path.startswith("/api/") or self.path == "/api":
+            self.production_records.append(self.path)
+            body = PRODUCTION_API_BODY
+        elif self.path.startswith("/__personal_lab__/api/"):
+            self.preview_records.append(dict(self.headers.items()))
+            body = b"Not found"
+            self.send_response(404)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        elif self.path.startswith("/__personal_lab__"):
+            self.preview_records.append(dict(self.headers.items()))
+            body = b"PRIVATE_PREVIEW_OK"
+        else:
+            body = PRODUCTION_FRONTEND_BODY
         if self.headers.get("Upgrade", "").lower() == "websocket":
+            self.preview_records.append(dict(self.headers.items()))
             key = self.headers.get("Sec-WebSocket-Key", "")
             accepted = base64.b64encode(
                 hashlib.sha1(
@@ -60,7 +80,8 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Sec-WebSocket-Accept", accepted)
             self.end_headers()
             return
-        body = b"PRIVATE_PREVIEW_OK"
+        if self.path.startswith("/__personal_lab__"):
+            self.preview_records.append(dict(self.headers.items()))
         self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Set-Cookie", "synthetic=private; Secure; HttpOnly")
@@ -113,37 +134,68 @@ def _caddy_failure(container: str, message: str) -> AssertionError:
 def main() -> None:
     FixtureHandler.auth_records = []
     FixtureHandler.preview_records = []
+    FixtureHandler.production_records = []
     auth, _auth_thread, fixture_port = _fixture_server()
     preview, _preview_thread, preview_port = _fixture_server()
     caddy_name = "sigma-preview-fixture-" + uuid.uuid4().hex[:10]
     with tempfile.TemporaryDirectory(prefix="sigma-preview-caddy-") as directory:
         temp = Path(directory)
         snippet = (ROOT / "deploy/auth-poc.preview.caddy").read_text(encoding="utf-8")
-        placeholder = "{$SIGMA_PERSONAL_LAB_EDGE_KEY}"
-        assert snippet.count(placeholder) == 1
-        snippet = snippet.replace(placeholder, EDGE)
+        assert snippet.count("{$SIGMA_PERSONAL_LAB_EDGE_KEY}") == 1
         snippet = snippet.replace("backend:8000", f"127.0.0.1:{fixture_port}")
         snippet = snippet.replace("sigma-personal-lab-preview:8002", f"127.0.0.1:{preview_port}")
+        snippet_path = temp / "personal-lab.caddy"
+        snippet_path.write_text(snippet, encoding="utf-8")
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             caddy_port = listener.getsockname()[1]
-        (temp / "Caddyfile").write_text(
-            f"http://127.0.0.1:{caddy_port} {{\n"
-            + snippet
-            + "\n@api path /api /api/*\nhandle @api {\nrespond production-api 200\n}\n}\n",
-            encoding="utf-8",
+        baseline = (ROOT / "deploy/Caddyfile").read_bytes()
+        spec = importlib.util.spec_from_file_location(
+            "preview_route", ROOT / "deploy/auth-poc-preview-caddy-route.py"
         )
+        assert spec and spec.loader
+        route = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(route)
+        key_free_runtime = route.render(
+            baseline, (ROOT / "deploy/auth-poc.preview.caddy").read_bytes(), EDGE
+        ).decode("utf-8")
+        runtime = key_free_runtime.replace(
+            "{$SIGMA_CADDY_SCHEME}://{$SIGMA_DOMAIN}", f"http://127.0.0.1:{caddy_port}"
+        )
+        runtime = runtime.replace("backend:8000", f"127.0.0.1:{fixture_port}")
+        runtime = runtime.replace("frontend:8080", f"127.0.0.1:{fixture_port}")
+        assert EDGE not in runtime
+        runtime_path = temp / "Caddyfile"
+        runtime_path.write_text(runtime, encoding="utf-8")
+        baseline_path = temp / "production.Caddyfile"
+        baseline_runtime = baseline.decode("utf-8").replace(
+            "{$SIGMA_CADDY_SCHEME}://{$SIGMA_DOMAIN}", f"http://127.0.0.1:{caddy_port}"
+        )
+        baseline_runtime = baseline_runtime.replace("backend:8000", f"127.0.0.1:{fixture_port}")
+        baseline_runtime = baseline_runtime.replace("frontend:8080", f"127.0.0.1:{fixture_port}")
+        baseline_path.write_text(baseline_runtime, encoding="utf-8")
         command = [
             "docker",
             "run",
             "--detach",
-            "--rm",
             "--name",
             caddy_name,
             "--network",
             "host",
             "--volume",
-            f"{temp / 'Caddyfile'}:/etc/caddy/Caddyfile:ro",
+            f"{runtime_path}:/etc/caddy/Caddyfile:ro",
+            "--volume",
+            f"{snippet_path}:/etc/caddy/personal-lab.caddy:ro",
+            "--env",
+            f"SIGMA_PERSONAL_LAB_EDGE_KEY={EDGE}",
+            "--env",
+            "SIGMA_CADDY_SCHEME=http",
+            "--env",
+            f"SIGMA_DOMAIN=127.0.0.1:{caddy_port}",
+            "--env",
+            "SIGMA_TLS_EMAIL=preview@example.invalid",
+            "--env",
+            "SIGMA_CADDY_UPSTREAM_SCHEME=https",
             "caddy:2.9.1-alpine",
         ]
         try:
@@ -216,7 +268,16 @@ def main() -> None:
             assert "cookie" not in ws_headers and "authorization" not in ws_headers, ws_headers
             assert ws_headers.get("x-sigma-personal-lab-edge") == EDGE, ws_headers
 
-            assert _assert_http(base + "/api/status", expected=200) == b"production-api"
+            assert _assert_http(base + "/api/status", expected=200) == PRODUCTION_API_BODY
+            assert (
+                _assert_http(
+                    base + "/__personal_lab__/api/health",
+                    headers={"Cookie": "sigma_admin=ok"},
+                    expected=404,
+                )
+                == b"Not found"
+            )
+            assert "/__personal_lab__/api/health" not in FixtureHandler.production_records
             assert FixtureHandler.auth_records[0] == ("/api/cloud-auth/admin/grants", "")
             assert FixtureHandler.auth_records[1] == (
                 "/api/cloud-auth/admin/grants",
@@ -225,12 +286,78 @@ def main() -> None:
             assert AUTH_GRANTS_BODY.decode() not in "".join(
                 str(record) for record in FixtureHandler.preview_records
             )
+
+            # The runtime overlay survives an edge restart with the production
+            # API route still intact.
+            subprocess.run(
+                ["docker", "restart", caddy_name], check=True, capture_output=True, timeout=20
+            )
+            for _ in range(80):
+                try:
+                    assert _assert_http(base + "/api/status", expected=200) == PRODUCTION_API_BODY
+                    break
+                except (AssertionError, OSError):
+                    time.sleep(0.25)
+            else:
+                raise AssertionError("Caddy did not restore the production API after restart")
+            assert (
+                _assert_http(
+                    base + "/__personal_lab__/",
+                    headers={"Cookie": "sigma_admin=ok"},
+                    expected=200,
+                )
+                == b"PRIVATE_PREVIEW_OK"
+            )
+
+            # Rollback recreates the edge with the exact unmodified production
+            # Caddyfile, so the same path returns the regular SPA route again.
+            subprocess.run(
+                ["docker", "rm", "--force", caddy_name],
+                check=False,
+                capture_output=True,
+                timeout=15,
+            )
+            rollback_command = [
+                "docker",
+                "run",
+                "--detach",
+                "--name",
+                caddy_name,
+                "--network",
+                "host",
+                "--volume",
+                f"{baseline_path}:/etc/caddy/Caddyfile:ro",
+                "--env",
+                "SIGMA_CADDY_SCHEME=http",
+                "--env",
+                f"SIGMA_DOMAIN=127.0.0.1:{caddy_port}",
+                "--env",
+                "SIGMA_TLS_EMAIL=preview@example.invalid",
+                "--env",
+                "SIGMA_CADDY_UPSTREAM_SCHEME=https",
+                "caddy:2.9.1-alpine",
+            ]
+            subprocess.run(rollback_command, check=True, capture_output=True, text=True, timeout=30)
+            for _ in range(80):
+                try:
+                    if (
+                        _assert_http(base + "/__personal_lab__/", expected=200)
+                        == PRODUCTION_FRONTEND_BODY
+                    ):
+                        break
+                except (AssertionError, OSError):
+                    time.sleep(0.25)
+            else:
+                raise AssertionError("Caddy rollback did not restore the production frontend route")
             print(
-                "PASS live Caddy admin gate, HTTP/WebSocket credential stripping, hidden grants, and API isolation"
+                "PASS live Caddy auth/WS boundary, route restart, unchanged production API, and exact-config rollback"
             )
         finally:
             subprocess.run(
-                ["docker", "stop", caddy_name], check=False, capture_output=True, timeout=15
+                ["docker", "rm", "--force", caddy_name],
+                check=False,
+                capture_output=True,
+                timeout=15,
             )
             auth.shutdown()
             preview.shutdown()
