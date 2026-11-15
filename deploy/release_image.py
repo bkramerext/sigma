@@ -31,7 +31,9 @@ def resolve_commit(repository: Path, requested: str) -> str:
     return resolved
 
 
-def build(repository: Path, requested: str, runner=_run) -> None:
+def build(
+    repository: Path, requested: str, runner=_run, *, auth_browser_poc: bool = False
+) -> None:
     commit = resolve_commit(repository, requested)
     with tempfile.TemporaryDirectory(prefix="sigma-release-") as directory:
         context = Path(directory)
@@ -65,6 +67,17 @@ def build(repository: Path, requested: str, runner=_run) -> None:
                 args.extend(["--build-arg", f"SIGMA_BUILD_COMMIT={commit}"])
             args.append(str(context))
             runner(args)
+        if auth_browser_poc:
+            runner(
+                [
+                    "docker", "build", "--platform", "linux/amd64",
+                    "--label", f"{LABEL}={commit}",
+                    "--tag", f"sigma-auth-browser-poc:{commit}",
+                    "--build-arg", f"SIGMA_RELEASE={commit}",
+                    "--file", str(context / "auth-browser-poc/Dockerfile"),
+                    str(context),
+                ]
+            )
 
 
 def image_info(image: str, requested: str, runner=_run) -> dict[str, Any]:
@@ -135,6 +148,7 @@ def main() -> None:
     build_parser = commands.add_parser("build")
     build_parser.add_argument("repository", type=Path)
     build_parser.add_argument("sha")
+    build_parser.add_argument("--auth-browser-poc", action="store_true")
     record_parser = commands.add_parser("record")
     record_parser.add_argument("sha")
     record_parser.add_argument("--directory", type=Path, default=Path("/var/lib/sigma/releases"))
@@ -144,8 +158,9 @@ def main() -> None:
     verify_parser.add_argument("sha")
     args = parser.parse_args()
     if args.command == "build":
-        build(args.repository.resolve(), args.sha)
-        print(f"PASS: built backend and frontend from {args.sha}")
+        build(args.repository.resolve(), args.sha, auth_browser_poc=args.auth_browser_poc)
+        print(f"PASS: built backend and frontend from {args.sha}" +
+              (" including auth-browser POC" if args.auth_browser_poc else ""))
     elif args.command == "record":
         path = record(
             args.sha,
