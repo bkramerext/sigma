@@ -8,6 +8,9 @@ on:
       - 'auth-poc/**'
       - 'deploy/auth-poc.compose.yaml'
       - 'deploy/auth-poc.gce.yaml'
+      - 'deploy/auth-poc.user.gce.yaml'
+      - 'src/sigma/personal_browser.py'
+      - 'tests/auth_poc_host_broker.py'
       - 'deploy/release_image.py'
       - 'deploy/start-gce.sh'
       - 'deploy/deploy-gce-release.py'
@@ -24,6 +27,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Check user-scoped Docker broker security invariants
+        run: python3 tests/auth_poc_host_broker.py
       - name: Verify GCE Compose overlay remains nonpublic and persistent
         shell: bash
         run: |
@@ -177,6 +182,65 @@ jobs:
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import urllib.request; html=urllib.request.urlopen("http://127.0.0.1:8001/").read(); assert b"Open ChatGPT account chooser" in html'
       - name: Verify browser-origin gate
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_security.py
+      - name: Verify backend user binding through real Unix socket
+        run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_broker_client.py
+      - name: Exercise two independent user-owned Docker projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f deploy/auth-poc.compose.yaml down --remove-orphans
+          docker network create sigma_application
+          state_root=$(mktemp -d)
+          chmod 0700 "$state_root"
+          export SIGMA_RELEASE="$GITHUB_SHA"
+          docker tag sigma-auth-poc:local "sigma-auth-poc:$SIGMA_RELEASE"
+          docker tag sigma-auth-browser-poc:local "sigma-auth-browser-poc:$SIGMA_RELEASE"
+          cleanup_broker() {
+            for workspace in "$(printf 'a%.0s' {1..32})" "$(printf 'b%.0s' {1..32})"; do
+              SIGMA_AUTH_POC_WORKSPACE_ID="$workspace" \
+              SIGMA_STATE_DISK_MOUNT="$state_root/$workspace" \
+              docker compose --project-name "sigma-personal-$workspace" \
+                -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+                -f deploy/auth-poc.user.gce.yaml down -v --remove-orphans || true
+            done
+            docker network rm sigma_application || true
+            sudo rm -rf -- "$state_root"
+          }
+          trap cleanup_broker EXIT
+          sudo env \
+            PATH="$PATH" \
+            SIGMA_RELEASE="$SIGMA_RELEASE" \
+            SIGMA_AUTH_BROKER_STATE_ROOT="$state_root" \
+            python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location(
+              "host_broker", Path("auth-poc/host_broker.py").resolve()
+          )
+          assert spec and spec.loader
+          broker = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(broker)
+          a, b = "a" * 32, "b" * 32
+          assert broker.operate("start", a)["status"] == "ready"
+          assert broker.operate("start", b)["status"] == "ready"
+          assert broker.operate("stop", a)["status"] == "stopped"
+          assert broker.operate("status", b)["status"] == "ready"
+          assert broker.operate("start", a)["status"] == "ready"
+          pa = broker.state_root() / a / "auth/auth-poc"
+          pb = broker.state_root() / b / "auth/auth-poc"
+          assert pa != pb and pa.is_dir() and pb.is_dir()
+          print("PASS separate user Compose projects, credential volumes and restart")
+          PY
+          for workspace in "$(printf 'a%.0s' {1..32})" "$(printf 'b%.0s' {1..32})"; do
+            worker=$(docker compose --project-name "sigma-personal-$workspace" \
+              -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+              -f deploy/auth-poc.user.gce.yaml ps -q auth-poc)
+            [[ -n "$worker" ]] || { echo "Missing user worker"; exit 1; }
+            [[ -z $(docker port "$worker" 6080 2>/dev/null) ]] || {
+              echo "Per-user browser unexpectedly published"; exit 1;
+            }
+          done
       - name: Execute private GCE Compose overlay with restart-persistent state
         shell: bash
         run: |
