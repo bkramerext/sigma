@@ -79,7 +79,7 @@ const previewUrl = __PREVIEW_URL__;
 const messages = {
   ready: 'Ready to sign in. Click Continue with ChatGPT in the browser below.',
   connecting: 'Waiting for ChatGPT sign-in to finish.',
-  connected: 'ChatGPT authorization verified. You can close this window and return to SIGMA.',
+  connected: 'ChatGPT authorization verified. Finishing the connection in SIGMA…',
   plan_not_permitted: 'Signed in. ChatGPT plan permission was not granted.',
   declined: 'ChatGPT authorization was declined.',
   cancelled: 'Sign-in ended before authorization completed. Start a new sign-in to retry.',

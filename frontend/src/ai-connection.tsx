@@ -309,6 +309,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? cloudFunding.googleAccount : null;
   const testConnected = localLabAccount !== null && testAccountOwner === localLabAccount;
   const previewAuthorized = localLabAccount !== null && authorizedPreviewOwner === localLabAccount;
+  const selectConnection = cloudFunding?.selectConnection;
+  const selectedConnection = cloudFunding?.selectedConnection;
+  const selectingConnection = cloudFunding?.selectingConnection;
+  const personalSelectionAllowed = !!cloudFunding && !cloudFunding.forcedSponsored;
+  const refreshConnection = ai.refresh;
   useEffect(() => {
     if (!localLabAccount) {
       setTestAccountOwner(null);
@@ -344,15 +349,33 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           return;
         }
       }
-      if (personalPopup?.closed) setPersonalPopup(null);
-      else if (personalPopup) timer = setTimeout(check, 750);
+      if (!personalPopup) return;
+      if (preview.status === 'fulfilled' && preview.value?.phase === 'connected' && personalSelectionAllowed) {
+        if (selectingConnection) {
+          timer = setTimeout(check, 750);
+          return;
+        }
+        setPersonalPopup(null);
+        try {
+          if (selectedConnection === 'sponsored') await selectConnection?.('personal');
+          await refreshConnection('manual');
+        } catch {
+          // The connection selector reports activation failures in SIGMA.
+        } finally {
+          personalPopup.close();
+        }
+        return;
+      }
+      if (personalPopup.closed) setPersonalPopup(null);
+      else timer = setTimeout(check, 750);
     }
     void check();
     return () => {
       controller.abort();
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [localLabAccount, personalPopup]);
+  }, [localLabAccount, personalPopup, personalSelectionAllowed, refreshConnection,
+    selectConnection, selectedConnection, selectingConnection]);
   const hostedNoticeClick = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticeEnabled
     && (hosted || localHostedNoticePreview) && !containerBrowserLab;
