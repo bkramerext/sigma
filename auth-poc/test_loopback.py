@@ -23,7 +23,12 @@ async def exercise() -> None:
                      + ("Host: 127.0.0.1:" + str(target.port)).encode("ascii")
                      + b"\r\nConnection: close\r\n\r\n")
         await writer.drain()
-        await asyncio.wait_for(reader.read(), timeout=5)
+        response = await asyncio.wait_for(reader.read(), timeout=5)
+        # The callback deliberately returns a neutral HTTP 200 even for an
+        # invalid OAuth state; the attempt must stay unconsumed and unconnected.
+        assert response.startswith(b"HTTP/1.1 200 OK\r\n"), response[:80]
+        assert b"Return to SIGMA" in response
+        assert b"invalid" not in response.lower()
         writer.close()
         await writer.wait_closed()
         assert chatgpt_auth.attempt_status(identifier)["status"] == "connecting"
