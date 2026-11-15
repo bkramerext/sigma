@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Opt-in local SIGMA UI POC: existing pill, real split Docker images,
-# private Unix browser relay. Synthetic provider sign-in remains disabled.
+# private Unix browser relay. Real authorization requires an explicit local preview.
 set -Eeuo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo"
+export SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN=0
+if [[ ${1:-} == "--real-signin-preview" ]]; then
+  export SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN=1
+  shift
+fi
 # Docker Desktop may install its CLI symlinks without putting its credential
 # helper on PATH in existing shells. Keep Docker's own binary directory visible
 # for image pulls rather than changing credential stores or user configuration.
@@ -45,6 +50,9 @@ umask 077
 runtime=$(mktemp -d /tmp/sigma-personal-local.XXXXXXXX)
 mkdir -m 0711 "$runtime/broker" "$runtime/gateways"
 state_root="$HOME/.sigma/personal-poc-state"
+if [[ "$SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN" == "1" ]]; then
+  state_root="$HOME/.sigma/personal-signin-preview-state"
+fi
 mkdir -p "$state_root"
 chmod 0700 "$state_root"
 export SIGMA_RELEASE="$release"
@@ -94,7 +102,11 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$SIGMA_AUTH_BROKER_SOCKET" ]] || { echo "Private Docker broker unavailable." >&2; exit 1; }
 echo "Open SIGMA, then click its existing ChatGPT pill while in Sponsored mode."
-echo "This POC runs real Docker browser/worker containers but does not yet enable OpenAI sign-in."
+if [[ "$SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN" == "1" ]]; then
+  echo "Local ChatGPT authorization preview. Inference is disabled."
+else
+  echo "Synthetic ChatGPT sign-in only."
+fi
 exec_status=0
 ./sigma start --signin --navigate "$@" || exec_status=$?
 exit "$exec_status"

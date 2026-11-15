@@ -6,7 +6,6 @@ This service is intentionally not a hosted multi-user authorization broker.
 from __future__ import annotations
 
 import os
-import secrets
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
@@ -15,8 +14,8 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import synthetic_signin
 
-from sigma import chat, chatgpt_auth
-from sigma.openai_connection import connection
+from sigma import chatgpt_auth
+from sigma.projects import ProjectError
 
 if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
     raise RuntimeError("This is a local laboratory; hosted integration is not enabled")
@@ -28,15 +27,17 @@ _ATTEMPT_ID: str | None = None
 
 
 def real_signin_enabled() -> bool:
-    # Explicitly fail closed while the nested Chromium sandbox is unavailable.
-    return os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") == "1"
+    return (
+        os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") == "1"
+    )
 
 
 def require_real_signin() -> None:
     if not real_signin_enabled():
         raise HTTPException(
             403,
-            "Real ChatGPT sign-in is disabled pending browser-sandbox and provider-eligibility review",
+            "Real ChatGPT sign-in is available only in the explicit local authorization preview.",
         )
 
 
@@ -73,26 +74,17 @@ document.getElementById('start').onclick=async()=>{
  status.textContent='Opening OpenAI sign-in...';
  const popup=window.open('about:blank','_blank');
  try{const r=await req('/begin');
-  if(popup)popup.location.replace('/open/'+encodeURIComponent(r.id));
+  if(popup){popup.opener=null;popup.location.replace('/open/'+encodeURIComponent(r.id));}
   else status.textContent='Popup blocked. Enable popups for this browser.';
  }catch(e){if(popup)popup.close();status.textContent=String(e);}
-};
-document.getElementById('verify').onclick=async()=>{
- status.textContent='Checking available models...';
- try{const r=await req('/verify');
- status.textContent=r.connected?'OpenAI model catalog verified.':'Not connected: '+r.status;
- }catch(e){status.textContent=String(e);}
-};
-document.getElementById('infer').onclick=async()=>{
- status.textContent='Requesting a bounded model response...';
- try{const r=await req('/inference');
- status.textContent=r.completed?'A real Responses API request completed.':'Inference failed.';
- }catch(e){status.textContent=String(e);}
 };
 let last='';
 async function poll(){
  try{const r=await fetch('/status',{cache:'no-store'}).then(r=>r.json());
- if(r.attempt&&r.attempt!==last){last=r.attempt;status.textContent='OAuth: '+r.attempt;}
+ if(r.attempt&&r.attempt!==last){
+  last=r.attempt;
+  status.textContent=r.message||('OAuth: '+r.attempt);
+ }
  }catch{}
 }
 setInterval(poll,1800);
@@ -105,9 +97,14 @@ setInterval(poll,1800);
             '<button id="start" hidden disabled></button>',
         )
     if real_signin_enabled():
-        html = html.replace('id="start" disabled', 'id="start"')
-        html = html.replace('id="verify" disabled', 'id="verify"')
-        html = html.replace('id="infer" disabled', 'id="infer"')
+        html = html.replace(
+            '<strong>Real ChatGPT sign-in is disabled for this synthetic test.</strong>',
+            '<strong>Local ChatGPT authorization preview. Inference is disabled.</strong>'
+            ' Finish sign-in on auth.openai.com, then return to this tab to see the result.',
+        ).replace(
+            '<button id="start" disabled>Open ChatGPT account chooser (disabled)</button>',
+            '<button id="start">Continue with ChatGPT</button>',
+        )
     return HTMLResponse(
         html,
         headers={
@@ -125,13 +122,17 @@ async def begin(request: Request) -> dict[str, str]:
     if _ATTEMPT_ID is not None:
         if chatgpt_auth.attempt_status(_ATTEMPT_ID)["status"] == "connecting":
             raise HTTPException(409, "Complete or cancel the previous sign-in")
-    attempt = await chatgpt_auth.begin()
+    try:
+        attempt = await chatgpt_auth.begin()
+    except ProjectError as exc:
+        raise HTTPException(503, "Could not begin ChatGPT authorization. Try again.") from exc
     _ATTEMPT_ID = attempt["id"]
     return {"id": _ATTEMPT_ID}
 
 
 @app.get("/open/{identifier}")
 async def open_auth(identifier: str) -> RedirectResponse:
+    require_real_signin()
     if _ATTEMPT_ID is None or identifier != _ATTEMPT_ID:
         raise HTTPException(404, "Sign-in attempt unavailable")
     url = chatgpt_auth.authorization_url(identifier)
@@ -144,39 +145,20 @@ async def open_auth(identifier: str) -> RedirectResponse:
 
 @app.get("/status")
 async def status() -> dict[str, str | None]:
-    if _ATTEMPT_ID is None:
+    if not real_signin_enabled() or _ATTEMPT_ID is None:
         return {"attempt": None}
-    return {"attempt": chatgpt_auth.attempt_status(_ATTEMPT_ID)["status"]}
+    try:
+        attempt = chatgpt_auth.attempt_status(_ATTEMPT_ID)
+    except ProjectError:
+        return {"attempt": "expired", "message": "Sign-in expired. Start another attempt."}
+    return {"attempt": attempt["status"], "message": attempt["message"]}
 
 
 @app.post("/verify")
-async def verify(request: Request) -> dict[str, str | bool]:
-    same_origin(request)
-    require_real_signin()
-    result = await connection(refresh=True)
-    return {
-        "connected": result.get("status") == "connected",
-        "status": str(result.get("status", "unavailable")),
-    }
-
-
 @app.post("/inference")
-async def inference(request: Request) -> dict[str, bool]:
+async def inference_disabled(request: Request) -> None:
     same_origin(request)
-    require_real_signin()
-    config = await chat.configuration()
-    if not config["available"]:
-        raise HTTPException(503, "No verified Personal ChatGPT model available")
-    # Deliberately fixed and bounded; not a general-purpose inference proxy.
-    result = await chat.respond(
-        speaker="ai_1",
-        messages=[{"speaker": "human", "text": "Reply with a brief greeting."}],
-        conversation_id=secrets.token_hex(16),
-        expected_binding=config["binding"],
-        model=config["model"],
-        reasoning_effort=config["reasoning_effort"],
-    )
-    return {"completed": bool(result.strip())}
+    raise HTTPException(403, "Model verification and inference are disabled in this preview.")
 
 
 @app.get("/health")

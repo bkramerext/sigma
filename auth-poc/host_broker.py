@@ -151,6 +151,9 @@ def compose_env(workspace_id: str) -> dict[str, str]:
         if browser_platform not in {"linux/amd64", "linux/arm64"}:
             raise ValueError("Unsupported local browser platform")
         env["SIGMA_AUTH_POC_BROWSER_PLATFORM"] = browser_platform
+        env["SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN"] = (
+            "1" if os.environ.get("SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN") == "1" else "0"
+        )
         env["SIGMA_AUTH_POC_LOCAL_UID"] = str(os.geteuid())
         env["SIGMA_AUTH_POC_LOCAL_GID"] = str(os.getegid())
     return env
@@ -300,8 +303,7 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
             prepare_state(workspace_id)
             if local_poc():
                 _stop_local_gateway(workspace_id)
-            else:
-                prepare_gateway(workspace_id)
+            prepare_gateway(workspace_id)
             _compose(workspace_id, "up", "-d", "--no-build", "--wait")
         elif action == "stop":
             _compose(workspace_id, "stop")

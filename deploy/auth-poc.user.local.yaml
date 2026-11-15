@@ -5,6 +5,7 @@ services:
   auth-poc:
     environment:
       SIGMA_AUTH_POC_LOCAL_DOCKER: "1"
+      SIGMA_AUTH_POC_REAL_SIGNIN: "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}"
     user: "${SIGMA_AUTH_POC_LOCAL_UID:?local POC UID required}:${SIGMA_AUTH_POC_LOCAL_GID:?local POC GID required}"
     tmpfs:
       - /tmp:rw,nosuid,size=64m,uid=${SIGMA_AUTH_POC_LOCAL_UID},gid=${SIGMA_AUTH_POC_LOCAL_GID},mode=0700
@@ -16,3 +17,6 @@ services:
         source: ${SIGMA_STATE_DISK_MOUNT:?local per-user state required}/auth/auth-poc
         target: /var/lib/sigma-poc-auth
   # The browser is still a different UID and has no credential mount.
+  browser:
+    environment:
+      SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN: "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}"

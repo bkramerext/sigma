@@ -18,6 +18,12 @@ websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/dev/null 2>&1 &
 # Keep Chromium's user namespace + seccomp renderer sandbox enabled.
 # The Docker service grants only the namespace syscalls required by Chromium.
 # Never add --no-sandbox: the process must fail closed on unsupported hosts.
+# Show the address bar while the user authorizes at OpenAI.
+if [ "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}" = "1" ]; then
+  set -- http://127.0.0.1:8001/
+else
+  set -- --app=http://127.0.0.1:8001/
+fi
 exec /usr/bin/chromium --no-first-run --no-default-browser-check \
   --disable-dev-shm-usage --disable-extensions --password-store=basic \
-  --user-data-dir=/tmp/chromium --window-size=1280,800 --app=http://127.0.0.1:8001/
+  --user-data-dir=/tmp/chromium --window-size=1280,800 "$@"
