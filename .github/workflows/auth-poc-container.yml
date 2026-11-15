@@ -22,6 +22,14 @@ on:
       - 'deploy/deploy-gce-release.py'
       - 'deploy/gce_preflight.py'
       - '.github/workflows/auth-poc-container.yml'
+  pull_request:
+    paths:
+      - 'auth-poc/**'
+      - 'deploy/auth-poc*.yaml'
+      - 'frontend/src/ai-connection.tsx'
+      - 'src/sigma/personal_browser.py'
+      - 'tests/auth_poc_local_launcher.py'
+      - '.github/workflows/auth-poc-container.yml'
   workflow_dispatch:
 
 permissions:
@@ -35,6 +43,34 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check user-scoped Docker broker security invariants
         run: python3 tests/auth_poc_host_broker.py
+      - name: Verify opt-in local pill launcher and broker UID separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n auth-poc/start-sigma-local.sh
+          python3 tests/auth_poc_local_launcher.py
+          export SIGMA_RELEASE="$GITHUB_SHA"
+          export SIGMA_AUTH_POC_WORKSPACE_ID="$(printf 'a%.0s' {1..32})"
+          export SIGMA_STATE_DISK_MOUNT="/tmp/sigma-poc-local-smoke"
+          export SIGMA_AUTH_POC_GATEWAY_DIR="/tmp/sigma-poc-local-gateway"
+          export SIGMA_AUTH_POC_LOCAL_UID="$(id -u)"
+          export SIGMA_AUTH_POC_LOCAL_GID="$(id -g)"
+          docker compose --project-name sigma-poc-config-check \\
+            -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \\
+            -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \\
+            config --format json > /tmp/sigma-poc-local-compose.json
+          python3 - <<'PY'
+          import json, os
+          config = json.load(open("/tmp/sigma-poc-local-compose.json"))
+          worker, browser = config["services"]["auth-poc"], config["services"]["browser"]
+          assert worker["user"] == f'{os.getuid()}:{os.getgid()}'
+          assert not worker.get("ports"), worker.get("ports")
+          assert not browser.get("ports"), browser.get("ports")
+          mounts = {m["target"]: m for m in worker["volumes"]}
+          assert mounts["/var/lib/sigma-poc-auth"]["type"] == "bind"
+          assert mounts["/run/sigma-personal"]["type"] == "bind"
+          assert not browser.get("volumes"), browser.get("volumes")
+          PY
       - name: Verify GCE Compose overlay remains nonpublic and persistent
         shell: bash
         run: |
