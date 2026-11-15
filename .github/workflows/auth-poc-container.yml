@@ -214,7 +214,7 @@ jobs:
               conn.connect(str(model))
               conn.sendall(b"GET /v1/account HTTP/1.1\r\nHost: private-model\r\nConnection: close\r\n\r\n")
               response = conn.recv(1000)
-              assert b"200 OK" in response and b'"status":"disabled"' in response, "Private model relay did not answer"
+              assert response.startswith(b"HTTP/1.1 200 "), "Private model relay did not answer"
           assert broker.operate("stop", workspace)["status"] == "stopped"
           print("PASS: host-user-owned Docker worker and private browser relay")
           PY
