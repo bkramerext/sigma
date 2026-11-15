@@ -74,14 +74,20 @@ async def _socket(principal: cloud_auth.Principal) -> str:
 async def _request(
     principal: cloud_auth.Principal, method: str, endpoint: str, body: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    if (method, endpoint) not in {("GET", "/v1/account"), ("POST", "/v1/response"), ("POST", "/v1/disconnect")}:
+    if (method, endpoint) not in {
+        ("GET", "/v1/account"),
+        ("POST", "/v1/response"),
+        ("POST", "/v1/disconnect"),
+    }:
         raise PersonalInferenceUnavailable("Unsupported model operation.")
     socket_path = await _socket(principal)
     headers: dict[str, str] = {}
     if personal_browser.sign_in_preview_enabled():
         seed = os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")
         if not _BINDING.fullmatch(seed):
-            raise PersonalInferenceUnavailable("Local Personal worker authentication is unavailable.")
+            raise PersonalInferenceUnavailable(
+                "Local Personal worker authentication is unavailable."
+            )
         try:
             workspace_id = await personal_browser._workspace_id(principal)
         except personal_browser.PersonalBrowserUnavailable as exc:
