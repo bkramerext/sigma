@@ -280,11 +280,19 @@ function HostedPersonalChatGPTNotice({ open, onClose }: { open: boolean; onClose
   </dialog>;
 }
 
-export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
+export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalBrowserLabEnabled?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
+  const [hostedChoiceOpen, setHostedChoiceOpen] = useState(false);
+  const [hostedBrowserError, setHostedBrowserError] = useState('');
+  const hostedChoiceDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!hostedChoiceOpen || !hostedChoiceDialog.current) return;
+    hostedChoiceDialog.current.showModal();
+    return () => { if (hostedChoiceDialog.current?.open) hostedChoiceDialog.current.close(); };
+  }, [hostedChoiceOpen]);
   const pillTrigger = useRef<HTMLElement>(null);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
@@ -299,13 +307,15 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const localHostedNoticePreview = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticePreview
     && !!cloudFunding.personalChatGPTNoticeEnabled;
+  const hostedBrowserLab = !!hosted && !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled;
   const hostedNoticeClick = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticeEnabled
-    && (hosted || localHostedNoticePreview);
+    && (hosted || localHostedNoticePreview) && !hostedBrowserLab;
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored'
     || localHostedNoticePreview;
   const hostedPersonalUnavailable = hosted && !!cloudFunding?.authorized
-    && cloudFunding.selectedConnection === 'personal' && !cloudFunding.forcedSponsored;
+    && cloudFunding.selectedConnection === 'personal' && !cloudFunding.forcedSponsored
+    && !hostedBrowserLab;
   const sponsoredPresentation = sponsoredSelected || hostedPersonalUnavailable;
   const adminSponsored = sponsoredPresentation && !!cloudFunding?.sponsorshipUnlimited;
   const adminNeedsSponsorProvisioning = !!hosted && adminSponsored
@@ -331,7 +341,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       ? 'Connecting to SIGMA-sponsored API…'
       : hostedPillLabel
     : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
-  const connectionTooltip = (hostedNoticeClick || hostedPersonalUnavailable)
+  const connectionTooltip = hostedBrowserLab
+    ? 'Choose Sponsored ChatGPT or connect your own ChatGPT account in a private browser.'
+    : (hostedNoticeClick || hostedPersonalUnavailable)
     ? cloudFunding?.personalChatGPTNoticeEnabled
       ? 'Click to learn why personal ChatGPT is unavailable in hosted SIGMA.'
       : 'Personal ChatGPT is unavailable in hosted SIGMA. Click to use SIGMA-sponsored ChatGPT instead.'
@@ -383,6 +395,32 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     : cloudFunding?.budget
       ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `Allocation: $${cloudFunding.budget.remaining_usd.toFixed(2)}`
     : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
+  async function startHostedPersonalBrowser() {
+    // Opening the popup must happen synchronously on the user's click.
+    // No user ever has to run a Docker command or know a VNC password.
+    const popup = window.open('about:blank', '_blank');
+    if (popup) popup.opener = null;
+    setHostedChoiceOpen(false);
+    setHostedBrowserError('');
+    try {
+      if (!popup) throw new Error('Browser popup blocked. Allow popups for SIGMA and retry.');
+      const response = await fetch('/api/ai/personal-browser/start', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: '{}',
+      });
+      const data = await response.json() as { browser_status?: string; detail?: string };
+      if (!response.ok || data.browser_status !== 'ready')
+        throw new Error(data.detail ?? 'Private ChatGPT browser could not start.');
+      popup.location.replace(windowAuthUrl('/api/ai/personal-browser/view'));
+      // Do not select Personal or show connected until real OAuth completes
+      // and provider credentials are verified for this exact SIGMA user.
+    } catch (cause) {
+      popup?.close();
+      setHostedBrowserError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
+      setHostedChoiceOpen(true);
+    }
+  }
   async function connect() {
     if (ai.connecting || ai.transitioning) return;
     try {
@@ -426,7 +464,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen}>
-    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (hostedBrowserLab) { setHostedChoiceOpen(true); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
@@ -442,6 +480,27 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     setPersonalHostedNoticeOpen(false);
     window.requestAnimationFrame(() => pillTrigger.current?.focus());
   }}/>
+  {hostedChoiceOpen && <dialog ref={hostedChoiceDialog} className="google-account-dialog hosted-personal-chatgpt-dialog"
+    aria-labelledby="hosted-chatgpt-connection-heading"
+    onClose={() => setHostedChoiceOpen(false)}>
+    <div className="privacy-notice-heading">
+      <h2 id="hosted-chatgpt-connection-heading">ChatGPT connection</h2>
+      <DialogDismissButton label="Close ChatGPT connection choices" onClick={() => setHostedChoiceOpen(false)}/>
+    </div>
+    <p>Choose which account SIGMA should use.</p>
+    <div className="ai-connect-actions">
+      <button type="button" className="connection-text-action"
+        onClick={() => { setHostedChoiceOpen(false); void cloudFunding?.selectConnection?.('sponsored'); }}>
+        Sponsored ChatGPT
+      </button>
+      <button type="button" className="connection-text-action"
+        onClick={() => void startHostedPersonalBrowser()}>
+        Personal ChatGPT
+      </button>
+    </div>
+    <p>Technical preview: Personal sign-in and real inference remain disabled until the browser security checks are complete.</p>
+    {hostedBrowserError && <p role="alert">{hostedBrowserError}</p>}
+  </dialog>}
   {zeroAllowance && zeroAllowanceAction}
   </>;
 }
