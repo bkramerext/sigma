@@ -94,6 +94,7 @@ def main() -> None:
                 with (
                     patch.object(broker.subprocess, "run", side_effect=fake_run),
                     patch.object(Path, "is_socket", return_value=True),
+                    patch.object(broker, "_socket_http_ready", return_value=True),
                 ):
                     result = broker.operate("start", A)
                     assert result == {"status": "ready", "worker": "sigma-personal-" + A}
