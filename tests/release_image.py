@@ -78,14 +78,10 @@ class ReleaseImageTests(unittest.TestCase):
         observed: list[tuple[list[str], str]] = []
 
         def docker(args: list[str]) -> str:
-            observed.append(
-                (args, (Path(args[-1]) / "auth-browser-poc/Dockerfile").read_text())
-            )
+            observed.append((args, (Path(args[-1]) / "auth-browser-poc/Dockerfile").read_text()))
             return ""
 
-        release_image.build(
-            self.repository, requested, runner=docker, auth_browser_poc=True
-        )
+        release_image.build(self.repository, requested, runner=docker, auth_browser_poc=True)
         self.assertEqual(len(observed), 3)
         args, content = observed[2]
         self.assertIn(f"sigma-auth-browser-poc:{requested}", args)
