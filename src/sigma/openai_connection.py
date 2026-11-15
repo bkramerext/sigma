@@ -67,6 +67,7 @@ class AuthContext(Mapping[str, Any]):
             raise ValueError("Invalid Personal worker credential context")
         self._safe = {"mode": mode, "status": status, "identity": identity}
         if transport is not None:
+            assert worker_binding is not None
             self._safe["transport"] = transport
             self._safe["worker_binding"] = worker_binding
         if account_label is not None:
@@ -500,7 +501,9 @@ async def connection(
             ),
             "checked_at": datetime.now(UTC).isoformat() if verified else None,
             "ttl_seconds": TTL,
-            "account_label": account["account_label"] if verified else None,
+            "account_label": (
+                account["account_label"] if verified and account is not None else None
+            ),
             "sponsor_account_selected": False,
             **prefs,
             "welcome_pending": False,
@@ -619,7 +622,7 @@ async def models(refresh: bool = False, context: Mapping[str, Any] | None = None
             and account["status"] == "verified"
             and account["binding"] == context.get("worker_binding")
         )
-        known = set(account["models"]) if verified else set()
+        known = set(account["models"]) if verified and account is not None else set()
         choices = [
             {
                 "id": identifier,
