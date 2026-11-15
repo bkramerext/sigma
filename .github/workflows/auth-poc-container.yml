@@ -29,6 +29,10 @@ on:
       - 'deploy/deploy-gce-release.py'
       - 'deploy/gce_preflight.py'
       - '.github/workflows/auth-poc-container.yml'
+  pull_request:
+    branches:
+      - coordinator/containerized-chatgpt-auth-poc
+
   workflow_dispatch:
 
 permissions:
