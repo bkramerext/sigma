@@ -24,6 +24,7 @@ app = FastAPI()
 app.include_router(synthetic_signin.router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
 _ATTEMPT_ID: str | None = None
+_LAB_PAINTED = False
 
 
 def real_signin_enabled() -> bool:
@@ -64,13 +65,25 @@ holds credentials in another container. They share a localhost network only.
 <p id="status" role="status">No sign-in started.</p>
 <script>
 const status=document.getElementById('status');
+const start=document.getElementById('start');
+if(start.dataset.preview==='1'){
+ const observer=new PerformanceObserver(async(list)=>{
+  if(!list.getEntries().some(entry=>entry.name==='first-contentful-paint'))return;
+  observer.disconnect();
+  try{
+   await req('/lab-painted');
+   start.disabled=false;
+  }catch{status.textContent='SIGMA could not confirm the sign-in page. Reopen the browser to try again.';}
+ });
+ observer.observe({type:'paint',buffered:true});
+}
 async function req(path) {
  const response=await fetch(path,{method:'POST',cache:'no-store'});
  const data=await response.json();
  if(!response.ok)throw new Error(data.detail||'Request failed');
  return data;
 }
-document.getElementById('start').onclick=async()=>{
+start.onclick=async()=>{
  status.textContent='Opening OpenAI sign-in...';
  const popup=window.open('about:blank','_blank');
  try{const r=await req('/begin');
@@ -100,10 +113,10 @@ setInterval(poll,1800);
         html = html.replace(
             '<strong>Real ChatGPT sign-in is disabled for this synthetic test.</strong>',
             '<strong>Local ChatGPT authorization preview. Inference is disabled.</strong>'
-            ' Finish sign-in on auth.openai.com, then return to this tab to see the result.',
+            ' The sign-in result appears at the top of the SIGMA window.',
         ).replace(
             '<button id="start" disabled>Open ChatGPT account chooser (disabled)</button>',
-            '<button id="start">Continue with ChatGPT</button>',
+            '<button id="start" data-preview="1" disabled>Continue with ChatGPT</button>',
         )
     return HTMLResponse(
         html,
@@ -114,11 +127,31 @@ setInterval(poll,1800);
     )
 
 
+@app.post("/lab-painted")
+async def lab_painted(request: Request) -> dict[str, bool]:
+    global _LAB_PAINTED
+    same_origin(request)
+    require_real_signin()
+    _LAB_PAINTED = True
+    return {"ready": True}
+
+
+@app.get("/preview-state")
+async def preview_state() -> dict[str, str]:
+    require_real_signin()
+    attempt = (await status())["attempt"]
+    if attempt is not None:
+        return {"phase": attempt}
+    return {"phase": "ready" if _LAB_PAINTED else "rendering"}
+
+
 @app.post("/begin")
 async def begin(request: Request) -> dict[str, str]:
     global _ATTEMPT_ID
     same_origin(request)
     require_real_signin()
+    if not _LAB_PAINTED:
+        raise HTTPException(409, "The sign-in page has not rendered yet.")
     if _ATTEMPT_ID is not None:
         if chatgpt_auth.attempt_status(_ATTEMPT_ID)["status"] == "connecting":
             raise HTTPException(409, "Complete or cancel the previous sign-in")

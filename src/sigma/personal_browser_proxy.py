@@ -75,6 +75,37 @@ cancel.addEventListener('click', () => {
   void fetch(__STOP_URL__, {method: 'POST', keepalive: true}).catch(() => {});
   window.close();
 });
+const previewUrl = __PREVIEW_URL__;
+const messages = {
+  ready: 'Ready to sign in. Click Continue with ChatGPT in the browser below.',
+  connecting: 'Waiting for ChatGPT sign-in to finish.',
+  connected: 'ChatGPT authorization verified. You can close this window and return to SIGMA.',
+  plan_not_permitted: 'Signed in. ChatGPT plan permission was not granted.',
+  declined: 'ChatGPT authorization was declined.',
+  cancelled: 'Sign-in ended before authorization completed. Start a new sign-in to retry.',
+  expired: 'Sign-in expired. Start a new sign-in to retry.',
+  failed: 'ChatGPT authorization failed. Start a new sign-in to retry.',
+};
+let displayConnected = false;
+async function watchPreview() {
+  const started = Date.now();
+  while (displayConnected) {
+    let phase = 'unavailable';
+    try {
+      const response = await fetch(previewUrl, {cache: 'no-store', signal: AbortSignal.timeout(4000)});
+      if (response.ok) phase = (await response.json()).phase;
+    } catch {}
+    if (!displayConnected) return;
+    if (phase === 'rendering' || phase === 'unavailable') {
+      status.textContent = Date.now() - started < 15000
+        ? 'Waiting for the sign-in page to render…'
+        : 'Could not confirm that the sign-in page loaded. Close this window and reopen sign-in.';
+    } else if (Object.hasOwn(messages, phase)) {
+      status.textContent = messages[phase];
+    }
+    await new Promise(resolve => setTimeout(resolve, 1200));
+  }
+}
 try {
   const {default: RFB} = await import('__BASE__/core/rfb.js');
   const target = document.querySelector('#screen');
@@ -87,10 +118,13 @@ try {
   rfb.scaleViewport = true;
   rfb.resizeSession = true;
   rfb.addEventListener('connect', () => {
-    status.textContent = 'Browser ready';
     cancel.hidden = true;
+    displayConnected = true;
+    if (previewUrl) void watchPreview();
+    else status.textContent = 'Browser ready';
   });
   rfb.addEventListener('disconnect', () => {
+    displayConnected = false;
     cancel.hidden = true;
     status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
   });
@@ -100,12 +134,16 @@ try {
 }
 """
     stop_url = "/api/ai/personal-browser/stop"
+    preview_url = "/api/ai/personal-browser/preview-state"
     if window_id:
-        stop_url += "?sigma_window=" + window_id
+        suffix = "?sigma_window=" + window_id
+        stop_url += suffix
+        preview_url += suffix
     script = (
         script.replace("__BASE__", prefix)
         .replace("__PASSWORD__", json.dumps(password))
         .replace("__STOP_URL__", json.dumps(stop_url))
+        .replace("__PREVIEW_URL__", json.dumps(preview_url if personal_browser.sign_in_preview_enabled() else None))
     )
     html = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"

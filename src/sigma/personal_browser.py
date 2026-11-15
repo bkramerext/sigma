@@ -172,6 +172,39 @@ async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
         return False
 
 
+def sign_in_preview_enabled() -> bool:
+    return (
+        enabled()
+        and os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN") == "1"
+    )
+
+
+async def sign_in_preview_phase(principal: cloud_auth.Principal | None) -> str:
+    if not sign_in_preview_enabled():
+        return "unavailable"
+    try:
+        path = await model_socket(principal)
+        transport = httpx.AsyncHTTPTransport(uds=path)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://private-personal-worker",
+            trust_env=False,
+            timeout=3,
+        ) as client:
+            response = await client.get("/v1/preview-state")
+            response.raise_for_status()
+            phase = response.json()["phase"]
+            if phase in (
+                "rendering", "ready", "connecting", "connected", "plan_not_permitted",
+                "declined", "cancelled", "expired", "failed",
+            ):
+                return phase
+    except (PersonalBrowserUnavailable, httpx.HTTPError, OSError, ValueError, KeyError, TypeError):
+        pass
+    return "unavailable"
+
+
 async def browser_password(principal: cloud_auth.Principal | None) -> str:
     """Only the authenticated HTTPS view may request this ephemeral VNC secret.
 

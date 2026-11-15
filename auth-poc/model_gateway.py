@@ -12,6 +12,7 @@ import json
 import os
 from typing import Any
 
+import httpx
 import synthetic_signin
 
 from fastapi import FastAPI, HTTPException, Request
@@ -66,6 +67,23 @@ async def test_account_status() -> dict[str, bool]:
     if not synthetic_signin.enabled():
         raise HTTPException(404)
     return {"verified": synthetic_signin.verified()}
+
+
+@app.get("/v1/preview-state")
+async def preview_state() -> dict[str, str]:
+    if (
+        os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") != "1"
+        or os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
+    ):
+        raise HTTPException(404)
+    try:
+        async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
+            result = await client.get("http://127.0.0.1:8001/preview-state")
+            result.raise_for_status()
+            phase = result.json()["phase"]
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(503, "The worker could not report sign-in progress.") from exc
+    return {"phase": phase}
 
 
 @app.post("/v1/response")

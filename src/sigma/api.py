@@ -3258,6 +3258,13 @@ async def personal_browser_test_account(request: Request):
     return JSONResponse({"verified": verified}, headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/ai/personal-browser/preview-state")
+async def personal_browser_preview_state(request: Request):
+    principal = _personal_browser_principal(request)
+    phase = await personal_browser.sign_in_preview_phase(principal)
+    return JSONResponse({"phase": phase}, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/ai/personal-browser/view")
 async def personal_browser_view(request: Request):
     return await personal_browser_proxy.view(request)
