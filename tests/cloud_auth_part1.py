@@ -86,17 +86,23 @@ class CloudAuthTests(CloudAuthFixture):
         self.assertEqual(call.kwargs["speaker"], "ai_1")
         self.assertEqual(call.kwargs["expected_binding"], "fixture-sponsored")
 
-    def test_hosted_brainstorm_guest_cannot_use_inference_or_transcripts(self):
+    def test_hosted_brainstorm_uninvited_user_cannot_use_inference_or_transcripts(self):
         self.client.base_url = "https://127.0.0.1"
         login = self.finish(email="guest@example.org", subject="guest-subject")
         self.assertEqual(login.status_code, 303)
-        self.client.cookies.set("sigma_session", login.cookies["sigma_session"])
+        # Hosted SIGMA denies uninvited identities instead of issuing a guest
+        # member session. A redirect/denied identity is not AI authorization.
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, login.cookies)
         status = self.client.get("/api/cloud-auth/status").json()
-        self.assertEqual(status["user"]["role"], "guest")
-        self.assertEqual(self.client.get("/api/chat/config").status_code, 403)
-        self.assertEqual(
-            self.client.post("/api/chat/session", headers={"Origin": ORIGIN}).status_code, 403
-        )
+        self.assertFalse(status["authenticated"])
+        for method, path in (
+            ("get", "/api/chat/config"),
+            ("post", "/api/chat/session"),
+            ("post", "/api/chat/message"),
+            ("post", "/api/chat/turn"),
+        ):
+            result = getattr(self.client, method)(path, headers={"Origin": ORIGIN})
+            self.assertEqual(result.status_code, 401, (method, path, result.text))
 
     def test_hosted_personal_chatgpt_notice_is_explicitly_configurable_and_local_stays_off(self):
         with patch.dict(os.environ, {"SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED": "true"}):
