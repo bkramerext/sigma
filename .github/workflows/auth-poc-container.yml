@@ -44,6 +44,19 @@ jobs:
             -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
             config --format json > /tmp/auth-poc-gce-compose.json
           python3 -c 'import json; c=json.load(open("/tmp/auth-poc-gce-compose.json")); a=c["services"]["auth-poc"]; b=c["services"]["browser"]; assert not a.get("ports"), a.get("ports"); assert not b.get("ports"), b.get("ports"); assert a["image"]=="sigma-auth-poc:"+__import__("os").environ["GITHUB_SHA"]; assert b["image"]=="sigma-auth-browser-poc:"+__import__("os").environ["GITHUB_SHA"]; assert a["environment"]["SIGMA_AUTH_POC_REAL_SIGNIN"]=="0"; assert not b.get("volumes"), b.get("volumes"); assert c["volumes"]["auth-poc-state"]["driver_opts"]["device"]=="/srv/sigma-state/auth/auth-poc"'
+      - name: Assert GCE browser seccomp and capability parity
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("/tmp/auth-poc-gce-compose.json").read_text())
+          browser = cfg["services"]["browser"]
+          assert browser["cap_drop"] == ["ALL"], browser["cap_drop"]
+          assert browser["cap_add"] == ["SYS_CHROOT"], browser["cap_add"]
+          assert any("chromium-seccomp.json" in x for x in browser["security_opt"]), browser["security_opt"]
+          assert "no-new-privileges:true" in browser["security_opt"], browser["security_opt"]
+          assert not browser.get("privileged"), browser
+          PY
       - name: Build and run production-architecture Linux/amd64 image
         run: docker compose -f deploy/auth-poc.compose.yaml up -d --build --wait
       - name: Verify browser and worker are isolated
@@ -119,7 +132,8 @@ jobs:
           # Unlike the previous diagnostic, neither Chrome's sandbox nor
           # Docker's seccomp filtering is disabled.
           output=$(timeout 18 docker run --rm --network none --read-only \
-            --cap-drop ALL --security-opt no-new-privileges \
+            --cap-drop ALL --cap-add SYS_CHROOT \
+            --security-opt no-new-privileges \
             --security-opt seccomp=auth-poc/chromium-seccomp.json \
             --pids-limit 128 \
             --tmpfs /tmp:rw,nosuid,size=512m,uid=11001,gid=11001 \
