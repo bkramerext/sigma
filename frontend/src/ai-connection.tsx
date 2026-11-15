@@ -415,8 +415,24 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       // Do not select Personal or show connected until real OAuth completes
       // and provider credentials are verified for this exact SIGMA user.
     } catch (cause) {
-      popup?.close();
-      setHostedBrowserError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
+      const message = cause instanceof Error ? cause.message : 'Private browser unavailable.';
+      setHostedBrowserError(message);
+      // Do not silently close the popup on failure. The original window has
+      // no visible diagnostic because the pill's <details> remains collapsed.
+      // Keep the same window open with a useful error, without changing the
+      // Sponsored/Personal selection or retrying Mac-local OAuth.
+      if (popup && !popup.closed) {
+        try {
+          popup.document.title = 'ChatGPT connection unavailable';
+          popup.document.body.style.cssText =
+            'font:16px system-ui;padding:32px;max-width:600px;line-height:1.5';
+          popup.document.body.textContent =
+            'The private Docker browser could not open. ' + message
+            + ' SIGMA remains in Sponsored mode.';
+        } catch {
+          // Browser may have been closed or navigated by the user.
+        }
+      }
     } finally {
       openingContainerBrowser.current = false;
     }
