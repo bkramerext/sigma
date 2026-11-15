@@ -1,0 +1,121 @@
+"""Credential-free end-to-end checks of SIGMA's per-user browser HTTPS proxy."""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import hashlib
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from fastapi import HTTPException, Request
+
+from sigma import cloud_auth, personal_browser_proxy as proxy
+
+A = cloud_auth.Principal("subject-a", "a@example.test", "member")
+B = cloud_auth.Principal("subject-b", "b@example.test", "member")
+
+
+def request(principal: cloud_auth.Principal) -> Request:
+    value = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    value.state.cloud_principal = principal
+    return value
+
+
+async def main() -> None:
+    with tempfile.TemporaryDirectory(prefix="sigma-browser-relay-") as directory:
+        sockets = {A.subject: str(Path(directory) / "a.sock"),
+                   B.subject: str(Path(directory) / "b.sock")}
+        servers = []
+
+        async def start(subject: str) -> None:
+            async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+                try:
+                    req = await reader.readuntil(b"\r\n\r\n")
+                    if req.startswith(b"GET /websockify HTTP/1.1"):
+                        key = next(
+                            line.split(b": ", 1)[1].strip()
+                            for line in req.split(b"\r\n")
+                            if line.lower().startswith(b"sec-websocket-key:")
+                        )
+                        accept = base64.b64encode(
+                            hashlib.sha1(key + proxy._WS_GUID.encode()).digest()
+                        )
+                        writer.write(
+                            b"HTTP/1.1 101 Switching Protocols\r\n"
+                            b"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                            b"Sec-WebSocket-Accept: " + accept + b"\r\n\r\n"
+                            b"\x82\x03yes"
+                        )
+                    else:
+                        assert req.startswith(b"GET /app/rfb.js HTTP/1.1")
+                        body = ("// only " + subject).encode()
+                        writer.write(
+                            b"HTTP/1.1 200 OK\r\nContent-Type: text/javascript\r\n"
+                            + b"Content-Length: " + str(len(body)).encode()
+                            + b"\r\nConnection: close\r\n\r\n" + body
+                        )
+                    await writer.drain()
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+
+            servers.append(await asyncio.start_unix_server(handler, sockets[subject]))
+
+        await start(A.subject)
+        await start(B.subject)
+        try:
+            def identity(principal: cloud_auth.Principal) -> str:
+                return sockets[principal.subject]
+
+            with (
+                patch.object(
+                    proxy.personal_browser, "session",
+                    new=AsyncMock(return_value={"browser_status": "ready"}),
+                ),
+                patch.object(proxy.personal_browser, "browser_socket", side_effect=lambda p: asyncio.sleep(0, result=identity(p))),
+                patch.object(proxy.personal_browser, "browser_password", side_effect=lambda p: asyncio.sleep(0, result="AB12CD34" if p.subject == A.subject else "EF56GH78")),
+                patch.object(proxy.cloud_auth, "config", return_value=SimpleNamespace(origin="https://sigma.example.test")),
+            ):
+                a = await proxy.asset(request(A), "app/rfb.js")
+                b = await proxy.asset(request(B), "app/rfb.js")
+                assert a.body == b"// only subject-a"
+                assert b.body == b"// only subject-b"
+                assert a.headers["cache-control"] == "no-store"
+                html_a = await proxy.view(request(A))
+                html_b = await proxy.view(request(B))
+                assert "AB12CD34" in html_a.body.decode()
+                assert "EF56GH78" not in html_a.body.decode()
+                assert "EF56GH78" in html_b.body.decode()
+                assert html_a.headers["cache-control"] == "no-store"
+                for bad in ("../../private", "app/../../private", "http://another-host"):
+                    try:
+                        await proxy.asset(request(A), bad)
+                    except HTTPException as error:
+                        assert error.status_code == 404
+                    else:
+                        raise AssertionError("Unsafe asset path was proxied")
+                reader, writer = await proxy._connect_worker(sockets[A.subject])
+                try:
+                    fin, opcode, payload = await proxy._remote_frame(reader)
+                    assert fin and opcode == 2 and payload == b"yes"
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+                try:
+                    await proxy.view(request(cloud_auth.Principal("guest", "g@test", "guest")))
+                except HTTPException as error:
+                    assert error.status_code == 403
+                else:
+                    raise AssertionError("Guest received private browser")
+        finally:
+            for server in servers:
+                server.close()
+                await server.wait_closed()
+    print("PASS private browser UDS assets, WebSocket framing, user identity and denial")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
