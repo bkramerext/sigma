@@ -428,6 +428,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     : cloudFunding?.budget
       ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `Allocation: $${cloudFunding.budget.remaining_usd.toFixed(2)}`
     : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
+  async function stopContainerPersonalBrowser() {
+    const response = await fetch(windowAuthUrl('/api/ai/personal-browser/stop'), {
+      method: 'POST',
+      headers: { 'X-Sigma-Error-Handled': 'true' },
+    });
+    if (!response.ok) throw new Error('Could not stop the private browser.');
+  }
+
   async function startContainerPersonalBrowser() {
     if (openingContainerBrowser.current) return;
     if (testPopup && !testPopup.closed) {
@@ -437,11 +445,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     openingContainerBrowser.current = true;
     if (testConnected) {
       try {
-        const response = await fetch(windowAuthUrl('/api/ai/personal-browser/stop'), {
-          method: 'POST',
-          headers: { 'X-Sigma-Error-Handled': 'true' },
-        });
-        if (!response.ok) throw new Error('Could not close the test browser.');
+        await stopContainerPersonalBrowser();
         setTestAccountOwner(null);
       } catch (cause) {
         reportRequestFailure(cause instanceof Error ? cause.message : 'Could not close the test browser.');
@@ -453,10 +457,21 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     // Opening the popup must happen synchronously on the user's click.
     // No user ever has to run a Docker command or know a VNC password.
     const popup = window.open('about:blank', '_blank');
+    let cancelled = false;
     if (popup) {
       popup.opener = null;
-      popup.document.title = 'Connect ChatGPT';
-      popup.document.body.textContent = 'Opening your private browser…';
+      const doc = popup.document;
+      doc.title = 'Connect ChatGPT';
+      doc.body.style.cssText = 'background:#171b20;color:white;font:16px system-ui;margin:32px;line-height:1.5';
+      const heading = doc.createElement('h1');
+      heading.textContent = 'Connect ChatGPT';
+      const message = doc.createElement('p');
+      message.textContent = 'SIGMA is starting the browser for ChatGPT sign-in. Startup can take about 20 seconds.';
+      const cancel = doc.createElement('button');
+      cancel.type = 'button';
+      cancel.textContent = 'Cancel';
+      cancel.addEventListener('click', () => popup.close());
+      doc.body.replaceChildren(heading, message, cancel);
     }
     try {
       if (!popup) throw new Error('Browser popup blocked. Allow popups for SIGMA and retry.');
@@ -468,6 +483,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       const data = await response.json().catch(() => ({})) as {
         browser_status?: string; detail?: string; error?: string;
       };
+      if (popup.closed) {
+        cancelled = true;
+        return;
+      }
       if (!response.ok)
         throw new Error(data.detail ?? data.error ??
           `Private ChatGPT browser startup returned HTTP ${response.status}.`);
@@ -476,11 +495,20 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       popup.location.replace(windowAuthUrl('/api/ai/personal-browser/view'));
       if (testAccount) setTestPopup(popup);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Private browser unavailable.';
+      if (popup?.closed) {
+        cancelled = true;
+        return;
+      }
       popup?.close();
-      reportRequestFailure(message);
+      reportRequestFailure(cause instanceof Error ? cause.message : 'Private browser unavailable.');
     } finally {
-      openingContainerBrowser.current = false;
+      try {
+        if (cancelled) await stopContainerPersonalBrowser();
+      } catch {
+        reportRequestFailure('Could not stop the private browser.');
+      } finally {
+        openingContainerBrowser.current = false;
+      }
     }
   }
   async function connect() {

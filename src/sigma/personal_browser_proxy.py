@@ -70,6 +70,11 @@ async def view(request: Request) -> HTMLResponse:
     nonce = secrets.token_urlsafe(20)
     script = """
 const status = document.querySelector('#connection-status');
+const cancel = document.querySelector('#cancel-connection');
+cancel.addEventListener('click', () => {
+  void fetch(__STOP_URL__, {method: 'POST', keepalive: true}).catch(() => {});
+  window.close();
+});
 try {
   const {default: RFB} = await import('__BASE__/core/rfb.js');
   const target = document.querySelector('#screen');
@@ -81,15 +86,27 @@ try {
   );
   rfb.scaleViewport = true;
   rfb.resizeSession = true;
-  rfb.addEventListener('connect', () => { status.textContent = 'Browser ready'; });
+  rfb.addEventListener('connect', () => {
+    status.textContent = 'Browser ready';
+    cancel.hidden = true;
+  });
   rfb.addEventListener('disconnect', () => {
+    cancel.hidden = true;
     status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
   });
 } catch {
+  cancel.hidden = true;
   status.textContent = 'Could not load the private browser. Close this window and reconnect from SIGMA.';
 }
 """
-    script = script.replace("__BASE__", prefix).replace("__PASSWORD__", json.dumps(password))
+    stop_url = "/api/ai/personal-browser/stop"
+    if window_id:
+        stop_url += "?sigma_window=" + window_id
+    script = (
+        script.replace("__BASE__", prefix)
+        .replace("__PASSWORD__", json.dumps(password))
+        .replace("__STOP_URL__", json.dumps(stop_url))
+    )
     html = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
@@ -101,7 +118,8 @@ try {
         "#screen{flex:1;min-height:0;overflow:hidden}#screen canvas{outline:none}"
         "</style></head><body><main>"
         "<header><strong>Connect ChatGPT</strong><span id='connection-status'>"
-        "Opening your private browser…</span></header>"
+        "Connecting to the ChatGPT sign-in browser…</span>"
+        "<button id='cancel-connection' type='button'>Cancel</button></header>"
         "<div id='screen'></div></main>"
         f"<script type='module' nonce='{nonce}'>{script}</script></body></html>"
     )
