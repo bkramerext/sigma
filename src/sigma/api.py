@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import sqlite3
+from pathlib import Path
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from dataclasses import asdict, replace
@@ -3209,9 +3210,26 @@ def _personal_browser_principal(request: Request) -> cloud_auth.Principal:
 
 async def _personal_browser_action(request: Request, action: str) -> JSONResponse:
     principal = _personal_browser_principal(request)
-    if action == "start" and os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"):
-        # A trusted static launcher diagnostic, never user input.
-        raise HTTPException(503, os.environ["SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"])
+    if action == "start":
+        if os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"):
+            # A trusted static launcher diagnostic, never user input.
+            raise HTTPException(503, os.environ["SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"])
+        marker = os.environ.get("SIGMA_LOCAL_PERSONAL_PREPARATION_FILE")
+        if marker:
+            try:
+                phase = Path(marker).read_text(encoding="ascii").strip()
+            except OSError as exc:
+                raise HTTPException(503, "Personal browser preparation is unavailable.") from exc
+            if phase == "preparing":
+                return JSONResponse(
+                    {"browser_status": "preparing"},
+                    status_code=202,
+                    headers={"Cache-Control": "no-store", "Retry-After": "2"},
+                )
+            if phase != "ready":
+                raise HTTPException(
+                    503, "Personal browser preparation failed. Check Docker Desktop and restart SIGMA."
+                )
     try:
         snapshot = await personal_browser.session(principal, action)
     except personal_browser.PersonalBrowserUnavailable as exc:

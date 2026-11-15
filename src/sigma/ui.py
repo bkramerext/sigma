@@ -165,7 +165,7 @@ def run_ui(
                     try:
                         personal_runtime = LocalPersonalRuntime.start()
                         print(
-                            "Local Personal ChatGPT browser ready. Sign in through SIGMA.",
+                            "Private Personal broker ready; image preparation continues separately.",
                             flush=True,
                         )
                     except (LocalPersonalUnavailable, OSError, RuntimeError) as exc:
@@ -219,7 +219,7 @@ def run_ui(
                 child_env["SIGMA_API_TARGET"] = "http://127.0.0.1:8000"
                 # Preserve the local Google admin session behavior of the former
                 # real-signin-preview launcher without requiring --signin.
-                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin or prod else "false"
+                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
                 # --prod now exercises the real local container path, never
@@ -305,6 +305,10 @@ def run_ui(
                             raise RuntimeError("Servers did not become ready within 30 seconds.")
                     replacement = instance.replacement_request()
                     if replacement is not None:
+                        replacement.sendall(
+                            (json.dumps({"identity": instance.identity, "status": "stopping"})
+                             + "\n").encode()
+                        )
                         break
                     time.sleep(0.1)
             finally:
@@ -319,7 +323,17 @@ def run_ui(
                             # Complete container shutdown BEFORE confirming that
                             # the old launcher has stopped. A replacement must
                             # never race the prior instance's Docker cleanup.
-                            personal_runtime.close()
+                            personal_runtime.close(
+                                progress=(
+                                    lambda: replacement.sendall(
+                                        (json.dumps(
+                                            {"identity": instance.identity, "status": "stopping"}
+                                        ) + "\n").encode()
+                                    )
+                                )
+                                if replacement is not None
+                                else None
+                            )
                             personal_runtime = None
                     finally:
                         signal.signal(signal.SIGINT, prior_int)

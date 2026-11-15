@@ -349,22 +349,27 @@ class Instance:
                             "Previous instance identity mismatch; refusing takeover."
                         )
                     print("Stopping existing SIGMA instance…", flush=True)
-                    # The old --prod owner must stop both UI children and its
-                    # isolated Docker worker before acknowledging takeover.
-                    # Keep that operation bounded while avoiding a race where
-                    # new startup reuses a Docker project still being torn down.
-                    client.settimeout(45)
+                    # Docker cleanup may have many 45s-per-workspace operations.
+                    # Keep receiving progress and never forcibly kill a verified
+                    # SIGMA owner merely because graceful cleanup is slow.
+                    client.settimeout(75)
                     try:
                         client.sendall(
                             json.dumps({"identity": self.identity, "command": "shutdown"}).encode()
-                            + b"\n"
+                            + "\n"
                         )
-                        stopped = self.receive(client)
-                    except (OSError, TimeoutError):
-                        self._terminate_unresponsive_owner()
-                    else:
-                        if stopped != {"identity": self.identity, "status": "stopped"}:
-                            raise RuntimeError("Previous SIGMA instance did not confirm cleanup.")
+                        while True:
+                            status = self.receive(client)
+                            if status == {"identity": self.identity, "status": "stopped"}:
+                                break
+                            if status != {"identity": self.identity, "status": "stopping"}:
+                                raise RuntimeError(
+                                    "Previous SIGMA instance reported invalid shutdown progress."
+                                )
+                    except (OSError, TimeoutError) as exc:
+                        raise RuntimeError(
+                            "Previous SIGMA instance is still cleaning up; retry startup."
+                        ) from exc
         # Only while holding the launch lock, after confirmed or forced cleanup.
         self.path.unlink(missing_ok=True)
 

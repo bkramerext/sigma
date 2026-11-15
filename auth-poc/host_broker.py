@@ -162,6 +162,10 @@ def compose_env(workspace_id: str) -> dict[str, str]:
             env["SIGMA_AUTH_POC_RPC_KEY"] = hmac.digest(
                 bytes.fromhex(seed), workspace_id.encode("ascii"), "sha256"
             ).hex()
+        checkout = os.environ.get("SIGMA_AUTH_POC_CHECKOUT_ID", "")
+        if not re.fullmatch(r"[0-9a-f]{32}", checkout):
+            raise ValueError("Local checkout identity is unavailable")
+        env["SIGMA_AUTH_POC_CHECKOUT_ID"] = checkout
         env["SIGMA_AUTH_POC_LOCAL_UID"] = str(os.geteuid())
         env["SIGMA_AUTH_POC_LOCAL_GID"] = str(os.getegid())
     return env
