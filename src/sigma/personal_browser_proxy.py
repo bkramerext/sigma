@@ -293,7 +293,26 @@ async def websocket_bridge(websocket: WebSocket) -> None:
                     fragments.clear()
                     fragment_opcode = None
 
-        tasks = [asyncio.create_task(from_browser()), asyncio.create_task(from_worker())]
+        async def verify_session_continues() -> None:
+            # An existing WebSocket must lose control after SIGMA logout,
+            # revoked membership, or session expiry, even while a tab stays open.
+            from starlette.concurrency import run_in_threadpool
+
+            while True:
+                await asyncio.sleep(5)
+                current = await run_in_threadpool(cloud_auth.resolve_session, raw)
+                if (
+                    current is None
+                    or current.subject != principal.subject
+                    or current.role not in {"admin", "member"}
+                ):
+                    raise PermissionError("SIGMA session is no longer authorized")
+
+        tasks = [
+            asyncio.create_task(from_browser()),
+            asyncio.create_task(from_worker()),
+            asyncio.create_task(verify_session_continues()),
+        ]
         try:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in pending:
@@ -314,6 +333,7 @@ async def websocket_bridge(websocket: WebSocket) -> None:
         asyncio.IncompleteReadError,
         asyncio.LimitOverrunError,
         HTTPException,
+        PermissionError,
         personal_browser.PersonalBrowserUnavailable,
     ):
         pass
