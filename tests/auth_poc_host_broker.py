@@ -35,10 +35,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-personal-broker-") as temporary:
         root = Path(temporary)
         root.chmod(0o700)
+        gateway_root = root / "gateway"
+        gateway_root.mkdir(mode=0o700)
         with patch.dict(
             os.environ,
             {
                 "SIGMA_AUTH_BROKER_STATE_ROOT": str(root),
+                "SIGMA_AUTH_BROKER_GATEWAY_ROOT": str(gateway_root),
                 "SIGMA_RELEASE": RELEASE,
             },
         ):
@@ -81,13 +84,16 @@ def main() -> None:
                         return subprocess.CompletedProcess(argv, 0, output, "")
 
                     with patch.object(broker.subprocess, "run", side_effect=fake_run):
-                        result = broker.operate("start", A)
-                        assert result == {"status": "ready", "worker": "sigma-personal-" + A}
-                        assert broker.operate("stop", A)["status"] == "stopped"
-                        assert broker.operate("start", B)["status"] == "ready"
+                        with patch.object(Path, "is_socket", return_value=True):
+                            result = broker.operate("start", A)
+                            assert result == {"status": "ready", "worker": "sigma-personal-" + A}
+                            assert broker.operate("stop", A)["status"] == "stopped"
+                            assert broker.operate("start", B)["status"] == "ready"
                     assert all(("--no-build" in c if "up" in c else True) for c in calls)
                     assert (a / "auth/auth-poc").is_dir()
                     assert (b / "auth/auth-poc").is_dir()
+                    assert (gateway_root / A).is_dir()
+                    assert (gateway_root / B).is_dir()
     print("PASS per-subject Docker stack identity, fixed release, symlink rejection and restart safety")
 
 
