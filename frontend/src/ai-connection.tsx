@@ -297,9 +297,10 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
       className="personal-chatgpt-browser-frame"
       title="Private ChatGPT sign-in browser"
       src={windowAuthUrl('/api/ai/personal-browser/view')}/>}
-    <p className="personal-chatgpt-preview-note">This local browser integration is a prototype.
-      A running browser does not mean a ChatGPT account is authorized; real
-      authorization and model calls remain disabled until their separate acceptance gates pass.</p>
+    <p className="personal-chatgpt-preview-note">This local preview supports signing in to a
+      personal ChatGPT account. SIGMA switches to Personal only after the isolated
+      worker verifies that account and its plan permission. Hosted deployment
+      remains disabled pending separate approval.</p>
   </dialog>;
 }
 
