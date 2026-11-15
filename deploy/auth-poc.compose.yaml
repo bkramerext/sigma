@@ -47,7 +47,6 @@ services:
     user: "11001:11001"
     cap_drop: [ALL]
     security_opt:
-      - no-new-privileges:true
       - seccomp:../auth-poc/chromium-seccomp.json
       # Ubuntu 24.04 AppArmor userns restrictions conflict with Chromium's
       # nested sandbox. This affects browser only; worker remains AppArmor-confined.
