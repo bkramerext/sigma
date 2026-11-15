@@ -63,7 +63,7 @@ with urlopen(Request(base + "/__personal_lab__/", headers=headers), timeout=5) a
     body = response.read().decode()
     assert response.status == 200
     assert "Synthetic preview only" in body
-    assert "do not sign in to OpenAI" in body
+    assert "Do not sign in to OpenAI" in body
 for path in ("/api/cloud-auth/admin/grants", "/api/health", "/health"):
     try:
         urlopen(Request(base + path, headers=headers), timeout=5)
