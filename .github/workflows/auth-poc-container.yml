@@ -46,8 +46,7 @@ jobs:
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import json, urllib.request; v=json.load(urllib.request.urlopen("http://127.0.0.1:8001/health")); assert v["ready"], v'
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import urllib.request; html=urllib.request.urlopen("http://127.0.0.1:8001/").read(); assert b"Open ChatGPT account chooser" in html'
       - name: Verify browser-origin gate
-        run: |
-          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python -c 'import urllib.request,urllib.error; r=urllib.request.Request("http://127.0.0.1:8001/verify",data=b"",method="POST"); assert (lambda:None)() is None; exec("try:\\n urllib.request.urlopen(r,timeout=3)\\n raise AssertionError(\\\"request must fail\\\")\\nexcept urllib.error.HTTPError as e:\\n assert e.code == 403")'
+        run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_security.py
       - name: Inspect failures (no login is performed in CI)
         if: failure()
         run: docker compose -f deploy/auth-poc.compose.yaml ps
