@@ -55,9 +55,9 @@ jobs:
           export SIGMA_AUTH_POC_GATEWAY_DIR="/tmp/sigma-poc-local-gateway"
           export SIGMA_AUTH_POC_LOCAL_UID="$(id -u)"
           export SIGMA_AUTH_POC_LOCAL_GID="$(id -g)"
-          docker compose --project-name sigma-poc-config-check \\
-            -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \\
-            -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \\
+          docker compose --project-name sigma-poc-config-check \
+            -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+            -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \
             config --format json > /tmp/sigma-poc-local-compose.json
           python3 - <<'PY'
           import json, os
