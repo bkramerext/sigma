@@ -18,9 +18,11 @@ async def auth_context(subject_hash: str | None) -> AuthContext:
             status="unavailable",
             identity="cloud_personal_unavailable:unbound",
         )
-    if not cloud_auth.config().local:
-        from sigma import personal_browser, personal_inference
+    from sigma import personal_browser, personal_inference
 
+    # The opt-in local container POC uses precisely the hosted worker protocol.
+    # Never silently consult this Mac's legacy OAuth credentials in that mode.
+    if personal_browser.enabled() or not cloud_auth.config().local:
         if personal_browser.enabled():
             try:
                 state = await personal_inference.account()
