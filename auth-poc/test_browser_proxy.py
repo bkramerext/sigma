@@ -70,13 +70,19 @@ async def main() -> None:
             def identity(principal: cloud_auth.Principal) -> str:
                 return sockets[principal.subject]
 
+            async def browser_socket(principal: cloud_auth.Principal) -> str:
+                return identity(principal)
+
+            async def browser_password(principal: cloud_auth.Principal) -> str:
+                return "AB12CD34" if principal.subject == A.subject else "EF56GH78"
+
             with (
                 patch.object(
                     proxy.personal_browser, "session",
                     new=AsyncMock(return_value={"browser_status": "ready"}),
                 ),
-                patch.object(proxy.personal_browser, "browser_socket", side_effect=lambda p: asyncio.sleep(0, result=identity(p))),
-                patch.object(proxy.personal_browser, "browser_password", side_effect=lambda p: asyncio.sleep(0, result="AB12CD34" if p.subject == A.subject else "EF56GH78")),
+                patch.object(proxy.personal_browser, "browser_socket", new=browser_socket),
+                patch.object(proxy.personal_browser, "browser_password", new=browser_password),
                 patch.object(proxy.cloud_auth, "config", return_value=SimpleNamespace(origin="https://sigma.example.test")),
             ):
                 a = await proxy.asset(request(A), "app/rfb.js")
