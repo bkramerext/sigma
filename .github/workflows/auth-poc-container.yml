@@ -7,6 +7,11 @@ on:
     paths:
       - 'auth-poc/**'
       - 'deploy/auth-poc.compose.yaml'
+      - 'deploy/auth-poc.gce.yaml'
+      - 'deploy/release_image.py'
+      - 'deploy/start-gce.sh'
+      - 'deploy/deploy-gce-release.py'
+      - 'deploy/gce_preflight.py'
       - '.github/workflows/auth-poc-container.yml'
   workflow_dispatch:
 
@@ -19,6 +24,26 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Verify GCE Compose overlay remains nonpublic and persistent
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIGMA_RELEASE="$GITHUB_SHA" \
+          SIGMA_DOMAIN="sigma.example.invalid" \
+          SIGMA_TLS_EMAIL="admin@example.invalid" \
+          SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="admin@example.invalid" \
+          GOOGLE_OIDC_CLIENT_ID="example.apps.googleusercontent.com" \
+          SIGMA_INVITATION_SMTP_USERNAME="admin@example.invalid" \
+          SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE="/tmp/dummy" \
+          SIGMA_CLOUD_OPENAI_API_KEY_FILE="/tmp/dummy" \
+          SIGMA_INVITATION_SMTP_PASSWORD_FILE="/tmp/dummy" \
+          SIGMA_SANDBOX_DOCKER_SOCKET="/tmp/dummy-docker.sock" \
+          SIGMA_SANDBOX_DOCKER_GID="10001" \
+          SIGMA_STATE_DISK_MOUNT="/srv/sigma-state" \
+          docker compose -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+            -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+            config --format json > /tmp/auth-poc-gce-compose.json
+          python3 -c 'import json; c=json.load(open("/tmp/auth-poc-gce-compose.json")); a=c["services"]["auth-poc"]; b=c["services"]["browser"]; assert not a.get("ports"), a.get("ports"); assert not b.get("ports"), b.get("ports"); assert a["image"]=="sigma-auth-poc:"+__import__("os").environ["GITHUB_SHA"]; assert b["image"]=="sigma-auth-browser-poc:"+__import__("os").environ["GITHUB_SHA"]; assert a["environment"]["SIGMA_AUTH_POC_REAL_SIGNIN"]=="0"; assert not b.get("volumes"), b.get("volumes"); assert c["volumes"]["auth-poc-state"]["driver_opts"]["device"]=="/srv/sigma-state/auth/auth-poc"'
       - name: Build and run production-architecture Linux/amd64 image
         run: docker compose -f deploy/auth-poc.compose.yaml up -d --build --wait
       - name: Verify browser and worker are isolated
