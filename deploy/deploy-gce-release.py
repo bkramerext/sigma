@@ -130,6 +130,37 @@ class Deployment:
             ["install", "-o", "root", "-g", "root", "-m", "0755", str(source), str(self.preflight)],
         )
 
+    def sync_service_unit(self) -> None:
+        """Install the reviewed service unit when deploying on the real GCE host.
+
+        The unit selects the *same* optional Compose overlays on both start
+        and stop, preserving backup quiescence and reliable rollback.
+        """
+        if not self.root_check:
+            return  # Offline release tests never write host systemd state.
+        source = self.repository / "deploy/systemd/sigma.service"
+        try:
+            info = source.lstat()
+        except OSError as error:
+            raise DeployFailure("release SIGMA systemd unit is missing") from error
+        if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            raise DeployFailure("release SIGMA systemd unit must be a regular file")
+        _call(
+            self.runner,
+            [
+                "install",
+                "-o",
+                "root",
+                "-g",
+                "root",
+                "-m",
+                "0644",
+                str(source),
+                "/etc/systemd/system/sigma.service",
+            ],
+        )
+        _call(self.runner, ["systemctl", "daemon-reload"])
+
     def check_preflight(self) -> None:
         argv = [
             "python3",
@@ -219,6 +250,7 @@ class Deployment:
             _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
             candidate_checkout_changed = True
             self.sync_preflight()
+            self.sync_service_unit()
             self.check_preflight()
             build_command = [
                 "python3",
@@ -268,6 +300,7 @@ class Deployment:
                     ["git", "-C", str(self.repository), "checkout", "--detach", previous],
                 )
                 self.sync_preflight()
+                self.sync_service_unit()
                 if initial:
                     _call(self.runner, ["systemctl", "stop", "sigma.service"])
                     _call(self.runner, ["systemctl", "disable", "sigma.service"])
