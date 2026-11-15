@@ -1,0 +1,35 @@
+name: Auth browser POC image smoke test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build same backend and browser images used by SIGMA release
+        run: |
+          docker build --platform linux/amd64 -t sigma-backend:ci -f Dockerfile .
+          docker build --platform linux/amd64 --build-arg SIGMA_RELEASE=ci -t sigma-auth-browser-poc:ci -f auth-browser-poc/Dockerfile .
+      - name: Start isolated browser and test status
+        run: |
+          secret_file=$(mktemp)
+          chmod 0644 "$secret_file"
+          python3 -c 'import secrets; print(secrets.token_hex(32))' > "$secret_file"
+          docker run -d --rm --init --name sigma-poc-ci --platform linux/amd64 \
+            -p 127.0.0.1:18765:8765 \
+            --mount type=bind,source="$secret_file",target=/run/secrets/auth_browser_poc_key,readonly \
+            --mount type=volume,source=sigma-auth-poc-ci-state,target=/var/lib/sigma-auth \
+            --env SIGMA_AUTH_BROWSER_POC_KEY_FILE=/run/secrets/auth_browser_poc_key \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,size=512m \
+            sigma-auth-browser-poc:ci
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:18765/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:18765/health
+          docker rm -f sigma-poc-ci
+          rm -f "$secret_file"
