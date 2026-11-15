@@ -813,9 +813,10 @@ class Preflight:
                         and not services["browser"].get("volumes")
                         and services["auth-poc"].get("read_only") is True
                         and services["browser"].get("read_only") is True
-                        and services["auth-poc"].get("environment", {}).get(
-                            "SIGMA_AUTH_POC_REAL_SIGNIN"
-                        ) == "0"
+                        and services["auth-poc"]
+                        .get("environment", {})
+                        .get("SIGMA_AUTH_POC_REAL_SIGNIN")
+                        == "0"
                         and volumes["auth-poc-state"]["driver_opts"]["device"]
                         == "/srv/sigma-state/auth/auth-poc"
                         and services["browser"].get("network_mode") == "service:auth-poc"
