@@ -117,6 +117,7 @@ def run_ui(
         return 2
     children: list[subprocess.Popen[bytes]] = []
     replacement: socket.socket | None = None
+    personal_runtime = None
 
     def interrupted(signum: int, frame: object) -> None:
         raise KeyboardInterrupt
@@ -156,6 +157,25 @@ def run_ui(
                 if orphan_failures := recover_orphans():
                     raise RuntimeError(" ".join(orphan_failures))
                 wait_for_ports()
+                if prod:
+                    # Local --prod owns its Personal broker exactly as it owns
+                    # the UI children. A missing Docker Desktop never prevents
+                    # sponsored SIGMA from starting or enables host-local OAuth.
+                    try:
+                        from sigma.local_personal import (
+                            LocalPersonalRuntime,
+                            LocalPersonalUnavailable,
+                        )
+
+                        personal_runtime = LocalPersonalRuntime.start()
+                        print("Local Personal browser ready (synthetic authorization only).", flush=True)
+                    except (LocalPersonalUnavailable, OSError, RuntimeError) as exc:
+                        print(
+                            f"Personal container unavailable: {exc} "
+                            "SIGMA will continue with Sponsored.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                 print("Starting SIGMA backend and frontend…", flush=True)
                 commands = [
                     [
@@ -172,7 +192,11 @@ def run_ui(
                     ["npm", "--prefix", "frontend", "run", "dev"],
                 ]
                 instance_id = uuid4().hex
-                child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
+                child_env = {
+                    **os.environ,
+                    **(personal_runtime.env if personal_runtime is not None else {}),
+                    "SIGMA_UI_INSTANCE_ID": instance_id,
+                }
                 child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
                 child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
@@ -190,8 +214,8 @@ def run_ui(
                 child_env.setdefault(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )
-                if prod:
-                    print("Previewing hosted Personal ChatGPT notice (local UI only).", flush=True)
+                if prod and personal_runtime is None:
+                    print("Personal browser unavailable; showing the hosted notice.", flush=True)
                 for command in commands:
                     children.append(
                         subprocess.Popen(
@@ -293,8 +317,12 @@ def run_ui(
             if children:
                 stop_servers(children)
         finally:
-            signal.signal(signal.SIGINT, prior_int)
-            signal.signal(signal.SIGTERM, previous)
+            try:
+                if personal_runtime is not None:
+                    personal_runtime.close()
+            finally:
+                signal.signal(signal.SIGINT, prior_int)
+                signal.signal(signal.SIGTERM, previous)
 
 
 def run_shutdown() -> int:
