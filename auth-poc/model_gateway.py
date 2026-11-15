@@ -103,7 +103,8 @@ async def _verified_account() -> tuple[dict[str, Any], str | None]:
             models = cached[2]
     binding = hashlib.sha256(session["account_id"].encode()).hexdigest()
     return {
-        "status": "verified", "binding": binding, "models": models, "account_label": None,
+        "status": "verified", "binding": binding, "models": models,
+        "account_label": (account.get("email") or account.get("name") or "ChatGPT account")[:254],
     }, token
 
 
@@ -141,6 +142,22 @@ async def preview_state() -> dict[str, str]:
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(503, "The worker could not report sign-in progress.") from exc
     return {"phase": phase}
+
+
+@app.post("/v1/disconnect")
+async def disconnect(request: Request) -> dict[str, bool]:
+    if not _valid_rpc_key(request):
+        raise HTTPException(403, "Personal ChatGPT disconnect is unavailable.")
+    try:
+        async with httpx.AsyncClient(timeout=45, trust_env=False) as client:
+            result = await client.post(
+                "http://127.0.0.1:8001/disconnect",
+                headers={"X-Sigma-Worker-Key": request.headers["x-sigma-worker-key"]},
+            )
+            result.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(503, "Could not disconnect the isolated ChatGPT account.") from exc
+    return {"disconnected": True}
 
 
 @app.post("/v1/response")

@@ -921,6 +921,24 @@ def record_personal_authorization(subject: str) -> None:
             )
 
 
+def clear_personal_authorization(subject: str) -> None:
+    """Forget local Personal authorization and return eligible users to Sponsored."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not cfg.local:
+        raise RuntimeError("Local Personal ChatGPT is unavailable.")
+    sponsored_enabled = sponsored_access_enabled()
+    with _db(cfg) as db:
+        changed = db.execute(
+            "UPDATE user_state SET model_access=CASE WHEN sponsorship_eligible=1 AND ? "
+            "THEN 'sponsored' ELSE 'personal' END, model_access_selected=1, "
+            "model_access_explicit=1, updated_at=? WHERE subject=? AND access_active=1",
+            (sponsored_enabled, _now(), subject),
+        ).rowcount
+        if changed != 1:
+            raise PermissionError("Authorized account state is unavailable.")
+        db.execute("DELETE FROM personal_authorizations WHERE subject=?", (subject,))
+
+
 def persist_model_connection_status(subject: str, status: str) -> None:
     """Persist provider connectivity from a server-side check for this identity."""
     allowed = {

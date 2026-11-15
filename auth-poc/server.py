@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import synthetic_signin
+from model_gateway import _valid_rpc_key
 
 from sigma import ai_store, chatgpt_auth
 from sigma.projects import ProjectError
@@ -207,6 +208,16 @@ async def status() -> dict[str, str | None]:
     except ProjectError:
         return {"attempt": "expired", "message": "Sign-in expired. Start another attempt."}
     return {"attempt": attempt["status"], "message": attempt["message"]}
+
+
+@app.post("/disconnect")
+async def disconnect(request: Request) -> dict[str, bool]:
+    global _ATTEMPT_ID
+    if not _valid_rpc_key(request):
+        raise HTTPException(403, "Personal ChatGPT disconnect is unavailable.")
+    await chatgpt_auth.disconnect()
+    _ATTEMPT_ID = None
+    return {"disconnected": True}
 
 
 @app.post("/verify")

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import './ai-connection.css';
 import { windowAuthUrl } from './window-auth';
 import { sponsoredProviderLabel, type SponsoredInferenceProvider } from './provider-usage-guidance';
@@ -291,6 +291,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
   const [authorizedPreviewOwner, setAuthorizedPreviewOwner] = useState<string | null>(null);
   const pillTrigger = useRef<HTMLElement>(null);
+  const disconnectDialog = useRef<HTMLDialogElement>(null);
+  const disconnectPromptId = useId();
+  const [disconnecting, setDisconnecting] = useState(false);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const dotActive = !projectHeader && status === 'connected' && providerActive;
@@ -400,7 +403,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const connected = (hosted ? hostedConnected : simulatedSponsored
     ? sponsoredPill && sponsoredSelected && cloudFunding?.provider?.status === 'connected'
     : status === 'connected') && !googleRequired;
-  const disabled = (!hosted && !hostedNoticeClick && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection;
+  const disabled = (!hosted && !hostedNoticeClick && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection || disconnecting;
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
@@ -544,11 +547,33 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     }
   }
 
+  async function disconnectContainerConnection() {
+    setDisconnecting(true);
+    try {
+      const response = await fetch(windowAuthUrl('/api/ai/personal-browser/disconnect'), {
+        method: 'POST',
+        headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
+      if (!response.ok) throw new Error('Could not disconnect Personal ChatGPT. Try again.');
+      setAuthorizedPreviewOwner(null);
+      disconnectDialog.current?.close();
+      window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
+      await ai.refresh('manual');
+    } catch (cause) {
+      reportRequestFailure(cause instanceof Error ? cause.message : 'Could not disconnect Personal ChatGPT.');
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
   async function selectContainerConnection() {
+    if (localLabAccount && !testConnected && selectedConnection === 'personal' && (previewAuthorized || connected)) {
+      disconnectDialog.current?.showModal();
+      return;
+    }
     if (previewAuthorized && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
-      const mode = cloudFunding.selectedConnection === 'personal' ? 'sponsored' : 'personal';
       try {
-        await cloudFunding.selectConnection?.(mode);
+        await cloudFunding.selectConnection?.('personal');
         personalPopup?.close();
         setPersonalPopup(null);
         await ai.refresh('manual');
@@ -604,7 +629,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen}>
-    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={previewAuthorized ? (sponsoredSelected ? 'Click to use your ChatGPT plan for SIGMA requests.' : 'Your ChatGPT plan is active. Click to switch to Sponsored.') : sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (localLabAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void selectContainerConnection(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={previewAuthorized ? (sponsoredSelected ? 'Click to use your ChatGPT plan for SIGMA requests.' : 'Your ChatGPT plan is active. Click to disconnect.') : sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (localLabAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void selectContainerConnection(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
@@ -616,6 +641,19 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       <button type="button" className="connection-text-action" onClick={() => setSponsorProvisioningHelpOpen(false)}>Dismiss</button>
     </div>}
   </details>
+  {localLabAccount && <dialog ref={disconnectDialog} className="google-account-dialog hosted-personal-chatgpt-dialog"
+    aria-labelledby={disconnectPromptId} onCancel={event => { if (disconnecting) event.preventDefault(); }}
+    onClose={() => window.requestAnimationFrame(() => pillTrigger.current?.focus())}>
+    <p id={disconnectPromptId}>{ai.info?.account_label
+      ? `Disconnect from personal ChatGPT account ${ai.info.account_label}?`
+      : 'Disconnect from your personal ChatGPT account?'}</p>
+    <div className="session-remove-confirm-actions">
+      <button type="button" className="text-view-link" disabled={disconnecting}
+        onClick={() => void disconnectContainerConnection()}>Confirm</button>
+      <button type="button" className="text-view-link" disabled={disconnecting} autoFocus
+        onClick={() => disconnectDialog.current?.close()}>Cancel</button>
+    </div>
+  </dialog>}
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
     setPersonalHostedNoticeOpen(false);
     window.requestAnimationFrame(() => pillTrigger.current?.focus());

@@ -9966,7 +9966,7 @@ function GoogleIdentityPill({ inviteInHeader = false }: { inviteInHeader?: boole
   }
   return <>
     {cloud?.enabled && cloud.authenticated
-      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} disabled={signingOut} aria-busy={signingOut} aria-label={signingOut ? 'Signing out of Google' : 'Sign out of Google'} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>{signingOut ? 'Signing out of Google…' : 'Signed into Google'}</button>
+      ? <button type="button" className="project-google-signin" onClick={() => void signOut()} disabled={signingOut} aria-busy={signingOut} aria-label={signingOut ? 'Signing out of Google' : 'Sign out of Google'} data-tooltip={signedInAccountTooltip}><span className="connection-dot connection-connected" aria-hidden="true"/>{signingOut ? 'Signing out of Google…' : 'Sign out of Google'}</button>
       : <>
         <a className="project-google-signin" href={projectReturn} onClick={() => window.sessionStorage.removeItem('sigma.nonMemberWelcomeDismissed')}><span className="connection-dot" aria-hidden="true"/>Sign in with Google</a>
         {canRequestInvitation && !inviteInHeader && <button type="button" className="project-google-signin project-invite-me" aria-haspopup="dialog" aria-controls="google-invitation-dialog" onClick={() => dialog.current?.showModal()}>Invite me!</button>}

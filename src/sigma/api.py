@@ -3251,6 +3251,19 @@ async def personal_browser_account(request: Request):
     )
 
 
+@app.post("/api/ai/personal-browser/disconnect")
+async def personal_browser_disconnect(request: Request):
+    principal = _personal_browser_principal(request)
+    if not cloud_auth.config().local or not personal_browser.sign_in_preview_enabled():
+        raise HTTPException(404, "Personal ChatGPT disconnect is unavailable.")
+    try:
+        await personal_inference.disconnect(principal)
+        await run_in_threadpool(cloud_auth.clear_personal_authorization, principal.subject)
+    except (personal_inference.PersonalInferenceUnavailable, OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(503, "Could not disconnect Personal ChatGPT. Try again.") from exc
+    return JSONResponse({"disconnected": True}, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/ai/personal-browser/test-account")
 async def personal_browser_test_account(request: Request):
     principal = _personal_browser_principal(request)

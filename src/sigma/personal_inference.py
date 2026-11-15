@@ -74,7 +74,7 @@ async def _socket(principal: cloud_auth.Principal) -> str:
 async def _request(
     principal: cloud_auth.Principal, method: str, endpoint: str, body: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    if (method, endpoint) not in {("GET", "/v1/account"), ("POST", "/v1/response")}:
+    if (method, endpoint) not in {("GET", "/v1/account"), ("POST", "/v1/response"), ("POST", "/v1/disconnect")}:
         raise PersonalInferenceUnavailable("Unsupported model operation.")
     socket_path = await _socket(principal)
     headers: dict[str, str] = {}
@@ -149,6 +149,14 @@ async def account(principal: cloud_auth.Principal | None = None) -> dict[str, An
     # An explicit principal is used only for already-authenticated SIGMA status
     # surfaces. Inference itself always requires the two matching context bindings.
     return _account(await _request(verified, "GET", "/v1/account"))
+
+
+async def disconnect(principal: cloud_auth.Principal) -> None:
+    if not personal_browser.sign_in_preview_enabled():
+        raise PersonalInferenceUnavailable("Personal ChatGPT disconnect is unavailable.")
+    verified = personal_browser._principal(principal)
+    if (await _request(verified, "POST", "/v1/disconnect")).get("disconnected") is not True:
+        raise PersonalInferenceUnavailable("The Personal worker did not confirm disconnect.")
 
 
 async def respond(
