@@ -53,6 +53,7 @@ jobs:
       - name: Diagnose Chromium startup (CI only, no OpenAI sign-in)
         if: failure()
         run: |
+          docker compose -f deploy/auth-poc.compose.yaml logs --no-color --tail=70 browser || true
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser sh -c 'timeout 8 /usr/bin/chromium --headless --disable-gpu --dump-dom about:blank 2>&1 | tail -35' || true
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser sh -c 'ps -ef | grep -E "chromium|Xvfb|x11vnc|websockify" | head -25' || true
       - name: Clean up POC containers and credentials
