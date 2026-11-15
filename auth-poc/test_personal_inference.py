@@ -48,7 +48,15 @@ async def main() -> None:
         malformed = await client.post(
             "/v1/response", json={**request, "token": "MUST-NOT-ACCEPT"}
         )
-        assert malformed.status_code == 422
+        # A caller without the private worker key is denied before parsing.
+        assert malformed.status_code == 403
+        # Even after the authenticated gate, extra credential-bearing fields
+        # cannot enter the strictly bounded model RPC schema.
+        with patch("model_gateway._valid_rpc_key", return_value=True):
+            malformed_authorized = await client.post(
+                "/v1/response", json={**request, "token": "MUST-NOT-ACCEPT"}
+            )
+            assert malformed_authorized.status_code == 422
 
     principal_a = cloud_auth.Principal("subject-a", "a@example.test", "member")
     principal_b = cloud_auth.Principal("subject-b", "b@example.test", "member")
