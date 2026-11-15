@@ -217,9 +217,18 @@ def run_ui(
                 # This launcher owns its API process. Never let a shell-level
                 # Vite proxy override route browser sign-ins to another backend.
                 child_env["SIGMA_API_TARGET"] = "http://127.0.0.1:8000"
-                # Preserve the local Google admin session behavior of the former
-                # real-signin-preview launcher without requiring --signin.
-                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
+                # The former POC launcher explicitly used --signin. Preserve
+                # its single-user loopback identity only when Google OIDC is
+                # wholly unconfigured. Never bypass a configured Google login.
+                legacy_local_admin = (
+                    prod
+                    and bool(admin_email)
+                    and not os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip()
+                    and not os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip()
+                )
+                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = (
+                    "true" if signin or legacy_local_admin else "false"
+                )
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
                 # --prod now exercises the real local container path, never

@@ -65,6 +65,11 @@ The historical `bash auth-poc/start-sigma-local.sh` only forwards to
 The old `--real-signin-preview` switch is no longer necessary: local
 `start --prod` includes that capability automatically.
 A one-time `./sigma setup` may still be required for a new checkout.
+If local Google OAuth is configured, normal Google sign-in remains required.
+If no Google OAuth client is configured and a designated local admin address
+exists, `start --prod` preserves the former POC's explicit `--signin`
+loopback-only local-admin behavior; it never grants that shortcut on a
+Google-configured or hosted server.
 
 Actual macOS Docker Desktop and browser acceptance still require local testing.
 CI exercises Linux containers, broker isolation, and the integration contract,
