@@ -257,10 +257,11 @@ class ProdLifecycleTests(unittest.TestCase):
                     return 1
 
             class Runtime:
-                preparation = FinishedProcess()
+                def __init__(self, root: Path) -> None:
+                    self.runtime = root
+                    self.preparation = FinishedProcess()
 
-            instance = Runtime()
-            instance.runtime = runtime
+            instance = Runtime(runtime)
             mod.LocalPersonalRuntime.refresh_preparation(instance)
             self.assertEqual(marker.read_text(), "failed")
 
