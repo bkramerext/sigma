@@ -115,12 +115,28 @@ async def session(
     }
 
 
-async def browser_address(principal: cloud_auth.Principal | None) -> str:
-    """Fixed Docker-network name derived solely from the verified workspace ID."""
+async def browser_socket(principal: cloud_auth.Principal | None) -> str:
+    """Only this verified user's private Unix relay; never a Docker hostname."""
     trusted = _principal(principal)
     _socket()  # Disabled or unsafe lab configuration fails closed.
     workspace_id = await _workspace_id(trusted)
-    return "http://sigma-personal-" + workspace_id + ":6080"
+    raw = os.environ.get("SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT", "")
+    root = Path(raw)
+    if not root.is_absolute() or ".." in root.parts or root == Path("/"):
+        raise PersonalBrowserUnavailable("Private browser gateway is unavailable.")
+    path = root / workspace_id / "vnc.sock"
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise PersonalBrowserUnavailable("Private browser gateway is unavailable.") from exc
+    if (
+        not stat.S_ISSOCK(info.st_mode)
+        or path.is_symlink()
+        or info.st_uid not in {0, os.geteuid()}
+        or info.st_mode & 0o077
+    ):
+        raise PersonalBrowserUnavailable("Private browser gateway is unavailable.")
+    return str(path)
 
 
 async def browser_password(principal: cloud_auth.Principal | None) -> str:
