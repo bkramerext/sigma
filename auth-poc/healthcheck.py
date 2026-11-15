@@ -1,4 +1,4 @@
-"""Container health probe that checks the worker's model UDS when mounted."""
+"""Container health probe for the isolated model gateway."""
 from __future__ import annotations
 
 import os
@@ -14,6 +14,10 @@ ROOT = Path("/run/sigma-personal")
 def main() -> None:
     with urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=3):
         pass
+    if os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1":
+        with urllib.request.urlopen("http://127.0.0.1:8002/v1/account", timeout=3):
+            pass
+        return
     if not ROOT.exists() and not ROOT.is_symlink():
         return
     details = ROOT.lstat()

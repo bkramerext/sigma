@@ -1,8 +1,8 @@
-"""Private, worker-only model RPC contract for the hosted Personal POC.
+"""Private, worker-only model RPC contract for the synthetic Personal POC.
 
-This server is bound ONLY to /run/sigma-personal/model.sock, never TCP.
-The browser container does not mount the socket. This milestone establishes
-the request/response protocol; REAL OAuth and provider dispatch stay blocked.
+Hosted workers bind this server to /run/sigma-personal/model.sock. The local
+Docker POC binds it to worker port 8002, published only on host loopback; its
+browser still has no credential mount. OAuth and provider dispatch stay blocked.
 No token, refresh token, cookie or OAuth code is ever returned over this API.
 """
 

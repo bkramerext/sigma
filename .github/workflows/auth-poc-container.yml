@@ -65,11 +65,13 @@ jobs:
           worker, browser = config["services"]["auth-poc"], config["services"]["browser"]
           assert worker["user"] == f'{os.getuid()}:{os.getgid()}'
           assert worker["environment"]["SIGMA_AUTH_POC_LOCAL_DOCKER"] == "1"
-          assert not worker.get("ports"), worker.get("ports")
+          ports = worker.get("ports", [])
+          assert {port["target"] for port in ports} == {6080, 8002}, ports
+          assert all(port["host_ip"] == "127.0.0.1" for port in ports), ports
           assert not browser.get("ports"), browser.get("ports")
           mounts = {m["target"]: m for m in worker["volumes"]}
           assert mounts["/var/lib/sigma-poc-auth"]["type"] == "bind"
-          assert mounts["/run/sigma-personal"]["type"] == "bind"
+          assert "/run/sigma-personal" not in mounts
           assert not browser.get("volumes"), browser.get("volumes")
           PY
       - name: Verify GCE Compose overlay remains nonpublic and persistent
@@ -216,7 +218,7 @@ jobs:
               response = conn.recv(1000)
               assert response.startswith(b"HTTP/1.1 200 "), "Private model relay did not answer"
           assert broker.operate("stop", workspace)["status"] == "stopped"
-          print("PASS: host-user-owned Docker worker and private browser relay")
+          print("PASS: host-user-owned Docker worker and native host Unix-socket relays")
           PY
       - name: Verify two isolated user-scoped stacks
         shell: bash

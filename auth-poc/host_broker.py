@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import select
 import socket
 import socketserver
 import stat
 import struct
-import sys
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler
@@ -33,13 +33,14 @@ FILES = (
 )
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCK = threading.Lock()
+_GATEWAY_SERVERS: dict[str, list[tuple[Path, socketserver.BaseServer, threading.Thread]]] = {}
 
 
 def local_poc() -> bool:
-    """Explicit single-machine POC: host user owns the private relay mounts.
+    """Explicit single-machine POC: host user owns native private relay sockets.
 
-    Production uses worker UID 10001; macOS Docker Desktop needs the launching
-    user's mapped UID on bind mounts. The browser remains a separate UID.
+    Production uses worker UID 10001; local Docker uses the launching user's
+    UID for its isolated credential volume. The browser remains a separate UID.
     """
     return os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
 
@@ -183,6 +184,103 @@ def _socket_http_ready(path: Path, target: str) -> bool:
         return False
 
 
+class _GatewayRelayHandler(socketserver.BaseRequestHandler):
+    """Forward one Unix stream to a fixed loopback-only Docker published port."""
+
+    def handle(self) -> None:
+        client = self.request
+        try:
+            upstream = socket.create_connection(
+                ("127.0.0.1", self.server.upstream_port), timeout=5
+            )
+        except OSError:
+            return
+        with upstream:
+            try:
+                while True:
+                    readable, _, _ = select.select([client, upstream], [], [], 300)
+                    if not readable:
+                        continue
+                    for source in readable:
+                        payload = source.recv(65536)
+                        if not payload:
+                            return
+                        target = upstream if source is client else client
+                        target.sendall(payload)
+            except OSError:
+                return
+
+
+class _GatewayServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    daemon_threads = True
+    block_on_close = False
+
+
+def _stop_local_gateway(workspace_id: str) -> None:
+    active = _GATEWAY_SERVERS.pop(workspace_id, [])
+    for path, server, thread in active:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        try:
+            info = path.lstat()
+            if stat.S_ISSOCK(info.st_mode) and info.st_uid == os.geteuid():
+                path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _published_loopback_port(workspace_id: str, container_port: int) -> int:
+    output = _compose(
+        workspace_id, "port", "auth-poc", str(container_port), timeout=10
+    )
+    matches = re.findall(r"(?m)^127\.0\.0\.1:(\d+)$", output)
+    if len(matches) != 1:
+        raise RuntimeError("Private loopback port mapping is unavailable")
+    port = int(matches[0])
+    if not 1 <= port <= 65535:
+        raise RuntimeError("Private loopback port mapping is invalid")
+    return port
+
+
+def _ensure_local_gateway(workspace_id: str) -> None:
+    """Create native host sockets that forward only to fixed loopback ports."""
+    gateway = prepare_gateway(workspace_id)
+    active = _GATEWAY_SERVERS.get(workspace_id, [])
+    if len(active) == 2 and all(path.is_socket() and thread.is_alive() for path, _, thread in active):
+        return
+    _stop_local_gateway(workspace_id)
+    specifications = (
+        ("vnc.sock", _published_loopback_port(workspace_id, 6080)),
+        ("model.sock", _published_loopback_port(workspace_id, 8002)),
+    )
+    started: list[tuple[Path, socketserver.BaseServer, threading.Thread]] = []
+    try:
+        for name, upstream_port in specifications:
+            path = gateway / name
+            if path.exists() or path.is_symlink():
+                old = path.lstat()
+                if not stat.S_ISSOCK(old.st_mode) or old.st_uid != os.geteuid():
+                    raise RuntimeError("Unsafe existing private gateway socket")
+                path.unlink()
+            server = _GatewayServer(str(path), _GatewayRelayHandler)
+            server.upstream_port = upstream_port
+            os.chmod(path, 0o600)
+            thread = threading.Thread(
+                target=server.serve_forever, kwargs={"poll_interval": 0.2}, daemon=True
+            )
+            thread.start()
+            started.append((path, server, thread))
+        _GATEWAY_SERVERS[workspace_id] = started
+    except Exception:
+        for path, server, thread in started:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            path.unlink(missing_ok=True)
+        raise
+
+
 def _lock_for(workspace_id: str) -> threading.Lock:
     with _LOCK:
         return _LOCKS.setdefault(workspace_id, threading.Lock())
@@ -196,10 +294,15 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
     with _lock_for(workspace_id):
         if action == "start":
             prepare_state(workspace_id)
-            prepare_gateway(workspace_id)
+            if local_poc():
+                _stop_local_gateway(workspace_id)
+            else:
+                prepare_gateway(workspace_id)
             _compose(workspace_id, "up", "-d", "--no-build", "--wait")
         elif action == "stop":
             _compose(workspace_id, "stop")
+            if local_poc():
+                _stop_local_gateway(workspace_id)
         if action == "stop":
             status = "stopped"
         else:
@@ -217,20 +320,19 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                     check=False,
                 )
                 gateway = gateway_root() / workspace_id
-                gateway_ready = all(
-                    (gateway / name).is_socket() and not (gateway / name).is_symlink()
-                    for name in ("vnc.sock", "model.sock")
-                )
-                if gateway_ready:
-                    gateway_ready = (
-                        _socket_http_ready(gateway / "vnc.sock", "/vnc.html")
-                        and _socket_http_ready(gateway / "model.sock", "/v1/account")
+                try:
+                    if local_poc():
+                        _ensure_local_gateway(workspace_id)
+                    gateway_ready = all(
+                        (gateway / name).is_socket() and not (gateway / name).is_symlink()
+                        for name in ("vnc.sock", "model.sock")
                     )
-                if gateway_ready and local_poc():
-                    if sys.platform == "darwin":
-                        # Docker Desktop exposes socket nodes as 0755 and ignores
-                        # chmod. The 0700 owner-only parent directory is the MAC:
-                        # require it, and require each socket to belong to this user.
+                    if gateway_ready:
+                        gateway_ready = (
+                            _socket_http_ready(gateway / "vnc.sock", "/vnc.html")
+                            and _socket_http_ready(gateway / "model.sock", "/v1/account")
+                        )
+                    if gateway_ready and local_poc():
                         parent = gateway.lstat()
                         gateway_ready = (
                             stat.S_ISDIR(parent.st_mode)
@@ -245,15 +347,10 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                                 stat.S_ISSOCK(info.st_mode)
                                 and not socket_path.is_symlink()
                                 and info.st_uid == os.geteuid()
-                                and bool(info.st_mode & stat.S_IRUSR)
-                                and bool(info.st_mode & stat.S_IWUSR)
+                                and stat.S_IMODE(info.st_mode) == 0o600
                             )
-                    else:
-                        for name in ("vnc.sock", "model.sock"):
-                            socket_path = gateway / name
-                            os.chmod(socket_path, 0o600)
-                            if stat.S_IMODE(socket_path.lstat().st_mode) != 0o600:
-                                gateway_ready = False
+                except (OSError, RuntimeError, subprocess.TimeoutExpired):
+                    gateway_ready = False
                 status = (
                     "ready"
                     if health.returncode == 0

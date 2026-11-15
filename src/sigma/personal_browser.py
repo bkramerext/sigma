@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import os
 import stat
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -132,15 +131,6 @@ async def _gateway_socket(principal: cloud_auth.Principal | None, *, filename: s
         info = path.lstat()
     except OSError as exc:
         raise PersonalBrowserUnavailable("Private browser gateway is unavailable.") from exc
-    local_macos_socket = (
-        os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
-        and sys.platform == "darwin"
-        and stat.S_IMODE(parent_info.st_mode) == 0o700
-        and parent_info.st_uid == os.geteuid()
-        and info.st_uid == os.geteuid()
-        and bool(info.st_mode & stat.S_IRUSR)
-        and bool(info.st_mode & stat.S_IWUSR)
-    )
     if (
         not stat.S_ISDIR(parent_info.st_mode)
         or directory.is_symlink()
@@ -149,7 +139,7 @@ async def _gateway_socket(principal: cloud_auth.Principal | None, *, filename: s
         or not stat.S_ISSOCK(info.st_mode)
         or path.is_symlink()
         or info.st_uid != os.geteuid()
-        or (info.st_mode & 0o077 and not local_macos_socket)
+        or (info.st_mode & 0o077)
     ):
         raise PersonalBrowserUnavailable("Private browser gateway is unavailable.")
     return str(path)

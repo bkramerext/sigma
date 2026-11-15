@@ -1,6 +1,6 @@
-# Explicit opt-in Mac/Linux local POC only. Same credential worker and browser
-# images as GCE; only filesystem UID and bind-mount ownership differ.
-# This file is appended AFTER the private GCE per-user overlay by host_broker.
+# Explicit opt-in local POC. The host broker creates the Unix sockets itself
+# and forwards them to random host ports bound only on 127.0.0.1.
+# This overlay is appended AFTER the private GCE per-user overlay.
 services:
   auth-poc:
     environment:
@@ -8,7 +8,10 @@ services:
     user: "${SIGMA_AUTH_POC_LOCAL_UID:?local POC UID required}:${SIGMA_AUTH_POC_LOCAL_GID:?local POC GID required}"
     tmpfs:
       - /tmp:rw,nosuid,size=64m,uid=${SIGMA_AUTH_POC_LOCAL_UID},gid=${SIGMA_AUTH_POC_LOCAL_GID},mode=0700
-    volumes:
+    ports: !override
+      - "127.0.0.1::6080"
+      - "127.0.0.1::8002"
+    volumes: !override
       - type: bind
         source: ${SIGMA_STATE_DISK_MOUNT:?local per-user state required}/auth/auth-poc
         target: /var/lib/sigma-poc-auth

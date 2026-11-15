@@ -1,11 +1,15 @@
 #!/bin/sh
-# Host-broker-created per-user workers publish a private Unix relay, never TCP.
-# The original standalone synthetic POC has no relay mount and is unchanged.
+# Host-broker-created per-user workers expose only private loopback host ports.
+# Hosted workers keep their direct Unix-socket relays.
 set -eu
 umask 077
-if [ -d /run/sigma-personal ]; then
-  # A stopped container leaves its bind-mounted socket inode behind. Before
-  # restart, unlink only our own stale socket; reject symlinks and foreign files.
+if [ "${SIGMA_AUTH_POC_LOCAL_DOCKER:-0}" = "1" ]; then
+  # Local POC only: Compose publishes these ports on host 127.0.0.1, and the
+  # browser shares this worker's private network namespace.
+  /opt/venv/bin/uvicorn model_gateway:app --host 0.0.0.0 --port 8002 --no-access-log &
+elif [ -d /run/sigma-personal ]; then
+  # A stopped container may leave bind-mounted socket inodes behind. Unlink
+  # only our own stale model socket; reject symlinks and foreign files.
   /opt/venv/bin/python - <<'PY'
 import os
 import stat
@@ -19,13 +23,7 @@ if path.exists() or path.is_symlink():
     path.unlink()
 PY
   /opt/venv/bin/python /opt/sigma/auth-poc/unix_proxy.py &
-  if [ "${SIGMA_AUTH_POC_LOCAL_DOCKER:-0}" = "1" ]; then
-    # Docker Desktop's shared Mac bind mount rejects chmod(2) on socket nodes.
-    # Pre-bind the model UDS so Uvicorn does not chmod the mounted socket.
-    /opt/venv/bin/python /opt/sigma/auth-poc/local_uds_uvicorn.py &
-  else
-    /opt/venv/bin/uvicorn model_gateway:app --uds /run/sigma-personal/model.sock --no-access-log &
-  fi
+  /opt/venv/bin/uvicorn model_gateway:app --uds /run/sigma-personal/model.sock --no-access-log &
   i=0
   while [ ! -S /run/sigma-personal/vnc.sock ] || [ ! -S /run/sigma-personal/model.sock ]; do
     i=$((i+1))
