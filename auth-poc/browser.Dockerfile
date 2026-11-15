@@ -4,7 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp DISPLAY=:99
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium xvfb x11vnc novnc websockify ca-certificates fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
-COPY auth-poc/boot.sh /opt/sigma/boot.sh
+COPY --chmod=0444 auth-poc/boot.sh /opt/sigma/boot.sh
 RUN useradd --uid 11001 --no-create-home --shell /usr/sbin/nologin sandbox-browser
 USER 11001:11001
 EXPOSE 6080

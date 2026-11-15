@@ -12,7 +12,8 @@ COPY src ./src
 COPY samples ./samples
 RUN uv sync --locked --no-dev
 COPY auth-poc /opt/sigma/auth-poc
-RUN mkdir -p /var/lib/sigma-poc-auth && chmod 0700 /var/lib/sigma-poc-auth \
+RUN chmod -R a+rX /opt/sigma/auth-poc \
+    && mkdir -p /var/lib/sigma-poc-auth && chmod 0700 /var/lib/sigma-poc-auth \
     && chown 10001:10001 /var/lib/sigma-poc-auth
 USER 10001:10001
 # Intentionally NOT published: browser shares only our network namespace.
