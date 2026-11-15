@@ -39,6 +39,7 @@ from sigma import (
     paper_scores,
     papers,
     personal_browser,
+    personal_browser_proxy,
     project_collaboration,
     project_diagnostics,
     project_types,
@@ -3221,6 +3222,21 @@ async def personal_browser_status(request: Request):
 async def personal_browser_stop(request: Request):
     """Pause only this user's browser; do not erase credentials or claim logout."""
     return await _personal_browser_action(request, "stop")
+
+
+@app.get("/api/ai/personal-browser/view")
+async def personal_browser_view(request: Request):
+    return await personal_browser_proxy.view(request)
+
+
+@app.get("/api/ai/personal-browser/{path:path}")
+async def personal_browser_asset(request: Request, path: str):
+    return await personal_browser_proxy.asset(request, path)
+
+
+@app.websocket("/api/ai/personal-browser/ws")
+async def personal_browser_ws(websocket):
+    await personal_browser_proxy.websocket_bridge(websocket)
 
 
 
