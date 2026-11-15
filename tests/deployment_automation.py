@@ -202,7 +202,7 @@ def main() -> None:
         unit_path = repo / "deploy/systemd/sigma.service"
         unit_path.parent.mkdir(parents=True, exist_ok=True)
         unit_path.write_text(
-            "[Unit]\\nDescription=SIGMA test\\n[Service]\\nExecStop=compose-gce.sh stop\\n",
+            "[Unit]\nDescription=SIGMA test\n[Service]\nExecStop=compose-gce.sh stop\n",
             encoding="utf-8",
         )
         installed: list[list[str]] = []
@@ -229,14 +229,14 @@ def main() -> None:
         bin_dir = root / "test-bin"
         bin_dir.mkdir()
         docker = bin_dir / "docker"
-        docker.write_text("#!/bin/sh\\nprintf '%s\\\\n' \"$@\"\\n", encoding="utf-8")
+        docker.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\"\n", encoding="utf-8")
         docker.chmod(0o755)
         helper = ROOT / "deploy/compose-gce.sh"
         for lab in ("true", "false"):
             for gmail in (False, True):
-                config = f"SIGMA_RELEASE={OLD}\\nSIGMA_AUTH_POC_LAB_ENABLED={lab}\\n"
+                config = f"SIGMA_RELEASE={OLD}\nSIGMA_AUTH_POC_LAB_ENABLED={lab}\n"
                 if gmail:
-                    config += "SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=/tmp/gmail\\n"
+                    config += "SIGMA_INVITATION_GMAIL_TOKEN_FILE_HOST=/tmp/gmail\n"
                 env_file.write_text(config, encoding="utf-8")
                 result = subprocess.run(
                     ["sh", str(helper), "stop"],
