@@ -743,7 +743,7 @@ class Preflight:
         ]
         auth_lab = self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true"
         if auth_lab:
-            argv[9:9] = [
+            argv[10:10] = [
                 "-f",
                 str(self.repository / "deploy/auth-poc.compose.yaml"),
                 "-f",
