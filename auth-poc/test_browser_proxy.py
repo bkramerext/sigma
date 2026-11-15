@@ -19,7 +19,7 @@ B = cloud_auth.Principal("subject-b", "b@example.test", "member")
 
 
 def request(principal: cloud_auth.Principal) -> Request:
-    value = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    value = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b""})
     value.state.cloud_principal = principal
     return value
 
