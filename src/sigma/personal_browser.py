@@ -196,8 +196,15 @@ async def sign_in_preview_phase(principal: cloud_auth.Principal | None) -> str:
             response.raise_for_status()
             phase = response.json()["phase"]
             if phase in (
-                "rendering", "ready", "connecting", "connected", "plan_not_permitted",
-                "declined", "cancelled", "expired", "failed",
+                "rendering",
+                "ready",
+                "connecting",
+                "connected",
+                "plan_not_permitted",
+                "declined",
+                "cancelled",
+                "expired",
+                "failed",
             ):
                 return phase
     except (PersonalBrowserUnavailable, httpx.HTTPError, OSError, ValueError, KeyError, TypeError):
