@@ -29,11 +29,13 @@ Use a separate worktree on PR #872; from that worktree root with Docker running:
 ```
 
 The wrapper builds both images and opens
-`http://127.0.0.1:16080/vnc.html` on macOS. Enter the temporary VNC password
-printed by the launcher, then use **the remote Chromium** to open OpenAI's
-account chooser. The **Verify model catalog** button checks the authorized
-account's models; **Test one real model response** performs a bounded
-Responses API request.
+`http://127.0.0.1:16080/vnc.html` on macOS by default (or the configured
+`SIGMA_AUTH_POC_PORT`). Enter the temporary VNC password printed by the
+launcher **only to inspect the synthetic local laboratory**. Do **not** sign
+into OpenAI, enter any real credentials, or use a personal ChatGPT account.
+The account chooser, model discovery, and real inference buttons are disabled;
+the worker fails closed with HTTP 403. Synthetic tests exercise the localhost
+callback and rejected invalid PKCE state without contacting OpenAI.
 
 The previous one-container implementation allowed Chromium to share a mount
 namespace with the credential holder. The new split fixes that specific flaw,
@@ -74,3 +76,11 @@ use an important account until the adversarial review is accepted.
   arrangement is authorized for SIGMA's multi-user hosted service.
 - The lab guard `SIGMA_AUTH_POC_LAB=1` must not become a production bypass.
   Production must fail closed until all previous gates are resolved.
+
+## Hosted eligibility decision gate
+
+Provider authorization and architecture acceptance are tracked in
+[issue #873](https://github.com/bkramerext/sigma/issues/873). Official
+[ChatGPT-plan documentation](https://developers.openai.com/siwc/token-sharing-open-source)
+asks remotely hosted apps to request access before offering plan usage. This
+container-local OAuth lab is neither that approval nor a production design.
