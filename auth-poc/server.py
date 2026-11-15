@@ -34,6 +34,11 @@ async def lifespan(_app: FastAPI):
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-dev-shm-usage",
+            # This POC runs Chromium behind Docker's user/capability/rootfs
+            # boundary. Default Docker seccomp blocks Chromium's nested
+            # namespace sandbox. A production security review must replace
+            # this flag with a verified sandbox policy before enabling users.
+            "--no-sandbox",
             "--disable-extensions",
             "--password-store=basic",
             "--user-data-dir=/tmp/chromium",
@@ -124,7 +129,7 @@ async def begin() -> dict[str, str]:
     if _BROWSER is None or _BROWSER.poll() is not None:
         raise HTTPException(503, "Chromium is not running.")
     subprocess.Popen(
-        ["/usr/bin/chromium", "--user-data-dir=/tmp/chromium", target],
+        ["/usr/bin/chromium", "--no-sandbox", "--user-data-dir=/tmp/chromium", target],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         env={**os.environ, "DISPLAY": ":99"},
     )
