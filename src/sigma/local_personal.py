@@ -38,7 +38,6 @@ class LocalPersonalUnavailable(RuntimeError):
     """The optional local Docker Personal browser cannot be started safely."""
 
 
-
 def _local_runtime_directory() -> Path:
     """Keep native macOS Unix relay socket names under sun_path's 104 bytes.
 
@@ -52,6 +51,7 @@ def _local_runtime_directory() -> Path:
         shutil.rmtree(path)
         raise LocalPersonalUnavailable("Local Personal Unix socket path is too long.")
     return path
+
 
 def _docker_failure_class(message: str) -> str:
     """Fixed output from Docker errors, never private stderr or mount paths."""
