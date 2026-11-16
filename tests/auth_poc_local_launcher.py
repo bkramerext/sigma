@@ -276,6 +276,44 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertNotIn("if (data.browser_status !== 'ready')", dialog)
         self.assertIn("OpenAI's personal ChatGPT sign-in uses a localhost callback", dialog)
 
+    def test_broker_health_accepts_http_10_and_http_11_only(self) -> None:
+        from unittest.mock import MagicMock
+
+        spec = importlib.util.spec_from_file_location(
+            "sigma_host_broker_readiness_test", ROOT / "auth-poc/host_broker.py"
+        )
+        assert spec and spec.loader
+        broker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(broker)
+
+        for response, expected in [
+            (b"HTTP/1.0 200 OK\r\n\r\n", True),
+            (b"HTTP/1.1 200 OK\r\n\r\n", True),
+            (b"HTTP/1.1 403 Forbidden\r\n\r\n", False),
+        ]:
+            conn = MagicMock()
+            conn.__enter__.return_value = conn
+            conn.recv.return_value = response
+            with patch.object(broker.socket, "socket", return_value=conn):
+                self.assertEqual(
+                    broker._socket_http_ready(Path("/tmp/virtual.sock"), "/vnc.html"),
+                    expected,
+                )
+
+    def test_broker_readiness_logs_only_stage_transitions(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "sigma_host_broker_diagnostics_test", ROOT / "auth-poc/host_broker.py"
+        )
+        assert spec and spec.loader
+        broker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(broker)
+        with patch("builtins.print") as output:
+            broker._readiness_report("a" * 32, "browser container health starting")
+            broker._readiness_report("a" * 32, "browser container health starting")
+            broker._readiness_report("a" * 32, "VNC viewer relay did not return HTTP 200")
+            self.assertEqual(output.call_count, 2)
+            self.assertNotIn("a" * 32, str(output.call_args_list))
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)

@@ -35,6 +35,16 @@ FILES = (
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCK = threading.Lock()
 _GATEWAY_SERVERS: dict[str, list[tuple[Path, socketserver.BaseServer, threading.Thread]]] = {}
+_LAST_READINESS: dict[str, str] = {}
+
+
+def _readiness_report(workspace_id: str, reason: str) -> None:
+    """Emit only changed infrastructure stages, never URLs, tokens, or account data."""
+    if _LAST_READINESS.get(workspace_id) == reason:
+        return
+    _LAST_READINESS[workspace_id] = reason
+    print("Personal browser readiness: " + reason, flush=True)
+
 
 
 def local_poc() -> bool:
@@ -183,6 +193,12 @@ def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
         check=False,
     )
     if result.returncode:
+        # Docker stderr can include private host paths. Print only the fixed
+        # operation name and status, not subprocess output or arguments.
+        print(
+            f"Personal Docker {args[0]} failed (exit {result.returncode}).",
+            flush=True,
+        )
         raise RuntimeError("Container supervisor action failed")
     return result.stdout.strip()
 
@@ -198,7 +214,10 @@ def _socket_http_ready(path: Path, target: str) -> bool:
                 "Connection: close\r\n\r\n"
             )
             conn.sendall(request.encode("ascii"))
-            return conn.recv(128).startswith(b"HTTP/1.1 200 ")
+            status = conn.recv(128).split(b"\r\n", 1)[0]
+            # noVNC/websockify may answer with HTTP/1.0, while FastAPI
+            # generally uses HTTP/1.1. Both are valid, healthy HTTP 200.
+            return status.startswith((b"HTTP/1.0 200 ", b"HTTP/1.1 200 "))
     except OSError:
         return False
 
@@ -323,10 +342,12 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                 _stop_local_gateway(workspace_id)
         if action == "stop":
             status = "stopped"
+            _readiness_report(workspace_id, "stopped")
         else:
             browser = _compose(workspace_id, "ps", "-q", "browser", timeout=10)
             if not browser or not re.fullmatch(r"[0-9a-f]{12,64}", browser):
                 status = "stopped"
+                _readiness_report(workspace_id, "browser container not running")
             else:
                 health = subprocess.run(
                     ["docker", "inspect", "--format", "{{.State.Health.Status}}", browser],
@@ -337,45 +358,56 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                     timeout=10,
                     check=False,
                 )
+                browser_healthy = (
+                    health.returncode == 0 and health.stdout.strip() == "healthy"
+                )
                 gateway = gateway_root() / workspace_id
+                reason = "ready"
                 try:
                     if local_poc():
                         _ensure_local_gateway(workspace_id)
-                    gateway_ready = all(
+                    sockets_ready = all(
                         (gateway / name).is_socket() and not (gateway / name).is_symlink()
                         for name in ("vnc.sock", "model.sock")
                     )
-                    if gateway_ready:
-                        gateway_ready = (
-                            _socket_http_ready(gateway / "vnc.sock", "/vnc.html")
-                            and _socket_http_ready(gateway / "model.sock", "/v1/account")
-                        )
-                    if gateway_ready and local_poc():
+                    if not sockets_ready:
+                        reason = "private gateway sockets unavailable"
+                    else:
+                        vnc_ready = _socket_http_ready(gateway / "vnc.sock", "/vnc.html")
+                        model_ready = _socket_http_ready(gateway / "model.sock", "/v1/account")
+                        if not vnc_ready:
+                            reason = "VNC viewer relay did not return HTTP 200"
+                        elif not model_ready:
+                            reason = "model worker relay did not return HTTP 200"
+                    if reason == "ready" and local_poc():
                         parent = gateway.lstat()
-                        gateway_ready = (
+                        permissions_ready = (
                             stat.S_ISDIR(parent.st_mode)
                             and not gateway.is_symlink()
                             and stat.S_IMODE(parent.st_mode) == 0o700
                             and parent.st_uid == os.geteuid()
                         )
                         for name in ("vnc.sock", "model.sock"):
-                            socket_path = gateway / name
-                            info = socket_path.lstat()
-                            gateway_ready = gateway_ready and (
+                            info = (gateway / name).lstat()
+                            permissions_ready = permissions_ready and (
                                 stat.S_ISSOCK(info.st_mode)
-                                and not socket_path.is_symlink()
+                                and not (gateway / name).is_symlink()
                                 and info.st_uid == os.geteuid()
                                 and stat.S_IMODE(info.st_mode) == 0o600
                             )
+                        if not permissions_ready:
+                            reason = "private relay socket permissions invalid"
                 except (OSError, RuntimeError, subprocess.TimeoutExpired):
-                    gateway_ready = False
-                status = (
-                    "ready"
-                    if health.returncode == 0
-                    and health.stdout.strip() == "healthy"
-                    and gateway_ready
-                    else "unavailable"
-                )
+                    reason = "private gateway setup failed"
+                if not browser_healthy:
+                    reason = "browser container health " + (
+                        health.stdout.strip()
+                        if health.returncode == 0
+                        and health.stdout.strip() in {"starting", "unhealthy"}
+                        else "unavailable"
+                    )
+                status = "ready" if reason == "ready" else "unavailable"
+                _readiness_report(workspace_id, reason)
         result = {"status": status, "worker": "sigma-personal-" + workspace_id}
         if action == "password":
             if status != "ready":
