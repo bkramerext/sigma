@@ -994,7 +994,13 @@ def store_markdown_answer(
         if digest(source) != expected_digest:
             raise ProjectError("Saved answer changed during conversion; reopen before retrying")
         existing = record.get("markdown_answer")
-        if isinstance(existing, str) and existing.strip():
+        existing_provenance = record.get("markdown_provenance")
+        if (
+            isinstance(existing, str) and existing.strip()
+            and isinstance(existing_provenance, dict)
+            and existing_provenance.get("model") == provenance.get("model")
+            and existing_provenance.get("reasoning_effort") == provenance.get("reasoning_effort")
+        ):
             selected_markdown = existing
             changed = False
         else:
