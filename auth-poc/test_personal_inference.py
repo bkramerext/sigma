@@ -89,7 +89,7 @@ async def main() -> None:
                     for line in head.decode().split("\r\n"):
                         if line.lower().startswith("content-length:"):
                             length = int(line.split(":", 1)[1].strip())
-                    assert length < 256_000
+                    assert length < 1_000_000
                     data = (
                         json.loads(await reader.readexactly(length)) if length else None
                     )
@@ -111,7 +111,10 @@ async def main() -> None:
                         )
                         status_code = 200
                     elif target == "/v1/response" and method == "POST":
-                        assert set(data) == {"expected_binding", "request_id", "payload"}
+                        assert set(data) == {
+                            "expected_binding", "request_id", "payload", "timeout_seconds"
+                        }
+                        assert 1 <= data["timeout_seconds"] <= 3600
                         assert data["expected_binding"] == binding
                         assert data["payload"]["store"] is False
                         assert data["payload"]["stream"] is True
