@@ -20,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from sigma import ai_store
 from sigma.ui_instance import private_directory
 from model_gateway import app as model_app
-from server import app as signin_app
+from server import app as signin_app, cancel_pending_signin
 
 _WORKSPACE = re.compile(r"[0-9a-f]{32}\Z")
 _active_workspace: str | None = None
@@ -138,6 +138,11 @@ async def browser_start(request: Request) -> dict:
     async with _browser_lock:
         if _active_workspace is not None:
             if (await _supervisor("status", _active_workspace))["status"] != "ready":
+                # The root supervisor can expire Chromium while OAuth's
+                # 300-second callback is still pending. Clear that attempt in
+                # its ORIGINAL workspace before starting another user's GUI.
+                with ai_store.use_directory(_store(_active_workspace)):
+                    cancel_pending_signin()
                 _active_workspace = None
         if _active_workspace not in {None, workspace}:
             raise HTTPException(409, "Another sign-in is in progress.")
@@ -161,6 +166,8 @@ async def browser_stop(request: Request) -> dict:
         if _active_workspace != workspace:
             return {"status": "stopped"}
         try:
+            # Revoke transient OAuth state without erasing retained accounts.
+            cancel_pending_signin()
             return await _supervisor("stop", workspace)
         finally:
             _active_workspace = None
@@ -168,10 +175,16 @@ async def browser_stop(request: Request) -> dict:
 
 @app.get("/v1/browser/status")
 async def browser_status(request: Request) -> dict:
+    global _active_workspace
     workspace = _workspace(request)
-    if workspace != _active_workspace:
-        return {"status": "stopped"}
-    return await _supervisor("status", workspace)
+    async with _browser_lock:
+        if workspace != _active_workspace:
+            return {"status": "stopped"}
+        state = await _supervisor("status", workspace)
+        if state["status"] != "ready":
+            cancel_pending_signin()
+            _active_workspace = None
+        return state
 
 
 @app.post("/v1/browser/password")
