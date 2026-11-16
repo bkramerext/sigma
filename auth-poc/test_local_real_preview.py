@@ -38,25 +38,84 @@ async def main() -> None:
             base_url="http://127.0.0.1:8001",
             follow_redirects=False,
         ) as client:
-            page = await client.get("/")
-            assert page.status_code == 200
-            assert "Local ChatGPT connection preview" in page.text
-            assert "Continue with ChatGPT" in page.text
-
-            missing_origin = await client.post("/lab-painted")
-            assert missing_origin.status_code == 403
-            painted = await client.post(
-                "/lab-painted", headers={"Origin": "http://127.0.0.1:8001"}
-            )
-            assert painted.status_code == 200
-
+            # Opening the isolated Chromium app goes straight to OpenAI. No
+            # interim Connect button, JS paint signal, or popup is required.
+            server._ATTEMPT_ID = None
             attempt_id = "test-authorization-id"
+            target = "https://auth.openai.com/authorize?state=example"
+            with (
+                patch.object(
+                    server.chatgpt_auth,
+                    "session",
+                    new_callable=AsyncMock,
+                    return_value={"status": "disconnected", "mode": "chatgpt"},
+                ),
+                patch.object(
+                    server.chatgpt_auth,
+                    "begin",
+                    new_callable=AsyncMock,
+                    return_value={"id": attempt_id},
+                ) as begin,
+                patch.object(
+                    server.chatgpt_auth,
+                    "authorization_url",
+                    return_value=target,
+                ),
+                patch.object(
+                    server.chatgpt_auth,
+                    "attempt_status",
+                    return_value={"status": "connecting"},
+                ),
+            ):
+                chooser = await client.get("/")
+                assert chooser.status_code in (302, 303, 307, 308)
+                assert chooser.headers["location"] == target
+                assert "no-store" in chooser.headers["cache-control"]
+                # Reloading while the chooser is already open must not launch
+                # competing OAuth flows or consume another local callback port.
+                repeated = await client.get("/")
+                assert repeated.headers["location"] == target
+                begin.assert_awaited_once()
+
+            server._ATTEMPT_ID = None
+            with (
+                patch.object(
+                    server.chatgpt_auth, "session",
+                    new_callable=AsyncMock,
+                    return_value={
+                        "status": "connected",
+                        "mode": "chatgpt",
+                        "account": {"plan_authorized": True},
+                    },
+                ),
+                patch.object(server.chatgpt_auth, "begin", new_callable=AsyncMock) as begin,
+            ):
+                existing = await client.get("/")
+                assert existing.status_code == 200
+                assert "Continue with ChatGPT" not in existing.text
+                begin.assert_not_awaited()
+
             with patch.object(
-                server.chatgpt_auth,
-                "begin",
+                server.chatgpt_auth, "session",
                 new_callable=AsyncMock,
-                return_value={"id": attempt_id},
-            ) as begin:
+                return_value={"status": "unavailable", "mode": "chatgpt"},
+            ):
+                unavailable = await client.get("/")
+                assert unavailable.status_code == 503
+
+            missing_origin = await client.post("/begin")
+            assert missing_origin.status_code == 403
+            with (
+                patch.object(
+                    server.chatgpt_auth, "begin",
+                    new_callable=AsyncMock,
+                    return_value={"id": attempt_id},
+                ) as begin,
+                patch.object(
+                    server.chatgpt_auth, "attempt_status",
+                    return_value={"status": "connecting"},
+                ),
+            ):
                 authorized = await client.post(
                     "/begin", headers={"Origin": "http://127.0.0.1:8001"}
                 )
@@ -66,13 +125,11 @@ async def main() -> None:
 
             with patch.object(
                 server.chatgpt_auth, "authorization_url",
-                return_value="https://auth.openai.com/authorize?state=example",
+                return_value=target,
             ):
                 chooser = await client.get("/open/" + attempt_id)
                 assert chooser.status_code in (302, 303, 307, 308)
-                assert chooser.headers["location"].startswith(
-                    "https://auth.openai.com/"
-                )
+                assert chooser.headers["location"].startswith("https://auth.openai.com/")
             with patch.object(server, "_saved_preview_is_authorized", return_value=True):
                 server._ATTEMPT_ID = None
                 preview = await client.get("/preview-state")
