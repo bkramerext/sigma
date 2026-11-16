@@ -3941,3 +3941,77 @@ if __name__ == "__main__":
     from papers_split_runner import run
 
     run(1)
+
+
+def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring() -> None:
+    """A bad mechanical correction must not force rewriting the whole paper."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "mechanical-recovery.sigma"
+        view = initialize_project(
+            path,
+            "Mechanical TeX recovery",
+            "Preserve the saved proof.",
+            research_mode="mathematical",
+        )
+        credential = {"identity": "fixture:pdf", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
+        authored_calls = 0
+        compile_sources: list[str] = []
+
+        async def author(package, *_args):
+            nonlocal authored_calls
+            authored_calls += 1
+            source_id = next(
+                source["id"] for source in package["sources"] if source["kind"] == "project"
+            )
+            return draft(source_id), config["model"]
+
+        async def introduce_invalid_correction(tex, *_args, **_kwargs):
+            altered = tex.replace(
+                r"\end{document}", r"\badproofreadercommand" + "\n" + r"\end{document}"
+            )
+            assert altered != tex
+            return altered, {
+                "status": "complete",
+                "corrections": ["escaping"],
+                "diagnostics": [],
+                "provider_calls_attempted": 0,
+                "ai_performed": True,
+                "elapsed_seconds": 0,
+            }
+
+        def compile_fixture(tex, **_kwargs):
+            compile_sources.append(tex)
+            if r"\badproofreadercommand" in tex:
+                raise RuntimeError("Undefined control sequence in proofreader patch")
+            return b"%PDF-fixture"
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=author),
+            patch.object(papers, "_proofread_tex", new=introduce_invalid_correction),
+            patch.object(papers, "_compile_pdf", new=compile_fixture),
+            mock_pdf_inspection(),
+        ):
+            published = asyncio.run(
+                papers.generate(str(path), credential["identity"], view.project.id)
+            )
+
+        record = papers.get_paper(str(path), published["paper_id"])
+        assert authored_calls == 1
+        assert len(compile_sources) == 2
+        assert r"\badproofreadercommand" in compile_sources[0]
+        assert r"\badproofreadercommand" not in compile_sources[1]
+        assert record["draft"]["abstract"] == draft().abstract
+        assert record["generation"]["publication_status"] == "needs_review"
+        assert record["generation"]["proofreading"]["verification_status"] == "incomplete"
+        assert "validated authored TeX" in record["generation"]["proofreading"]["review_reason"]
+        assert papers._load_work(str(path)) is None

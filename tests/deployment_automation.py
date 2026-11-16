@@ -98,6 +98,37 @@ def main() -> None:
             raise AssertionError("missing deploy.env was accepted")
         assert len(calls) > 0
 
+        # Direct-Caddy rollback cannot silently target a release that lacks
+        # the backend/frontend loopback overlay. Block BEFORE changing checkout,
+        # service state, or the release pin; the old host route remains live.
+        env_file.write_bytes(original + b"SIGMA_HOST_DIRECT=true\n")
+        direct_calls: list[list[str]] = []
+
+        def unsupported_rollback(
+            argv: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            direct_calls.append(argv)
+            if (
+                argv[:4] == ["git", "-C", str(repo), "cat-file"]
+                and argv[-1] == OLD + ":deploy/compose.direct.gce.yaml"
+            ):
+                return subprocess.CompletedProcess(argv, 1, "", "")
+            return ok_runner(argv, **kwargs)
+
+        direct = module.Deployment(
+            repo, env_file, root / "preflight.py", unsupported_rollback, False
+        )
+        try:
+            direct.deploy(NEW, True, True)
+        except module.DeployFailure as error:
+            assert "Host-direct routing" in str(error)
+        else:
+            raise AssertionError("Unsafe direct-Caddy rollback was accepted")
+        assert not any(argv[:4] == ["git", "-C", str(repo), "checkout"] for argv in direct_calls)
+        assert not any(argv[:2] == ["systemctl", "stop"] for argv in direct_calls)
+        assert env_file.read_bytes() == original + b"SIGMA_HOST_DIRECT=true\n"
+        env_file.write_bytes(original)
+
         # Startup failure restores the original code pin/config and never writes
         # to the durable state directory. Failure diagnostics contain no values.
         start_attempts = 0

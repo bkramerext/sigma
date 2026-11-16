@@ -55,6 +55,34 @@ async def main_async(root: Path):
     path.mkdir()
     (path / "project.json").write_bytes(source_before)
     project_before = (path / "project.json").read_bytes()
+    # Regression: the Current Understanding Markdown button fetches this endpoint.
+    # Changing the user's Model/Thinking must change the returned fingerprint;
+    # otherwise the UI will (incorrectly) treat the old formatted blocks as fresh.
+    from sigma.api import proposal_config
+
+    selected_preview = {"model": "gpt-6-luna", "effort": "medium"}
+
+    async def preview_configuration(*args, **kwargs):
+        assert args == (str(path),)
+        assert not kwargs, "Markdown config must not freeze Model/Thinking"
+        return {
+            "available": True,
+            "model": selected_preview["model"],
+            "reasoning_effort": selected_preview["effort"],
+            "binding": "fixture-account",
+        }
+
+    with (
+        patch("sigma.api.cloud_auth.current_principal", return_value=None),
+        patch("sigma.api.configuration", side_effect=preview_configuration),
+    ):
+        before = await proposal_config(str(path), purpose="markdown")
+        assert (before["model"], before["reasoning_effort"]) == ("gpt-6-luna", "medium")
+        selected_preview.update(model="gpt-6", effort="high")
+        after = await proposal_config(str(path), purpose="markdown")
+        assert (after["model"], after["reasoning_effort"]) == ("gpt-6", "high")
+    print("PASS Markdown configuration uses live Model/Thinking for Current Understanding")
+
     conclusion_path = root / "conclusion-session.sigma"
     initialize_project(conclusion_path, "Conclusion conversion", "Review a saved result.")
     conclusion_source = (
@@ -155,8 +183,8 @@ async def main_async(root: Path):
     }
 
     async def cheap_configuration(**kwargs):
-        assert kwargs["frozen_model"] == FORMAT_MODEL
-        assert kwargs["frozen_effort"] == FORMAT_EFFORT
+        assert "frozen_model" not in kwargs
+        assert "frozen_effort" not in kwargs
         return config
 
     with (
@@ -178,6 +206,14 @@ async def main_async(root: Path):
         assert len(calls) == 1
         assert inspect_text(path, "project")["markdown"]["body"] == markdown
         assert len(calls) == 1
+        with patch(
+            "sigma.global_research_settings.load_config",
+            return_value={"ai_model": MODEL, "reasoning_effort": "high"},
+        ):
+            stale = inspect_text(path, "project")
+            assert stale["markdown"]["body"] == markdown
+            assert not stale["markdown"]["current"]
+        assert inspect_text(path, "project")["markdown"]["current"]
 
         edited = markdown + "\n\nKeep the stated proof obligations."
         save_source(path, "project", edited, "markdown", plain["source_digest"])
@@ -498,8 +534,7 @@ async def main_async(root: Path):
             raise AssertionError("Stale conversion was persisted")
         assert inspect_text(race, "project")["markdown"] is None
 
-    # Markdown formatting is pinned to Cheap/Medium across changes in the user's
-    # independent research Model/Thinking selections.
+    # AI Markdown follows user selection and retains stale variants until refreshed.
     live_path = root / "live-model-thinking.sigma"
     initialize_project(live_path, "Live model selection", "Count e_n for n >= 0")
     live_strategy = create_strategy(
@@ -511,9 +546,12 @@ async def main_async(root: Path):
     allow_response = asyncio.Event()
     dispatched: list[tuple[str, str]] = []
 
-    async def live_configuration(*, view, context, frozen_model, frozen_effort):
-        assert frozen_model == FORMAT_MODEL and frozen_effort == FORMAT_EFFORT
-        return {**config, "model": frozen_model, "reasoning_effort": frozen_effort}
+    async def live_configuration(*, view, context):
+        return {
+            **config,
+            "model": active_selection["model"],
+            "reasoning_effort": active_selection["effort"],
+        }
 
     async def live_handler(request):
         payload = json.loads(request.content)
@@ -531,6 +569,13 @@ async def main_async(root: Path):
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
         patch("sigma.text_conversion.configuration", side_effect=live_configuration),
         patch(
+            "sigma.global_research_settings.load_config",
+            side_effect=lambda: {
+                "ai_model": active_selection["model"],
+                "reasoning_effort": active_selection["effort"],
+            },
+        ),
+        patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
                 transport=httpx.MockTransport(live_handler), **kwargs
@@ -542,19 +587,19 @@ async def main_async(root: Path):
         active_selection.update(model=MODEL, effort="high")
         allow_response.set()
         first = await pending
-        assert first["markdown"]["current"]
+        assert not first["markdown"]["current"]
         assert first["markdown"]["provenance"] == {
             "provider": "openai",
             "model": "gpt-6-luna",
-            "reasoning_effort": "medium",
+            "reasoning_effort": "low",
         }
         second = await convert_text(str(live_path), "strategy", "markdown", live_strategy.id)
         assert second["markdown"]["current"]
         assert second["markdown"]["provenance"]["model"] == MODEL
-        assert second["markdown"]["provenance"]["reasoning_effort"] == FORMAT_EFFORT
-    assert dispatched == [(MODEL, FORMAT_EFFORT), (MODEL, FORMAT_EFFORT)]
+        assert second["markdown"]["provenance"]["reasoning_effort"] == "high"
+    assert dispatched == [("gpt-6-luna", "low"), (MODEL, "high")]
     assert (live_path / "project.json").read_bytes() == live_source_before
-    print("PASS Markdown formatting is always Cheap/Medium and records fixed provenance")
+    print("PASS Markdown conversion follows user Model/Thinking and preserves stale results")
 
     # Current Understanding allows only the authoritative, digest-bound narrative.
     from sigma.research_state import current_understanding
@@ -690,6 +735,10 @@ async def main_async(root: Path):
             assert "incomplete" in str(exc)
         else:
             raise AssertionError("Truncated conversion was persisted")
+    # A provider switch after dispatch must not discard a completed conversion.
+    mode_switch_path = root / "mode-switch.sigma"
+    initialize_project(mode_switch_path, "Mode switch", "Count d_n for n >= 0")
+    mode_switch_before = (mode_switch_path / "project.json").read_bytes()
     with (
         patch(
             "sigma.text_conversion.auth_context",
@@ -710,12 +759,10 @@ async def main_async(root: Path):
             ),
         ),
     ):
-        try:
-            await convert_text(str(failure_path), "project", "markdown")
-        except ProjectError as exc:
-            assert "account/billing" in str(exc)
-        else:
-            raise AssertionError("Changed account conversion was persisted")
+        result = await convert_text(str(mode_switch_path), "project", "markdown")
+        assert result["markdown"]["body"]
+    assert (mode_switch_path / "project.json").read_bytes() == mode_switch_before
+    assert (mode_switch_path / "text-representations.json").exists()
     assert (failure_path / "project.json").read_bytes() == before
     assert not (failure_path / "text-representations.json").exists()
 
@@ -1479,7 +1526,13 @@ async def main_async(root: Path):
 
 
 def main():
-    with TemporaryDirectory() as directory:
+    with (
+        TemporaryDirectory() as directory,
+        patch(
+            "sigma.global_research_settings.load_config",
+            return_value={"ai_model": MODEL, "reasoning_effort": FORMAT_EFFORT},
+        ),
+    ):
         asyncio.run(main_async(Path(directory)))
 
 

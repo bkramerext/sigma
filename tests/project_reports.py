@@ -661,3 +661,27 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_pdf_compiler_architecture_failure_is_classified_without_source_leak() -> None:
+    """An incompatible binary is a compiler problem, not a bad manuscript."""
+    import errno
+
+    diagnostics: list[str] = []
+    with (
+        TemporaryDirectory() as root,
+        patch("sigma.project_reports.shutil.which", return_value="/usr/local/bin/tectonic"),
+        patch(
+            "sigma.project_reports.subprocess.run",
+            side_effect=OSError(errno.ENOEXEC, "Exec format error"),
+        ),
+        patch.dict(os.environ, {"SIGMA_STATE_DIR": root}),
+    ):
+        try:
+            _compile_pdf("PRIVATE AUTHORS' MANUSCRIPT", diagnostics=diagnostics)
+        except RuntimeError as exc:
+            assert "compiler could not start" in str(exc).lower()
+            assert "PRIVATE AUTHORS" not in str(exc)
+        else:
+            raise AssertionError("An unexecutable Tectonic binary must fail with a safe error")
+    assert diagnostics == ["Tectonic could not start; verify the backend compiler architecture."]

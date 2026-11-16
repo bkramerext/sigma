@@ -64,6 +64,14 @@ def _current_principal() -> cloud_auth.Principal:
 
 
 async def _socket(principal: cloud_auth.Principal) -> str:
+    if os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1":
+        # Recreate the private model relay without launching Chromium.
+        # A saved Personal account must resume research with ZERO idle browsers.
+        try:
+            await personal_browser.session(principal, action="status")
+            return await personal_browser.model_socket(principal)
+        except (PermissionError, personal_browser.PersonalBrowserUnavailable) as exc:
+            raise PersonalInferenceUnavailable("Shared Personal worker is unavailable.") from exc
     # User -> workspace ID -> model socket comes only from the server-verified
     # Google principal, never a user-supplied path, ID or Docker project.
     try:
@@ -117,6 +125,8 @@ async def _request(
         headers["X-Sigma-Worker-Key"] = hmac.digest(
             bytes.fromhex(seed), workspace_id.encode("ascii"), "sha256"
         ).hex()
+        if os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1":
+            headers["X-Sigma-Workspace"] = workspace_id
     transport = httpx.AsyncHTTPTransport(uds=socket_path)
     try:
         async with httpx.AsyncClient(

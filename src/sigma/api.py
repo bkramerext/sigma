@@ -42,6 +42,7 @@ from sigma import (
     papers,
     personal_browser,
     personal_browser_proxy,
+    personal_diagnostics,
     personal_inference,
     project_collaboration,
     project_diagnostics,
@@ -1336,6 +1337,17 @@ async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
             status_code=500,
         )
     return {"markdown": markdown}
+
+
+@app.post("/api/projects/papers/{paper_id}/markdown-preview")
+async def paper_markdown_preview_view(paper_id: str, body: PaperScoreRequest):
+    """AI formatting is a non-destructive view of the immutable saved paper."""
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    from sigma.paper_preview_markdown import format_paper_preview
+
+    return {"markdown": await format_paper_preview(body.path, paper_id, body.expected_project_id)}
 
 
 @app.get("/api/projects/papers/{paper_id}/pdf")
@@ -2692,10 +2704,6 @@ async def strategy_inference_view(body: ProposalRequest):
         body.expected_binding, body.expected_project_id, body.path
     )
     credential = await auth_context()
-    if body.expected_binding != credential["identity"] or body.expected_mode != credential["mode"]:
-        raise ProjectError(
-            "AI account or billing mode changed. Review the current connection and retry; no request was sent."
-        )
     if body.request_id is None:
         raise ProjectError("Inference request identifier is required; no request was sent.")
     request_id = str(body.request_id)
@@ -2703,8 +2711,8 @@ async def strategy_inference_view(body: ProposalRequest):
         body.path,
         body.expected_project_id,
         request_id,
-        body.expected_binding,
-        body.expected_mode,
+        credential["identity"],
+        credential["mode"],
     )
     if action == "return":
         current = proposals.inference_status(body.path, body.expected_project_id, request_id)
@@ -2722,8 +2730,8 @@ async def strategy_inference_view(body: ProposalRequest):
     task = asyncio.create_task(
         generate_proposal(
             body.path,
-            expected_binding=body.expected_binding,
-            expected_mode=body.expected_mode,
+            expected_binding=credential["identity"],
+            expected_mode=credential["mode"],
             expected_project_id=body.expected_project_id,
             infer_strategy=True,
             request_id=request_id,
@@ -2793,10 +2801,9 @@ async def proposal_config(path: str | None = None, purpose: str | None = None):
         }
     if purpose is not None and purpose != "markdown":
         raise ProjectError("Unknown proposal configuration purpose")
-    if purpose == "markdown":
-        from sigma.text_conversion import FORMAT_EFFORT, FORMAT_MODEL
-
-        return await configuration(path, frozen_model=FORMAT_MODEL, frozen_effort=FORMAT_EFFORT)
+    # Markdown uses the same live user-scoped Model/Thinking selection as research.
+    # Never freeze it here: the client uses these values to decide whether
+    # an existing Markdown preview needs refreshing on the next button click.
     return await configuration(path)
 
 
@@ -2858,11 +2865,6 @@ async def cancel_proposal(body: ProposalCancelRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    credential = await auth_context()
-    if credential["identity"] != body.expected_binding:
-        raise ProjectError(
-            "AI account changed; reopen the connection before checking cancellation status."
-        )
     return await proposals.cancel_inference(
         body.path, body.expected_project_id, str(body.request_id)
     )
@@ -2873,11 +2875,6 @@ async def strategy_inference_status(
     path: str, expected_project_id: str, expected_binding: str, request_id: UUID
 ):
     await require_cloud_inference_binding(expected_binding, expected_project_id, path)
-    credential = await auth_context()
-    if credential["identity"] != expected_binding:
-        raise ProjectError(
-            "AI account changed; reopen the connection before checking inference status."
-        )
     return proposals.inference_status(path, expected_project_id, str(request_id))
 
 
@@ -3210,8 +3207,20 @@ def _personal_browser_principal(request: Request) -> cloud_auth.Principal:
 
 async def _personal_browser_action(request: Request, action: str) -> JSONResponse:
     principal = _personal_browser_principal(request)
+    trace = personal_diagnostics.attempt(request.headers.get("X-Sigma-Personal-Attempt"))
+    with personal_diagnostics.attempt_scope(trace):
+        return await _personal_browser_action_scoped(request, action, principal)
+
+
+async def _personal_browser_action_scoped(
+    request: Request,
+    action: str,
+    principal: cloud_auth.Principal,
+) -> JSONResponse:
+    personal_diagnostics.emit("api", "browser_route_start", operation=action)
     if action == "start":
         if os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"):
+            personal_diagnostics.emit("api", "launcher_unavailable")
             # A trusted static launcher diagnostic, never user input.
             raise HTTPException(503, os.environ["SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"])
         marker = os.environ.get("SIGMA_LOCAL_PERSONAL_PREPARATION_FILE")
@@ -3219,7 +3228,13 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
             try:
                 phase = Path(marker).read_text(encoding="ascii").strip()
             except OSError as exc:
+                personal_diagnostics.emit(
+                    "api",
+                    "preparation_marker_missing",
+                    failure=type(exc).__name__,
+                )
                 raise HTTPException(503, "Personal browser preparation is unavailable.") from exc
+            personal_diagnostics.emit("api", "preparation_marker", phase=phase)
             if phase == "preparing":
                 return JSONResponse(
                     {"browser_status": "preparing"},
@@ -3227,6 +3242,7 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
                     headers={"Cache-Control": "no-store", "Retry-After": "2"},
                 )
             if phase != "ready":
+                personal_diagnostics.emit("api", "preparation_not_ready", phase=phase)
                 raise HTTPException(
                     503,
                     "Personal browser preparation failed. Check Docker Desktop and restart SIGMA.",
@@ -3234,7 +3250,15 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
     try:
         snapshot = await personal_browser.session(principal, action)
     except personal_browser.PersonalBrowserUnavailable as exc:
-        raise HTTPException(503, "Personal browser service is unavailable.") from exc
+        personal_diagnostics.emit(
+            "api", "browser_route_failed", operation=action, failure=type(exc).__name__
+        )
+        # The broker exports only predefined stage/reason identifiers, never
+        # Docker stderr or credential material. Preserve the actionable code.
+        raise HTTPException(503, str(exc)) from exc
+    personal_diagnostics.emit(
+        "api", "browser_route_ok", operation=action, browser_status=snapshot["browser_status"]
+    )
     return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
 
 
@@ -3253,6 +3277,23 @@ async def personal_browser_status(request: Request):
 async def personal_browser_stop(request: Request):
     """Pause only this user's browser; do not erase credentials or claim logout."""
     return await _personal_browser_action(request, "stop")
+
+
+@app.get("/api/ai/personal-browser/diagnostics")
+async def personal_browser_diagnostics(request: Request):
+    """Bounded, redacted local-only diagnostics for the Connect dialog."""
+    _personal_browser_principal(request)
+    if (
+        not cloud_auth.config().local
+        or os.environ.get("SIGMA_PERSONAL_SHARED_MODE") != "1"
+        or not personal_diagnostics.enabled()
+    ):
+        raise HTTPException(404, "Local Personal diagnostics unavailable.")
+    personal_diagnostics.emit("api", "diagnostics_requested")
+    return JSONResponse(
+        {"diagnostics": personal_diagnostics.report()},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/api/ai/personal-browser/account")

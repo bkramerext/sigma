@@ -1,5 +1,5 @@
 import { Component, createContext, createElement, forwardRef, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
@@ -798,7 +798,7 @@ function ContextManifestNotes({ manifest }: { manifest: ContextManifest }) {
 
 type OutcomeMarkdownSection = 'conclusion' | 'reasoning' | 'citations' | 'assessments';
 type OutcomeMarkdownBlock = { field: string; source: string; section: OutcomeMarkdownSection };
-type FormattedOutcomeBlock = { source: string; body: string };
+type FormattedOutcomeBlock = { source: string; body: string; settingsKey: string };
 
 function outcomeTextBlocks(session: ResearchSession): OutcomeMarkdownBlock[] {
   const blocks: OutcomeMarkdownBlock[] = [];
@@ -832,9 +832,10 @@ function formattedOutcomeSession(
   session: ResearchSession,
   selected: ReadonlySet<OutcomeMarkdownSection>,
   blocks: Record<string, FormattedOutcomeBlock>,
+  settingsKey: string,
 ): ResearchSession {
   const resolve = (section: OutcomeMarkdownSection, field: string, text: string) =>
-    selected.has(section) && blocks[field]?.source === text ? blocks[field].body : text;
+    selected.has(section) && blocks[field]?.source === text && blocks[field]?.settingsKey === settingsKey ? blocks[field].body : text;
   const review = session.outcome.solution_review;
   const newReview = review ? {
     ...review,
@@ -958,6 +959,8 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const [markdownSections, setMarkdownSections] = useState<OutcomeMarkdownSection[]>(() =>
     containsMathNotation(session.outcome.conclusion || '') ? ['conclusion'] : []);
   const [convertedBlocks, setConvertedBlocks] = useState<Record<string, FormattedOutcomeBlock>>({});
+  const [conversionSettingsKey, setConversionSettingsKey] = useState("");
+  const conversionSettingsRef = useRef("");
   const convertedBlocksRef = useRef<Record<string, FormattedOutcomeBlock>>({});
   const [conversionError, setConversionError] = useState('');
   const [conversionProgress, setConversionProgress] = useState('');
@@ -972,8 +975,8 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const blocks = useMemo(() => outcomeTextBlocks(session), [session]);
   const activeSections = useMemo(() => new Set(markdownSections), [markdownSections]);
   const renderSession = useMemo(() =>
-    formattedOutcomeSession(session, activeSections, convertedBlocks),
-    [session, activeSections, convertedBlocks]);
+    formattedOutcomeSession(session, activeSections, convertedBlocks, conversionSettingsKey),
+    [session, activeSections, convertedBlocks, conversionSettingsKey]);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
   const [interventionKind, setInterventionKind] = useState<ResearchIntervention['kind']>('priority');
   const [interventionText, setInterventionText] = useState('');
@@ -1112,6 +1115,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
           if (!settingsResponse.ok || !settings.available) {
             throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
           }
+          const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
           finishProviderRequest = beginProviderRequest('text-conversion');
           const converted = await post<{ body: string; source_digest: string; warnings: string[] }>(
             'text/convert',
@@ -1124,7 +1128,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
           );
           if (converted.source_digest !== expectedDigest)
             throw new Error('Research text changed while formatting. The original source is unchanged.');
-          const next = { ...convertedBlocksRef.current, [block.field]: { source: block.source, body: converted.body } };
+          const next = { ...convertedBlocksRef.current, [block.field]: { source: block.source, body: converted.body, settingsKey } };
           convertedBlocksRef.current = next;
           setConvertedBlocks(next);
         } catch (cause) {
@@ -1144,34 +1148,53 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
       setConversionProgress('');
     }
   }
-  function enqueueConversions(target: OutcomeMarkdownSection[]) {
-    const candidates = blocks.filter(block => target.includes(block.section) && block.source.trim().length >= 40
-      && block.source.length <= 20000 && convertedBlocksRef.current[block.field]?.source !== block.source
-      && !conversionQueue.current.some(item => item.field === block.field && item.source === block.source));
-    if (!candidates.length) return;
-    if (!conversionWorker.current) { completedConversions.current = 0; totalConversions.current = 0; }
-    totalConversions.current += candidates.length;
-    conversionQueue.current.push(...candidates);
-    setConversionError('');
-    void drainConversions();
+  async function enqueueConversions(target: OutcomeMarkdownSection[]) {
+    try {
+      const response = await fetch(
+        `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
+        { cache: 'no-store' },
+      );
+      const settings = await response.json();
+      if (!response.ok || !settings.available)
+        throw new Error(settings.message ?? 'Markdown formatting is unavailable.');
+      const key = `${settings.model}:${settings.reasoning_effort}`;
+      const candidates = blocks.filter(block => target.includes(block.section) && block.source.trim().length >= 40
+        && block.source.length <= 20000 && (convertedBlocksRef.current[block.field]?.source !== block.source
+        || convertedBlocksRef.current[block.field]?.settingsKey !== key)
+        && !conversionQueue.current.some(item => item.field === block.field && item.source === block.source));
+      conversionSettingsRef.current = key;
+      setConversionSettingsKey(key);
+      if (!candidates.length) return;
+      if (!conversionWorker.current) { completedConversions.current = 0; totalConversions.current = 0; }
+      totalConversions.current += candidates.length;
+      conversionQueue.current.push(...candidates);
+      setConversionError('');
+      void drainConversions();
+    } catch (cause) {
+      setConversionError(friendlyProviderError(errorMessage(cause)));
+    }
   }
-  function toggleAllMarkdown() {
+  async function toggleAllMarkdown() {
     const all: OutcomeMarkdownSection[] = ['conclusion', 'reasoning', 'citations', 'assessments'];
-    if (all.every(section => activeSections.has(section))) {
+    const active = all.every(section => activeSections.has(section));
+    // The pressed toggle says "Show plain text": it must always turn off
+    // Markdown, even if Model/Thinking changed. Re-entering Markdown then
+    // recomputes stale model-bound conversions via enqueueConversions().
+    if (active) {
       setMarkdownSections([]);
       conversionQueue.current = [];
       conversionAbort.current?.abort();
     } else {
       setMarkdownSections(all);
-      if (!guest) enqueueConversions(all);
+      if (!guest) void enqueueConversions(all);
     }
   }
   const markdownSymbol = <MarkdownGlyph/>;
   const markdownButton = (label: string, active: boolean, onClick: () => void) =>
-    <button type="button" className="sigma-render-toggle" aria-label={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
+    <button type="button" className="sigma-render-toggle sigma-unified-markdown" aria-label={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
       aria-pressed={active}
-      data-tooltip={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
-      onClick={onClick}>{markdownSymbol}</button>;
+      data-tooltip={active ? 'Show plain text' : 'Convert to markdown'}
+      onClick={() => void onClick()}>{markdownSymbol}</button>;
   const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
@@ -1383,8 +1406,10 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const [suggestionStatus, setSuggestionStatus] = useState('');
   const [markdownView, setMarkdownView] = useState(false);
   const [guestMarkdownPreview, setGuestMarkdownPreview] = useState(false);
-  const [formattedBlocks, setFormattedBlocks] = useState<Record<string, { source: string; body: string }>>({});
+  const [formattedBlocks, setFormattedBlocks] = useState<Record<string, { source: string; body: string; settingsKey: string }>>({});
   const [formatProgress, setFormatProgress] = useState('');
+  const [formatSettingsKey, setFormatSettingsKey] = useState('');
+  const [formatBusy, setFormatBusy] = useState(false);
   const [formatError, setFormatError] = useState('');
   const formatAbort = useRef<AbortController | null>(null);
   const textBlocks = [
@@ -1398,28 +1423,40 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const textFingerprint = JSON.stringify(textBlocks);
   useEffect(() => () => { formatAbort.current?.abort(); }, [projectId, path, textFingerprint]);
   async function toggleUnderstandingMarkdown() {
-    if (guest) { setGuestMarkdownPreview(true); return; }
+    // "Show plain text" is always a local view switch, never an AI request.
+    // A later click to show Markdown checks Model/Thinking and refreshes if stale.
     if (markdownView) {
       formatAbort.current?.abort();
       setMarkdownView(false);
+      setFormatBusy(false);
       setFormatProgress('');
       setFormatError('');
       return;
     }
-    setMarkdownView(true);
-    const queued = textBlocks.filter(item => item.source.trim().length >= 40
-      && item.source.length <= 20000 && formattedBlocks[item.field]?.source !== item.source);
-    if (!queued.length) return;
+    if (guest) { setGuestMarkdownPreview(true); return; }
+    if (formatAbort.current) return;
     const controller = new AbortController();
     formatAbort.current = controller;
+    setFormatError('');
     let finishProviderRequest = () => {};
     try {
       const settingsResponse = await fetch(
         `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
-        { signal: controller.signal },
+        { signal: controller.signal, cache: 'no-store' },
       );
       const settings = await settingsResponse.json();
       if (!settingsResponse.ok || !settings.available) throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+      const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
+      const queued = textBlocks.filter(item => item.source.trim().length >= 40
+        && item.source.length <= 20000 && (formattedBlocks[item.field]?.source !== item.source
+        || formattedBlocks[item.field]?.settingsKey !== settingsKey));
+      setMarkdownView(true);
+      if (!queued.length) {
+        // Cached Markdown needs only a local view change, not formatting UI.
+        setFormatSettingsKey(settingsKey);
+        return;
+      }
+      setFormatBusy(true);
       finishProviderRequest = beginProviderRequest('text-conversion');
       for (let index = 0; index < queued.length; index++) {
         if (controller.signal.aborted) return;
@@ -1434,8 +1471,9 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
         }, controller.signal, true);
         if (result.source_digest !== expectedDigest) throw new Error('Current Understanding changed while formatting.');
         if (controller.signal.aborted) return;
-        setFormattedBlocks(current => ({ ...current, [item.field]: { source: item.source, body: result.body } }));
+        setFormattedBlocks(current => ({ ...current, [item.field]: { source: item.source, body: result.body, settingsKey } }));
       }
+      if (!controller.signal.aborted) setFormatSettingsKey(settingsKey);
     } catch (cause) {
       if (!controller.signal.aborted) {
         setFormatError(`Markdown formatting stopped: ${friendlyProviderError(errorMessage(cause))}. Research was not changed.`);
@@ -1443,11 +1481,12 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     } finally {
       finishProviderRequest();
       if (formatAbort.current === controller) formatAbort.current = null;
+      setFormatBusy(false);
       setFormatProgress('');
     }
   }
   const narrative = (source: string, field: string, fallback?: string) => markdownView
-    ? <div className="current-understanding-rendered"><Suspense fallback={<p>{fallback ?? source}</p>}><RenderedMarkdown body={formattedBlocks[field]?.source === source ? formattedBlocks[field].body : (fallback ?? source)}/></Suspense></div>
+    ? <div className="current-understanding-rendered"><Suspense fallback={<p>{fallback ?? source}</p>}><RenderedMarkdown body={formattedBlocks[field]?.source === source && formattedBlocks[field]?.settingsKey === formatSettingsKey ? formattedBlocks[field].body : (fallback ?? source)}/></Suspense></div>
     : <p>{fallback ?? source}</p>;
   const inferencePending = useRef(false);
   const inferenceRequestId = useRef<string | null>(null);
@@ -1562,7 +1601,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     setExpanded(isOpen);
     window.localStorage.setItem(`sigma.currentUnderstanding:${projectId}`, String(isOpen));
   }}>
-    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><button type="button" className="sigma-render-toggle current-understanding-markdown" aria-label={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} aria-pressed={markdownView} data-tooltip={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleUnderstandingMarkdown(); }}><MarkdownGlyph/></button>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was added." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><span className="sigma-unified-markdown-progress" onClick={event => { if (formatBusy) { event.preventDefault(); event.stopPropagation(); } }}>{formatBusy ? <span className="sigma-unified-hourglass" aria-hidden="true"><ProjectOpeningHourglass/></span> : <button type="button" className={`sigma-render-toggle sigma-unified-markdown current-understanding-markdown${formatBusy ? ' sigma-render-pending' : ''}`} aria-label={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} aria-pressed={markdownView || formatBusy} aria-busy={formatBusy} data-tooltip={formatBusy ? 'Formatting with AI…' : markdownView ? 'Show plain text' : 'Convert to markdown'} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleUnderstandingMarkdown(); }}><MarkdownGlyph/></button>}{formatBusy && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was added." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
     {guestMarkdownPreview && createPortal(<GuestFeatureDialog title="Markdown for Current Understanding"
       message="With member access and ChatGPT, SIGMA can reformat the findings, questions and limitations as Markdown. This is a presentation change, not a scientific result. No text was sent or changed."
       onClose={() => setGuestMarkdownPreview(false)}/>, document.body)}
@@ -1576,7 +1615,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
         {remainingQuestions.length > 0 && <details><summary>{remainingQuestions.length} more recorded questions / dispositions</summary><ol>{remainingQuestions.map(questionRow)}</ol></details>}
       </section>
     </div>
-    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map((note, index) => <li key={index}>{markdownView ? <div className="current-understanding-rendered"><Suspense fallback={note}><RenderedMarkdown body={formattedBlocks[`limitations.${index}`]?.source === note ? formattedBlocks[`limitations.${index}`].body : note}/></Suspense></div> : note}</li>)}</ul><p>All {state.findings.length} findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
+    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map((note, index) => <li key={index}>{markdownView ? <div className="current-understanding-rendered"><Suspense fallback={note}><RenderedMarkdown body={formattedBlocks[`limitations.${index}`]?.source === note && formattedBlocks[`limitations.${index}`]?.settingsKey === formatSettingsKey ? formattedBlocks[`limitations.${index}`].body : note}/></Suspense></div> : note}</li>)}</ul><p>All {state.findings.length} findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
     <div className="strategy-suggestion-feedback">{suggestionError && <p className="error" role="alert">{suggestionError}</p>}{suggestionStatus && <p role="status">{suggestionStatus}</p>}</div>
   </details>;
 }
@@ -3195,7 +3234,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [, setScoreConfig] = useState<{ available: boolean; binding: string; message: string } | null>(null);
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
+  // A dismissal hides only the expanded preview's duplicate notice.
+  // The saved publication status and the outer warning remain unchanged.
+  const [dismissedPaperReviewIds, setDismissedPaperReviewIds] = useState<Set<string>>(() => new Set());
   const [copiedPaperId, setCopiedPaperId] = useState('');
+  const [formattedPaper, setFormattedPaper] = useState<{ id: string; markdown: string; settingsKey: string } | null>(null);
+  const [renderedPaperId, setRenderedPaperId] = useState('');
+  const [formattingPaperId, setFormattingPaperId] = useState('');
+  const paperMarkdownCheck = useRef(false);
+  const [paperFormatError, setPaperFormatError] = useState('');
   const [copiedExplanationId, setCopiedExplanationId] = useState('');
   const [copyError, setCopyError] = useState('');
   const [binding, setBinding] = useState('');
@@ -3262,47 +3309,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const paperStepRestartAnchor = useRef<HTMLButtonElement | null>(null);
   const paperStepRestartPopup = useRef<HTMLDivElement | null>(null);
   const [paperStepRestartPlacement, setPaperStepRestartPlacement] = useState<{ left: number; top: number } | null>(null);
-  const [providerChangePrompt, setProviderChangePrompt] = useState<{ savedModel: string; nextModel: string } | null>(null);
-  const providerChangeResolver = useRef<((allowed: boolean) => void) | null>(null);
-  const providerChangeAnchor = useRef<HTMLElement | null>(null);
-  const providerChangePopup = useRef<HTMLDivElement>(null);
-  const [providerChangePlacement, setProviderChangePlacement] = useState<{ left: number; top: number } | null>(null);
-  const answerProviderChange = (allowed: boolean) => {
-    const resolve = providerChangeResolver.current;
-    providerChangeResolver.current = null;
-    setProviderChangePrompt(null);
-    resolve?.(allowed);
-  };
-  useEffect(() => () => { providerChangeResolver.current?.(false); providerChangeResolver.current = null; }, []);
-  useLayoutEffect(() => {
-    if (!providerChangePrompt) { setProviderChangePlacement(null); return; }
-    const place = () => {
-      const anchor = providerChangeAnchor.current?.isConnected
-        ? providerChangeAnchor.current : document.querySelector<HTMLElement>('.papers-pane-heading');
-      const popup = providerChangePopup.current;
-      if (!anchor || !popup) return;
-      const rect = anchor.getBoundingClientRect();
-      const width = popup.offsetWidth, height = popup.offsetHeight;
-      const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-      const top = Math.max(12, Math.min(
-        window.innerHeight - rect.bottom >= height + 18 ? rect.bottom + 6 : rect.top - height - 6,
-        window.innerHeight - height - 12,
-      ));
-      setProviderChangePlacement({ left, top });
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); answerProviderChange(false); }
-    };
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    document.addEventListener('keydown', escape);
-    return () => {
-      window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [providerChangePrompt]);
   const dismissPaperStepRestart = () => {
     paperStepCheckAbort.current?.abort();
     paperStepCheckAbort.current = null;
@@ -4208,9 +4214,51 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperRemovalErrors(current => ({ ...current, [id]: errorMessage(cause) }));
     }
   }
+  async function togglePaperMarkdown(paperId: string) {
+    if (formattingPaperId || paperMarkdownCheck.current) return;
+    if (renderedPaperId === paperId) {
+      setRenderedPaperId('');
+      return;
+    }
+    paperMarkdownCheck.current = true;
+    setPaperFormatError('');
+    try {
+      const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { cache: 'no-store' });
+      const settings = await settingsResponse.json();
+      if (!settingsResponse.ok || !settings.available || !settings.binding)
+        throw new Error(settings.message ?? 'Connect ChatGPT to format this paper.');
+      const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
+      if (formattedPaper?.id === paperId && formattedPaper.settingsKey === settingsKey) {
+        setRenderedPaperId(paperId);
+        return;
+      }
+      setFormattingPaperId(paperId);
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(paperId)}/markdown-preview`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: settings.binding }),
+      });
+      const result = await response.json();
+      if (!response.ok || typeof result.markdown !== 'string' || !result.markdown.trim())
+        throw new Error(result.error ?? 'Paper Markdown formatting failed.');
+      setFormattedPaper({ id: paperId, markdown: result.markdown, settingsKey });
+      setRenderedPaperId(paperId);
+    } catch (cause) { setPaperFormatError(errorMessage(cause)); }
+    finally { paperMarkdownCheck.current = false; setFormattingPaperId(''); }
+  }
   async function copyPaper(id: string) {
     setCopyError('');
     try {
+      if (renderedPaperId === id && formattedPaper?.id === id) {
+        // Markdown covers the body; front matter is deterministic and may not
+        // be rewritten or omitted by the AI formatter.
+        const frontMatter = selected?.paper_id === id
+          ? `# ${selected.draft.title}\n\n## Abstract\n\n${selected.draft.abstract}\n\n`
+          : '';
+        await navigator.clipboard.writeText(frontMatter + formattedPaper.markdown);
+        setCopiedPaperId(id);
+        window.setTimeout(() => setCopiedPaperId(current => current === id ? '' : current), 1600);
+        return;
+      }
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}/txt?${new URLSearchParams({ path })}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Paper text could not be loaded.');
       await navigator.clipboard.writeText(await response.text());
@@ -4535,18 +4583,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         setCheckpointMismatch(preflight);
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
-      // A different account/billing connection must never silently take over
-      // already-started paper work. Model/Thinking can change at the next call.
-      let authorizedProviderChange = false;
-      if (preflight.provider_change_requires_confirmation) {
-        const savedModel = preflight.saved_provider_model ?? 'previous model';
-        authorizedProviderChange = await new Promise<boolean>(resolve => {
-          providerChangeResolver.current = resolve;
-          setProviderChangePrompt({ savedModel, nextModel: model });
-        });
-        if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Work remains unchanged.');
-      }
-      if (preflight.resume_uses_saved_model && !authorizedProviderChange) {
+      if (preflight.resume_uses_saved_model) {
         setPhase('Resuming work; the current Model/Thinking selection applies to the next AI call.');
       }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
@@ -4562,7 +4599,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsOverride ?? includeDiagramsAndTables,
           ...(pendingRecovery.length ? { authorized_recovery_sections: pendingRecovery } : {}),
-          authorized_provider_change: authorizedProviderChange }) });
+          authorized_provider_change: false }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -4807,7 +4844,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // The step-bar and icon controls share these actions, including every
   // confirmation and creator authorization check. Do not duplicate dispatch.
   const beginPaperFromControl = (anchor: HTMLButtonElement) => {
-    providerChangeAnchor.current = anchor;
     setDraftPaperExpanded(true);
     if (checkpointMismatch) {
       positionPaperPopup(anchor, 280, 180);
@@ -4846,7 +4882,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }, [resumeAfterActiveRewind, busy, unfinishedRestartBusy, paperStepRestartBusy, binding]);
 
   const resumeOtherPaperRun = (run: PaperRun, anchor?: HTMLButtonElement) => {
-    if (anchor) providerChangeAnchor.current = anchor;
     selectPaperRun(run.run_id);
     setPaperProgress(run.progress as PaperProgress | null);
     setNewPaperRequested(true);
@@ -4863,19 +4898,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }, [allPapersRunning, activePaperRunIdsKey, onRunningChange]);
   useEffect(() => { onQueuedChange(allPapersQueued); return () => onQueuedChange(false); }, [allPapersQueued, onQueuedChange]);
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
-    {providerChangePrompt && createPortal(
-      <div ref={providerChangePopup} className="paper-step-restart-popup" role="dialog"
-        aria-label="Confirm AI connection change" aria-modal="false"
-        style={providerChangePlacement
-          ? { left: providerChangePlacement.left, top: providerChangePlacement.top }
-          : { left: 12, top: 12, visibility: 'hidden' }}>
-        <p>Continue this paper with {providerChangePrompt.nextModel} and the current AI connection?</p>
-        <div className="session-remove-confirm-actions">
-          <button type="button" className="text-view-link" onClick={() => answerProviderChange(true)}>Confirm</button>
-          <button type="button" className="text-view-link" onClick={() => answerProviderChange(false)}>Cancel</button>
-        </div>
-      </div>, document.body
-    )}
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
       <div className="papers-heading-actions strategy-heading-actions">
@@ -5124,7 +5146,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </div></div>}
                 </span>}
               </>}/>
-            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <><span className="paper-meta-dot" aria-hidden="true"> · </span><span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}<span className="paper-meta-dot" aria-hidden="true"> · </span>{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}<span className="paper-meta-dot" aria-hidden="true"> · </span><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
+            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <>{' · '}<span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}{' · '}{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}{' · '}<button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
               progress={{
                 status: scoringId === paper.paper_id ? 'active' : paper.score ? 'complete' : 'interrupted',
                 stage: scoringId === paper.paper_id ? 'scoring' : paper.score ? 'complete' : 'score_failed',
@@ -5165,9 +5187,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           {expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
           ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""} questionHeadingAction={<CopyToClipboardButton name="explaination" copied={copiedExplanationId === paper.paper_id} onCopy={() => void copyExplanation(paper.paper_id, selected.eli5?.markdown ?? '')}/>}/></Suspense></div>
-          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>
-        {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
-        <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
+          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><span className="text-view-format-control sigma-unified-markdown-progress">{formattingPaperId === paper.paper_id ? <span className="sigma-unified-hourglass" aria-hidden="true"><ProjectOpeningHourglass/></span> : <button type="button" className={`sigma-render-toggle sigma-unified-markdown${renderedPaperId === paper.paper_id ? ' sigma-render-active' : ''}${formattingPaperId === paper.paper_id ? ' sigma-render-pending' : ''}`} aria-label={renderedPaperId === paper.paper_id ? 'Show plain paper' : 'Render paper as Markdown'} aria-pressed={renderedPaperId === paper.paper_id || formattingPaperId === paper.paper_id} aria-busy={formattingPaperId === paper.paper_id} data-tooltip={formattingPaperId === paper.paper_id ? 'Formatting with AI…' : renderedPaperId === paper.paper_id ? 'Show plain text' : 'Convert to markdown'} disabled={!!formattingPaperId} onClick={() => void togglePaperMarkdown(paper.paper_id)}><MarkdownGlyph/></button>}{formattingPaperId === paper.paper_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>{paperFormatError && <p className="error" role="alert">{paperFormatError}</p>}<p className="paper-preview-abstract"><strong>Abstract.</strong> {selected.draft.abstract}</p>{renderedPaperId === paper.paper_id && formattedPaper?.id === paper.paper_id ? <div className="outcome-markdown paper-preview-markdown"><Suspense fallback={<p>Preparing paper preview…</p>}><RenderedMarkdown body={formattedPaper.markdown}/></Suspense></div> : <>
+        {selected.generation.publication_status === 'needs_review' && !dismissedPaperReviewIds.has(paper.paper_id) && <div role="status" className="ai-paper-warning paper-preview-review-notice">
+          <span><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</span>
+          <DialogDismissButton label={`Dismiss Paper ${paper.paper_version} review notice`} onClick={() => setDismissedPaperReviewIds(current => new Set(current).add(paper.paper_id))}/>
+        </div>}
         <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
         <section aria-label="Paper writing source material used"><h4>Paper writing source material used</h4>
           {selected.generation.writing_sources?.length ? <ul>{selected.generation.writing_sources.map(source => <li key={source.sha256}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a> <span className="settings-hint">({source.tier} · {source.branch})</span></li>)}</ul> : <p className="settings-hint">No external writing guidance recorded for this version.</p>}
@@ -5203,6 +5227,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
         {!selected.pdf_available && <p role="status">The paper record exists, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
+        </>}
         </>}
       </article>}      {selected?.paper_id === paper.paper_id && (selected.generation.sigma_issues?.length ?? 0) > 0 && <details className="outcome-subsection paper-diagnostics-disclosure">
         <summary><svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg><span>Diagnostics ({selected.generation.sigma_issues?.length ?? 0})</span></summary>
@@ -5602,7 +5627,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       const next = await response.json();
       if (!response.ok) throw new Error(next.error ?? 'Conversion failed; source text was kept.');
       setData(next as TextRepresentations); setDraft(next[targetFormat]?.body ?? ''); chooseView(targetFormat === 'markdown' ? 'rendered' : 'plain');
-    } catch (cause) { if (!controller.signal.aborted) { chooseView('plain'); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); } }
+    } catch (cause) { if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); } }
     finally { finishProviderRequest(); if (abort.current === controller) { abort.current = null; setBusy(false); setRendering(false); } }
   }
   async function save(event: FormEvent) {
@@ -5621,16 +5646,33 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     setExportOpen(false);
     requestAnimationFrame(() => exportTrigger.current?.focus());
   }
-  const markdownToggle = <button type="button" className={`sigma-render-toggle${markdownSlotId ? '' : ' workspace-icon-button'}${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
+  const markdownToggle = rendering ? <span className="sigma-unified-hourglass" aria-hidden="true"><ProjectOpeningHourglass/></span> : <button type="button" className={`sigma-render-toggle sigma-unified-markdown${markdownSlotId ? '' : ' workspace-icon-button'}${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
       aria-label={selected === 'rendered' ? `Show plain ${name}` : plainRecovery ? `Convert ${name} to Plain` : `Render ${name} as Markdown`}
       aria-pressed={selected === 'rendered' || rendering} data-tooltip={renderTooltip}
       aria-hidden={combinedEditMode || undefined} style={combinedEditMode ? { visibility: 'hidden' } : undefined}
       disabled={editing || busy || combinedEditMode} onClick={() => {
-        if (selected === 'rendered') { chooseView('plain'); setError(''); }
-        else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
-        else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }}>{rendering ? <ProjectOpeningHourglass/> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
-  const markdownControl = <span className="text-view-format-control">
+        void (async () => {
+          if (!data) return;
+          if (selected === 'rendered') {
+            chooseView('plain');
+            setError('');
+            return;
+          }
+          if (plainRecovery) { await convert('plain'); return; }
+          try {
+            const query = new URLSearchParams({ path, scope, ...(strategyId ? { strategy_id: strategyId } : {}) });
+            const response = await fetch(`/api/projects/text?${query}`, { cache: 'no-store' });
+            const fresh = await response.json() as TextRepresentations;
+            if (!response.ok) throw new Error('Could not check Markdown cache.');
+            if (fresh.markdown?.current) {
+              setData(fresh);
+              chooseView('rendered');
+              setError('');
+            } else await convert('markdown');
+          } catch (cause) { setError(errorMessage(cause)); }
+        })();
+      }}><MarkdownGlyph/></button>;
+  const markdownControl = <span className="text-view-format-control sigma-unified-markdown-progress">
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
   </span>;
@@ -5657,7 +5699,9 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     </div>
     {editing ? <form ref={editorForm} id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : MAX_STRATEGY_APPROACH} rows={8} required disabled={busy} onChange={event => { setDraft(event.target.value); onCombinedDraftChange?.(event.target.value); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
-    </form> : current && version ? selected === 'rendered'
+    </form> : selected === 'plain' && data?.source_format === 'markdown' && !data.plain?.current
+      ? <p className={contentClass}>{data.markdown?.body ?? source}</p>
+      : current && version ? selected === 'rendered'
       ? <div ref={renderedContent} className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
@@ -6290,7 +6334,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
 type Destination = { root: string; path: string | null; exists: boolean };
 
 type ResearchQASource = { source_id: string; session_number: number | null; kind: string; label?: string; navigation_available?: boolean; navigation_url?: string; navigation_unavailable_reason?: string };
-type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; author_email?: string; created_by?: string; markdown_answer?: string | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
+type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; author_email?: string; created_by?: string; markdown_answer?: string | null; markdown_provenance?: { model: string; reasoning_effort: string } | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
 
 function GuestFeatureCard({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
   return <section className="research-pause-guidance guest-feature-card" role="status" aria-label={title}>
@@ -6497,25 +6541,38 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     } catch (cause) { setError(errorMessage(cause)); }
   }
   async function toggleAnswerMarkdown(record: ResearchQARecord) {
-    if (formattingAnswerId || busy) return;
+    if (formattingAnswerId || formattingRequest.current || busy) return;
     if (renderedAnswerIds.has(record.qa_id)) {
-      setRenderedAnswerIds(current => { const next = new Set(current); next.delete(record.qa_id); return next; });
-      return;
-    }
-    if (record.markdown_answer) {
-      setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
+      setRenderedAnswerIds(current => {
+        const next = new Set(current);
+        next.delete(record.qa_id);
+        return next;
+      });
       return;
     }
     if (guest) { setGuestAnswerMarkdownPreview(true); return; }
     const controller = new AbortController();
     formattingRequest.current = controller;
-    setFormattingAnswerId(record.qa_id); setError('');
-    const finishProviderRequest = beginProviderRequest('text-conversion');
+    setError('');
+    let finishProviderRequest = () => {};
     try {
       const expectedDigest = await sha256Text(record.answer);
-      const markdownResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { signal: controller.signal });
+      const markdownResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { signal: controller.signal, cache: 'no-store' });
       const markdownSettings = await markdownResponse.json();
       if (!markdownResponse.ok || !markdownSettings.available) throw new Error(markdownSettings.message ?? 'Markdown formatting is unavailable.');
+      if (record.markdown_answer
+        && record.markdown_provenance?.model === markdownSettings.model
+        && record.markdown_provenance?.reasoning_effort === markdownSettings.reasoning_effort) {
+        setRenderedAnswerIds(current => {
+          const next = new Set(current);
+          if (next.has(record.qa_id)) next.delete(record.qa_id);
+          else next.add(record.qa_id);
+          return next;
+        });
+        return;
+      }
+      setFormattingAnswerId(record.qa_id);
+      finishProviderRequest = beginProviderRequest('text-conversion');
       const response = await fetch('/api/projects/text/convert', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ path, scope: 'research-qa', qa_id: record.qa_id, target: 'markdown',
@@ -6525,7 +6582,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       if (!response.ok) throw new Error(data.error ?? 'Markdown conversion failed; original answer was kept.');
       const converted = data.markdown?.body;
       if (typeof converted !== 'string' || !converted.trim()) throw new Error('Markdown conversion did not produce text.');
-      setAnswers(current => current.map(item => item.qa_id === record.qa_id ? { ...item, markdown_answer: converted } : item));
+      setAnswers(current => current.map(item => item.qa_id === record.qa_id ? { ...item, markdown_answer: converted, markdown_provenance: data.markdown?.provenance ?? { model: markdownSettings.model, reasoning_effort: markdownSettings.reasoning_effort } } : item));
       setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
     } catch (cause) {
       if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
@@ -6556,7 +6613,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
         {guest ? <p className="settings-hint ai-paper-model">Guest preview · no ChatGPT connection or model execution</p>
           : <p className="settings-hint ai-paper-model">Project model: <strong>{model || 'Loading…'}</strong> · thinking level: <strong>{effort || 'Loading…'}</strong></p>}
         {configError && <p role="alert" className="error">{configError}</p>}
-        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span data-tooltip={formatRunAttribution({ kind: 'answer', creator: viewerEmail, model, thinking: effort, mode: 'hover' })}><button type="button" className="text-view-link" disabled aria-label="Answering">⌛ Answering…</button></span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={(!guest && !binding) || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
+        <form onSubmit={event => void ask(event)} className="research-qa-form"><div className="research-qa-question-heading"><label htmlFor="research-qa-question">Question</label><div className="ai-paper-controls">{busy ? <><span className="sigma-inert-progress" role="status"><span aria-hidden="true">⌛</span> Answering…</span><button type="button" className="text-view-link" onClick={() => request.current?.abort()}>Cancel</button></> : <button type="submit" className="text-view-link" disabled={(!guest && !binding) || !question.trim()}>Ask</button>}</div></div><textarea id="research-qa-question" rows={4} maxLength={4000} value={question} disabled={busy} onChange={event => setQuestion(event.target.value)} placeholder="Ask about the research…"/></form>
         {guestAskPreview && <GuestFeatureCard title="Ask about your research" message="SIGMA answers questions using project research and cites supporting evidence. Answers require verification." onClose={() => setGuestAskPreview(false)}/>}
         {pendingAnswers.length > 0 && <section aria-label="Q/A in progress">
           {pendingAnswers.map(pending => <p className="ai-paper-status" role="status" key={pending.request_id}>
@@ -6567,7 +6624,13 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
         </section>}
         {busy && <p role="status" className="ai-paper-status">Preparing evidence and asking the selected model…</p>}{success && <p role="status" className="ai-paper-status">{success}</p>}{error && <p role="alert" className="error">{error} <DialogDismissButton label="Dismiss error" onClick={() => setError('')}/></p>}
         {loading ? <p>Loading answers…</p> : answers.length > 0 && <section className="saved-paper-library research-qa-library" aria-label="Questions and answers"><h3>Answers</h3>{answers.map(record => <article className="saved-paper-card" key={record.qa_id}>
-          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control"><button type="button" className={`qa-markdown-action sigma-render-toggle workspace-icon-button${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}${formattingAnswerId === record.qa_id ? ' sigma-render-pending' : ''}`} aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'} aria-pressed={renderedAnswerIds.has(record.qa_id) || formattingAnswerId === record.qa_id} data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : formattingAnswerId === record.qa_id ? 'Formatting with AI…' : 'Convert to Markdown'} disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}>{formattingAnswerId === record.qa_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
+          <div className="saved-paper-row"><div className="saved-paper-heading"><SavedPaperTitle title={record.question} itemLabel="answer" expanded={expanded === record.qa_id} controls={`qa-body-${record.qa_id}`} onToggle={() => setExpanded(current => current === record.qa_id ? '' : record.qa_id)} copyName="Markdown answer" copied={copiedId === record.qa_id} onCopy={() => void copy(record)} inlineTitleActions beforeCopy={<span className="text-view-format-control qa-markdown-control sigma-unified-markdown-progress">{formattingAnswerId === record.qa_id ? <span className="sigma-unified-hourglass" aria-hidden="true"><ProjectOpeningHourglass/></span> : <button type="button"
+className={`qa-markdown-action sigma-render-toggle sigma-unified-markdown${renderedAnswerIds.has(record.qa_id) ? ' sigma-render-active' : ''}`}
+aria-label={renderedAnswerIds.has(record.qa_id) ? 'Show plain answer' : 'Render answer as Markdown'}
+aria-pressed={renderedAnswerIds.has(record.qa_id)}
+data-tooltip={renderedAnswerIds.has(record.qa_id) ? 'Show plain text' : 'Convert to markdown'}
+disabled={busy || !!formattingAnswerId} onClick={() => void toggleAnswerMarkdown(record)}><MarkdownGlyph/></button>}
+{formattingAnswerId === record.qa_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>} actions={<>
             <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-view-pdf-icon" aria-label="View answer in a new browser tab" data-tooltip="View answer in a new browser tab" onClick={() => window.open(`/project?${new URLSearchParams({ path, qa_browser: record.qa_id })}`, '_blank', 'noopener,noreferrer')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg></button>
             {!guest && (!viewerEmail || viewerEmail === projectOwnerEmail || answerAuthors?.[record.qa_id] === viewerEmail) && <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label="Remove answer" data-tooltip="Remove answer" onClick={() => setRemoveId(record.qa_id)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
           </>}/><div className="saved-paper-meta"><p>{dateLabel(record.created_at)} · Elapsed {savedPaperElapsed(record.generation.generation_elapsed_seconds)} · {(record.author_email || (record.created_by && record.created_by !== 'Local user')) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'answer', creator: record.author_email || record.created_by, model: record.generation.model, thinking: record.generation.reasoning_effort })}</span> : modelThinkingLabel(record.generation.model, record.generation.reasoning_effort)}</p></div></div></div>
@@ -7142,7 +7205,13 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
               {collaborators.length > 0 && <p className="project-collaborator-standards-note">Title, research category, difficulty, and user settings are inherited from the project owner.</p>}
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
-                {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
+                {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => {
+                  // The Close button can be clicked in the next pointer event.
+                  // Commit the removal to React state before Close reads the
+                  // draft; otherwise a stale closure can dismiss the modal
+                  // without persisting the ACL revocation.
+                  flushSync(() => setCollaborators(previous => previous.filter(value => value !== email)));
+                }}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
                 </button>}
               </div>)}
@@ -7837,7 +7906,7 @@ function RecentProjects({ onOpen, getCachedView, onNavigateActivity, cacheScope,
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
           <div className="recent-title-row">
-            <button className="recent-open" disabled={!entry.available || !!opening} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
+            <button className="recent-open" disabled={!entry.available || !!opening || removing === entry.id} aria-busy={opening === entry.id || removing === entry.id} aria-label={opening === entry.id ? `Opening ${entry.title}` : removing === entry.id ? `Removing ${entry.title}` : undefined} onClick={() => void open(entry)}>{entry.title}{(visibleProgress === `open:${entry.id}` || visibleProgress === `remove:${entry.id}`) && <><ProjectOpeningHourglass/><span className="project-opening-label">{removing === entry.id ? 'Removing...' : 'Opening...'}</span></>}</button>
             {paperActivity(entry) && <button type="button" className="recent-activity-jump" aria-label={`Open active work in ${entry.title}`}
               data-tooltip={recentRunLabels(entry).join('\n') || activityDescription(entry)} data-tooltip-activity="true"
               disabled={!entry.available} onClick={() => onNavigateActivity(entry, entry.activity_runs?.find(run => run.status === 'active') ?? entry.activity_runs?.[0] ?? null)}>

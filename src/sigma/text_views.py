@@ -31,6 +31,21 @@ from sigma.projects import (
 )
 
 Format = Literal["plain", "markdown"]
+
+
+def _matches_conversion_preferences(version: dict[str, Any]) -> bool:
+    """AI-derived content is current only for the selected Model/Thinking."""
+    from sigma import global_research_settings
+
+    selected = global_research_settings.load_config()
+    provenance = version.get("provenance")
+    return (
+        isinstance(provenance, dict)
+        and provenance.get("model") == selected["ai_model"]
+        and provenance.get("reasoning_effort") == selected["reasoning_effort"]
+    )
+
+
 STATE = "text-representations.json"
 _gate = threading.Lock()
 
@@ -299,6 +314,7 @@ def inspect_text(value: str | Path, scope: str, strategy_id: str | None = None) 
                     if item["kind"] == "ai_derived"
                     and item["source_digest"] == source_digest
                     and item["source_format"] == source_format
+                    and _matches_conversion_preferences(item)
                 ),
                 None,
             )

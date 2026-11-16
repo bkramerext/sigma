@@ -1,10 +1,9 @@
-"""Private model RPC contract for the Personal ChatGPT worker.
+"""Private model RPC for both legacy tests and shared Personal POC.
 
-Hosted workers bind this server to /run/sigma-personal/model.sock. The local
-Docker POC binds it to worker port 8002, published only on host loopback; its
-browser still has no credential mount. Only the explicit local preview allows
-provider dispatch with a per-workspace RPC key.
-No token, refresh token, cookie or OAuth code is ever returned over this API.
+The greenfield shared Docker service uses port 8001 and per-workspace HMACs.
+Its credential worker is UID-isolated from on-demand Chromium. Provider
+credentials remain private; no OAuth code or token is returned over this API.
+Hosted plan usage requires separate acceptance before deployment.
 """
 
 from __future__ import annotations
@@ -66,6 +65,21 @@ _catalog_cache: tuple[bytes, float, list[str]] | None = None
 
 
 def _valid_rpc_key(request: Request) -> bool:
+    if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1":
+        # The backend derives workspace identity from the verified Google
+        # subject. The shared service authenticates the exact same workspace
+        # on EVERY RPC; one user's token cannot address another user's vault.
+        workspace = request.headers.get("x-sigma-workspace", "")
+        key = request.headers.get("x-sigma-worker-key", "")
+        seed = os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")
+        if (
+            not re.fullmatch(r"[0-9a-f]{32}", workspace)
+            or not re.fullmatch(r"[0-9a-f]{64}", key)
+            or not re.fullmatch(r"[0-9a-f]{64}", seed)
+        ):
+            return False
+        expected = hmac.digest(bytes.fromhex(seed), workspace.encode("ascii"), "sha256")
+        return hmac.compare_digest(bytes.fromhex(key), expected)
     key = os.environ.get("SIGMA_AUTH_POC_RPC_KEY", "")
     return (
         os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
@@ -122,14 +136,28 @@ async def account_status(request: Request) -> dict[str, Any]:
 
 
 @app.get("/v1/test-account")
-async def test_account_status() -> dict[str, bool]:
+async def test_account_status(request: Request) -> dict[str, bool]:
+    if not _valid_rpc_key(request):
+        raise HTTPException(403, "Personal ChatGPT test status denied.")
+    if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1":
+        # Synthetic sign-in isn't part of the shared real-account service.
+        return {"verified": False}
     if not synthetic_signin.enabled():
         raise HTTPException(404)
     return {"verified": synthetic_signin.verified()}
 
 
 @app.get("/v1/preview-state")
-async def preview_state() -> dict[str, str]:
+async def preview_state(request: Request) -> dict[str, str]:
+    if not _valid_rpc_key(request):
+        raise HTTPException(403, "Personal ChatGPT preview access denied.")
+    if (
+        os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1"
+        and not getattr(request.state, "shared_browser_active", False)
+    ):
+        # An idle or foreign workspace must never see the active user's
+        # OAuth progress, even though the account RPC itself is authenticated.
+        return {"phase": "unavailable"}
     if (
         os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") != "1"
         or os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
@@ -149,6 +177,15 @@ async def preview_state() -> dict[str, str]:
 async def disconnect(request: Request) -> dict[str, bool]:
     if not _valid_rpc_key(request):
         raise HTTPException(403, "Personal ChatGPT disconnect is unavailable.")
+    if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1":
+        # Shared service already binds the verified workspace context in its
+        # middleware. Calling legacy /disconnect would instead use whichever
+        # browser is currently active, violating user isolation.
+        try:
+            await chatgpt_auth.disconnect()
+        except ProjectError as exc:
+            raise HTTPException(503, "Could not disconnect ChatGPT account.") from exc
+        return {"disconnected": True}
     try:
         async with httpx.AsyncClient(timeout=45, trust_env=False) as client:
             result = await client.post(

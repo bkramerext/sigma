@@ -86,12 +86,12 @@
 .workspace-page .papers-pane .paper-action-popover button.destructive-action { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-action-popover button:disabled { opacity: .55; cursor: default; }
 .workspace-page .papers-pane .saved-paper-meta { margin-top: 2px; }
-/* One shared spacer for date, elapsed, attribution and score. */
-.workspace-page .papers-pane .saved-paper-meta .paper-meta-dot {
-  display: inline;
-  margin-inline: 0;
-  white-space: pre;
-}
+/* Match the natural inline middle-dot spacing of active papers. */
+.workspace-page .papers-pane .ai-paper-preview-title-copy { display: inline-flex; align-items: center; gap: 6px; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy .text-view-format-control { display: inline-flex; align-items: center; gap: 3px; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy .markdown-logo { width: 26px; height: 22px; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy .text-view-format-status { font: 11px/1.3 Inter, sans-serif; color: var(--sigma-copper-foreground); }
+.workspace-page .papers-pane .paper-preview-markdown { margin-top: 12px; }
 .workspace-page .papers-pane .saved-paper-meta .text-view-link { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link { display: inline; width: auto; min-height: 0; padding: 0; margin-left: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; }
@@ -139,7 +139,7 @@
 .workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .paper-remove-actions .session-remove-confirm-actions button:hover:not(:disabled) { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .saved-paper-card .ai-paper-preview { max-height: min(55dvh, 560px); overflow: auto; }
-.workspace-page .papers-pane .ai-paper-preview-title-copy { display: inline-flex; margin-left: 8px; vertical-align: middle; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy { display: inline-flex; margin-left: 14px; vertical-align: middle; }
 .workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button svg { width: 18px; height: 18px; }
 .workspace-page .papers-pane .ai-paper-preview-title-copy .text-copy-button:hover { border-color: #ac7054; background: #3b3029; }
@@ -830,4 +830,12 @@
 .workspace-page .papers-pane .paper-score-error-card .sigma-dialog-dismiss.sigma-dialog-dismiss {
   top: 5px !important;
   right: 5px !important;
+}
+
+/* Dismiss only the expanded paper's duplicate review notice; the status above
+   the preview remains visible as the authoritative publication warning. */
+.workspace-page .papers-pane .paper-preview-review-notice { position: relative; padding-right: 44px; }
+.workspace-page .papers-pane .paper-preview-review-notice .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 6px !important;
+  right: 8px !important;
 }

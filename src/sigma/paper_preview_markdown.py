@@ -1,0 +1,75 @@
+"""Read-only Markdown conversion for the saved paper preview.
+
+Uses the selected user Model/Thinking and the shared formatting instructions.
+Does not change the paper, PDF, TeX, or checkpoint accounting.
+"""
+
+from __future__ import annotations
+
+from typing import cast
+
+from pydantic import BaseModel, ConfigDict
+
+from sigma import papers
+from sigma.openai_connection import auth_context
+from sigma.projects import ProjectError, inspect_project
+from sigma.proposals import configuration
+from sigma.text_conversion import INSTRUCTIONS
+
+
+def _body_without_front_matter(source: str, title: str, abstract: str) -> str:
+    """The saved title and abstract render verbatim outside AI Markdown.
+
+    Excluding them from model conversion prevents a flaky formatter from
+    silently omitting or rewriting either piece of paper front matter.
+    """
+    prefix = f"{title}\n\nAbstract\n{abstract}\n"
+    if not source.startswith(prefix):
+        raise ProjectError("Saved paper front matter is inconsistent with the paper text.")
+    body = source[len(prefix) :].lstrip("\n")
+    if not body.strip():
+        raise ProjectError("Saved paper body is empty.")
+    return body
+
+
+class PaperPreviewMarkdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    body: str
+
+
+async def format_paper_preview(path: str, paper_id: str, expected_project_id: str) -> str:
+    view = inspect_project(path)
+    if view.project.id != expected_project_id:
+        raise ProjectError("Project identity changed; reopen and retry.")
+    record = papers.get_paper(path, paper_id, include_tex=False)
+    draft = record["draft"]
+    text = _body_without_front_matter(
+        papers.paper_text(path, paper_id), draft["title"], draft["abstract"]
+    )
+    if len(text.encode("utf-8")) > 24000:
+        raise ProjectError("Paper preview is too long for one Markdown conversion.")
+    auth = await auth_context()
+    config = await configuration(view=view, context=auth)
+    if not config["available"]:
+        raise ProjectError(config["message"])
+    result, _ = await papers._provider_structured(
+        {"source_format": "plain", "target_format": "markdown", "text": text},
+        auth,
+        config,
+        instructions=INSTRUCTIONS
+        + " Convert only the provided paper body into readable Markdown, including all "
+        "headings and paragraphs. The UI renders the exact saved title and abstract "
+        "separately. Preserve all supplied content and mathematics without summarizing.",
+        schema_name="sigma_paper_preview_markdown",
+        response_model=PaperPreviewMarkdown,
+        max_input_bytes=32000,
+        max_output_tokens=14000,
+        project_id=expected_project_id,
+        project_path_value=path,
+    )
+    markdown = cast(PaperPreviewMarkdown, result).body
+    if not markdown.strip() or len(markdown) < max(1, len(text.strip()) // 5):
+        raise ProjectError(
+            "Paper formatting appears incomplete; the original preview is unchanged."
+        )
+    return markdown

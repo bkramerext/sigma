@@ -734,8 +734,8 @@ async def _answer_locked(
     if view.project.id != expected_project_id:
         raise ProjectError("The project changed before Q/A started")
     binding = await auth_context()
-    if not isinstance(binding, Mapping) or binding.get("identity") != expected_binding:
-        raise ProjectError("AI connection changed before Q/A started")
+    if not isinstance(binding, Mapping):
+        raise ProjectError("An active AI connection is required before Q/A can start")
     if not re.fullmatch(r"[0-9a-f]{32}", request_id):
         raise ProjectError("Invalid Q/A request identifier")
     from sigma import project_collaboration
@@ -966,6 +966,7 @@ def saved_answer_text(path: str, qa_id: str) -> dict[str, Any]:
     return {
         "answer": record["answer"],
         "markdown_answer": record.get("markdown_answer"),
+        "markdown_provenance": record.get("markdown_provenance"),
     }
 
 
@@ -994,7 +995,14 @@ def store_markdown_answer(
         if digest(source) != expected_digest:
             raise ProjectError("Saved answer changed during conversion; reopen before retrying")
         existing = record.get("markdown_answer")
-        if isinstance(existing, str) and existing.strip():
+        existing_provenance = record.get("markdown_provenance")
+        if (
+            isinstance(existing, str)
+            and existing.strip()
+            and isinstance(existing_provenance, dict)
+            and existing_provenance.get("model") == provenance.get("model")
+            and existing_provenance.get("reasoning_effort") == provenance.get("reasoning_effort")
+        ):
             selected_markdown = existing
             changed = False
         else:

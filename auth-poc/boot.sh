@@ -1,11 +1,14 @@
 #!/bin/sh
-# Chromium is a distinct container from the OAuth worker. Compose shares the
-# NETWORK namespace only, giving both the same 127.0.0.1 address.
+# In the shared low-memory POC, Chromium runs under a different Linux UID
+# inside the same Docker container as the OAuth worker. Its HOME/profile are
+# disposable; it never mounts the protected token or key directories.
 set -eu
-export DISPLAY=:99 HOME=/tmp
-export XDG_CONFIG_HOME=/tmp/sigma-config XDG_CACHE_HOME=/tmp/sigma-cache
+export DISPLAY=:99 HOME="${SIGMA_BROWSER_HOME:-/tmp}"
+export XDG_CONFIG_HOME="$HOME/sigma-config" XDG_CACHE_HOME="$HOME/sigma-cache"
+BROWSER_PROFILE="${SIGMA_BROWSER_PROFILE:-/tmp/chromium}"
+BROWSER_PASSWORD_PATH="${SIGMA_BROWSER_PASSWORD_PATH:-/tmp/sigma-vnc-pass}"
 umask 077
-python3 -c 'import secrets; print(secrets.token_urlsafe(9)[:8])' > /tmp/sigma-vnc-pass
+python3 -c 'import secrets; print(secrets.token_urlsafe(9)[:8])' > "$BROWSER_PASSWORD_PATH"
 echo "SIGMA Personal browser: starting Xvfb" 
 Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
 i=0
@@ -20,7 +23,7 @@ echo "SIGMA Personal browser: Xvfb ready; starting x11vnc"
 # two independent lock states can make lowercase letters arrive as UPPERCASE.
 # Also clear stale Shift/lock modifiers on startup before accepting credentials.
 x11vnc -display :99 -localhost -forever -shared -skip_lockkeys -clear_all \
-  -passwdfile /tmp/sigma-vnc-pass -quiet >/dev/null 2>&1 &
+  -passwdfile "$BROWSER_PASSWORD_PATH" -quiet >/dev/null 2>&1 &
 websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/dev/null 2>&1 &
 echo "SIGMA Personal browser: VNC relay launched; starting Chromium"
 # Keep Chromium's user namespace + seccomp renderer sandbox enabled.
@@ -38,5 +41,5 @@ exec /usr/bin/chromium --no-first-run --no-default-browser-check \
   --disable-save-password-bubble \
   --enable-features=WebAuthnUsePasskeyFromAnotherDeviceInContextMenu \
   --disable-features=AutofillReintroduceHybridPasskeyDropdownItem,WebAuthnPasskeyUpgrade,WebAuthnAmbientSignin \
-  --user-data-dir=/tmp/chromium --window-size=1280,800 \
+  --user-data-dir="$BROWSER_PROFILE" --window-size=1280,800 \
   --app=http://127.0.0.1:8001/

@@ -1,7 +1,8 @@
-"""Single-user laboratory OAuth worker. Never exposes the token store to Chromium.
+"""Local OAuth browser routes, reused by the shared low-memory POC worker.
 
-The browser runs in a separate container with a shared NETWORK namespace.
-This service is intentionally not a hosted multi-user authorization broker.
+Only the authenticated worker may read account records. The transient browser
+uses a separate UID in the shared container and a loopback-only callback.
+Hosted Personal ChatGPT remains separately gated and unapproved.
 """
 from __future__ import annotations
 
@@ -51,6 +52,25 @@ def require_real_signin() -> None:
 def same_origin(request: Request) -> None:
     if request.headers.get("origin") != "http://127.0.0.1:8001":
         raise HTTPException(403, "Invalid browser origin")
+
+
+def cancel_pending_signin() -> None:
+    """Cancel the sole active browser's OAuth attempt in its owning workspace.
+
+    Called only while the shared worker has bound the prior verified workspace,
+    on browser close or after a supervisor-enforced timeout. Token records are
+    retained; only transient PKCE material and the pending callback expire.
+    """
+    global _ATTEMPT_ID, _SIGNIN_FAILED
+    identifier = _ATTEMPT_ID
+    if identifier is not None:
+        try:
+            chatgpt_auth.cancel(identifier)
+        except ProjectError:
+            # A completed/expired attempt cannot be replayed into another user.
+            pass
+        _ATTEMPT_ID = None
+    _SIGNIN_FAILED = False
 
 
 async def _direct_local_signin() -> HTMLResponse | RedirectResponse:

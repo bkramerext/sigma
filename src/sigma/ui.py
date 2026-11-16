@@ -196,12 +196,23 @@ def run_ui(
                     **(personal_runtime.env if personal_runtime is not None else {}),
                     "SIGMA_UI_INSTANCE_ID": instance_id,
                 }
+                # The frontend must match the server's explicit opt-in state.
+                # Do not inherit a stale Vite flag from the invoking shell.
+                child_env["VITE_SIGMA_PERSONAL_DIAGNOSTICS_ENABLED"] = (
+                    "true"
+                    if prod and os.environ.get("SIGMA_PERSONAL_DIAGNOSTICS_ENABLED") == "1"
+                    else "false"
+                )
                 if prod and personal_runtime is None:
                     # Never accidentally fall back to host-local ChatGPT OAuth
-                    # after --prod's isolated Docker startup fails. Keep the
-                    # Personal UI available to explain the missing prerequisite.
+                    # after --prod's isolated Docker startup fails. Preserve
+                    # the redacted diagnostics endpoint even for early failure.
                     child_env.update(
                         {
+                            "SIGMA_PERSONAL_SHARED_MODE": "1",
+                            "SIGMA_PERSONAL_DIAGNOSTICS_FILE": os.environ.get(
+                                "SIGMA_PERSONAL_DIAGNOSTICS_FILE", ""
+                            ),
                             "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
                             "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
                             "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": "/nonexistent/sigma-personal-broker.sock",

@@ -16,11 +16,101 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY = ROOT / "deploy"
 sys.path.insert(0, str(DEPLOY))
+import check_host_direct_caddy  # pyright: ignore[reportMissingImports]
 import gce_preflight  # pyright: ignore[reportMissingImports]
 import prepare_state_disk  # pyright: ignore[reportMissingImports]
 
 
 class GceHostToolingTests(unittest.TestCase):
+    def test_adapted_caddy_routes_validate_api_vs_frontend(self) -> None:
+        def proxy(dial: str) -> dict:
+            return {"handler": "reverse_proxy", "upstreams": [{"dial": dial}]}
+
+        def document(
+            backend: str = "127.0.0.1:18081",
+            frontend: str = "127.0.0.1:18082",
+            api_paths: list[str] | None = None,
+        ) -> dict:
+            return {
+                "apps": {
+                    "http": {
+                        "servers": {
+                            "srv0": {
+                                "routes": [
+                                    {
+                                        "match": [{"host": ["sigma-research.duckdns.org"]}],
+                                        "handle": [
+                                            {
+                                                "handler": "subroute",
+                                                "routes": [
+                                                    {
+                                                        "match": [
+                                                            {
+                                                                "path": (
+                                                                    api_paths
+                                                                    if api_paths is not None
+                                                                    else ["/api", "/api/*"]
+                                                                )
+                                                            }
+                                                        ],
+                                                        "handle": [proxy(backend)],
+                                                    },
+                                                    {"handle": [proxy(frontend)]},
+                                                ],
+                                            }
+                                        ],
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+
+        check_host_direct_caddy.validate(document())
+        decoy = document()
+        decoy["apps"]["http"]["servers"]["srv0"]["routes"][0]["match"] = [
+            {"host": ["other.example.net"]}
+        ]
+        missing_frontend = document()
+        missing_frontend["apps"]["http"]["servers"]["srv0"]["routes"][0]["handle"][0][
+            "routes"
+        ].pop()
+        extra_edge = document()
+        extra_edge["apps"]["http"]["servers"]["srv0"]["routes"][0]["handle"][0]["routes"].append(
+            {"handle": [proxy("127.0.0.1:18080")]}
+        )
+        for invalid in (
+            decoy,
+            document(backend="127.0.0.1:18082", frontend="127.0.0.1:18081"),
+            document(backend="127.0.0.1:18080"),
+            document(backend="0.0.0.0:18081"),
+            document(api_paths=["/api/*"]),
+            document(api_paths=["/api", "/api/*", "/admin"]),
+            missing_frontend,
+            extra_edge,
+            {"comment": "127.0.0.1:18081 127.0.0.1:18082"},
+            [],
+        ):
+            with (
+                self.subTest(config=invalid),
+                self.assertRaises(check_host_direct_caddy.InvalidDirectRouting),
+            ):
+                check_host_direct_caddy.validate(invalid)
+
+    def test_host_direct_caddy_preserves_edge_security_headers(self) -> None:
+        direct = (DEPLOY / "host-caddy-direct.Caddyfile").read_text(encoding="utf-8")
+        edge = (DEPLOY / "Caddyfile").read_text(encoding="utf-8")
+        for setting in (
+            "encode zstd gzip",
+            'Strict-Transport-Security "max-age=31536000"',
+            'X-Content-Type-Options "nosniff"',
+            'Referrer-Policy "no-referrer"',
+        ):
+            with self.subTest(setting=setting):
+                self.assertIn(setting, edge)
+                self.assertIn(setting, direct)
+
     def test_host_readiness_derives_rootless_socket_without_production_environment(self) -> None:
         preflight = gce_preflight.Preflight(host_readiness=True)
         with patch("gce_preflight._sandbox_uid", return_value=1001):
@@ -145,6 +235,27 @@ class GceHostToolingTests(unittest.TestCase):
         with patch.object(preflight, "command", side_effect=compose_result):
             preflight.check_compose()
         self.assertEqual(preflight.results[-1].status, "PASS")
+
+        # Direct host-Caddy mode is opt-in; both app ports must bind only to
+        # loopback, preserving the original healthy edge as rollback config.
+        services["backend"]["ports"] = [
+            {"host_ip": "127.0.0.1", "target": 8000, "published": "18081"}
+        ]
+        services["frontend"]["ports"] = [
+            {"host_ip": "127.0.0.1", "target": 8080, "published": "18082"}
+        ]
+        preflight.values["SIGMA_HOST_DIRECT"] = "true"
+        with patch.object(preflight, "command", side_effect=compose_result) as cmd:
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "PASS")
+        self.assertIn(str(ROOT / "deploy/compose.direct.gce.yaml"), cmd.call_args.args[0])
+        services["backend"]["ports"][0]["host_ip"] = "0.0.0.0"
+        with patch.object(preflight, "command", side_effect=compose_result):
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "FAIL")
+        services["backend"].pop("ports")
+        services["frontend"].pop("ports")
+        preflight.values.pop("SIGMA_HOST_DIRECT")
 
         services["edge"].pop("healthcheck")
         with patch.object(preflight, "command", side_effect=compose_result):

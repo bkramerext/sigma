@@ -233,6 +233,30 @@ class Deployment:
             raise DeployFailure("current checkout does not identify a full commit SHA")
         if not initial and previous != old_sha:
             raise DeployFailure("current checkout and configured release pin disagree")
+        if self.host_direct_enabled():
+            # Automatic rollback preserves deploy.env, including the direct
+            # host routing flag. A rollback to a release without its loopback
+            # port overlay would leave Caddy pointing at dead upstreams.
+            # Fail BEFORE touching the checkout or stopping the current app.
+            for release in (previous, sha) if not initial else (sha,):
+                try:
+                    _call(
+                        self.runner,
+                        [
+                            "git",
+                            "-C",
+                            str(self.repository),
+                            "cat-file",
+                            "-e",
+                            f"{release}:deploy/compose.direct.gce.yaml",
+                        ],
+                    )
+                except DeployFailure as exc:
+                    raise DeployFailure(
+                        "Host-direct routing requires BOTH deployment releases to "
+                        "support direct loopback ports. Restore original host Caddy "
+                        "routing and disable SIGMA_HOST_DIRECT before deploying an older release."
+                    ) from exc
 
         # Build from a git-archive of the exact requested commit and attach
         # source-SHA labels; never build a requested tag from the active checkout.
@@ -336,6 +360,13 @@ class Deployment:
         except OSError as exc:
             raise DeployFailure("cannot read reviewed auth-lab deployment setting") from exc
 
+    def host_direct_enabled(self) -> bool:
+        """Hosted direct-routing activation is explicitly reviewed and optional."""
+        try:
+            return b"SIGMA_HOST_DIRECT=true" in self.env_file.read_bytes().splitlines()
+        except OSError as exc:
+            raise DeployFailure("cannot read host-direct deployment setting") from exc
+
     def verify_health(self, sha: str) -> None:
         compose = [
             "docker",
@@ -349,7 +380,11 @@ class Deployment:
             "-f",
             str(self.repository / "deploy/compose.gce.yaml"),
         ]
-        services = ["backend", "frontend", "edge"]
+        services = ["backend", "frontend"]
+        if self.host_direct_enabled():
+            compose.extend(["-f", str(self.repository / "deploy/compose.direct.gce.yaml")])
+        else:
+            services.append("edge")
         if self.auth_lab_enabled():
             compose.extend(
                 [

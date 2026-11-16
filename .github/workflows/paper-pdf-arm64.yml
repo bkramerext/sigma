@@ -1,0 +1,37 @@
+name: Paper PDF compiler on ARM64
+
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'src/sigma/project_reports.py'
+      - 'src/sigma/papers.py'
+      - '.github/workflows/paper-pdf-arm64.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tectonic-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the actual pinned ARM64 Tectonic stage
+        run: docker build --platform linux/arm64 --target tectonic -t sigma-tectonic-arm64:ci .
+      - name: Verify binary architecture and compile a real mathematical PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /usr/local/bin/tectonic sigma-tectonic-arm64:ci --version
+          cat > /tmp/sigma-paper-smoke.tex <<'TEX'
+          \documentclass{article}
+          \begin{document}
+          Maximum regions: \(1+n(n+1)/2\).
+          \end{document}
+          TEX
+          docker run --rm \
+            -v /tmp/sigma-paper-smoke.tex:/tmp/report.tex:ro \
+            --entrypoint /bin/sh sigma-tectonic-arm64:ci -ec \
+            'tectonic --untrusted --outdir /tmp /tmp/report.tex && test -s /tmp/report.pdf'

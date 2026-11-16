@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from sigma import cloud_research, cloud_workspaces, model_dispatch
+from sigma import cloud_research, cloud_workspaces, global_research_settings, model_dispatch
 from sigma.model_catalog import validate_pair
 from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
@@ -17,7 +17,7 @@ from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
 from sigma.proposals import configuration
 from sigma.text_views import Format, _format, digest, inspect_text, store_conversion
 
-# Formatting always uses the reviewed inexpensive model, irrespective of research settings.
+# Formatting follows the user-scoped Model/Thinking preferences.
 # Keep cancellation and the existing provider-completion safeguards.
 FORMAT_MODEL = "gpt-6-luna"
 FORMAT_EFFORT = "medium"
@@ -53,6 +53,9 @@ INSTRUCTIONS = (
     "their surrounding sentence uses them as variables or sequence terms. "
     "Keep ordinary slash-separated words in prose, without math delimiters or LaTeX fractions. "
     "Use mathematical notation only where the slash expresses a fraction or quotient in context. "
+    "Preserve numbered and bulleted list structure, exact numeric labels including zero, "
+    "and nested list indentation. Never add diacritics or stray Unicode combining marks "
+    "to digits. Do not turn bullet points into paragraphs. "
     "Preserve existing valid Markdown, explicit math delimiters, multiline equations, escaped "
     "delimiters, unmatched delimiter text, inline code, fenced code, links and table structure. "
     "For Markdown use normal Markdown prose; use $...$ or $$...$$ only when an expression "
@@ -261,6 +264,11 @@ async def _convert_text(
                     "markdown": {"body": record["markdown_answer"], "current": True}
                     if isinstance(record["markdown_answer"], str)
                     and record["markdown_answer"].strip()
+                    and isinstance(record.get("markdown_provenance"), dict)
+                    and record["markdown_provenance"].get("model")
+                    == global_research_settings.load_config()["ai_model"]
+                    and record["markdown_provenance"].get("reasoning_effort")
+                    == global_research_settings.load_config()["reasoning_effort"]
                     else None,
                 }
             elif scope == "current-understanding":
@@ -356,15 +364,9 @@ async def _convert_text(
             if len(source_body) > limit:
                 raise ProjectError("Source text exceeds the conversion limit")
             binding = await auth_context()
-            if expected_binding is not None and expected_binding != binding["identity"]:
-                raise ProjectError(
-                    "AI account/billing mode changed. Review the connection and retry"
-                )
             config = await configuration(
                 view=view,
                 context=binding,
-                frozen_model=FORMAT_MODEL,
-                frozen_effort=FORMAT_EFFORT,
             )
             if not config["available"]:
                 raise ProjectError(config["message"])
@@ -579,13 +581,7 @@ async def _convert_text(
                 not note.strip() or len(note) > 300 for note in result.warnings
             ):
                 raise ProjectError("Provider returned invalid conversion notes")
-            again = await auth_context()
-            if again["identity"] != binding["identity"] or again["mode"] != binding["mode"]:
-                raise ProjectError(
-                    "AI account/billing mode changed during conversion; nothing was saved"
-                )
-            # Formatting uses an explicit fixed model/effort; the selected research
-            # model can change during this request without changing provenance.
+            # The conversion provenance reflects the user selection at dispatch.
             if scope == "current-understanding":
                 if (
                     field_path is None

@@ -2914,6 +2914,7 @@ def test_paper_checkpoint_portability_keeps_saved_sections_and_call_history() ->
             reasoning_effort="medium",
         )
         assert preflight["resume_available"] is True
+        assert preflight["provider_change_requires_confirmation"] is False
         assert preflight["completed_sections"] == 1
         assert preflight["provider_calls_attempted"] == 2
         new_fingerprint = hashlib.sha256(("chatgpt" + "\0" + binding).encode()).hexdigest()
@@ -4844,8 +4845,7 @@ def test_paper_live_model_selection_changes_future_calls_only() -> None:
     assert len(state["model_change_history"]) == 2
     assert len(saved) == 2
 
-    # A matching AI identity may resume already-paid work with the user's
-    # current choice; changing the identity still requires explicit approval.
+    # A different active connection may resume the same paid checkpoint.
     checkpoint = {
         "binding_fingerprint": "same-identity",
         "model": "gpt-6.1-sol",
@@ -4855,12 +4855,12 @@ def test_paper_live_model_selection_changes_future_calls_only() -> None:
         "gpt-6-luna",
         "low",
     )
-    try:
-        papers._resume_provider_choice(checkpoint, "different-identity", "gpt-6-luna", "low")
-    except ProjectError as exc:
-        assert "explicit approval" in str(exc)
-    else:
-        raise AssertionError("Paper checkpoint changed AI identity without consent")
+    assert papers._resume_provider_choice(
+        checkpoint, "different-identity", "gpt-6-luna", "low"
+    ) == (
+        "gpt-6-luna",
+        "low",
+    )
 
 
 if __name__ == "__main__":

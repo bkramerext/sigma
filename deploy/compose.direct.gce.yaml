@@ -1,0 +1,9 @@
+# Opt-in: host Caddy routes directly to frontend/backend loopback endpoints.
+# The Docker edge is deliberately scaled to zero by start-gce.sh.
+services:
+  backend:
+    ports:
+      - "127.0.0.1:18081:8000/tcp"
+  frontend:
+    ports:
+      - "127.0.0.1:18082:8080/tcp"
