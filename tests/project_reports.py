@@ -684,6 +684,4 @@ def test_pdf_compiler_architecture_failure_is_classified_without_source_leak() -
             assert "PRIVATE AUTHORS" not in str(exc)
         else:
             raise AssertionError("An unexecutable Tectonic binary must fail with a safe error")
-    assert diagnostics == [
-        "Tectonic could not start; verify the backend compiler architecture."
-    ]
+    assert diagnostics == ["Tectonic could not start; verify the backend compiler architecture."]

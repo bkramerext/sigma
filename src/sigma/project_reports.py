@@ -1010,7 +1010,9 @@ def _compile_pdf(
                 exc.errno,
             )
             if diagnostics is not None:
-                diagnostics.append("Tectonic could not start; verify the backend compiler architecture.")
+                diagnostics.append(
+                    "Tectonic could not start; verify the backend compiler architecture."
+                )
             raise RuntimeError(
                 "PDF compiler could not start. Check the backend's Tectonic architecture."
             ) from exc
