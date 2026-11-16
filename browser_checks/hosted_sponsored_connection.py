@@ -521,7 +521,7 @@ def exercise(origin: str) -> None:
         pill = page.locator(".api-connection > summary")
         expect(pill).to_be_visible()
         expect(pill).to_contain_text("ChatGPT Sponsored")
-        expect(pill.locator(".sponsored-allowance-inline")).to_have_text("Allocation: $1.50")
+        expect(pill.locator(".sponsored-allowance-inline")).to_have_text("Allocation: 1.50")
         allowance = page.get_by_role("button", name=re.compile(r"^Sponsored allowance:"))
         assert allowance.evaluate("e => getComputedStyle(e).backgroundColor") == "rgba(0, 0, 0, 0)"
         assert allowance.get_attribute("data-tooltip") is None
@@ -1159,7 +1159,7 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary.locator(".sponsored-allowance-inline")).to_have_text(
-            "Allocation: $0.75"
+            "Allocation: 0.75"
         )
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_be_visible()
         expect(sponsored_summary.locator(".connection-dot")).to_have_css(
