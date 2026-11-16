@@ -121,6 +121,9 @@ jobs:
           docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml exec -T personal \
             /usr/bin/setpriv --reuid=11001 --regid=11001 --clear-groups \
             /opt/venv/bin/python -c 'import os; assert not os.access("/var/lib/sigma-shared-key", os.X_OK), "Browser UID can traverse private key directory"'
+          docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml exec -T personal \
+            /usr/bin/setpriv --reuid=10001 --regid=10001 --clear-groups \
+            /opt/venv/bin/python /opt/sigma/auth-poc/test_shared_oauth_lifecycle.py
           container=$(docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml ps -q personal)
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' "$container"
       - name: Verify encrypted user credentials survive shared worker restart
