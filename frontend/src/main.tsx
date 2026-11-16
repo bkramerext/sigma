@@ -7087,6 +7087,10 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   }, [initialGroupSettings, initial.path]);
   const [shared, setShared] = useState<SharedProjectInfo | null>(initialGroupSettings);
   const [collaborators, setCollaborators] = useState<string[]>(() => initialGroupSettings?.collaborators ?? []);
+  // Remote collaboration refreshes must not silently replace a locally staged
+  // addition/removal while its debounced save is waiting for admission.
+  const collaboratorDraftPending = useRef(false);
+  const settingsSaveEpoch = useRef(0);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
@@ -7109,6 +7113,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     if (initialGroupSettings && (collaborationRevision === undefined
       || collaborationRevision === initialGroupSettings.revision)) return;
     const controller = new AbortController();
+    const saveEpoch = settingsSaveEpoch.current;
     const json = async (url: string) => {
       const response = await fetch(url, { signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
       const data = await response.json();
@@ -7125,9 +7130,11 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     }, 8000);
     void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, include_authors: 'false' })}`)
       .then((saved: SharedProjectInfo) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || saveEpoch !== settingsSaveEpoch.current) return;
         setShared(saved);
-        setCollaborators(saved.collaborators);
+        // Keep locally edited collaborators until their save succeeds or
+        // reports a real revision conflict. Polls must not discard the draft.
+        if (!collaboratorDraftPending.current) setCollaborators(saved.collaborators);
         setLoading(false);
       }).catch(cause => {
         if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
@@ -7146,6 +7153,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     if (email === shared?.owner || collaborators.includes(email)) {
       setError('This account is already a collaborator.'); return;
     }
+    collaboratorDraftPending.current = true;
     setCollaborators(previous => [...previous, email].sort());
     setNewEmail(''); setAdding(false); setError('');
   }
@@ -7160,6 +7168,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   }
   async function save(): Promise<boolean> {
     if (busy || loading || !changed || !shared) return false;
+    settingsSaveEpoch.current += 1;
     setBusy(true); setError('');
     try {
       const previous = settingsOf(baseline);
@@ -7182,8 +7191,11 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
           headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
         });
         if (!response.ok) throw new Error('Project updated, but collaboration status could not be refreshed.');
-        setShared(await response.json() as SharedProjectInfo);
+        const savedShared = await response.json() as SharedProjectInfo;
+        setShared(savedShared);
+        setCollaborators(savedShared.collaborators);
       }
+      collaboratorDraftPending.current = false;
       setBaseline(next);
       onSaved(next);
       return true;
@@ -7257,6 +7269,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
                   // Commit the removal to React state before Close reads the
                   // draft; otherwise a stale closure can dismiss the modal
                   // without persisting the ACL revocation.
+                  collaboratorDraftPending.current = true;
                   flushSync(() => setCollaborators(previous => previous.filter(value => value !== email)));
                 }}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
