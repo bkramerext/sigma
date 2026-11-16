@@ -164,9 +164,10 @@ def main() -> None:
             assert papers._resume_provider_choice(
                 checkpoint, fake_fingerprint, "other-model", "low"
             ) == ("other-model", "low")
-            assert papers._resume_provider_choice(
-                checkpoint, "b" * 64, "other-model", "low"
-            ) == ("other-model", "low")
+            assert papers._resume_provider_choice(checkpoint, "b" * 64, "other-model", "low") == (
+                "other-model",
+                "low",
+            )
             assert papers._resume_provider_choice(
                 checkpoint, "b" * 64, "other-model", "low", True
             ) == ("other-model", "low")

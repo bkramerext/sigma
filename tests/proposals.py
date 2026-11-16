@@ -378,6 +378,13 @@ async def check(path):
             assert cancelled_before_send.status_code == 200
             assert cancelled_before_send.json()["status"] == "cancelled"
 
+            # Use a genuinely new proposal to verify an account-mode change
+            # is not mistaken for a rejected request or duplicate strategy.
+            inference_output.update(
+                title="Finite boundary counterexample search",
+                summary="Explore counterexamples independently of compactness.",
+                approach="Enumerate rational boundary parameter configurations and test whether a finite counterexample invalidates the conjectured stability claim.",
+            )
             count_before_account_switch = len(inference_calls)
             account_switched = api.post(
                 "/api/projects/strategy-inference",
@@ -488,6 +495,11 @@ async def check(path):
             assert replay_after_edit.json()["strategy"]["removed_at"]
             assert len(inference_calls) == before_settings_change + 1
 
+            inference_output.update(
+                title="Boundary evidence cross check",
+                summary="Cross-check the proposed boundary result against independent evidence.",
+                approach="Construct an independent analytic estimate for the boundary parameter and compare its predictions with the previous finite search.",
+            )
             account_changed = False
             original_auth_context = proposals.auth_context
 

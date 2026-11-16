@@ -715,7 +715,7 @@ async def main_async(root: Path):
         ),
     ):
         result = await convert_text(str(mode_switch_path), "project", "markdown")
-        assert result["body"]
+        assert result["markdown"]["body"]
     assert (mode_switch_path / "project.json").read_bytes() == mode_switch_before
     assert (mode_switch_path / "text-representations.json").exists()
     assert (failure_path / "project.json").read_bytes() == before

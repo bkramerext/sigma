@@ -5600,7 +5600,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
       }}><MarkdownGlyph/></button>;
-  const markdownControl = <span className="text-view-format-control">
+  const markdownControl = <span className="text-view-format-control sigma-unified-markdown-progress">
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
   </span>;
