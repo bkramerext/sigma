@@ -34,6 +34,7 @@ services:
       # Host-only; backend's authenticated private relay is the only consumer.
       - "127.0.0.1::8001"
       - "127.0.0.1::6080"
+    stop_grace_period: 45s
     restart: unless-stopped
     healthcheck:
       test: [CMD, "/opt/venv/bin/python", "-c", "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8001/health',timeout=3).status==200"]
