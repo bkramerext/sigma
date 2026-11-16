@@ -76,12 +76,13 @@ def report(mode: str) -> list[str]:
     if mode not in {"browser", "worker"}:
         raise ValueError("Invalid diagnostic mode")
     counts = _processes()
-    lines = [
-        "component=" + mode,
-        "local_model_gateway_enabled=" + (
-            "yes" if os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1" else "no"
-        ),
-    ]
+    lines = ["component=" + mode]
+    if mode == "worker":
+        lines.append(
+            "local_model_gateway_enabled=" + (
+                "yes" if os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1" else "no"
+            )
+        )
     if mode == "browser":
         lines.extend(
             [

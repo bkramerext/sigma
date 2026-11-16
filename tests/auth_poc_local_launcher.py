@@ -335,6 +335,43 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertFalse(broker._safe_probe_line("component=worker;token=secret"))
         self.assertTrue(broker._safe_probe_line("websocket_http_6080=http_200"))
 
+    def test_host_readiness_probe_never_prints_ports_or_credentials(self) -> None:
+        import io
+        from contextlib import redirect_stdout
+        from unittest.mock import MagicMock
+
+        port_map = ["127.0.0.1:49123", "127.0.0.1:49124"]
+
+        def run(argv, **_kwargs):
+            from subprocess import CompletedProcess
+
+            assert "port" in argv and "ps" not in argv
+            return CompletedProcess(argv, 0, port_map.pop(0), "")
+
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.recv.return_value = b"HTTP/1.1 200 OK\r\nX-Token: secret"
+        with (
+            patch.object(broker, "compose_args", side_effect=lambda *a: ["docker", *a]),
+            patch.object(broker.subprocess, "run", side_effect=run),
+            patch.object(broker.socket, "create_connection", return_value=connection),
+            patch.object(broker.socket, "socket", return_value=connection),
+            patch.object(broker.Path, "is_socket", return_value=True),
+            patch.object(broker.Path, "is_symlink", return_value=False),
+            patch.object(broker, "gateway_root", return_value=Path("/tmp/private")),
+            redirect_stdout(io.StringIO()) as output,
+        ):
+            broker._host_readiness_snapshot("a" * 32, {"PATH": "/usr/bin"})
+        captured = output.getvalue()
+        self.assertIn("host.loopback_vnc=http_200", captured)
+        self.assertIn("host.private_model=http_200", captured)
+        for disallowed in ("49123", "49124", "secret", "a" * 32, "/tmp/private"):
+            self.assertNotIn(disallowed, captured)
+
+    def test_container_diagnostics_include_stopped_containers(self) -> None:
+        source = (ROOT / "auth-poc/host_broker.py").read_text(encoding="utf-8")
+        self.assertIn('compose_args(workspace_id, "ps", "--all", "-q", service)', source)
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)

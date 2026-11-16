@@ -247,6 +247,10 @@ jobs:
           assert "auth-poc.model_http_8002=http_200" in safe_report, safe_report
           assert "auth-poc.oauth_http_8001=http_200" in safe_report, safe_report
           assert "browser.websocket_http_6080=http_200" in safe_report, safe_report
+          assert "host.loopback_vnc=http_200" in safe_report, safe_report
+          assert "host.loopback_model=http_200" in safe_report, safe_report
+          assert "host.private_vnc=http_200" in safe_report, safe_report
+          assert "host.private_model=http_200" in safe_report, safe_report
           assert "auth-poc.local_model_gateway_enabled=yes" in safe_report, safe_report
           assert "auth.openai.com" not in safe_report
           assert "access_token" not in safe_report

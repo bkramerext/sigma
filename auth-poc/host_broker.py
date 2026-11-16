@@ -222,6 +222,73 @@ def compose_env(workspace_id: str) -> dict[str, str]:
     return env
 
 
+def _probe_http_status(sock: socket.socket, target: str) -> str:
+    """Read only the response status line; discard all potentially private data."""
+    try:
+        sock.settimeout(2)
+        sock.sendall(
+            (
+                "GET " + target + " HTTP/1.0\r\n"
+                "Host: 127.0.0.1\r\nConnection: close\r\n\r\n"
+            ).encode("ascii")
+        )
+        first = sock.recv(96).split(b"\r\n", 1)[0].split()
+        if len(first) >= 2 and first[0] in (b"HTTP/1.0", b"HTTP/1.1"):
+            code = int(first[1])
+            if 100 <= code <= 599:
+                return "http_" + str(code)
+        return "invalid"
+    except (OSError, ValueError):
+        return "unreachable"
+
+
+def _host_readiness_snapshot(workspace_id: str, environment: dict[str, str]) -> None:
+    """Test Docker loopback publishing AND the SIGMA Unix relay independently.
+
+    No host port numbers, private socket paths, responses or account identifiers
+    are included in stdout. This runs only in the explicitly local POC.
+    """
+    for label, port, target, socket_name in (
+        ("vnc", 6080, "/vnc.html", "vnc.sock"),
+        ("model", 8002, "/v1/account", "model.sock"),
+    ):
+        result = "unmapped"
+        try:
+            mapping = subprocess.run(
+                compose_args(workspace_id, "port", "auth-poc", str(port)),
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=8,
+                check=False,
+            )
+            if mapping.returncode == 0:
+                match = re.fullmatch(r"127\.0\.0\.1:(\d{1,5})", mapping.stdout.strip())
+                if match is not None and 1 <= int(match.group(1)) <= 65535:
+                    with socket.create_connection(
+                        ("127.0.0.1", int(match.group(1))), timeout=2
+                    ) as connection:
+                        result = _probe_http_status(connection, target)
+                else:
+                    result = "mapping_invalid"
+        except (OSError, subprocess.TimeoutExpired):
+            result = "unreachable"
+        print(f"  host.loopback_{label}={result}", flush=True)
+
+        relay_result = "missing"
+        try:
+            relay = gateway_root() / workspace_id / socket_name
+            if relay.is_socket() and not relay.is_symlink():
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                    connection.settimeout(2)
+                    connection.connect(str(relay))
+                    relay_result = _probe_http_status(connection, target)
+        except OSError:
+            relay_result = "unreachable"
+        print(f"  host.private_{label}={relay_result}", flush=True)
+
+
 def _container_diagnostics(workspace_id: str, cause: str, *, force: bool = False) -> None:
     """Diagnose BOTH Docker containers and their internals without raw logs.
 
@@ -240,13 +307,14 @@ def _container_diagnostics(workspace_id: str, cause: str, *, force: bool = False
     except (OSError, ValueError):
         print("  compose_environment=invalid", flush=True)
         return
+    _host_readiness_snapshot(workspace_id, environment)
     for service, probe_path, mode, interpreter in (
         ("auth-poc", "/opt/sigma/auth-poc/diag_probe.py", "worker", "/opt/venv/bin/python"),
         ("browser", "/opt/sigma/diag_probe.py", "browser", "python3"),
     ):
         try:
             listing = subprocess.run(
-                compose_args(workspace_id, "ps", "-q", service),
+                compose_args(workspace_id, "ps", "--all", "-q", service),
                 cwd=ROOT,
                 env=environment,
                 text=True,
