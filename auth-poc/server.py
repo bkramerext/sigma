@@ -53,6 +53,25 @@ def same_origin(request: Request) -> None:
         raise HTTPException(403, "Invalid browser origin")
 
 
+def cancel_pending_signin() -> None:
+    """Cancel the sole active browser's OAuth attempt in its owning workspace.
+
+    Called only while the shared worker has bound the prior verified workspace,
+    on browser close or after a supervisor-enforced timeout. Token records are
+    retained; only transient PKCE material and the pending callback expire.
+    """
+    global _ATTEMPT_ID, _SIGNIN_FAILED
+    identifier = _ATTEMPT_ID
+    if identifier is not None:
+        try:
+            chatgpt_auth.cancel(identifier)
+        except ProjectError:
+            # A completed/expired attempt cannot be replayed into another user.
+            pass
+        _ATTEMPT_ID = None
+    _SIGNIN_FAILED = False
+
+
 async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
     """Go straight to the verified OpenAI chooser in this isolated browser.
 
