@@ -1,5 +1,6 @@
 """Real Chrome Q/A workflow using the deterministic local provider fixture."""
 
+import json
 import os
 import re
 from pathlib import Path
@@ -82,6 +83,60 @@ with sync_playwright() as playwright:
         "async path => (await (await fetch('/api/projects/audit?' + new URLSearchParams({path}))).json())",
         path,
     )
+
+    # Current Understanding: a second click with the same cached Model/Thinking
+    # must not show AI formatting, even transiently, or dispatch a new request.
+    current_panel = page.locator(".current-understanding")
+    expect(current_panel).to_have_count(1)
+    current_button = current_panel.get_by_role(
+        "button", name="Format Current Understanding as Markdown"
+    )
+    current_requests = []
+
+    def current_markdown_fixture(route):
+        payload = route.request.post_data_json
+        if payload.get("scope") != "current-understanding":
+            route.continue_()
+            return
+        current_requests.append(payload["field_path"])
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "body": "Cached preview fixture for " + payload["field_path"],
+                "source_digest": payload["expected_digest"],
+            }),
+        )
+
+    context.route("**/api/projects/text/convert", current_markdown_fixture)
+    current_button.click()
+    expect(current_panel.locator(".current-understanding-rendered").first).to_contain_text(
+        "Cached preview fixture", timeout=30000
+    )
+    expect(current_panel.locator(".text-view-format-status")).to_have_count(0, timeout=30000)
+    assert current_requests, "The initial Current Understanding formatting must convert text"
+    initial_request_count = len(current_requests)
+    current_button.click()
+    expect(current_button).to_have_attribute("aria-pressed", "false")
+    expect(current_panel.locator(".text-view-format-status")).to_have_count(0)
+    current_panel.evaluate("""node => {
+        node.dataset.cachedFormattingShown = 'false';
+        const observer = new MutationObserver(() => {
+            if (node.querySelector('.text-view-format-status, .sigma-unified-hourglass'))
+                node.dataset.cachedFormattingShown = 'true';
+        });
+        observer.observe(node, {subtree: true, childList: true});
+        node.__markdownCacheObserver = observer;
+    }""")
+    current_button.click()
+    expect(current_button).to_have_attribute("aria-pressed", "true")
+    expect(current_panel.locator(".current-understanding-rendered").first).to_contain_text(
+        "Cached preview fixture"
+    )
+    assert current_panel.get_attribute("data-cached-formatting-shown") == "false"
+    assert len(current_requests) == initial_request_count, current_requests
+    current_panel.evaluate("node => node.__markdownCacheObserver.disconnect()")
+    context.unroute("**/api/projects/text/convert", current_markdown_fixture)
 
     qa_button = page.get_by_role("button", name="Research Q/A", exact=True)
     expect(qa_button).to_be_visible()
@@ -430,8 +485,20 @@ with sync_playwright() as playwright:
     expect(title_line.get_by_role("status")).to_have_count(0)
     expect(title_line.locator(".sigma-unified-hourglass")).to_have_count(0)
     assert len(conversion_requests) == 1, conversion_requests
+    title_line.evaluate("""node => {
+        node.dataset.cachedFormattingShown = 'false';
+        const observer = new MutationObserver(() => {
+            if (node.querySelector('.text-view-format-status, .sigma-unified-hourglass'))
+                node.dataset.cachedFormattingShown = 'true';
+        });
+        observer.observe(node, {subtree: true, childList: true});
+        node.__markdownCacheObserver = observer;
+    }""")
     title_line.get_by_role("button", name="Render answer as Markdown").click()
     expect(card.locator(".outcome-markdown")).to_contain_text("The saved research answers")
+    assert title_line.get_attribute("data-cached-formatting-shown") == "false"
+    expect(title_line.get_by_role("status")).to_have_count(0)
+    title_line.evaluate("node => node.__markdownCacheObserver.disconnect()")
     # The conversion is saved on the answer, not recomputed on a second toggle.
     stored = page.evaluate(
         "async path => (await (await fetch('/api/projects/research-qa?' + new URLSearchParams({path}))).json()).answers",
