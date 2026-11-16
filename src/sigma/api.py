@@ -3231,7 +3231,9 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
     try:
         snapshot = await personal_browser.session(principal, action)
     except personal_browser.PersonalBrowserUnavailable as exc:
-        raise HTTPException(503, "Personal browser service is unavailable.") from exc
+        # The broker exports only predefined stage/reason identifiers, never
+        # Docker stderr or credential material. Preserve the actionable code.
+        raise HTTPException(503, str(exc)) from exc
     return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
 
 

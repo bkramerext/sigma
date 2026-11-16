@@ -32,6 +32,33 @@ MAX_REQUEST = 512
 MAX_IDLE_GATEWAYS = 32  # Limit idle Unix sockets/threads on the low-memory POC.
 
 
+class SharedDockerUnavailable(RuntimeError):
+    """Safe diagnostic only: no Docker stderr, host paths, or credentials."""
+
+    def __init__(self, stage: str, failure_class: str):
+        self.stage = stage
+        self.failure_class = failure_class
+        super().__init__(f"{stage}:{failure_class}")
+
+
+def _docker_failure_class(stderr: str) -> str:
+    # Fixed categories only. Never return Docker's raw stderr to SIGMA or logs.
+    message = stderr.lower()
+    categories = (
+        ("docker_daemon_unavailable", ("cannot connect to the docker daemon", "is the docker daemon running")),
+        ("permission_denied", ("permission denied", "operation not permitted", "mounts denied")),
+        ("port_conflict", ("port is already allocated", "address already in use", "bind: address")),
+        ("image_platform_mismatch", ("no matching manifest", "exec format error", "platform mismatch")),
+        ("container_unhealthy", ("unhealthy", "healthcheck")),
+        ("chromium_security_rejected", ("seccomp", "security_opt", "namespace operation failed")),
+        ("resource_exhausted", ("out of memory", "oomkilled", "no space left on device")),
+    )
+    for code, indicators in categories:
+        if any(indicator in message for indicator in indicators):
+            return code
+    return "docker_command_failed"
+
+
 def _valid(workspace: str) -> str:
     if not isinstance(workspace, str) or not _WORKSPACE.fullmatch(workspace):
         raise ValueError("Invalid workspace identity")
@@ -43,15 +70,20 @@ def _compose(*args: str) -> str:
     if not _WORKSPACE.fullmatch(checkout):
         raise RuntimeError("Invalid checkout identity")
     env = dict(os.environ)
-    result = subprocess.run(
-        ["docker", "compose", "--project-name", "sigma-shared-" + checkout,
-         "-f", "deploy/personal-shared.compose.yaml", *args],
-        cwd=ROOT, env=env, capture_output=True, text=True,
-        check=False, timeout=150 if "up" in args else 20,
-    )
+    stage = "docker_" + (args[0] if args and args[0] in {"up", "ps", "port", "down"} else "other")
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "--project-name", "sigma-shared-" + checkout,
+             "-f", "deploy/personal-shared.compose.yaml", *args],
+            cwd=ROOT, env=env, capture_output=True, text=True,
+            check=False, timeout=150 if "up" in args else 20,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise SharedDockerUnavailable(stage, "docker_command_timeout") from exc
+    except OSError as exc:
+        raise SharedDockerUnavailable(stage, "docker_command_unavailable") from exc
     if result.returncode:
-        # Never surface Docker errors containing paths, environment or tokens.
-        raise RuntimeError("Shared Personal Docker service unavailable")
+        raise SharedDockerUnavailable(stage, _docker_failure_class(result.stderr or ""))
     return result.stdout.strip()
 
 
@@ -59,7 +91,7 @@ def _port(number: int) -> int:
     raw = _compose("port", "personal", str(number))
     match = _PORT.fullmatch(raw)
     if not match:
-        raise RuntimeError("Shared Personal port is not host-loopback-only")
+        raise SharedDockerUnavailable("docker_port", "invalid_loopback_binding")
     port = int(match.group(1))
     if not 1 <= port <= 65535:
         raise RuntimeError("Invalid shared Personal port")
@@ -94,11 +126,13 @@ def _rpc(workspace: str, operation: str) -> dict:
         if response.status == 409:
             return {"status": "unavailable"}
         if response.status != 200:
-            raise RuntimeError("Shared Personal browser operation denied")
+            raise SharedDockerUnavailable("worker_rpc", "worker_rejected")
         state = json.loads(body)
         if state.get("status") not in {"ready", "stopped", "unavailable"}:
             raise RuntimeError("Invalid Personal browser response")
         return state
+    except (OSError, TimeoutError, ConnectionError) as exc:
+        raise SharedDockerUnavailable("worker_rpc", "worker_unreachable") from exc
     finally:
         connection.close()
 
@@ -373,8 +407,31 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, operate(operation, _valid(workspace)))
         except (ValueError, TypeError, json.JSONDecodeError):
             self._send(400, {"error": "Invalid request"})
-        except (RuntimeError, OSError, subprocess.TimeoutExpired):
-            self._send(503, {"error": "Personal container unavailable"})
+        except SharedDockerUnavailable as exc:
+            # Distinguish Docker and worker failures without disclosing raw
+            # Docker diagnostics, user paths, keys, or tokens.
+            print(
+                f"SIGMA Personal broker: stage={exc.stage} failure_class={exc.failure_class}",
+                flush=True,
+            )
+            self._send(
+                503,
+                {
+                    "error": "Personal container unavailable",
+                    "stage": exc.stage,
+                    "failure_class": exc.failure_class,
+                },
+            )
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+            print(f"SIGMA Personal broker: stage=broker failure_class={type(exc).__name__}", flush=True)
+            self._send(
+                503,
+                {
+                    "error": "Personal container unavailable",
+                    "stage": "broker",
+                    "failure_class": "broker_unavailable",
+                },
+            )
 
     def do_GET(self) -> None:
         if urlsplit(self.path).path != "/v1/status":

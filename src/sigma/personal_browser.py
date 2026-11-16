@@ -90,12 +90,36 @@ async def session(
     transport = httpx.AsyncHTTPTransport(uds=socket_path)
     try:
         async with httpx.AsyncClient(
-            transport=transport, base_url="http://sigma-personal-broker", timeout=85
+            transport=transport,
+            base_url="http://sigma-personal-broker",
+            trust_env=False,
+            # A cold Docker Desktop startup may consume the broker's full
+            # 150-second Compose grace period. Do not time out at 85 seconds
+            # and misreport a still-starting Chromium as a broken iframe.
+            timeout=230,
         ) as client:
             if action == "status":
                 response = await client.get("/v1/status", params={"workspace_id": workspace_id})
             else:
                 response = await client.post("/v1/" + action, json={"workspace_id": workspace_id})
+            if response.status_code == 503:
+                failure = response.json()
+                stage = failure.get("stage") if isinstance(failure, dict) else None
+                failure_class = failure.get("failure_class") if isinstance(failure, dict) else None
+                known_stages = {"docker_up", "docker_ps", "docker_port", "docker_other", "worker_rpc", "broker"}
+                known_reasons = {
+                    "docker_daemon_unavailable", "permission_denied", "port_conflict",
+                    "image_platform_mismatch", "container_unhealthy",
+                    "chromium_security_rejected", "resource_exhausted",
+                    "docker_command_failed", "docker_command_timeout",
+                    "docker_command_unavailable", "invalid_loopback_binding",
+                    "worker_rejected", "worker_unreachable", "broker_unavailable",
+                }
+                if stage in known_stages and failure_class in known_reasons:
+                    raise PersonalBrowserUnavailable(
+                        f"Personal browser failed at {stage} ({failure_class}). "
+                        "See the SIGMA terminal for diagnostics."
+                    )
             response.raise_for_status()
             payload = response.json()
     except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:

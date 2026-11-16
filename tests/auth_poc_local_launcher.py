@@ -7,6 +7,7 @@ encrypted vaults, and the two-user boundary. No per-user Docker compatibility.
 from __future__ import annotations
 
 import ast
+import asyncio
 import importlib.util
 import os
 import shutil
@@ -19,7 +20,9 @@ import unittest
 from pathlib import Path
 from subprocess import CompletedProcess
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+
+import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -60,6 +63,58 @@ class SharedBrokerTests(unittest.TestCase):
             self.assertEqual(argv[4:6], ["-f", "deploy/personal-shared.compose.yaml"])
             self.assertNotIn("sigma-personal-", " ".join(argv))
             self.assertEqual(argv[-3:], ["ps", "-q", "personal"])
+
+    def test_docker_failure_diagnostics_do_not_leak_stderr(self) -> None:
+        broker = self.broker
+        secret = "/Users/private/oauth-token-secret"
+        with (
+            patch.dict(os.environ, {"SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32}),
+            patch.object(
+                broker.subprocess,
+                "run",
+                return_value=CompletedProcess(
+                    [], 1, "", "Error: permission denied at " + secret
+                ),
+            ),
+        ):
+            with self.assertRaises(broker.SharedDockerUnavailable) as context:
+                broker._compose("up", "-d", "--no-build", "--wait")
+        self.assertEqual(context.exception.stage, "docker_up")
+        self.assertEqual(context.exception.failure_class, "permission_denied")
+        self.assertNotIn(secret, str(context.exception))
+
+    def test_unexpected_compose_port_binding_fails_closed(self) -> None:
+        broker = self.broker
+        with patch.object(broker, "_compose", return_value="0.0.0.0:32768"):
+            with self.assertRaises(broker.SharedDockerUnavailable) as context:
+                broker._port(8001)
+        self.assertEqual(context.exception.failure_class, "invalid_loopback_binding")
+
+    def test_private_browser_503_preserves_only_safe_broker_codes(self) -> None:
+        from sigma import personal_browser
+
+        for exposed in (True, False):
+            result = (
+                {"stage": "docker_up", "failure_class": "container_unhealthy"}
+                if exposed
+                else {"stage": "/tmp/private/session", "failure_class": "Bearer secret"}
+            )
+            transport = httpx.MockTransport(
+                lambda _: httpx.Response(503, json=result)
+            )
+            with (
+                patch.object(personal_browser, "_principal", return_value=object()),
+                patch.object(personal_browser, "_socket", return_value="/tmp/unused.sock"),
+                patch.object(personal_browser, "_workspace_id", new_callable=AsyncMock, return_value="a" * 32),
+                patch.object(personal_browser.httpx, "AsyncHTTPTransport", return_value=transport),
+            ):
+                with self.assertRaises(personal_browser.PersonalBrowserUnavailable) as context:
+                    asyncio.run(personal_browser.session(None, "start"))
+            if exposed:
+                self.assertIn("docker_up (container_unhealthy)", str(context.exception))
+            else:
+                self.assertNotIn("Bearer secret", str(context.exception))
+                self.assertNotIn("/tmp/private/session", str(context.exception))
 
     def test_relay_revocation_closes_already_connected_vnc_clients(self) -> None:
         broker = self.broker
