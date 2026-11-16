@@ -1,0 +1,20 @@
+# POC optional direct host routing. Host Caddy remains up during SIGMA restarts.
+# Install only after 127.0.0.1:18081 and :18082 are healthy.
+sigma-research.duckdns.org {
+    handle_errors {
+        root * /var/www/sigma-maintenance
+        header Cache-Control "no-store, max-age=0"
+        rewrite * /index.html
+        file_server
+    }
+    route {
+        import /etc/caddy/sigma-maintenance/*.caddy
+        @api path /api /api/*
+        handle @api {
+            reverse_proxy 127.0.0.1:18081
+        }
+        handle {
+            reverse_proxy 127.0.0.1:18082
+        }
+    }
+}
