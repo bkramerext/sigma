@@ -209,7 +209,9 @@ jobs:
           }
           trap cleanup_local EXIT
           python3 - <<'PY'
+          import contextlib
           import importlib.util
+          import io
           import socket
           import stat
           from pathlib import Path
@@ -236,6 +238,18 @@ jobs:
               conn.sendall(b"GET /v1/account HTTP/1.1\r\nHost: private-model\r\nConnection: close\r\n\r\n")
               response = conn.recv(1000)
               assert response.startswith(b"HTTP/1.1 200 "), "Private model relay did not answer"
+          # Exercise the real local worker+browser diagnostic path, not
+          # merely the default synthetic Compose configuration.
+          captured = io.StringIO()
+          with contextlib.redirect_stdout(captured):
+              broker._container_diagnostics(workspace, "ci_local_probe", force=True)
+          safe_report = captured.getvalue()
+          assert "auth-poc.model_http_8002=http_200" in safe_report, safe_report
+          assert "auth-poc.oauth_http_8001=http_200" in safe_report, safe_report
+          assert "browser.websocket_http_6080=http_200" in safe_report, safe_report
+          assert "auth-poc.local_model_gateway_enabled=yes" in safe_report, safe_report
+          assert "auth.openai.com" not in safe_report
+          assert "access_token" not in safe_report
           assert broker.operate("stop", workspace)["status"] == "stopped"
           print("PASS: host-user-owned Docker worker and native host Unix-socket relays")
           PY
