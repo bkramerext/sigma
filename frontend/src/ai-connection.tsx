@@ -521,6 +521,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
             if (dialogActive.current && activationSequence === browserLaunchSequence.current) {
               dialogActive.current = false;
               setPersonalDialogState('closed');
+              // The shared worker continues model inference; release Chromium
+              // and its X11/VNC helpers as soon as authorization succeeds.
+              void stopContainerPersonalBrowser().catch(() => {
+                console.warn('SIGMA: could not release the temporary ChatGPT browser.');
+              });
             }
           } catch (cause) {
             if (dialogActive.current) {
@@ -645,7 +650,6 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   async function closePersonalBrowserDialog() {
     dialogActive.current = false;
     browserLaunchSequence.current += 1;
-    const alreadyPersonal = selectedConnection === 'personal' && connected;
     const activationPending = activatingPersonal.current;
     const wasReady = personalDialogState === 'ready' || personalDialogState === 'error';
     setPersonalDialogState('closed');
@@ -653,7 +657,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     // Closing a completed connection must not stop its inference worker.
     // If activation is in flight, let it finish before touching the worker.
     // Image preparation and the Sponsored SIGMA application keep running.
-    if (!wasReady || alreadyPersonal || activationPending) return;
+    if (!wasReady || activationPending) return;
     try {
       await stopContainerPersonalBrowser();
     } catch (cause) {
@@ -682,6 +686,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
           dialogActive.current = false;
           setPersonalDialogState('closed');
+          void stopContainerPersonalBrowser().catch(() => {
+            console.warn('SIGMA: could not release the temporary ChatGPT browser.');
+          });
           return;
         } catch (cause) {
           if (sequence === browserLaunchSequence.current && dialogActive.current) {
