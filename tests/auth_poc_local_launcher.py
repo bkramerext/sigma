@@ -6,6 +6,8 @@ accidentally applying local bind-mount UID overrides to hosted users.
 
 from __future__ import annotations
 
+import ast
+import asyncio
 import importlib.util
 import os
 import shutil
@@ -15,7 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("local_poc_broker", ROOT / "auth-poc/host_broker.py")
@@ -583,3 +585,165 @@ class ProdLifecycleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PersonalModelDispatchAuditTests(unittest.TestCase):
+    """All SIGMA generation paths honor the same Personal worker boundary."""
+
+    def test_no_unreviewed_direct_responses_api_call_sites(self) -> None:
+        # This is a closed inventory, not a whitelist of features to forget:
+        # adding any new direct Responses caller requires transport review.
+        expected = {
+            "papers.py": {"_provider", "_provider_structured"},
+            "proposals.py": {"generate_proposal"},
+            "research_sessions.py": {"_call_provider", "_ensure_reference_compilation"},
+            "text_conversion.py": {"_convert_text"},
+        }
+        observed: dict[str, set[str]] = {}
+        for path in (ROOT / "src/sigma").rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            if (
+                "https://api.openai.com/v1/responses" not in source
+                and 'provider_endpoint("responses")' not in source
+            ):
+                continue
+            functions: set[str] = set()
+            for node in ast.walk(ast.parse(source, filename=str(path))):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                body = ast.get_source_segment(source, node) or ""
+                if (
+                    "https://api.openai.com/v1/responses" not in body
+                    and 'provider_endpoint("responses")' not in body
+                ):
+                    continue
+                self.assertIn(
+                    "model_dispatch.private_response_if_selected(",
+                    body,
+                    f"{path.name}:{node.name} bypasses Personal worker dispatch",
+                )
+                functions.add(node.name)
+            observed[path.name] = functions
+        self.assertEqual(observed, expected)
+
+        # Q/A, ELI5 and the section/proofreading generators must reuse the
+        # audited paper adapter, never create their own direct HTTP path.
+        for filename in ("research_qa.py", "paper_eli5.py"):
+            source = (ROOT / "src/sigma" / filename).read_text(encoding="utf-8")
+            self.assertIn("papers._provider_structured(", source)
+
+    def test_personal_rpc_cannot_fall_back_to_sponsored_or_direct_http(self) -> None:
+        from sigma import model_dispatch, personal_inference
+        from sigma.projects import ProjectError
+
+        binding = {
+            "mode": "chatgpt",
+            "status": "connected",
+            "token": "",
+            "transport": "personal_worker",
+            "worker_binding": "a" * 64,
+        }
+        payload = {
+            "model": "gpt-6-luna",
+            "store": False,
+            "stream": True,
+            "input": [{"role": "user", "content": "test"}],
+        }
+
+        async def exercise() -> None:
+            result = {"status": "completed", "model": "gpt-6-luna", "output": []}
+            with patch.object(
+                personal_inference, "respond", new_callable=AsyncMock, return_value=result
+            ) as rpc:
+                actual = await model_dispatch.private_response_if_selected(
+                    binding, payload, timeout_seconds=3600
+                )
+                self.assertIs(actual, result)
+                rpc.assert_awaited_once()
+                self.assertEqual(rpc.await_args.kwargs["timeout_seconds"], 3600)
+                self.assertEqual(rpc.await_args.kwargs["expected_binding"], "a" * 64)
+                self.assertEqual(len(rpc.await_args.kwargs["request_id"]), 32)
+                rpc.reset_mock()
+                sponsor = {**binding, "transport": "sponsored", "token": "sponsor-secret"}
+                self.assertIsNone(
+                    await model_dispatch.private_response_if_selected(
+                        sponsor, payload, timeout_seconds=60
+                    )
+                )
+                rpc.assert_not_awaited()
+                rpc.return_value = None
+                with self.assertRaisesRegex(ProjectError, "returned no valid response"):
+                    await model_dispatch.private_response_if_selected(
+                        binding, payload, timeout_seconds=60
+                    )
+                rpc.side_effect = ProjectError("worker not available")
+                with self.assertRaisesRegex(ProjectError, "worker not available"):
+                    await model_dispatch.private_response_if_selected(
+                        binding, payload, timeout_seconds=60
+                    )
+            with self.assertRaisesRegex(ProjectError, "Invalid isolated Personal"):
+                await model_dispatch.private_response_if_selected(
+                    {**binding, "token": "must-not-leak"}, payload, timeout_seconds=60
+                )
+
+        asyncio.run(exercise())
+
+    def test_paper_authoring_long_sections_and_qa_use_private_transport(self) -> None:
+        from pydantic import BaseModel
+
+        from sigma import papers, personal_inference
+
+        class SampleOutput(BaseModel):
+            value: str
+
+        binding = {
+            "mode": "chatgpt",
+            "status": "connected",
+            "token": "",
+            "transport": "personal_worker",
+            "worker_binding": "b" * 64,
+        }
+        config = {"model": "gpt-6-luna", "reasoning_effort": "medium"}
+        response = {
+            "status": "completed",
+            "model": "gpt-6-luna",
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": '{"value":"ok"}'}],
+                }
+            ],
+            "usage": {"input_tokens": 20, "output_tokens": 30},
+        }
+
+        async def exercise() -> None:
+            with (
+                patch.object(
+                    personal_inference, "respond",
+                    new_callable=AsyncMock, return_value=response,
+                ) as rpc,
+                patch.object(
+                    papers.httpx, "AsyncClient",
+                    side_effect=AssertionError("Paper bypassed private Personal worker"),
+                ),
+                patch.object(
+                    papers.cloud_research, "start_provider_attempt",
+                    side_effect=AssertionError("Personal used sponsor billing ledger"),
+                ),
+            ):
+                for schema in ("sigma_research_qa", "sigma_long_paper_section"):
+                    output, model = await papers._provider_structured(
+                        {"question": "offline validation"},
+                        binding, config,
+                        instructions="Return the JSON output.",
+                        schema_name=schema, response_model=SampleOutput,
+                    )
+                    self.assertEqual(output.value, "ok")
+                    self.assertEqual(model, "gpt-6-luna")
+                    self.assertEqual(rpc.await_args.kwargs["timeout_seconds"], 3600)
+                self.assertEqual(rpc.await_count, 2)
+                with self.assertRaises(papers.PaperTransientFailure):
+                    await papers._provider({}, binding, config, include_diagrams=False)
+                self.assertEqual(rpc.await_count, 3)
+
+        asyncio.run(exercise())
