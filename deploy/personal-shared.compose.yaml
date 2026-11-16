@@ -1,0 +1,42 @@
+# Greenfield low-memory shared Personal ChatGPT service.
+# No per-user Docker projects, browser containers or legacy credential mounts.
+services:
+  personal:
+    platform: linux/amd64
+    build:
+      context: ..
+      dockerfile: auth-poc/shared.Dockerfile
+    image: sigma-shared-personal:${SIGMA_RELEASE:?set release}
+    init: true
+    read_only: true
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, SYS_CHROOT]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:../auth-poc/chromium-seccomp.json
+    pids_limit: 384
+    mem_limit: 1792m
+    memswap_limit: 1792m
+    cpus: 2.0
+    environment:
+      SIGMA_AUTH_POC_RPC_SEED: "${SIGMA_AUTH_POC_RPC_SEED:?set isolated 64-character RPC secret}"
+    volumes:
+      - shared-personal-records:/var/lib/sigma-shared
+      - shared-personal-keys:/var/lib/sigma-shared-key
+    tmpfs:
+      - /tmp:rw,nosuid,size=256m,mode=1777
+      - /run/sigma-browser-control:rw,nosuid,size=1m,mode=0755
+    ports:
+      # Host-only; backend's authenticated private relay is the only consumer.
+      - "127.0.0.1::8001"
+      - "127.0.0.1::6080"
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, "/opt/venv/bin/python", "-c", "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8001/health',timeout=3).status==200"]
+      interval: 20s
+      timeout: 4s
+      retries: 3
+volumes:
+  shared-personal-records:
+  shared-personal-keys:
