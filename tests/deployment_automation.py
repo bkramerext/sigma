@@ -101,10 +101,12 @@ def main() -> None:
         # Direct-Caddy rollback cannot silently target a release that lacks
         # the backend/frontend loopback overlay. Block BEFORE changing checkout,
         # service state, or the release pin; the old host route remains live.
-        env_file.write_bytes(original + b"SIGMA_HOST_DIRECT=true\\n")
+        env_file.write_bytes(original + b"SIGMA_HOST_DIRECT=true\n")
         direct_calls: list[list[str]] = []
 
-        def unsupported_rollback(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        def unsupported_rollback(
+            argv: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
             direct_calls.append(argv)
             if (
                 argv[:4] == ["git", "-C", str(repo), "cat-file"]
@@ -123,11 +125,10 @@ def main() -> None:
         else:
             raise AssertionError("Unsafe direct-Caddy rollback was accepted")
         assert not any(
-            argv[:4] == ["git", "-C", str(repo), "checkout"]
-            for argv in direct_calls
+            argv[:4] == ["git", "-C", str(repo), "checkout"] for argv in direct_calls
         )
         assert not any(argv[:2] == ["systemctl", "stop"] for argv in direct_calls)
-        assert env_file.read_bytes() == original + b"SIGMA_HOST_DIRECT=true\\n"
+        assert env_file.read_bytes() == original + b"SIGMA_HOST_DIRECT=true\n"
         env_file.write_bytes(original)
 
         # Startup failure restores the original code pin/config and never writes
