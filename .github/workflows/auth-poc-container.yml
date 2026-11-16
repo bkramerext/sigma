@@ -127,7 +127,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml restart personal
+          cid=$(docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml ps -q personal)
+          docker kill --signal=TERM "$cid"
+          # A normal Docker stop must exit with status 0, not hang until
+          # the Docker daemon has to kill an unresponsive PID 1.
+          exit_code=$(timeout 55s docker wait "$cid")
+          test "$exit_code" = 0
           docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml up -d --no-build --wait
           docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml exec -T personal \
             /usr/bin/setpriv --reuid=10001 --regid=10001 --clear-groups \
