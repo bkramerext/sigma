@@ -443,8 +443,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     && !!cloudFunding.personalChatGPTNoticePreview
     && !!cloudFunding.personalChatGPTNoticeEnabled;
   const containerBrowserLab = !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled;
-  const localLabAccount = containerBrowserLab && cloudFunding?.target === 'local'
-    ? cloudFunding.googleAccount : null;
+  // The isolated Docker worker is shared by local preview and opt-in hosted
+  // deployments. Never rely on target === 'local' as the authorization gate.
+  const localLabAccount = containerBrowserLab ? cloudFunding?.googleAccount ?? null : null;
   const testConnected = localLabAccount !== null && testAccountOwner === localLabAccount;
   const previewAuthorized = localLabAccount !== null && authorizedPreviewOwner === localLabAccount;
   const selectConnection = cloudFunding?.selectConnection;
@@ -602,7 +603,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   // the pill as unavailable until an authorized Google session returns.
   const hostedConnected = hosted && sponsoredSelected && cloudFunding?.provider?.status === 'connected';
   const forcedSponsored = !!cloudFunding?.forcedSponsored && !!cloudFunding?.authorized;
-  const connected = (hosted ? hostedConnected : simulatedSponsored
+  const connected = (hosted ? (sponsoredSelected ? hostedConnected : status === 'connected') : simulatedSponsored
     ? sponsoredPill && sponsoredSelected && cloudFunding?.provider?.status === 'connected'
     : status === 'connected') && !googleRequired;
   const disabled = (!hosted && !hostedNoticeClick && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection || disconnecting || restoringPersonal;
