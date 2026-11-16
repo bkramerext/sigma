@@ -1,56 +1,92 @@
-# SIGMA low-memory Personal ChatGPT: greenfield shared-container POC
+# SIGMA low-memory Docker architecture (greenfield POC)
 
-**Status: incomplete / draft. Do not merge or deploy.** No legacy data migration.
+## Intended running services
 
-## Target
+| Process | Lifecycle | Isolation |
+| --- | --- | --- |
+| Host Caddy | Always running on GCE | TLS, maintenance, and direct routing |
+| SIGMA backend container | Always running | API, sessions, paper generation, project state |
+| SIGMA frontend container | Always running | Static UI via internal Nginx |
+| One shared Personal ChatGPT container | When enabled | Auth/model worker UID 10001; disposable Chromium UID 11001 |
+| Python/Sage research containers | Per experiment | Untrusted code, no network, no model credentials |
 
-* One shared Personal ChatGPT Docker container, with one credential/model service
-  for every SIGMA user. Do not create a Docker project or pair of containers
-  per user.
-* Per-user AEAD-encrypted credentials in one private, persistent store.
-  Use independently authenticated SIGMA workspace IDs as associated data.
-  The 32-byte encryption key is delivered via a protected file **outside**
-  the data volume; never in the image, browser profile, request, or logs.
-* A single Chromium sign-in at a time, **on demand only**, with ephemeral
-  browser profile, separate sandboxed browser UID, and immediate shutdown
-  after success/cancel/timeout. No idle browser process during research.
-* The trusted SIGMA backend derives the workspace from verified Google
-  identity and talks to the service over authenticated local IPC.
-  Every account lookup, refresh, inference, and disconnect is user-scoped;
-  no account IDs or paths chosen by clients. Never fall back to Sponsored.
-* User-facing ChatGPT pill/dialog, real account chooser, all model request
-  paths (research, papers, markdown, Q/A, brainstorm), Stop/Resume and
-  disconnect behave exactly as before.
-* Keep research Python/Sage containers temporary and isolated. Host Caddy
-  ultimately routes directly to backend/frontend; eliminate Docker edge.
+There is **no migration** from the earlier experimental per-user Docker pairs.
+The shared vault initializes empty. No legacy path, account token, or Docker
+project is imported into this implementation.
 
-## Already implemented on this branch
+## Shared Personal ChatGPT (local `./sigma start --prod`)
 
-The new `auth-poc/shared_vault.py` provides workspace-bound AES-GCM
-encryption, private file/owner checks, atomic writes, and tamper rejection.
-`tests/shared_personal_vault.py` exercises two-user isolation, ciphertext
-swapping, corruption, symlinks and key permissions. The Docker CI workflow
-runs the tests inside the existing Python worker image, which already has
-the cryptography dependency.
+* `deploy/personal-shared.compose.yaml` defines **one** `personal` service,
+  limited to 1792 MiB, with its only ports published on host loopback.
+* The credential worker runs as UID 10001, with encrypted per-workspace records
+  in `shared-personal-records`. The 32-byte AES-GCM key is created as UID
+  10001 in a **different** protected persistent volume,
+  `shared-personal-keys`, on first start.
+* User identity is derived by SIGMA from its verified Google subject.
+  Every model RPC and browser lifecycle operation is authenticated with
+  workspace-specific HMAC. No client-provided credential pathname is accepted.
+* One Chromium login at a time. A separate browser UID (11001) has no
+  read/traversal access to the 0700 credential/key directories.
+* A successful account authorization or closed sign-in dialog stops the
+  browser process group and removes its temporary profile, without disrupting
+  the shared model worker, active research or papers. Abandoned viewers expire.
+* `auth-poc/test_shared_runtime.py` exercises two encrypted workspaces,
+  invalid HMACs, cross-user browser denial, browser shutdown and continued
+  account queries without an idle GUI. Docker CI reports memory statistics.
 
-The vault is not yet connected to a shared service, and **the existing
-experimental worker/browser Compose layout still runs**. Do not call this
-an implemented one-container system until integration and acceptance pass.
+At-rest encryption does **not** protect all accounts from a compromise of the
+live shared decrypting worker. The POC accepts this explicit tradeoff in return
+for low memory, using scoped authorization, strict file permissions and a
+separate browser UID. Do not treat it as a production security certification.
 
-## Security and acceptance gates
+## Hosted GCE: remove the redundant Docker edge (opt-in)
 
-Encryption at rest does not prevent a compromised shared decrypting service
-from accessing multiple accounts. We accept a simpler POC boundary only
-with (a) strict authenticated request scoping, (b) browser process isolation
-from vault keys and tokens, (c) no public credential/browser ports,
-(d) maximum one sign-in browser, (e) explicit memory limits and measured
-real idle/peak RSS, and (f) two-user adversarial checks.
+Normal production starts with host Caddy forwarding to the Docker edge on
+`127.0.0.1:18080`, with unchanged existing routing. Merely merging this
+code **does not** switch production traffic or stop its proxy.
 
-No production credentials exist in this experimental container topology,
-so there is **nothing to migrate**. Do not write migration tooling or
-compatibility shims for the previous per-user container experiment.
+The reviewed alternative uses host Caddy directly:
 
-Keep this PR in draft until the shared container is actually wired into
-`./sigma start --prod` and hosted deployment config, actual account chooser
-and inference pass, all application request paths are audited, and rollback
-is tested. Hosted plan-usage authorization must be independently verified.
+```
+HTTPS -> host Caddy -> 127.0.0.1:18081 (backend)
+                    -> 127.0.0.1:18082 (frontend)
+```
+
+`SIGMA_HOST_DIRECT=true` in `/etc/sigma/deploy.env` activates
+`deploy/compose.direct.gce.yaml` and scales Docker `edge` to zero.
+Unsetting the flag restores the original edge architecture. Neither mode
+publishes the backend or frontend on any non-loopback interface.
+
+### Staged cutover (only after reviewed GCE acceptance)
+
+1. Deploy the code with `SIGMA_HOST_DIRECT` **unset**. Back up the installed
+   root-owned `/etc/caddy/Caddyfile`. Production remains on Docker edge.
+2. Set `SIGMA_HOST_DIRECT=true`, then bring up only `backend` and
+   `frontend` using `deploy/compose-gce.sh up -d --no-build backend frontend`
+   while the edge is still running. Verify the new loopback health endpoints,
+   and verify both new ports are inaccessible off-VM.
+3. Validate `deploy/host-caddy-direct.Caddyfile` with `caddy validate` and
+   install it as the host Caddyfile. Reload Caddy. Verify an authenticated
+   browser session, API, SSE/streaming, WebSocket and maintenance mode.
+4. Restart `sigma.service`. Its startup refuses to scale edge to zero unless
+   the installed Caddyfile contains both loopback upstreams. Verify the two
+   core application containers are healthy, edge has zero instances, and
+   production is serving through host Caddy.
+5. Record `docker stats` and VM memory before and after; inspect browser
+   memory separately when the temporary Personal GUI is open.
+
+Rollback: while the direct application ports are still alive, restore and
+reload the saved original host Caddyfile **first**, then remove
+`SIGMA_HOST_DIRECT=true` and restart SIGMA to bring Docker edge back.
+Never leave the direct Caddyfile pointing at an old release without direct
+published loopback ports.
+
+## Acceptance gates
+
+Do not merge, deploy or call this feature complete until GitHub CI is green
+and real sign-in, account selection, inference, Q/A, research, papers,
+markdown conversions, Stop/Resume, backend restart, browser close,
+cross-user isolation, idle/peak RSS and the host-Caddy rollback are exercised.
+The hosted OpenAI plan/OAuth eligibility policy is a separate authorization
+gate; local loopback success alone does not establish permission to deploy
+hosted Personal ChatGPT.
