@@ -746,14 +746,19 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             # An old Personal selection without a completed, subject-bound
             # authorization must never strand an eligible account at "Connect".
             # Preserve legitimate saved authorizations for worker restoration.
-            db.execute(
-                "UPDATE user_state SET model_access='sponsored',"
-                "model_access_selected=0,model_access_explicit=0,updated_at=? "
-                "WHERE subject=? AND model_access='personal' "
+            stale_personal = db.execute(
+                "SELECT 1 FROM user_state WHERE subject=? AND model_access='personal' "
                 "AND NOT EXISTS(SELECT 1 FROM personal_authorizations "
                 "WHERE subject=user_state.subject)",
-                (_now(), principal.subject),
-            )
+                (principal.subject,),
+            ).fetchone()
+            if stale_personal:
+                db.execute(
+                    "UPDATE user_state SET model_access='sponsored',"
+                    "model_access_selected=0,model_access_explicit=0,updated_at=? "
+                    "WHERE subject=? AND model_access='personal'",
+                    (_now(), principal.subject),
+                )
         if first_member_session:
             # A local guest session can become a member when an administrator
             # adds the grant. That path has no new OAuth callback to set the
