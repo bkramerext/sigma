@@ -506,8 +506,7 @@ async def main_async(root: Path):
             raise AssertionError("Stale conversion was persisted")
         assert inspect_text(race, "project")["markdown"] is None
 
-    # Markdown formatting is pinned to Cheap/Medium across changes in the user's
-    # independent research Model/Thinking selections.
+    # AI Markdown follows user selection and retains stale variants until refreshed.
     live_path = root / "live-model-thinking.sigma"
     initialize_project(live_path, "Live model selection", "Count e_n for n >= 0")
     live_strategy = create_strategy(
@@ -519,9 +518,8 @@ async def main_async(root: Path):
     allow_response = asyncio.Event()
     dispatched: list[tuple[str, str]] = []
 
-    async def live_configuration(*, view, context, frozen_model, frozen_effort):
-        assert frozen_model == FORMAT_MODEL and frozen_effort == FORMAT_EFFORT
-        return {**config, "model": frozen_model, "reasoning_effort": frozen_effort}
+    async def live_configuration(*, view, context):
+        return {**config, "model": active_selection["model"], "reasoning_effort": active_selection["effort"]}
 
     async def live_handler(request):
         payload = json.loads(request.content)
@@ -538,6 +536,9 @@ async def main_async(root: Path):
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
         patch("sigma.text_conversion.configuration", side_effect=live_configuration),
+        patch("sigma.global_research_settings.load_config", side_effect=lambda: {
+            "ai_model": active_selection["model"], "reasoning_effort": active_selection["effort"],
+        }),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -550,19 +551,19 @@ async def main_async(root: Path):
         active_selection.update(model=MODEL, effort="high")
         allow_response.set()
         first = await pending
-        assert first["markdown"]["current"]
+        assert not first["markdown"]["current"]
         assert first["markdown"]["provenance"] == {
             "provider": "openai",
             "model": "gpt-6-luna",
-            "reasoning_effort": "medium",
+            "reasoning_effort": "low",
         }
         second = await convert_text(str(live_path), "strategy", "markdown", live_strategy.id)
         assert second["markdown"]["current"]
         assert second["markdown"]["provenance"]["model"] == MODEL
-        assert second["markdown"]["provenance"]["reasoning_effort"] == FORMAT_EFFORT
-    assert dispatched == [(MODEL, FORMAT_EFFORT), (MODEL, FORMAT_EFFORT)]
+        assert second["markdown"]["provenance"]["reasoning_effort"] == "high"
+    assert dispatched == [("gpt-6-luna", "low"), (MODEL, "high")]
     assert (live_path / "project.json").read_bytes() == live_source_before
-    print("PASS Markdown formatting is always Cheap/Medium and records fixed provenance")
+    print("PASS Markdown conversion follows user Model/Thinking and preserves stale results")
 
     # Current Understanding allows only the authoritative, digest-bound narrative.
     from sigma.research_state import current_understanding
