@@ -78,7 +78,35 @@
   font-size: 12px;
 }
 .personal-chatgpt-connection-error { padding: 12px 0; }
-.personal-chatgpt-connection-error .text-view-link { color: var(--sigma-copper-foreground); }
+/* Dialogs may be rendered in a portal outside .home-page/.workspace-page.
+   Keep SIGMA's standard compact underlined action in every placement. */
+.personal-chatgpt-connect-dialog button.sigma-text-action,
+.personal-chatgpt-connect-dialog button.sigma-text-action:hover:not(:disabled),
+.personal-chatgpt-connect-dialog button.sigma-text-action:active:not(:disabled) {
+  appearance: none;
+  display: inline-block;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--sigma-copper-foreground);
+  font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.personal-chatgpt-connect-dialog button.sigma-text-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
 @media (max-width: 650px) {
   .personal-chatgpt-connect-dialog { padding: 18px 16px; }
   .personal-chatgpt-browser-frame { height: 54dvh; }
