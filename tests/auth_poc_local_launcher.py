@@ -266,6 +266,16 @@ class ProdLifecycleTests(unittest.TestCase):
             mod.LocalPersonalRuntime.refresh_preparation(instance)
             self.assertEqual(marker.read_text(), "failed")
 
+    def test_connection_dialog_retries_readiness_without_restarting_docker(self) -> None:
+        source = (ROOT / "frontend/src/ai-connection.tsx").read_text(encoding="utf-8")
+        dialog = source.split("function PersonalBrowserDialog", 1)[1]
+        self.assertIn('className="sigma-text-action" type="button" onClick={onRetry}', dialog)
+        self.assertIn("const deadline = Date.now() + 60_000", dialog)
+        self.assertIn("'/api/ai/personal-browser/status'", dialog)
+        self.assertIn("data.browser_status === 'ready'", dialog)
+        self.assertNotIn("if (data.browser_status !== 'ready')", dialog)
+        self.assertIn("OpenAI's personal ChatGPT sign-in uses a localhost callback", dialog)
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)
