@@ -124,9 +124,7 @@ def main() -> None:
             assert "Host-direct routing" in str(error)
         else:
             raise AssertionError("Unsafe direct-Caddy rollback was accepted")
-        assert not any(
-            argv[:4] == ["git", "-C", str(repo), "checkout"] for argv in direct_calls
-        )
+        assert not any(argv[:4] == ["git", "-C", str(repo), "checkout"] for argv in direct_calls)
         assert not any(argv[:2] == ["systemctl", "stop"] for argv in direct_calls)
         assert env_file.read_bytes() == original + b"SIGMA_HOST_DIRECT=true\n"
         env_file.write_bytes(original)
