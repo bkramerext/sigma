@@ -1000,6 +1000,20 @@ def _compile_pdf(
             raise RuntimeError(
                 f"PDF compilation exceeded {timeout_seconds} seconds. No file was downloaded."
             ) from exc
+        except OSError as exc:
+            # A binary built for a different CPU can exist on PATH yet fail
+            # with ENOEXEC at subprocess launch. Treat it as a compiler defect,
+            # not as an AI proofreading error or a paper-content problem.
+            logging.getLogger("sigma.lifecycle").error(
+                "paper.pdf_compiler_launch_failed error_type=%s errno=%s",
+                type(exc).__name__,
+                exc.errno,
+            )
+            if diagnostics is not None:
+                diagnostics.append("Tectonic could not start; verify the backend compiler architecture.")
+            raise RuntimeError(
+                "PDF compiler could not start. Check the backend's Tectonic architecture."
+            ) from exc
         pdf_path = os.path.join(directory, "report.pdf")
         if diagnostics is not None:
             compiler_output = result.stdout.decode("utf-8", "replace")
