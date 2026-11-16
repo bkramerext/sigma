@@ -2,11 +2,14 @@
 # No per-user Docker projects, browser containers or legacy credential mounts.
 services:
   personal:
-    platform: linux/amd64
+    platform: ${SIGMA_SHARED_PLATFORM:-linux/amd64}
     build:
       context: ..
       dockerfile: auth-poc/shared.Dockerfile
     image: sigma-shared-personal:${SIGMA_RELEASE:?set release}
+    labels:
+      io.sigma.personal.owner: "${SIGMA_AUTH_POC_LOCAL_UID:-10001}"
+      io.sigma.personal.checkout: "${SIGMA_AUTH_POC_CHECKOUT_ID:-hosted}"
     init: true
     read_only: true
     user: "0:0"
