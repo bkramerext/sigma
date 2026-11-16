@@ -41,6 +41,7 @@ _LAST_DIAGNOSTIC_AT: dict[str, float] = {}
 _DIAGNOSTIC_INTERVAL_SECONDS = 18.0
 _SAFE_PROBE_FIELDS = {
     "component": r"browser|worker",
+    "local_model_gateway_enabled": r"yes|no",
     "x11_socket": r"present|missing",
     "vnc_password_file": r"present|missing",
     "vnc_tcp_5900": r"listening|unreachable",
