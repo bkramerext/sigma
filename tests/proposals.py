@@ -920,7 +920,8 @@ async def check(path):
                 ).status_code
                 == 400
             )
-        assert len(inference_calls) == 15
+        # Two formerly rejected account transitions now dispatch and succeed.
+        assert len(inference_calls) == 16
         unchanged = (path / "project.json").read_bytes()
         original_binding = {
             "identity": "proposal-account",

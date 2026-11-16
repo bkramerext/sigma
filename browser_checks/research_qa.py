@@ -270,7 +270,7 @@ with sync_playwright() as playwright:
     title_line.screenshot(path=str(OUT / "research-qa-title-normal.png"))
     markdown_icon = title_line.get_by_role("button", name="Render answer as Markdown")
     expect(markdown_icon).to_be_visible()
-    expect(markdown_icon).to_have_attribute("data-tooltip", "Convert to Markdown")
+    expect(markdown_icon).to_have_attribute("data-tooltip", "Convert to markdown")
     markdown_box = markdown_icon.bounding_box()
     assert markdown_box and markdown_icon.locator("svg.markdown-logo").count() == 1
     normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")
