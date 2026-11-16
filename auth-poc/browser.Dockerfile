@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Disable password-manager passkey creation in this disposable Chromium only.
 # Existing passkey authentication remains available when required for MFA.
 RUN mkdir -p /etc/chromium/policies/managed \
-    && printf '%s\\n' '{"PasswordManagerPasskeysEnabled":false,"PasswordManagerEnabled":false}' \
+    && printf '%s' '{"PasswordManagerPasskeysEnabled":false,"PasswordManagerEnabled":false}' \
       > /etc/chromium/policies/managed/sigma-no-passkeys.json \
     && chmod 0644 /etc/chromium/policies/managed/sigma-no-passkeys.json
 COPY auth-poc/boot.sh /opt/sigma/boot.sh
