@@ -779,15 +779,17 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       dialogActive.current = false;
       browserLaunchSequence.current += 1;
       setPersonalDialogState('closed');
+      // Begin tearing down Chromium before the confirmation disappears, so a
+      // new click can await this precise stop rather than race it.
+      const stop = stopContainerPersonalBrowser();
+      pendingPersonalStop.current = stop;
       closeDisconnectPopup();
       window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
       // The committed disconnect must not turn into a false failure because a
       // subsequent provider-status refresh happened to be unavailable.
       await ai.refresh('manual').catch(() => undefined);
-      // Also discard Chromium's ephemeral web login so reconnecting exercises
-      // a cold chooser; a Docker stop failure cannot undo local disconnect.
-      const stop = stopContainerPersonalBrowser();
-      pendingPersonalStop.current = stop;
+      // Chromium's ephemeral browser login is discarded for the next chooser.
+      // A Docker stop failure cannot undo the committed local disconnect.
       try {
         await stop.catch(() => {
           reportRequestFailure('ChatGPT was disconnected, but its private browser could not be stopped.');
