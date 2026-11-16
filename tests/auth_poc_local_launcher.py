@@ -715,24 +715,30 @@ class PersonalModelDispatchAuditTests(unittest.TestCase):
         async def exercise() -> None:
             with (
                 patch.object(
-                    personal_inference, "respond",
-                    new_callable=AsyncMock, return_value=response,
+                    personal_inference,
+                    "respond",
+                    new_callable=AsyncMock,
+                    return_value=response,
                 ) as rpc,
                 patch.object(
-                    papers.httpx, "AsyncClient",
+                    papers.httpx,
+                    "AsyncClient",
                     side_effect=AssertionError("Paper bypassed private Personal worker"),
                 ),
                 patch.object(
-                    papers.cloud_research, "start_provider_attempt",
+                    papers.cloud_research,
+                    "start_provider_attempt",
                     side_effect=AssertionError("Personal used sponsor billing ledger"),
                 ),
             ):
                 for schema in ("sigma_research_qa", "sigma_long_paper_section"):
                     output, model = await papers._provider_structured(
                         {"question": "offline validation"},
-                        binding, config,
+                        binding,
+                        config,
                         instructions="Return the JSON output.",
-                        schema_name=schema, response_model=SampleOutput,
+                        schema_name=schema,
+                        response_model=SampleOutput,
                     )
                     self.assertEqual(output.value, "ok")
                     self.assertEqual(model, "gpt-6-luna")
