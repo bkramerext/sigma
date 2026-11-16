@@ -608,7 +608,16 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
             if local_poc():
                 _stop_local_gateway(workspace_id)
             prepare_gateway(workspace_id)
-            _compose(workspace_id, "up", "-d", "--no-build", "--wait")
+            # A successful OAuth callback leaves Chromium displaying its
+            # "Return to SIGMA" page. Disconnect clears worker credentials,
+            # but a best-effort stop may fail. Always create a fresh disposable
+            # browser on the next explicit start, even if Docker still reports
+            # the previous browser as running. The credential worker and its
+            # durable per-user state are NOT recreated.
+            _compose(
+                workspace_id, "up", "-d", "--no-build", "--wait",
+                "--force-recreate", "browser",
+            )
         elif action == "stop":
             _compose(workspace_id, "stop")
             if local_poc():
