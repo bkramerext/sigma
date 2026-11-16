@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from sigma import cloud_research, cloud_workspaces
+from sigma import cloud_research, cloud_workspaces, model_dispatch
 from sigma.model_catalog import validate_pair
 from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
@@ -406,7 +406,7 @@ async def _convert_text(
                     }
                 },
             }
-            worker_binding = binding.get("worker_binding") if binding.get("transport") == "personal_worker" else None
+            worker_selected = model_dispatch.uses_personal_worker(binding)
             if binding["mode"] == "chatgpt":
                 del payload["max_output_tokens"]
                 payload["stream"] = True
@@ -414,7 +414,7 @@ async def _convert_text(
             guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
             attempt = None
             try:
-                if cloud_workspaces.enabled() and worker_binding is None:
+                if cloud_workspaces.enabled() and not worker_selected:
                     if not cloud_credential(binding):
                         raise ProjectError("Sponsored cloud inference is not configured.")
                     attempt = cloud_research.start_provider_attempt(
@@ -424,18 +424,11 @@ async def _convert_text(
                         payload,
                         8000,
                     )
-                if worker_binding is not None:
-                    # In --prod, only the isolated worker holds personal tokens.
-                    # This isn't a sponsored call and must not enter its billing ledger.
-                    from sigma import personal_inference
-                    from uuid import uuid4
-
-                    async with asyncio.timeout(CALL_SECONDS):
-                        raw = await personal_inference.respond(
-                            payload,
-                            expected_binding=worker_binding,
-                            request_id=uuid4().hex,
-                        )
+                personal_raw = await model_dispatch.private_response_if_selected(
+                    binding, payload, timeout_seconds=CALL_SECONDS
+                )
+                if personal_raw is not None:
+                    raw = personal_raw
                 else:
                     headers = {"Authorization": "Bearer " + binding["token"]}
                     if binding["mode"] == "chatgpt":
