@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium xvfb x11vnc novnc websockify ca-certificates fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 COPY auth-poc/boot.sh /opt/sigma/boot.sh
-RUN chmod 0755 /opt/sigma && chmod 0444 /opt/sigma/boot.sh \
+COPY auth-poc/diag_probe.py /opt/sigma/diag_probe.py
+RUN chmod 0755 /opt/sigma && chmod 0444 /opt/sigma/boot.sh /opt/sigma/diag_probe.py \
     && useradd --uid 11001 --no-create-home --shell /usr/sbin/nologin sandbox-browser
 USER 11001:11001
 # Check the entrypoint can traverse the directory and read the script.

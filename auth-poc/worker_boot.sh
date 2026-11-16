@@ -6,6 +6,7 @@ umask 077
 if [ "${SIGMA_AUTH_POC_LOCAL_DOCKER:-0}" = "1" ]; then
   # Local POC only: Compose publishes these ports on host 127.0.0.1, and the
   # browser shares this worker's private network namespace.
+  echo "SIGMA Personal worker: starting model gateway on private port 8002"
   /opt/venv/bin/uvicorn model_gateway:app --host 0.0.0.0 --port 8002 --no-access-log &
 elif [ -d /run/sigma-personal ]; then
   # A stopped container may leave bind-mounted socket inodes behind. Unlink
@@ -34,4 +35,5 @@ PY
     sleep 0.1
   done
 fi
+echo "SIGMA Personal worker: starting localhost OAuth callback on port 8001"
 exec /opt/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --no-access-log
