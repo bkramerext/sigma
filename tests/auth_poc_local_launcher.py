@@ -162,12 +162,8 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn("-skip_lockkeys -clear_all", boot)
         # Moving "Use passkey from another device" to the context menu avoids
         # obscuring the Google email field, without disabling WebAuthn itself.
-        self.assertIn(
-            "--enable-features=WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot
-        )
-        self.assertIn(
-            "--disable-features=AutofillReintroduceHybridPasskeyDropdownItem", boot
-        )
+        self.assertIn("--enable-features=WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot)
+        self.assertIn("--disable-features=AutofillReintroduceHybridPasskeyDropdownItem", boot)
         self.assertNotIn("--disable-features=WebAuthentication", boot)
 
     def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
