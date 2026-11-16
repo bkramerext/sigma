@@ -298,7 +298,9 @@ async def checks(root):
         )
         assert fixture.generated == 1
         await rejection(generate_proposal(str(path), expected_project_id="changed"), "identity")
-        await rejection(generate_proposal(str(path), expected_binding="api_key"), "billing mode")
+        changed_mode = await generate_proposal(str(path), expected_binding="api_key")
+        assert changed_mode["draft"] == DRAFT
+        assert fixture.generated == 2  # UI's stale binding cannot block current selection.
         # SSE malformed/failed/incomplete/refusal/truncated/oversized/out-of-order streams.
         events = fixture.events()
         cases = [b"data: not-json\n\n", b"data: [DONE]\n\n", b"x" * 1000001]

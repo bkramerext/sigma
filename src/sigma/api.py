@@ -1338,6 +1338,17 @@ async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
     return {"markdown": markdown}
 
 
+@app.post("/api/projects/papers/{paper_id}/markdown-preview")
+async def paper_markdown_preview_view(paper_id: str, body: PaperScoreRequest):
+    """AI formatting is a non-destructive view of the immutable saved paper."""
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    from sigma.paper_preview_markdown import format_paper_preview
+
+    return {"markdown": await format_paper_preview(body.path, paper_id, body.expected_project_id)}
+
+
 @app.get("/api/projects/papers/{paper_id}/pdf")
 def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
     disposition = "inline" if open_in_browser else "attachment"
@@ -2692,10 +2703,6 @@ async def strategy_inference_view(body: ProposalRequest):
         body.expected_binding, body.expected_project_id, body.path
     )
     credential = await auth_context()
-    if body.expected_binding != credential["identity"] or body.expected_mode != credential["mode"]:
-        raise ProjectError(
-            "AI account or billing mode changed. Review the current connection and retry; no request was sent."
-        )
     if body.request_id is None:
         raise ProjectError("Inference request identifier is required; no request was sent.")
     request_id = str(body.request_id)
@@ -2703,8 +2710,8 @@ async def strategy_inference_view(body: ProposalRequest):
         body.path,
         body.expected_project_id,
         request_id,
-        body.expected_binding,
-        body.expected_mode,
+        credential["identity"],
+        credential["mode"],
     )
     if action == "return":
         current = proposals.inference_status(body.path, body.expected_project_id, request_id)
@@ -2722,8 +2729,8 @@ async def strategy_inference_view(body: ProposalRequest):
     task = asyncio.create_task(
         generate_proposal(
             body.path,
-            expected_binding=body.expected_binding,
-            expected_mode=body.expected_mode,
+            expected_binding=credential["identity"],
+            expected_mode=credential["mode"],
             expected_project_id=body.expected_project_id,
             infer_strategy=True,
             request_id=request_id,
@@ -2858,11 +2865,6 @@ async def cancel_proposal(body: ProposalCancelRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    credential = await auth_context()
-    if credential["identity"] != body.expected_binding:
-        raise ProjectError(
-            "AI account changed; reopen the connection before checking cancellation status."
-        )
     return await proposals.cancel_inference(
         body.path, body.expected_project_id, str(body.request_id)
     )
@@ -2873,11 +2875,6 @@ async def strategy_inference_status(
     path: str, expected_project_id: str, expected_binding: str, request_id: UUID
 ):
     await require_cloud_inference_binding(expected_binding, expected_project_id, path)
-    credential = await auth_context()
-    if credential["identity"] != expected_binding:
-        raise ProjectError(
-            "AI account changed; reopen the connection before checking inference status."
-        )
     return proposals.inference_status(path, expected_project_id, str(request_id))
 
 

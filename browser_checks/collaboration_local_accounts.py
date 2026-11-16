@@ -1179,7 +1179,8 @@ def exercise(ui: str, workspaces: Path) -> None:
         # No delayed draft or click-batching race may make Close save the old ACL.
         expect(owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}")).to_have_count(0)
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
-        expect(owner_dialog).not_to_be_visible()
+        # Wait for the revision-fenced save before testing access revocation.
+        expect(owner_dialog).not_to_be_visible(timeout=20000)
         committed = get_json(
             owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
         )
@@ -1213,6 +1214,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         invite.fill(COLLABORATOR)
         invite.press("Tab")
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
+        expect(owner_dialog).not_to_be_visible(timeout=20000)
         member.goto(ui)
         member.get_by_role("tab", name="My Work").click()
         expand_saved_group(member)

@@ -293,8 +293,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(strategy_status).to_be_visible()
             assert (
                 strategy_status.evaluate("element => getComputedStyle(element.parentElement).gap")
-                == "6px"
+                == "3px"
             )
+            strategy_hourglass = page.locator(
+                ".strategy-markdown-slot .sigma-unified-hourglass"
+            ).first
+            expect(strategy_hourglass).to_be_visible()
+            assert (
+                strategy_hourglass.evaluate("element => getComputedStyle(element).pointerEvents")
+                == "none"
+            )
+            assert strategy_hourglass.get_attribute("data-tooltip") is None
+            expect(
+                page.locator(".strategy-markdown-slot button.sigma-unified-markdown")
+            ).to_have_count(0)
             page.locator(".strategy-title-line").first.screenshot(
                 path="/tmp/sigma-strategy-markdown-formatting.png"
             )

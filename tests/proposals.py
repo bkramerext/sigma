@@ -129,6 +129,7 @@ async def check(path):
         "approach": "Formalize a compactness hypothesis from the unresolved boundary findings and test it on the extremal parameter family. Treat any successful computation as evidence, not proof.",
     }
     expected_inference_session_count = 2
+    proposal_output = None
 
     async def handler(request):
         if request.method == "GET":
@@ -194,7 +195,9 @@ async def check(path):
             "finding-boundary",
         }
         calls.append(payload)
-        return httpx.Response(200, json=response())
+        if proposal_output is not None:
+            assert request.headers["authorization"] == "Bearer fixture-switched"
+        return httpx.Response(200, json=response(proposal_output))
 
     def client(**kwargs):
         return REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
@@ -378,15 +381,23 @@ async def check(path):
             assert cancelled_before_send.status_code == 200
             assert cancelled_before_send.json()["status"] == "cancelled"
 
-            count_before_account_rejection = len(inference_calls)
-            account_rejected = api.post(
+            # Use a genuinely new proposal to verify an account-mode change
+            # is not mistaken for a rejected request or duplicate strategy.
+            inference_output.update(
+                title="Finite boundary counterexample search",
+                summary="Explore counterexamples independently of compactness.",
+                approach="Enumerate rational boundary parameter configurations and test whether a finite counterexample invalidates the conjectured stability claim.",
+            )
+            count_before_account_switch = len(inference_calls)
+            account_switched = api.post(
                 "/api/projects/strategy-inference",
                 json=inference_request(
                     "00000000-0000-4000-8000-000000000337", binding="different-account"
                 ),
             )
-            assert account_rejected.status_code == 400
-            assert len(inference_calls) == count_before_account_rejection
+            assert account_switched.status_code == 200
+            assert account_switched.json()["strategy"]["provenance"]["provider"] == "openai"
+            assert len(inference_calls) == count_before_account_switch + 1
 
             async def provider_failure_hook():
                 return httpx.Response(503, json={"error": {"message": "fixture provider failure"}})
@@ -487,6 +498,11 @@ async def check(path):
             assert replay_after_edit.json()["strategy"]["removed_at"]
             assert len(inference_calls) == before_settings_change + 1
 
+            inference_output.update(
+                title="Boundary evidence cross check",
+                summary="Cross-check the proposed boundary result against independent evidence.",
+                approach="Construct an independent analytic estimate for the boundary parameter and compare its predictions with the previous finite search.",
+            )
             account_changed = False
             original_auth_context = proposals.auth_context
 
@@ -506,15 +522,16 @@ async def check(path):
                     "/api/projects/strategy-inference", json=inference_request(changed_account_id)
                 )
             account_changed = False
-            assert account_changed_response.status_code >= 400
-            assert not any(
+            assert account_changed_response.status_code == 200
+            assert any(
                 row.provenance and row.provenance.inference_request_id == changed_account_id
                 for row in inspect_project(path).project.strategies
             )
             account_retry = api.post(
                 "/api/projects/strategy-inference", json=inference_request(changed_account_id)
             )
-            assert account_retry.status_code >= 400
+            assert account_retry.status_code == 200
+            assert account_retry.json() == account_changed_response.json()
             assert len(inference_calls) == before_account_change + 1
 
             inference_hook = None
@@ -906,36 +923,45 @@ async def check(path):
                 ).status_code
                 == 400
             )
-        assert len(inference_calls) == 14
+        # Two formerly rejected account transitions now dispatch and succeed.
+        assert len(inference_calls) == 16
         unchanged = (path / "project.json").read_bytes()
+        # This is deliberately distinct from all already-saved strategies so
+        # the test reaches the transport/account transition, not duplicate rejection.
+        proposal_output = {
+            **DRAFT,
+            "title": "Adversarial spectral witness search",
+            "summary": "Investigate a new spectral witness independently of moment positivity.",
+            "approach": "Construct an adversarial spectral witness from a separate set of test matrices and verify its obstruction rank under controlled perturbations.",
+        }
         original_binding = {
             "identity": "proposal-account",
             "mode": "api_key",
-            "token": "fixture",
+            "token": "fixture-original",
             "status": "connected",
         }
         switched_binding = {
             "identity": "other-account",
             "mode": "api_key",
-            "token": "fixture",
+            "token": "fixture-switched",
             "status": "connected",
         }
         with (
             patch(
                 "sigma.proposals.auth_context",
-                new=AsyncMock(side_effect=[original_binding, original_binding, switched_binding]),
+                new=AsyncMock(side_effect=[original_binding, switched_binding]),
             ),
             patch("sigma.proposals.httpx.AsyncClient", side_effect=client),
         ):
-            await rejects(
-                proposals.generate_proposal(
-                    str(path),
-                    expected_binding="proposal-account",
-                    expected_project_id=inspect_project(path).project.id,
-                ),
-                "changed during generation",
+            switched = await proposals.generate_proposal(
+                str(path),
+                expected_binding="proposal-account",
+                expected_project_id=inspect_project(path).project.id,
             )
+        assert switched["draft"]["title"] == proposal_output["title"]
         assert (path / "project.json").read_bytes() == unchanged
+        # Restore the already-persisted direction to test duplicate protection.
+        proposal_output = None
         await rejects(
             proposals.generate_proposal(str(path), consent=True), "repeats"
         )  # Repeated approach.

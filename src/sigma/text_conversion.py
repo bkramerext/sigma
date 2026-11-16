@@ -356,10 +356,6 @@ async def _convert_text(
             if len(source_body) > limit:
                 raise ProjectError("Source text exceeds the conversion limit")
             binding = await auth_context()
-            if expected_binding is not None and expected_binding != binding["identity"]:
-                raise ProjectError(
-                    "AI account/billing mode changed. Review the connection and retry"
-                )
             config = await configuration(
                 view=view,
                 context=binding,
@@ -579,11 +575,6 @@ async def _convert_text(
                 not note.strip() or len(note) > 300 for note in result.warnings
             ):
                 raise ProjectError("Provider returned invalid conversion notes")
-            again = await auth_context()
-            if again["identity"] != binding["identity"] or again["mode"] != binding["mode"]:
-                raise ProjectError(
-                    "AI account/billing mode changed during conversion; nothing was saved"
-                )
             # Formatting uses an explicit fixed model/effort; the selected research
             # model can change during this request without changing provenance.
             if scope == "current-understanding":

@@ -169,8 +169,6 @@ async def explain(path: str, paper_id: str, expected_binding: str, expected_proj
     memory_guard.require_capacity()
 
     auth = await auth_context()
-    if auth["identity"] != expected_binding:
-        raise ProjectError("AI connection changed; reconnect and retry.")
     config = await configuration(view=inspect_project(path), context=auth)
     if not config["available"]:
         raise ProjectError(config["message"])

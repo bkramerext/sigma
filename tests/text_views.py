@@ -690,6 +690,10 @@ async def main_async(root: Path):
             assert "incomplete" in str(exc)
         else:
             raise AssertionError("Truncated conversion was persisted")
+    # A provider switch after dispatch must not discard a completed conversion.
+    mode_switch_path = root / "mode-switch.sigma"
+    initialize_project(mode_switch_path, "Mode switch", "Count d_n for n >= 0")
+    mode_switch_before = (mode_switch_path / "project.json").read_bytes()
     with (
         patch(
             "sigma.text_conversion.auth_context",
@@ -710,12 +714,10 @@ async def main_async(root: Path):
             ),
         ),
     ):
-        try:
-            await convert_text(str(failure_path), "project", "markdown")
-        except ProjectError as exc:
-            assert "account/billing" in str(exc)
-        else:
-            raise AssertionError("Changed account conversion was persisted")
+        result = await convert_text(str(mode_switch_path), "project", "markdown")
+        assert result["markdown"]["body"]
+    assert (mode_switch_path / "project.json").read_bytes() == mode_switch_before
+    assert (mode_switch_path / "text-representations.json").exists()
     assert (failure_path / "project.json").read_bytes() == before
     assert not (failure_path / "text-representations.json").exists()
 
