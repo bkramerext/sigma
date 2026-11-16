@@ -744,6 +744,11 @@
   outline: 2px solid #edbc77;
   outline-offset: 2px;
 }
+/* Creator/model attribution shares the date, elapsed-time, and score size. */
+.workspace-page .papers-pane .saved-paper-meta .artifact-attribution {
+  font-size: inherit;
+}
+
 .workspace-page .papers-pane .saved-paper-meta .paper-inline-score {
   display: inline;
   margin: 0;
