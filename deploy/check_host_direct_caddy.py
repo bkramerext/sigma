@@ -30,9 +30,7 @@ def validate(config: Any) -> None:
                 if not isinstance(upstreams, list) or not upstreams:
                     raise InvalidDirectRouting("Unexpected host reverse proxy")
                 for upstream in upstreams:
-                    if not isinstance(upstream, dict) or not isinstance(
-                        upstream.get("dial"), str
-                    ):
+                    if not isinstance(upstream, dict) or not isinstance(upstream.get("dial"), str):
                         raise InvalidDirectRouting("Unexpected host reverse proxy")
                     dialed.add(upstream["dial"])
             for value in node.values():
@@ -61,9 +59,7 @@ def validate(config: Any) -> None:
     except (KeyError, TypeError, AttributeError) as exc:
         raise InvalidDirectRouting("Invalid host Caddy HTTP routing") from exc
     if not matched or dialed != EXPECTED:
-        raise InvalidDirectRouting(
-            "SIGMA host is not routed exclusively to direct loopback ports"
-        )
+        raise InvalidDirectRouting("SIGMA host is not routed exclusively to direct loopback ports")
 
 
 def main() -> None:
