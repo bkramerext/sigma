@@ -21,12 +21,10 @@ echo "SIGMA Personal browser: VNC relay launched; starting Chromium"
 # Keep Chromium's user namespace + seccomp renderer sandbox enabled.
 # The Docker service grants only the namespace syscalls required by Chromium.
 # Never add --no-sandbox: the process must fail closed on unsupported hosts.
-# Show the address bar while the user authorizes at OpenAI.
-if [ "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}" = "1" ]; then
-  set -- http://127.0.0.1:8001/
-else
-  set -- --app=http://127.0.0.1:8001/
-fi
+# Use an app window in both real and synthetic modes: no Chromium tabs,
+# address bar, or popup. The local worker's / route redirects straight to
+# OpenAI authorization only when the account actually needs it.
 exec /usr/bin/chromium --no-first-run --no-default-browser-check \
   --disable-dev-shm-usage --disable-extensions --password-store=basic \
-  --user-data-dir=/tmp/chromium --window-size=1280,800 "$@"
+  --user-data-dir=/tmp/chromium --window-size=1280,800 \
+  --app=http://127.0.0.1:8001/
