@@ -129,6 +129,7 @@ async def check(path):
         "approach": "Formalize a compactness hypothesis from the unresolved boundary findings and test it on the extremal parameter family. Treat any successful computation as evidence, not proof.",
     }
     expected_inference_session_count = 2
+    proposal_output = None
 
     async def handler(request):
         if request.method == "GET":
@@ -194,7 +195,9 @@ async def check(path):
             "finding-boundary",
         }
         calls.append(payload)
-        return httpx.Response(200, json=response())
+        if proposal_output is not None:
+            assert request.headers["authorization"] == "Bearer fixture-switched"
+        return httpx.Response(200, json=response(proposal_output))
 
     def client(**kwargs):
         return REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
@@ -923,34 +926,42 @@ async def check(path):
         # Two formerly rejected account transitions now dispatch and succeed.
         assert len(inference_calls) == 16
         unchanged = (path / "project.json").read_bytes()
+        # This is deliberately distinct from all already-saved strategies so
+        # the test reaches the transport/account transition, not duplicate rejection.
+        proposal_output = {
+            **DRAFT,
+            "title": "Adversarial spectral witness search",
+            "summary": "Investigate a new spectral witness independently of moment positivity.",
+            "approach": "Construct an adversarial spectral witness from a separate set of test matrices and verify its obstruction rank under controlled perturbations.",
+        }
         original_binding = {
             "identity": "proposal-account",
             "mode": "api_key",
-            "token": "fixture",
+            "token": "fixture-original",
             "status": "connected",
         }
         switched_binding = {
             "identity": "other-account",
             "mode": "api_key",
-            "token": "fixture",
+            "token": "fixture-switched",
             "status": "connected",
         }
         with (
             patch(
                 "sigma.proposals.auth_context",
-                new=AsyncMock(side_effect=[original_binding, original_binding, switched_binding]),
+                new=AsyncMock(side_effect=[original_binding, switched_binding]),
             ),
             patch("sigma.proposals.httpx.AsyncClient", side_effect=client),
         ):
-            await rejects(
-                proposals.generate_proposal(
-                    str(path),
-                    expected_binding="proposal-account",
-                    expected_project_id=inspect_project(path).project.id,
-                ),
-                "changed during generation",
+            switched = await proposals.generate_proposal(
+                str(path),
+                expected_binding="proposal-account",
+                expected_project_id=inspect_project(path).project.id,
             )
+        assert switched["draft"]["title"] == proposal_output["title"]
         assert (path / "project.json").read_bytes() == unchanged
+        # Restore the already-persisted direction to test duplicate protection.
+        proposal_output = None
         await rejects(
             proposals.generate_proposal(str(path), consent=True), "repeats"
         )  # Repeated approach.
