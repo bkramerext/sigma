@@ -3,6 +3,7 @@
 No legacy per-user-container data is read or migrated. Authentication of the
 workspace identity is the responsibility of the trusted SIGMA RPC boundary.
 """
+
 from __future__ import annotations
 
 import base64
@@ -69,8 +70,12 @@ class Vault:
         try:
             with os.fdopen(fd, "rb") as stream:
                 info = os.fstat(stream.fileno())
-                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
-                        or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 2 * _MAX):
+                if (
+                    not stat.S_ISREG(info.st_mode)
+                    or info.st_uid != os.geteuid()
+                    or stat.S_IMODE(info.st_mode) != 0o600
+                    or info.st_size > 2 * _MAX
+                ):
                     raise VaultError("Credential record unavailable")
                 value = json.loads(stream.read(2 * _MAX + 1))
             if set(value) != {"v", "nonce", "data"} or value["v"] != 1:
@@ -93,10 +98,13 @@ class Vault:
             raise VaultError("Credential record too large")
         nonce = secrets.token_bytes(12)
         data = cipher.encrypt(nonce, raw, _AAD + workspace.encode())
-        sealed = json.dumps({
-            "v": 1, "nonce": base64.b64encode(nonce).decode(),
-            "data": base64.b64encode(data).decode(),
-        }).encode()
+        sealed = json.dumps(
+            {
+                "v": 1,
+                "nonce": base64.b64encode(nonce).decode(),
+                "data": base64.b64encode(data).decode(),
+            }
+        ).encode()
         fd, name = tempfile.mkstemp(prefix=".sealed-", dir=self.root)
         try:
             with os.fdopen(fd, "wb") as f:
