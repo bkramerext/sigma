@@ -238,7 +238,7 @@ class Deployment:
             # host routing flag. A rollback to a release without its loopback
             # port overlay would leave Caddy pointing at dead upstreams.
             # Fail BEFORE touching the checkout or stopping the current app.
-            for release in ((previous, sha) if not initial else (sha,)):
+            for release in (previous, sha) if not initial else (sha,):
                 try:
                     _call(
                         self.runner,
