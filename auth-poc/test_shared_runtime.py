@@ -9,7 +9,6 @@ import hmac
 import http.client
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -63,18 +62,20 @@ async def storage_check() -> None:
 
 
 def assert_no_browser_processes() -> None:
-    """No idle Chromium, X11, VNC or websocket process may survive a login."""
-    for attempt in range(30):
-        result = subprocess.run(
-            ["ps", "-eo", "stat=,comm="],
-            capture_output=True, text=True, check=True, timeout=3,
-        )
-        active = [
-            line.strip() for line in result.stdout.splitlines()
-            if line.strip() and not line.strip().split()[0].startswith("Z")
-            and any(name in line.split()[-1].lower()
-                    for name in ("chromium", "xvfb", "x11vnc", "websockify"))
-        ]
+    """Chromium, X11 and noVNC must not consume memory when the viewer is closed."""
+    names = {"chromium", "chrome", "xvfb", "x11vnc", "websockify"}
+    for _ in range(30):
+        active: list[str] = []
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                name = (entry / "comm").read_text(encoding="utf-8").strip().lower()
+                state = (entry / "stat").read_text(encoding="utf-8").split(") ", 1)[1][0]
+            except (OSError, IndexError, UnicodeError):
+                continue
+            if state != "Z" and (name in names or name.startswith("chromium")):
+                active.append(name)
         if not active:
             return
         time.sleep(0.2)
