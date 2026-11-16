@@ -37,6 +37,7 @@ ALLOWED_ENV_KEYS = {
     "SIGMA_CLOUD_FORCE_SPONSORED_MODE",
     "SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED",
     "SIGMA_AUTH_POC_LAB_ENABLED",
+    "SIGMA_HOST_DIRECT",
     "GOOGLE_OIDC_CLIENT_ID",
     "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
     "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
@@ -133,6 +134,8 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
         return None, "personal ChatGPT notice setting must be true or false"
     if values.get("SIGMA_AUTH_POC_LAB_ENABLED", "false") not in {"true", "false"}:
         return None, "synthetic auth laboratory setting must be true or false"
+    if values.get("SIGMA_HOST_DIRECT", "false") not in {"true", "false"}:
+        return None, "host-direct routing setting must be true or false"
     if provider not in {"api_key", "chatgpt"}:
         return None, "inference provider is invalid"
     if provider == "chatgpt" and not re.fullmatch(
@@ -742,6 +745,9 @@ class Preflight:
             "json",
         ]
         auth_lab = self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true"
+        host_direct = self.values.get("SIGMA_HOST_DIRECT") == "true"
+        if host_direct:
+            argv[10:10] = ["-f", str(self.repository / "deploy/compose.direct.gce.yaml")]
         if auth_lab:
             argv[10:10] = [
                 "-f",
@@ -787,6 +793,18 @@ class Preflight:
             frontend_healthcheck = services["frontend"]["healthcheck"]
             edge_healthcheck = services["edge"]["healthcheck"]
             edge_dependencies = services["edge"]["depends_on"]
+
+            def loopback(service: dict, port: int, published: str) -> bool:
+                ports = service.get("ports", [])
+                return (
+                    len(ports) == 1
+                    and isinstance(ports[0], dict)
+                    and ports[0].get("host_ip") == "127.0.0.1"
+                    and ports[0].get("target") == port
+                    and str(ports[0].get("published")) == published
+                    and ports[0].get("protocol", "tcp") == "tcp"
+                )
+
             valid = (
                 {"backend", "frontend", "edge"}.issubset(services)
                 and backend.get("read_only") is True
@@ -794,8 +812,18 @@ class Preflight:
                 and socket_mount.get("source") == self.values["SIGMA_SANDBOX_DOCKER_SOCKET"]
                 and socket_mount.get("read_only") is True
                 and state == "/srv/sigma-state/auth"
-                and not services["backend"].get("ports")
-                and not services["frontend"].get("ports")
+                and (
+                    (
+                        not host_direct
+                        and not services["backend"].get("ports")
+                        and not services["frontend"].get("ports")
+                    )
+                    or (
+                        host_direct
+                        and loopback(backend, 8000, "18081")
+                        and loopback(services["frontend"], 8080, "18082")
+                    )
+                )
                 and bool(services["edge"].get("ports"))
                 and bool(backend_healthcheck.get("test"))
                 and bool(frontend_healthcheck.get("test"))
@@ -833,7 +861,7 @@ class Preflight:
             self.add(
                 "Production Compose configuration",
                 "PASS",
-                "Caddy, backend, and frontend healthchecks, healthy edge dependencies, persistent state bind, and read-only rootless socket are configured",
+                "Core healthchecks, protected app ports, persistent state, and rootless socket are configured",
             )
         else:
             self.add(
