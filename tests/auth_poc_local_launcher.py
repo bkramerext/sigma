@@ -59,6 +59,119 @@ class SharedBrokerTests(unittest.TestCase):
             self.assertNotIn("sigma-personal-", " ".join(argv))
             self.assertEqual(argv[-3:], ["ps", "-q", "personal"])
 
+    def test_relay_revocation_closes_already_connected_vnc_clients(self) -> None:
+        broker = self.broker
+        with tempfile.TemporaryDirectory() as temp:
+            listener = Path(temp) / "vnc.sock"
+            server = broker.RelayServer(str(listener), broker.RelayHandler)
+            server.configure(workspace="a" * 32, name="vnc.sock", port=6080)
+            left, right = socket.socketpair()
+            try:
+                broker._ACTIVE = "a" * 32
+                self.assertTrue(server.authorized())
+                with server.clients_lock:
+                    server.clients.add(left)
+                # A's old noVNC stream cannot survive when B begins login.
+                broker._ACTIVE = "b" * 32
+                self.assertFalse(server.authorized())
+                server.revoke()
+                right.settimeout(1)
+                self.assertEqual(right.recv(1), b"")
+                self.assertTrue(server.closed)
+            finally:
+                left.close()
+                right.close()
+                server.server_close()
+                broker._ACTIVE = None
+
+    def test_compose_restarts_stopped_shared_worker_without_new_user_container(self) -> None:
+        broker = self.broker
+        calls: list[tuple[str, ...]] = []
+
+        def compose(*parts: str) -> str:
+            calls.append(parts)
+            if parts[:3] == ("ps", "--status", "running"):
+                return ""
+            return ""
+
+        with patch.object(broker, "_compose", side_effect=compose):
+            broker._ensure_shared()
+        self.assertEqual(calls[0], ("ps", "--status", "running", "-q", "personal"))
+        self.assertEqual(calls[1], ("up", "-d", "--no-build", "--wait"))
+
+    def test_foreign_user_cannot_interrupt_active_signin(self) -> None:
+        broker = self.broker
+        previous = broker._ACTIVE
+        broker._ACTIVE = "a" * 32
+        try:
+            with (
+                patch.object(broker, "_ensure_shared"),
+                patch.object(broker, "_port", return_value=8001),
+                patch.object(broker, "_relay") as relay,
+                patch.object(broker, "_rpc", return_value={"status": "ready"}) as rpc,
+            ):
+                result = broker.operate("start", "b" * 32)
+            self.assertEqual(result["status"], "unavailable")
+            self.assertEqual(broker._ACTIVE, "a" * 32)
+            rpc.assert_called_once_with("a" * 32, "status")
+            self.assertEqual(relay.call_args.args[1], "model.sock")
+        finally:
+            broker._ACTIVE = previous
+
+    def test_new_login_retires_stale_other_user_relay_before_launch(self) -> None:
+        broker = self.broker
+        previous = broker._ACTIVE
+        broker._ACTIVE = "a" * 32
+        events: list[tuple[str, str, str]] = []
+
+        def rpc(workspace: str, operation: str) -> dict[str, str]:
+            events.append(("rpc", workspace, operation))
+            return {"status": "stopped" if operation == "status" else "ready"}
+
+        def relay(workspace: str, channel: str, _port: int) -> None:
+            events.append(("relay", workspace, channel))
+
+        def unrelay(workspace: str, channel: str) -> None:
+            events.append(("unrelay", workspace, channel))
+
+        broker._GATEWAYS["a" * 32] = {}
+        try:
+            with (
+                patch.object(broker, "_ensure_shared"),
+                patch.object(broker, "_port", return_value=6080),
+                patch.object(broker, "_rpc", side_effect=rpc),
+                patch.object(broker, "_relay", side_effect=relay),
+                patch.object(broker, "_unrelay", side_effect=unrelay),
+            ):
+                result = broker.operate("start", "b" * 32)
+            self.assertEqual(result["status"], "ready")
+            self.assertEqual(broker._ACTIVE, "b" * 32)
+            self.assertLess(
+                events.index(("unrelay", "a" * 32, "vnc.sock")),
+                events.index(("rpc", "b" * 32, "start")),
+            )
+        finally:
+            broker._ACTIVE = previous
+            broker._GATEWAYS.pop("a" * 32, None)
+
+    def test_status_restores_relay_after_private_broker_restart(self) -> None:
+        broker = self.broker
+        previous = broker._ACTIVE
+        broker._ACTIVE = None
+        try:
+            with (
+                patch.object(broker, "_ensure_shared"),
+                patch.object(broker, "_port", return_value=6080),
+                patch.object(broker, "_rpc", return_value={"status": "ready"}),
+                patch.object(broker, "_relay") as relay,
+            ):
+                state = broker.operate("status", "a" * 32)
+            self.assertEqual(state["status"], "ready")
+            self.assertEqual(broker._ACTIVE, "a" * 32)
+            self.assertIn("vnc.sock", [call.args[1] for call in relay.call_args_list])
+        finally:
+            broker._ACTIVE = previous
+
     def test_all_credential_and_browser_calls_bound_to_workspace(self) -> None:
         broker = self.broker
         with patch.dict(os.environ, {"SIGMA_AUTH_POC_RPC_SEED": "a" * 64}):
