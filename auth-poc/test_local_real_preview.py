@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import asynccontextmanager
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -20,6 +21,108 @@ import server
 import model_gateway
 from sigma import api, chatgpt_auth, cloud_auth, personal_browser, personal_inference
 from sigma.projects import ProjectError
+
+
+async def check_research_worker_dispatch() -> None:
+    """A verified --prod Personal session must never use direct bearer HTTP."""
+    from sigma import personal_inference, research_sessions, research_reference_compiler
+
+    binding = "a" * 64
+    credentials = {
+        "mode": "chatgpt", "token": "", "transport": "personal_worker",
+        "worker_binding": binding, "status": "connected",
+    }
+    payload = {
+        "model": "gpt-6-luna", "store": False, "stream": True,
+        "input": [{"role": "user", "content": "Offline test prompt"}],
+    }
+    response = {
+        "status": "completed", "model": "gpt-6-luna",
+        "output": [{"content": [{"type": "output_text", "text": "not-json"}]}],
+        "usage": {"input_tokens": 12, "output_tokens": 14},
+    }
+    with (
+        patch.object(research_sessions, "_require_current_local_backend"),
+        patch.object(research_sessions, "_role_request_payload", return_value=payload),
+        patch.object(research_sessions, "_assert_saved_role_input_matches"),
+        patch.object(research_sessions, "_session_log_context", return_value=None),
+        patch.object(research_sessions, "_sponsor_inference_diagnostic"),
+        patch.object(research_sessions, "_call_timeout_seconds", return_value=60.0),
+        patch.object(research_sessions, "auth_context", new_callable=AsyncMock, return_value=credentials),
+        patch.object(personal_inference, "respond", new_callable=AsyncMock, return_value=response) as worker,
+        patch.object(research_sessions.httpx, "AsyncClient",
+                     side_effect=AssertionError("Research may not bypass Personal worker")),
+    ):
+        try:
+            await research_sessions._call_provider(
+                {"mode": "chatgpt", "model": "gpt-6-luna", "project_path": "/not-used"},
+                "investigator", {}, timeout_seconds=30,
+            )
+        except ProjectError as exc:
+            assert "malformed output" in str(exc)
+        else:
+            raise AssertionError("Malformed offline model response was accepted")
+        worker.assert_awaited_once()
+        assert worker.await_args.args == (payload,)
+        assert worker.await_args.kwargs["expected_binding"] == binding
+        assert len(worker.await_args.kwargs["request_id"]) == 32
+
+    frozen = {"sha256": "frozen-digest", "sources": [{"id": "source-1"}]}
+    compiled = {
+        "guidance": "Apply the source methodology.",
+        "selected_source_ids": ["source-1"],
+        "omitted_source_ids": [],
+        "guidance_sha256": "guidance-digest",
+        "source_sha256": "frozen-digest",
+    }
+    original = {
+        "id": "test-session", "status": "queued", "mode": "chatgpt",
+        "model": "gpt-6-luna", "research_method_sources": frozen,
+        "reference_compilation": {
+            "version": research_reference_compiler.VERSION, "status": "pending",
+            "source_sha256": "frozen-digest", "attempts": [],
+            "required_for_acceptance": True,
+        },
+    }
+    response["output"][0]["content"][0]["text"] = json.dumps({
+        "guidance": "Apply the source methodology.",
+        "selected_source_ids": ["source-1"], "omitted_source_ids": [],
+        "rationale": "Evidence is relevant.",
+    })
+
+    @asynccontextmanager
+    async def slot():
+        yield
+
+    with (
+        patch.object(research_sessions, "_session_state_lock", return_value=asyncio.Lock()),
+        patch.object(research_sessions, "_read", return_value=original),
+        patch.object(research_sessions, "_save"),
+        patch.object(research_sessions, "_event"),
+        patch.object(research_sessions, "_pause_for_stop_advisory", return_value=False),
+        patch.object(research_sessions, "methodology_digest", return_value="frozen-digest"),
+        patch.object(research_sessions, "_call_timeout_seconds", return_value=60.0),
+        patch.object(research_sessions, "_portfolio_global_gate", side_effect=lambda _: slot()),
+        patch.object(research_sessions, "auth_context", new_callable=AsyncMock, return_value=credentials),
+        patch.object(research_sessions.cloud_research, "billing_enabled", return_value=False),
+        patch.object(research_reference_compiler, "build_request", return_value=payload),
+        patch.object(
+            research_reference_compiler, "compilation_eligible_sources",
+            return_value=[{"id": "source-1"}],
+        ),
+        patch.object(research_reference_compiler, "validate_result", return_value=compiled),
+        patch.object(personal_inference, "respond", new_callable=AsyncMock, return_value=response) as worker,
+        patch.object(research_sessions.httpx, "AsyncClient",
+                     side_effect=AssertionError("Compiler may not bypass Personal worker")),
+    ):
+        assert await research_sessions._ensure_reference_compilation(
+            "test-session", "/not-used"
+        )
+        worker.assert_awaited_once()
+        assert worker.await_args.args == (payload,)
+        assert worker.await_args.kwargs["expected_binding"] == binding
+        assert len(worker.await_args.kwargs["request_id"]) == 32
+        assert original["reference_compilation"]["status"] == "completed"
 
 
 async def main() -> None:
@@ -291,7 +394,8 @@ async def main() -> None:
                 "/begin", headers={"Origin": "http://127.0.0.1:8001"}
             )
             assert denied.status_code == 403
-    print("PASS: gated real local chooser, origin, verified preview, and worker RPC key")
+    await check_research_worker_dispatch()
+    print("PASS: gated local sign-in and credential-free research/compilation worker dispatch")
 
 
 if __name__ == "__main__":
