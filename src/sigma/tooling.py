@@ -161,6 +161,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/paper_run_isolation.py"],
             [*python, "python", "tests/paper_rewind.py"],
             [*python, "python", "tests/test_paper_math_typesetting.py"],
+            [*python, "python", "tests/test_paper_preview_markdown.py"],
             [*python, "python", "tests/test_paper_listing_metadata_cache.py"],
             [*python, "python", "tests/publication_reference_compiler.py"],
             [*python, "python", "tests/paper_scores.py"],

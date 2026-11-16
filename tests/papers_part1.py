@@ -2491,12 +2491,9 @@ def test_paper_progress_endpoint_recovers_interrupted_checkpoint() -> None:
                 )
             assert response.status_code == 200, response.text
             progress = response.json()["progress"]
-            detail = progress.pop("detail")
-            # Interruption copy was updated to distinguish a retired worker
-            # from an actively running generation. Preserve the recovery
-            # contract without pinning an obsolete sentence.
-            assert "previous paper worker" in detail.lower(), detail
-            assert "Resume" in detail, detail
+            assert progress.pop("detail").startswith(
+                "The previous paper worker is no longer active"
+            )
             assert progress == {
                 "status": "interrupted",
                 "stage": "sections",
