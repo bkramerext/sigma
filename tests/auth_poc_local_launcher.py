@@ -395,6 +395,7 @@ class ProdLifecycleTests(unittest.TestCase):
                 self.started = True
 
         created = []
+
         def factory(**kwargs):
             task = DeferredThread(**kwargs)
             created.append(task)
