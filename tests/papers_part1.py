@@ -3965,7 +3965,7 @@ def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring
             return draft(source_id), config["model"]
 
         async def introduce_invalid_correction(tex, *_args, **_kwargs):
-            altered = tex.replace(r"\\end{document}", r"\\badproofreadercommand" + "\\n" + r"\\end{document}")
+            altered = tex.replace(r"\end{document}", r"\badproofreadercommand" + "\n" + r"\end{document}")
             assert altered != tex
             return altered, {
                 "status": "complete", "corrections": ["escaping"],
@@ -3975,7 +3975,7 @@ def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring
 
         def compile_fixture(tex, **_kwargs):
             compile_sources.append(tex)
-            if r"\\badproofreadercommand" in tex:
+            if r"\badproofreadercommand" in tex:
                 raise RuntimeError("Undefined control sequence in proofreader patch")
             return b"%PDF-fixture"
 
@@ -3995,9 +3995,9 @@ def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring
         record = papers.get_paper(str(path), published["paper_id"])
         assert authored_calls == 1
         assert len(compile_sources) == 2
-        assert r"\\badproofreadercommand" in compile_sources[0]
-        assert r"\\badproofreadercommand" not in compile_sources[1]
-        assert record["draft"]["abstract"] == draft()["abstract"]
+        assert r"\badproofreadercommand" in compile_sources[0]
+        assert r"\badproofreadercommand" not in compile_sources[1]
+        assert record["draft"]["abstract"] == draft().abstract
         assert record["generation"]["publication_status"] == "needs_review"
         assert record["generation"]["proofreading"]["verification_status"] == "incomplete"
         assert "validated authored TeX" in record["generation"]["proofreading"]["review_reason"]

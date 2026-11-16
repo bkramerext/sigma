@@ -4252,7 +4252,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         // Markdown covers the body; front matter is deterministic and may not
         // be rewritten or omitted by the AI formatter.
         const frontMatter = selected?.paper_id === id
-          ? `# ${selected.draft.title}\\n\\n## Abstract\\n\\n${selected.draft.abstract}\\n\\n`.replaceAll('\\n', '\n')
+          ? `# ${selected.draft.title}\n\n## Abstract\n\n${selected.draft.abstract}\n\n`
           : '';
         await navigator.clipboard.writeText(frontMatter + formattedPaper.markdown);
         setCopiedPaperId(id);

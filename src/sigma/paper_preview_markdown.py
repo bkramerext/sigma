@@ -23,7 +23,7 @@ def _body_without_front_matter(source: str, title: str, abstract: str) -> str:
     Excluding them from model conversion prevents a flaky formatter from
     silently omitting or rewriting either piece of paper front matter.
     """
-    prefix = f"{title}\\n\\nAbstract\\n{abstract}\\n".replace("\\n", "\n")
+    prefix = f"{title}\n\nAbstract\n{abstract}\n"
     if not source.startswith(prefix):
         raise ProjectError("Saved paper front matter is inconsistent with the paper text.")
     body = source[len(prefix):].lstrip("\n")
