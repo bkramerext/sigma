@@ -1,5 +1,5 @@
 import { Component, createContext, createElement, forwardRef, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
@@ -7142,7 +7142,13 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
               {collaborators.length > 0 && <p className="project-collaborator-standards-note">Title, research category, difficulty, and user settings are inherited from the project owner.</p>}
               {collaborators.map(email => <div className="project-collaborator-row" key={email}>
                 <span>{email}</span>
-                {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => setCollaborators(previous => previous.filter(value => value !== email))}>
+                {(!shared.collaborators.includes(email) || shared.removable_collaborators?.includes(email)) && <button type="button" aria-label={`Remove ${email}`} data-tooltip="Remove collaborator" className="project-collaborator-remove text-view-icon workspace-icon-button" onClick={() => {
+                  // The Close button can be clicked in the next pointer event.
+                  // Commit the removal to React state before Close reads the
+                  // draft; otherwise a stale closure can dismiss the modal
+                  // without persisting the ACL revocation.
+                  flushSync(() => setCollaborators(previous => previous.filter(value => value !== email)));
+                }}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
                 </button>}
               </div>)}
