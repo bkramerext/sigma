@@ -264,9 +264,11 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
 }
 
 
-function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
+function PersonalBrowserDialog({ state, error, external = false, handoff, onClose, onRetry }: {
   state: 'closed' | 'preparing' | 'starting' | 'ready' | 'error';
   error: string;
+  external?: boolean;
+  handoff?: string;
   onClose: () => void;
   onRetry: () => void;
 }) {
@@ -277,20 +279,26 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, [state === 'closed']);
   if (state === 'closed') return null;
-  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${state !== 'error' ? ' is-viewing' : ''}`}
+  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${!external && state !== 'error' ? ' is-viewing' : ''}`}
     aria-labelledby="personal-browser-heading"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="privacy-notice-heading">
       <h2 id="personal-browser-heading">Connect to ChatGPT</h2>
       <DialogDismissButton label="Close ChatGPT connection" onClick={onClose}/>
     </div>
-    {state === 'preparing' && <p role="status">Preparing ChatGPT sign-in… This may take a little longer the first time.</p>}
-    {state === 'starting' && <p role="status">Opening ChatGPT sign-in…</p>}
+    {state === 'preparing' && !external && <p role="status">Preparing ChatGPT sign-in… This may take a little longer the first time.</p>}
+    {state === 'starting' && <p role="status">{external
+      ? 'Complete ChatGPT sign-in in the browser tab. This dialog closes after you connect.'
+      : 'Opening ChatGPT sign-in…'}</p>}
+    {external && handoff && state === 'starting' &&
+      <a className="sigma-text-action" href={handoff} target="_blank" rel="noreferrer">
+        Open sign-in tab
+      </a>}
     {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
-      <p>{error || 'The private browser could not be started.'}</p>
+      <p>{error || (external ? 'ChatGPT sign-in did not complete.' : 'The private browser could not be started.')}</p>
       <button className="sigma-text-action" type="button" onClick={onRetry}>Retry</button>
     </div>}
-    {state === 'ready' && <iframe
+    {!external && state === 'ready' && <iframe
       className="personal-chatgpt-browser-frame"
       title="Private ChatGPT sign-in browser"
       src={windowAuthUrl('/api/ai/personal-browser/view')}/>}
