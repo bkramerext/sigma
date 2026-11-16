@@ -1123,7 +1123,9 @@ async def generate_proposal(
                 if credential["mode"] == "chatgpt" and response.status_code == 200:
                     raw = await completed(
                         response,
-                        hashlib.sha256((credential["mode"] + credential["token"]).encode()).hexdigest(),
+                        hashlib.sha256(
+                            (credential["mode"] + credential["token"]).encode()
+                        ).hexdigest(),
                     )
                 else:
                     data = bytearray()
