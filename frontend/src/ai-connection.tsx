@@ -277,7 +277,7 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, [state === 'closed']);
   if (state === 'closed') return null;
-  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${state === 'ready' ? ' is-viewing' : ''}`}
+  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${state !== 'error' ? ' is-viewing' : ''}`}
     aria-labelledby="personal-browser-heading"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="privacy-notice-heading">
@@ -683,9 +683,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     openingContainerBrowser.current = true;
     setPersonalDialogError('');
     setRestoringPersonal(true);
-    // Start the worker without briefly displaying the sign-in iframe when
-    // a previously authorized ChatGPT account can be reused.
-    setPersonalDialogState('closed');
+    // Show the dialog immediately. The actual iframe remains deferred until
+    // the isolated worker is ready; a saved account may close it automatically.
+    setPersonalDialogState('starting');
     try {
       // A new cold connection must never race the preceding Docker stop.
       if (pendingPersonalStop.current) await pendingPersonalStop.current.catch(() => undefined);
