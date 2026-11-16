@@ -132,6 +132,14 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn("setDisconnectError", source)
         self.assertIn('{disconnecting ? <span role="status">Disconnecting…</span>', source)
         self.assertIn("if (result.disconnected !== true)", source)
+        # Never strand an eligible --prod user on a disconnected Personal
+        # selection. Sponsored is the default unless this worker has verified
+        # the person's saved account; persist the mode through the server.
+        self.assertIn("const localSponsoredDefault =", source)
+        self.assertIn("|| localHostedNoticePreview || localSponsoredDefault;", source)
+        self.assertIn("void selectConnection('sponsored').catch(", source)
+        self.assertIn("test.value?.verified !== true", source)
+        self.assertIn("!dialogActive.current && personalDialogState === 'closed'", source)
         self.assertIn("const stop = stopContainerPersonalBrowser()", source)
         self.assertIn(
             "console.warn('SIGMA: private browser cleanup failed after disconnect.')", source
