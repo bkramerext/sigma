@@ -122,16 +122,34 @@ class Control(socketserver.StreamRequestHandler):
         pid, uid, gid = struct.unpack("3i", raw)
         if uid != WORKER_UID:
             return
-        command = self.rfile.readline(32).strip().decode("ascii", errors="ignore")
+        command = self.rfile.readline(96).strip().decode("ascii", errors="ignore")
+        parts = command.split(" ")
+        action, workspace = parts if len(parts) == 2 else ("", "")
+        if not re.fullmatch(r"[0-9a-f]{32}", workspace):
+            self.wfile.write((json.dumps({"status": "unavailable"}) + "\n").encode())
+            return
+        global _OWNER, _STARTED_AT
         with _LOCK:
-            if command == "start":
-                result = {"status": "ready" if _start() else "unavailable"}
-            elif command == "stop":
-                _stop()
+            if action == "start":
+                if _OWNER != workspace:
+                    _stop()
+                    _OWNER = None
+                ready = _start()
+                _OWNER = workspace if ready else None
+                _STARTED_AT = time.monotonic() if ready else 0.0
+                result = {"status": "ready" if ready else "unavailable"}
+            elif action == "stop":
+                if _OWNER == workspace:
+                    _stop()
+                    _OWNER = None
                 result = {"status": "stopped"}
-            elif command == "status":
-                result = {"status": "ready" if _browser_ready() else "stopped"}
-            elif command == "password":
+            elif action == "status":
+                ready = _OWNER == workspace and _browser_ready()
+                if _OWNER == workspace and not ready:
+                    _stop()
+                    _OWNER = None
+                result = {"status": "ready" if ready else "stopped"}
+            elif action == "password" and _OWNER == workspace:
                 password = BROWSER_HOME / "vnc-pass"
                 try:
                     value = password.read_text(encoding="ascii").strip()
@@ -175,6 +193,8 @@ def _prepare_volumes() -> None:
             handle.write(os.urandom(32))
             handle.flush()
             os.fsync(handle.fileno())
+    if fd >= 0:
+        os.chown(key, WORKER_UID, WORKER_UID)
     info = key.lstat()
     if (
         not stat.S_ISREG(info.st_mode)
@@ -219,6 +239,10 @@ def main() -> None:
     thread.start()
     try:
         while _WORKER.poll() is None:
+            with _LOCK:
+                if _OWNER is not None and time.monotonic() - _STARTED_AT > 360:
+                    _stop()
+                    _OWNER = None
             time.sleep(0.5)
     finally:
         with _LOCK:
