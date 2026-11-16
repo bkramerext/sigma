@@ -39,6 +39,10 @@ class LocalPersonalUnavailable(RuntimeError):
 
 
 def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
+    # Suppress arbitrary process output and report only a fixed operation name.
+    stage = args[0] + (" " + args[1] if len(args) > 1 and args[1] in {
+        "compose", "info", "image", "tag", "ps"
+    } else "")
     try:
         result = subprocess.run(
             args,
@@ -50,9 +54,11 @@ def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"SIGMA Personal preparation: {stage} unavailable/timeout", flush=True)
         raise LocalPersonalUnavailable("Local Personal container preparation failed.") from exc
     if result.returncode:
         # Docker output can include credentials/host paths; keep errors generic.
+        print(f"SIGMA Personal preparation: {stage} exit={result.returncode}", flush=True)
         raise LocalPersonalUnavailable(
             "Local Personal container preparation failed. Check Docker Desktop."
         )
@@ -100,6 +106,11 @@ def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, st
         raise LocalPersonalUnavailable("Docker Desktop architecture is unsupported.")
     env["SIGMA_RELEASE"] = release
     env["SIGMA_AUTH_POC_BROWSER_PLATFORM"] = platform
+    print(
+        f"SIGMA Personal preparation: host_browser_platform={platform}, "
+        "worker_platform=linux/amd64",
+        flush=True,
+    )
     if build and not _images_compatible(env):
         print("Preparing isolated Personal ChatGPT images for this Mac…", flush=True)
         _command(
@@ -113,6 +124,7 @@ def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, st
                 env=env,
                 timeout=20,
             )
+        print("SIGMA Personal preparation: rebuilt both pinned images", flush=True)
         if not _images_compatible(env):
             raise LocalPersonalUnavailable(
                 "The Personal browser images were built for the wrong architecture."
@@ -142,7 +154,9 @@ def _images_compatible(env: dict[str, str]) -> bool:
         except LocalPersonalUnavailable:
             return False
         if actual != desired:
+            print(f"SIGMA Personal preparation: image {name} architecture mismatch", flush=True)
             return False
+    print("SIGMA Personal preparation: pinned image architectures verified", flush=True)
     return True
 
 
@@ -218,16 +232,25 @@ def _preparation_state(path: Path, state: str) -> None:
 def _prepare(env: dict[str, str]) -> int:
     """Reconcile crashed launchers and build missing images off the UI path."""
     marker = Path(env["SIGMA_LOCAL_PERSONAL_PREPARATION_FILE"])
+    phase = "docker_reconciliation"
+    print("SIGMA Personal preparation: reconciling previous Docker sessions", flush=True)
     try:
-        for workspace in sorted(_owned_workspaces(env)):
+        workspaces = _owned_workspaces(env)
+        print(
+            f"SIGMA Personal preparation: owned_projects={len(workspaces)}",
+            flush=True,
+        )
+        for workspace in sorted(workspaces):
             _down_workspace(env, workspace)
+        phase = "image_architecture_and_build"
         _release_images(env)
+        phase = "write_readiness"
         _preparation_state(marker, "ready")
-        print("Personal ChatGPT browser preparation complete.", flush=True)
+        print("SIGMA Personal preparation: ready", flush=True)
         return 0
-    except (OSError, RuntimeError, ValueError, KeyError) as exc:
+    except (OSError, RuntimeError, ValueError, KeyError):
         _preparation_state(marker, "failed")
-        print("Personal ChatGPT preparation failed: " + str(exc), file=sys.stderr)
+        print(f"SIGMA Personal preparation: failed_at={phase}", file=sys.stderr, flush=True)
         return 1
 
 
@@ -279,6 +302,7 @@ class LocalPersonalRuntime:
                 }
             )
             # The RPC seed is intentionally short lived: rederived per launch.
+            print("SIGMA Personal launch: starting protected host broker", flush=True)
             broker = subprocess.Popen(
                 [sys.executable, str(ROOT / "auth-poc" / "host_broker.py")],
                 cwd=ROOT,
@@ -294,6 +318,11 @@ class LocalPersonalRuntime:
                     if info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o600:
                         prepare_env = dict(env)
                         prepare_env.pop("SIGMA_AUTH_POC_RPC_SEED", None)
+                        print(
+                            "SIGMA Personal launch: protected broker ready; "
+                            "background image preparation starting",
+                            flush=True,
+                        )
                         preparation = subprocess.Popen(
                             [sys.executable, "-m", "sigma.local_personal", "--prepare"],
                             cwd=ROOT,
@@ -333,6 +362,7 @@ class LocalPersonalRuntime:
         except OSError:
             return
         if phase == "preparing":
+            print("SIGMA Personal preparation: worker exited before readiness", flush=True)
             _preparation_state(marker, "failed")
 
     def close(self, progress: Callable[[], None] | None = None) -> None:

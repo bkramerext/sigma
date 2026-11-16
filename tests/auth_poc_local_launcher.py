@@ -314,6 +314,27 @@ class ProdLifecycleTests(unittest.TestCase):
             self.assertEqual(output.call_count, 2)
             self.assertNotIn("a" * 32, str(output.call_args_list))
 
+    def test_diagnostics_do_not_relay_untrusted_docker_log_content(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "sigma_broker_safe_log_test", ROOT / "auth-poc/host_broker.py"
+        )
+        assert spec and spec.loader
+        broker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(broker)
+        raw = (
+            "SIGMA Personal browser: starting Xvfb\n"
+            "https://auth.openai.com/authorize?code=SECRET\n"
+            "SIGMA Personal worker: starting model gateway on private port 8002\n"
+            "SIGMA Personal browser: VNC relay launched; starting Chromium\n"
+            "token=SECRET credential=SECRET\n"
+        )
+        messages = broker._safe_milestones(raw)
+        self.assertEqual(len(messages), 3)
+        self.assertNotIn("SECRET", repr(messages))
+        self.assertFalse(broker._ALLOWED_PROBE_VALUES.fullmatch(
+            "access_token=secret"
+        ))
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)

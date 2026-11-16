@@ -40,6 +40,20 @@ _LAST_READINESS: dict[str, str] = {}
 _LAST_DIAGNOSTIC_AT: dict[str, float] = {}
 _DIAGNOSTIC_INTERVAL_SECONDS = 18.0
 _ALLOWED_PROBE_VALUES = re.compile(r"[a-z_]+=(?:[a-z_]+|http_[1-5][0-9]{2}|[0-9]{1,13})\Z")
+_SAFE_MILESTONES = {
+    "SIGMA Personal browser: starting Xvfb",
+    "SIGMA Personal browser: Xvfb ready; starting x11vnc",
+    "SIGMA Personal browser: VNC relay launched; starting Chromium",
+    "SIGMA Personal browser: Xvfb did not initialize",
+    "SIGMA Personal worker: starting model gateway on private port 8002",
+    "SIGMA Personal worker: starting localhost OAuth callback on port 8001",
+}
+
+
+def _safe_milestones(raw_output: str) -> list[str]:
+    """Only literal, release-owned milestones; never dump Docker logs."""
+    return [line for line in raw_output.splitlines() if line in _SAFE_MILESTONES]
+
 
 
 def _readiness_report(workspace_id: str, reason: str) -> None:
@@ -252,6 +266,19 @@ def _container_diagnostics(workspace_id: str, cause: str, *, force: bool = False
                 )
             else:
                 print(f"  {service}.state=inspect_failed", flush=True)
+            # Docker logs may contain OAuth URLs and private data. Collect
+            # them locally but print ONLY hardcoded startup milestone lines.
+            logs = subprocess.run(
+                ["docker", "logs", "--tail", "80", container_id],
+                cwd=ROOT,
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=8,
+                check=False,
+            )
+            for message in _safe_milestones(logs.stdout + "\n" + logs.stderr):
+                print("  " + message, flush=True)
             if state[:1] != ["running"]:
                 continue
             result = subprocess.run(

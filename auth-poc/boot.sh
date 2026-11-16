@@ -11,7 +11,7 @@ Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
 i=0
 while [ ! -S /tmp/.X11-unix/X99 ]; do
   i=$((i+1))
-  if [ "$i" -ge 60 ]; then echo "Xvfb did not initialize" >&2; exit 1; fi
+  if [ "$i" -ge 60 ]; then echo "SIGMA Personal browser: Xvfb did not initialize" >&2; exit 1; fi
   sleep 0.1
 done
 echo "SIGMA Personal browser: Xvfb ready; starting x11vnc"
