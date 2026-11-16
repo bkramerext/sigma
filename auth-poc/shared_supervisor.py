@@ -143,10 +143,44 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     allow_reuse_address = False
 
 
+def _prepare_volumes() -> None:
+    """First-start creation only; NEVER import historical credential files."""
+    records = Path("/var/lib/sigma-shared/records")
+    workspaces = Path("/var/lib/sigma-shared/workspaces")
+    key_home = Path("/var/lib/sigma-shared-key")
+    for directory in (records, workspaces, key_home):
+        if directory.is_symlink():
+            raise SystemExit("Shared Personal storage contains a symlink")
+        directory.mkdir(parents=True, exist_ok=True)
+        info = directory.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != WORKER_UID:
+            raise SystemExit("Shared Personal storage ownership is invalid")
+        os.chmod(directory, 0o700)
+    key = key_home / "master"
+    try:
+        fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except FileExistsError:
+        fd = -1
+    if fd >= 0:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(os.urandom(32))
+            handle.flush()
+            os.fsync(handle.fileno())
+    info = key.lstat()
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != WORKER_UID
+        or stat.S_IMODE(info.st_mode) != 0o600
+        or info.st_size != 32
+    ):
+        raise SystemExit("Shared Personal encryption key is unsafe")
+
+
 def main() -> None:
     global _WORKER
     if os.geteuid() != 0:
         raise SystemExit("Shared Personal supervisor requires root for UID separation")
+    _prepare_volumes()
     CONTROL.parent.mkdir(parents=True, exist_ok=True)
     os.chown(CONTROL.parent, 0, WORKER_UID)
     os.chmod(CONTROL.parent, 0o750)
