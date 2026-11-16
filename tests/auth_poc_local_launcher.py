@@ -331,7 +331,9 @@ class ProdLifecycleTests(unittest.TestCase):
         messages = broker._safe_milestones(raw)
         self.assertEqual(len(messages), 3)
         self.assertNotIn("SECRET", repr(messages))
-        self.assertFalse(broker._ALLOWED_PROBE_VALUES.fullmatch("access_token=secret"))
+        self.assertFalse(broker._safe_probe_line("access_token=secret"))
+        self.assertFalse(broker._safe_probe_line("component=worker;token=secret"))
+        self.assertTrue(broker._safe_probe_line("websocket_http_6080=http_200"))
 
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
