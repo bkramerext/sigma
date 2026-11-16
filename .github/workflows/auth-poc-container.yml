@@ -46,8 +46,11 @@ jobs:
           assert p["platform"] == "linux/amd64"
           limit=p["mem_limit"]
           if isinstance(limit, str):
-              suffix=limit[-1].lower()
-              limit=int(limit[:-1])*{"k":1024,"m":1024**2,"g":1024**3}[suffix]
+              if limit.isdecimal():
+                  limit=int(limit)
+              else:
+                  suffix=limit[-1].lower()
+                  limit=int(limit[:-1])*{"k":1024,"m":1024**2,"g":1024**3}[suffix]
           assert limit <= 2 * 1024 * 1024 * 1024
           assert {x["target"] for x in p["ports"]} == {8001,6080}
           assert all(x["host_ip"]=="127.0.0.1" for x in p["ports"])
