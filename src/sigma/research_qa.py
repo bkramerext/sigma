@@ -966,6 +966,7 @@ def saved_answer_text(path: str, qa_id: str) -> dict[str, Any]:
     return {
         "answer": record["answer"],
         "markdown_answer": record.get("markdown_answer"),
+        "markdown_provenance": record.get("markdown_provenance"),
     }
 
 
