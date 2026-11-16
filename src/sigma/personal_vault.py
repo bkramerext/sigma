@@ -15,8 +15,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _SCOPE = re.compile(r"[0-9a-f]{32}\Z")
 _AAD = b"sigma-shared-personal-v1:"
@@ -81,7 +81,7 @@ class Vault:
                 raise ValueError()
             decoded = json.loads(cipher.decrypt(nonce, data, _AAD + workspace.encode()))
             if not isinstance(decoded, dict):
-                raise ValueError()
+                raise TypeError("Unexpected credential record type")
             return decoded
         except (ValueError, TypeError, KeyError, InvalidTag, UnicodeError) as exc:
             raise VaultError("Invalid, tampered, or wrong-user credential record") from exc
