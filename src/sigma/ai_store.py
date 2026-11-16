@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sigma.projects import ROOT, ProjectError
 from sigma.personal_vault import Vault, VaultError
+from sigma.projects import ROOT, ProjectError
 from sigma.ui_instance import private_directory
 
 _DIRECTORY_OVERRIDE: ContextVar[Path | None] = ContextVar("sigma_ai_store_directory", default=None)
