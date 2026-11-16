@@ -17,6 +17,7 @@ import stat
 import struct
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -28,6 +29,7 @@ _LOCK = threading.RLock()
 _ACTIVE: str | None = None
 _GATEWAYS: dict[str, dict[str, tuple[Path, socketserver.BaseServer, threading.Thread]]] = {}
 MAX_REQUEST = 512
+MAX_IDLE_GATEWAYS = 32  # Limit idle Unix sockets/threads on the low-memory POC.
 
 
 def _valid(workspace: str) -> str:
@@ -112,6 +114,7 @@ class RelayHandler(socketserver.BaseRequestHandler):
             if server.closed or not server.authorized():
                 return
             server.clients.add(client)
+            server.last_used = time.monotonic()
         try:
             upstream = socket.create_connection(
                 ("127.0.0.1", server.upstream_port), timeout=5
@@ -136,6 +139,7 @@ class RelayHandler(socketserver.BaseRequestHandler):
                 server.clients.discard(client)
                 if upstream is not None:
                     server.clients.discard(upstream)
+                server.last_used = time.monotonic()
             if upstream is not None:
                 upstream.close()
 
@@ -151,6 +155,7 @@ class RelayServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
         self.clients_lock = threading.Lock()
         self.clients: set[socket.socket] = set()
         self.closed = False
+        self.last_used = time.monotonic()
 
     def authorized(self) -> bool:
         return self.channel == "model.sock" or _ACTIVE == self.workspace
@@ -221,6 +226,40 @@ def _unrelay(workspace: str, name: str) -> None:
         path.unlink()
 
 
+def _prune_idle_gateways(*, preserve: str) -> None:
+    """Bound idle per-user relays without interrupting in-flight model calls.
+
+    Every SIGMA user's first status request creates a model.sock. Leaving those
+    socket servers and worker threads around forever is unbounded memory/FD
+    growth. Never evict the active browser owner, the current caller, or any
+    user with a live model/VNC stream; evicted sockets are recreated on demand.
+    Call under _LOCK, as all operate() lifecycle mutations are.
+    """
+    excess = len(_GATEWAYS) - MAX_IDLE_GATEWAYS
+    if excess <= 0:
+        return
+    idle: list[tuple[float, str]] = []
+    for workspace, channels in _GATEWAYS.items():
+        if workspace in {preserve, _ACTIVE}:
+            continue
+        if not channels:
+            idle.append((0.0, workspace))
+            continue
+        times: list[float] = []
+        for _, server, _ in channels.values():
+            with server.clients_lock:
+                if server.clients:
+                    break
+                times.append(server.last_used)
+        else:
+            idle.append((max(times), workspace))
+    idle.sort()
+    for _, workspace in idle[:excess]:
+        for channel in tuple(_GATEWAYS.get(workspace, {})):
+            _unrelay(workspace, channel)
+        _GATEWAYS.pop(workspace, None)
+
+
 def _ensure_shared() -> None:
     # A stopped or unhealthy worker must not be treated as an active service.
     # Keep the shared project and its persistent encrypted volumes intact.
@@ -237,6 +276,7 @@ def operate(action: str, workspace: str) -> dict:
         _ensure_shared()
         # Model relay stays available when Chromium closes; no idle browser.
         _relay(workspace, "model.sock", _port(8001))
+        _prune_idle_gateways(preserve=workspace)
         if action == "start":
             # A service/browser restart can invalidate the broker's cached
             # owner. Never let A's old VNC relay point at a new B browser.
@@ -260,6 +300,12 @@ def operate(action: str, workspace: str) -> dict:
                 _ACTIVE = None
         elif action == "password":
             state = _rpc(workspace, "password")
+            if state["status"] != "ready":
+                # The worker owns the authoritative browser lease. An old
+                # broker-side lease must not keep a VNC relay reachable.
+                _unrelay(workspace, "vnc.sock")
+                if _ACTIVE == workspace:
+                    _ACTIVE = None
         else:
             state = _rpc(workspace, "status")
             if state["status"] == "ready":
@@ -275,6 +321,7 @@ def operate(action: str, workspace: str) -> dict:
         result = {"status": state["status"], "worker": "sigma-personal-" + workspace}
         if action == "password" and "password" in state:
             result["password"] = state["password"]
+        _prune_idle_gateways(preserve=workspace)
         return result
 
 
@@ -295,11 +342,15 @@ class Handler(BaseHTTPRequestHandler):
     def _authorized(self) -> bool:
         uid = int(os.environ.get("SIGMA_AUTH_BROKER_CLIENT_UID", "10001"))
         if hasattr(socket, "SO_PEERCRED"):
-            pid, peer_uid, gid = struct.unpack(
+            _pid, peer_uid, _gid = struct.unpack(
                 "3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
             )
             return peer_uid == uid
-        return True
+        if hasattr(self.connection, "getpeereid"):
+            peer_uid, _peer_gid = self.connection.getpeereid()
+            return peer_uid == uid
+        # Never silently disable peer authentication on an unknown OS.
+        return False
 
     def _dispatch(self, operation: str) -> None:
         if not self._authorized():
