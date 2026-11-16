@@ -134,6 +134,22 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn("if (result.disconnected !== true)", source)
         self.assertIn("await stopContainerPersonalBrowser().catch(", source)
         self.assertIn("state !== 'error' ? ' is-viewing' : ''", source)
+        # Project header disables pointer events on its container and explicitly
+        # re-enables only buttons/links/summaries. An iframe rendered there
+        # displays remote frames but cannot accept pointer input. The modal
+        # MUST be portaled out to body instead of inheriting the header mask.
+        self.assertIn(
+            "createPortal(\\n    <PersonalBrowserDialog state={personalDialogState}",
+            source,
+        )
+        self.assertIn(
+            "onRetry={() => void startContainerPersonalBrowser()}/>,\\n    document.body,",
+            source,
+        )
+        workspace_css = (ROOT / "frontend/src/workspace.css").read_text(encoding="utf-8")
+        self.assertIn(".header-controls {", workspace_css)
+        self.assertIn("pointer-events: none;", workspace_css)
+
         self.assertNotIn("personal-chatgpt-preview-note", source)
         self.assertNotIn("OpenAI's personal ChatGPT sign-in uses", source)
         boot = (ROOT / "auth-poc/boot.sh").read_text(encoding="utf-8")
