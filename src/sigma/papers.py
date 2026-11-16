@@ -11971,7 +11971,11 @@ async def _generate_impl(
                         and _diagram_compile_failure_is_identified(pass_diagnostics, compile_error)
                     )
                     recovered_authored_tex = False
-                    if pass_number == 1 and not diagnosed_diagram_error:
+                    if (
+                        pass_number == 1
+                        and not diagnosed_diagram_error
+                        and proofreading.get("corrections")
+                    ):
                         # The mechanical AI proofreader may produce syntactically
                         # invalid but semantically unchanged TeX. Before throwing
                         # away authored content or visuals, retry the unmodified
@@ -12018,7 +12022,9 @@ async def _generate_impl(
                                     "corrections": [],
                                     "final_sha256": proofread_source_sha256,
                                     "diagnostics": list(
-                                        dict.fromkeys([*proofreading.get("diagnostics", []), reason])
+                                        dict.fromkeys(
+                                            [*proofreading.get("diagnostics", []), reason]
+                                        )
                                     )[:100],
                                 }
                                 record["generation"]["proofreading"].update(
@@ -12083,7 +12089,9 @@ async def _generate_impl(
                                 int(work.get("static_math_restorations", 0)) + restored
                             )
                             record["generation"]["publication_status"] = "needs_review"
-                            record["generation"]["proofreading"]["verification_status"] = "incomplete"
+                            record["generation"]["proofreading"]["verification_status"] = (
+                                "incomplete"
+                            )
                             record["generation"]["proofreading"]["review_reason"] = (
                                 "The PDF used an unproofread text-only fallback rendering."
                             )

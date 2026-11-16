@@ -3948,29 +3948,41 @@ def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "mechanical-recovery.sigma"
         view = initialize_project(
-            path, "Mechanical TeX recovery", "Preserve the saved proof.",
+            path,
+            "Mechanical TeX recovery",
+            "Preserve the saved proof.",
             research_mode="mathematical",
         )
         credential = {"identity": "fixture:pdf", "mode": "api_key", "token": "fixture"}
-        config = {"available": True, "binding": credential["identity"],
-                  "model": "fixture-model", "reasoning_effort": "high"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "high",
+        }
         authored_calls = 0
         compile_sources: list[str] = []
 
         async def author(package, *_args):
             nonlocal authored_calls
             authored_calls += 1
-            source_id = next(source["id"] for source in package["sources"]
-                             if source["kind"] == "project")
+            source_id = next(
+                source["id"] for source in package["sources"] if source["kind"] == "project"
+            )
             return draft(source_id), config["model"]
 
         async def introduce_invalid_correction(tex, *_args, **_kwargs):
-            altered = tex.replace(r"\end{document}", r"\badproofreadercommand" + "\n" + r"\end{document}")
+            altered = tex.replace(
+                r"\end{document}", r"\badproofreadercommand" + "\n" + r"\end{document}"
+            )
             assert altered != tex
             return altered, {
-                "status": "complete", "corrections": ["escaping"],
-                "diagnostics": [], "provider_calls_attempted": 0,
-                "ai_performed": True, "elapsed_seconds": 0,
+                "status": "complete",
+                "corrections": ["escaping"],
+                "diagnostics": [],
+                "provider_calls_attempted": 0,
+                "ai_performed": True,
+                "elapsed_seconds": 0,
             }
 
         def compile_fixture(tex, **_kwargs):
@@ -3981,8 +3993,9 @@ def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring
 
         with (
             patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
-            patch.object(papers, "configuration",
-                         new=lambda **_kwargs: asyncio.sleep(0, result=config)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
             patch.object(papers, "_provider", new=author),
             patch.object(papers, "_proofread_tex", new=introduce_invalid_correction),
             patch.object(papers, "_compile_pdf", new=compile_fixture),
