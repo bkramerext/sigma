@@ -381,16 +381,16 @@ SIGMA remains experimental: research conclusions, citations, generated papers, a
 
 ---
 
-## Version 0.4.3 — Brainstorm and Personal ChatGPT Foundations
+## Version 0.4.3 — Reliable Research and Lower-Memory Hosting
 *Release candidate · November 16, 2026 · Production acceptance pending*
 
-**A new two-agent Brainstorm workspace, more dependable connection handling, and the foundation for a private Personal ChatGPT browser connection.** This update also improves account-switching, startup recovery, and clarity around sponsored provider limits.
+**More dependable research and paper recovery, lower-memory hosted serving, and a private Personal ChatGPT connection for local `--prod` use.** This candidate includes the changes merged to `main` through `5fa2aa293e36c816b146967bff654dee2c69801e` (PRs #881–#883), in addition to the earlier 0.4.3 draft scope.
 
 ### Brainstorm: explore ideas with two AI agents
 
 - **Two-agent conversation.** Brainstorm alternates AI #1 and AI #2 around your prompts, with Human, Repeated, Send, Stop, and Clear controls. The Repeated prompt is applied to future agent turns without adding redundant transcript entries.
 - **More useful presentation.** Side-by-side agent panels adapt to smaller screens. Replies can display Markdown and mathematical notation, while the underlying text remains inspectable.
-- **Deliberate access.** Locally, `./sigma start --brainstorm` opens Home with the Brainstorm entry enabled; an ordinary start does not show it. Authorized hosted users can navigate to `/brainstorm`, but it is not promoted on hosted Home by default. Guest and unauthenticated requests remain restricted.
+- **Deliberate access.** Brainstorm is a local-only feature. `./sigma start --brainstorm` opens Home with the Brainstorm entry enabled; ordinary and hosted production entry points remain unavailable.
 - **Request validation repaired.** Brainstorm no longer rejects an otherwise valid sponsored-model request merely because an optional response-format field is absent.
 
 ### Personal ChatGPT: isolated local connection
@@ -400,6 +400,13 @@ SIGMA remains experimental: research conclusions, citations, generated papers, a
 - **Consistent connection controls.** The standard SIGMA dialog supports preparation, retry, cancellation, and connection status. Normal local SIGMA keeps its system-browser authorization flow; `--prod` uses the isolated browser.
 - **Provider isolation throughout the application.** The Personal worker transport is integrated with research agents, reference preparation, paper-writing stages, proofreading, Research Q&A, text formatting, proposals, and Brainstorm. Personal requests must not silently fall back to Sponsored credentials or its spending ledger. Long paper requests have bounded timeouts.
 - **Better startup and recovery diagnostics.** Local Docker readiness, browser health, background image preparation, cleanup after abnormal exits, and reconnect paths have additional safeguards and tests.
+
+### Lower-memory hosted serving and recovery
+
+- **Optional direct host-Caddy routing.** GCE can route HTTPS traffic directly to the backend and frontend on loopback and stop the redundant Docker edge. This is an opt-in deployment topology with an edge-first rollback path; it does not change the default topology by itself.
+- **More trustworthy paper recovery checks.** The normal test matrix now covers interrupted paper recovery wording, saved-paper Markdown preview, and PDF launch failures.
+- **Live Model and Thinking selection.** Research and paper requests waiting for a provider slot use the current selection when dispatched, while already-running calls and saved checkpoints remain intact.
+- **Paper interface polish.** Saved review notices can be dismissed consistently, metadata spacing is more compact, and paper text actions have clearer layout.
 
 ### Sign-in, sponsored access, and interface fixes
 
@@ -411,8 +418,8 @@ SIGMA remains experimental: research conclusions, citations, generated papers, a
 
 ### Release scope and known limitations
 
-The isolated Personal ChatGPT connection described here is **a local `--prod` implementation, not an accepted hosted production feature**. Its Docker foundation and synthetic isolation tests are merged, but the GCE broker service, backend socket overlay, hosted sign-in eligibility, real provider operation, and end-user acceptance require separate work. The existing Sponsored production path must remain functional and isolated. Hosted real Personal authentication and inference should not be presented as available until independently verified and accepted. See [production issue #854](https://github.com/bkramerext/sigma/issues/854).
+The isolated Personal ChatGPT connection described here is **a local `--prod` implementation, not an accepted hosted production feature**. Hosted multi-user sign-in and plan-based inference are not enabled by this candidate; local account credentials are not transferred to GCE. The production candidate must preserve Sponsored service and its accounting. Hosted Personal access must not be represented as available until provider eligibility, security, real operation, and user acceptance are independently verified. See [production issue #854](https://github.com/bkramerext/sigma/issues/854).
 
 SIGMA remains experimental. Research findings, generated citations and papers, and editorial scores require independent review.
 
-**Maintainer boundary:** These notes describe changes merged to `main` after the v0.4.2 release merge `0201c706d0ad63d3909016c9c4cc35e6f9ecb074`, through `b326c7de5723d7d3f9052bf960b93ea36a790550` (PR #872, including PR #877). This is a **release-notes draft**, not a version bump, release tag, production deployment, or hosted feature acceptance. Follow-up PR #879 was merged only into the feature branch at this cutoff and is not included in the `main` release scope.
+**Candidate boundary:** Version metadata is 0.4.3. The source cutoff is `main` SHA `5fa2aa293e36c816b146967bff654dee2c69801e` (through PR #883). This remains a **production release candidate**, not a final release declaration or tag. Production deployment and the operator's browser acceptance are pending; hosted Personal ChatGPT remains unavailable unless separately authorized and verified.
