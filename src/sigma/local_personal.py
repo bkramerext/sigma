@@ -38,6 +38,21 @@ class LocalPersonalUnavailable(RuntimeError):
     """The optional local Docker Personal browser cannot be started safely."""
 
 
+
+def _local_runtime_directory() -> Path:
+    """Keep native macOS Unix relay socket names under sun_path's 104 bytes.
+
+    Apple's usual /var/folders/.../T/TMPDIR is far too long once SIGMA appends
+    a private workspace ID and socket name. A random mode-0700 directory under
+    /tmp is short, owner-private and removed at normal launcher shutdown.
+    """
+    path = Path(tempfile.mkdtemp(prefix="sigma-personal-", dir="/tmp"))
+    longest_socket = path / "gateways" / ("0" * 32) / "model.sock"
+    if len(os.fsencode(longest_socket)) >= 104:
+        shutil.rmtree(path)
+        raise LocalPersonalUnavailable("Local Personal Unix socket path is too long.")
+    return path
+
 def _docker_failure_class(message: str) -> str:
     """Fixed output from Docker errors, never private stderr or mount paths."""
     normalized = message.lower()
@@ -302,7 +317,7 @@ class LocalPersonalRuntime:
         # preserve the account already authorized through the old launcher.
         state_root = Path.home() / ".sigma" / "personal-signin-preview-state"
         _private_directory(state_root, 0o700)
-        runtime = Path(tempfile.mkdtemp(prefix="sigma-personal-local-"))
+        runtime = _local_runtime_directory()
         broker: subprocess.Popen[bytes] | None = None
         preparation: subprocess.Popen[bytes] | None = None
         try:
