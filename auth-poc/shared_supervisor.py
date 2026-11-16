@@ -26,6 +26,8 @@ BROWSER_HOME = Path("/tmp/sigma-browser")
 _LOCK = threading.Lock()
 _BROWSER: subprocess.Popen | None = None
 _WORKER: subprocess.Popen | None = None
+_OWNER: str | None = None
+_STARTED_AT = 0.0
 
 
 def _alive() -> bool:
