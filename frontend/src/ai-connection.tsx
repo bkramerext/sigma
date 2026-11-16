@@ -426,16 +426,20 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const selectingConnection = cloudFunding?.selectingConnection;
   const personalSelectionAllowed = !!cloudFunding && !cloudFunding.forcedSponsored;
   const refreshConnection = ai.refresh;
+  // Reset the isolated preview only when its owner changes. Do not clear the
+  // ordinary-local OAuth dialog every time it changes from closed to starting:
+  // those state updates must not be coupled to the container-only status poll.
   useEffect(() => {
-    if (!localLabAccount) {
-      dialogActive.current = false;
-      browserLaunchSequence.current += 1;
-      setRestoringPersonal(false);
-      setTestAccountOwner(null);
-      setAuthorizedPreviewOwner(null);
-      setPersonalDialogState('closed');
-      return;
-    }
+    if (localLabAccount) return;
+    dialogActive.current = false;
+    browserLaunchSequence.current += 1;
+    setRestoringPersonal(false);
+    setTestAccountOwner(null);
+    setAuthorizedPreviewOwner(null);
+    setPersonalDialogState('closed');
+  }, [localLabAccount]);
+  useEffect(() => {
+    if (!localLabAccount) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function readStatus(path: string) {
