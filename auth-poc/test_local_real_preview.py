@@ -130,7 +130,8 @@ async def check_shared_private_model_dispatch() -> None:
     """Every model path reaches the same worker, never a coordinator HTTP request."""
     from pydantic import BaseModel
 
-    from sigma import chat, model_dispatch, papers, personal_inference, proposals
+    from sigma import agentic, chat, model_dispatch, papers, personal_inference, proposals
+    from sigma import text_conversion
 
     binding = {
         "mode": "chatgpt",
@@ -259,6 +260,67 @@ async def check_shared_private_model_dispatch() -> None:
             pass  # The mock explicitly returns an incomplete model response.
         else:
             raise AssertionError("A failed proposal incorrectly completed")
+        rpc.assert_awaited_once()
+
+
+    example = "A clear research explanation should preserve its original meaning and evidence."
+    markdown = "**A clear research explanation** should preserve its original meaning and evidence."
+    response.update({
+        "status": "completed",
+        "output": [{"type": "message", "content": [
+            {"type": "output_text", "text": json.dumps({"body": markdown, "warnings": []})}
+        ]}],
+    })
+    project_view = SimpleNamespace(
+        project=SimpleNamespace(
+            id="test-project", research_mode="default", title="Offline test project",
+        ),
+    )
+    with (
+        patch.object(text_conversion, "inspect_project", return_value=project_view),
+        patch.object(text_conversion, "_understanding_block", return_value=example),
+        patch.object(text_conversion, "auth_context", new_callable=AsyncMock,
+                     return_value=binding),
+        patch.object(text_conversion, "configuration", new_callable=AsyncMock,
+                     return_value=config),
+        patch.object(
+            personal_inference, "respond", new_callable=AsyncMock, return_value=response
+        ) as rpc,
+        patch.object(text_conversion.httpx, "AsyncClient",
+                     side_effect=AssertionError("Markdown bypassed private worker")),
+        patch.object(text_conversion.cloud_research, "start_provider_attempt",
+                     side_effect=AssertionError("Markdown entered sponsor ledger")),
+    ):
+        formatted = await text_conversion.convert_text(
+            "/not-used", "current-understanding", "markdown",
+            field_path="scope_note", expected_project_id="test-project",
+            expected_digest=text_conversion.digest(example),
+            expected_binding=binding["identity"],
+        )
+        assert formatted["body"] == markdown
+        assert formatted["provenance"]["model"] == config["model"]
+        rpc.assert_awaited_once()
+
+    response["status"] = "failed"
+    view = SimpleNamespace(path="/not-used", project=SimpleNamespace(id="test-project"))
+    with (
+        patch.object(agentic, "auth_context", new_callable=AsyncMock, return_value=binding),
+        patch.object(agentic, "inspect_project", return_value=view),
+        patch.object(agentic, "_bounded_context", return_value="offline context"),
+        patch.object(
+            personal_inference, "respond", new_callable=AsyncMock, return_value=response
+        ) as rpc,
+        patch.object(agentic.httpx, "AsyncClient",
+                     side_effect=AssertionError("Agentic strategy bypassed private worker")),
+    ):
+        try:
+            await agentic._invoke(
+                "explore", {"id": "sample"}, config, binding, view
+            )
+        except ProjectError:
+            pass  # Failure is deliberately returned after the worker response.
+        else:
+            raise AssertionError("A failed agentic strategy incorrectly completed")
         rpc.assert_awaited_once()
 
 async def main() -> None:
