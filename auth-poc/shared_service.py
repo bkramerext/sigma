@@ -112,12 +112,27 @@ class WorkspaceMiddleware(BaseHTTPMiddleware):
             except HTTPException as exc:
                 return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         else:
+            # The route handlers imported from the standalone OAuth app do
+            # not bring along its TrustedHostMiddleware. Without an explicit
+            # Host restriction, a browser visiting a hostile site could use
+            # DNS rebinding to read the local sign-in controller. The actual
+            # Chromium entrypoint and OpenAI loopback redirect use IPv4 only.
+            host = request.headers.get("host", "").lower()
+            if host not in {"127.0.0.1", "127.0.0.1:8001"}:
+                return JSONResponse({"detail": "Invalid sign-in host"}, status_code=403)
             if (
                 not request.client
-                or request.client.host not in {"127.0.0.1", "::1"}
+                or request.client.host != "127.0.0.1"
                 or _active_workspace is None
             ):
                 return JSONResponse({"detail": "Sign-in session unavailable"}, status_code=403)
+            # Never let a non-/v1/ route mutate credential records. The old
+            # /disconnect handler checks the caller's workspace HMAC, but the
+            # browser route is bound to the *active browser owner*. A valid
+            # signed request for B could therefore disconnect A. The v1
+            # endpoint is the only authorized disconnect path.
+            if path == "/disconnect":
+                return JSONResponse({"detail": "Use scoped disconnect"}, status_code=403)
             workspace = _active_workspace
 
         # ContextVar prevents concurrent requests from changing each other's
