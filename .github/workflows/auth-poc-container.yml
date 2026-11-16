@@ -83,7 +83,12 @@ jobs:
             /opt/venv/bin/python /opt/sigma/auth-poc/test_shared_runtime.py
           docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml exec -T personal \
             /usr/bin/setpriv --reuid=11001 --regid=11001 --clear-groups \
-            /opt/venv/bin/python -c 'from pathlib import Path; p=Path("/var/lib/sigma-shared-key/master"); assert not p.is_file() or not __import__("os").access(p, __import__("os").R_OK)'
+            /opt/venv/bin/python -c 'from pathlib import Path; p=Path("/var/lib/sigma-shared-key/master"); blocked=False
+try:
+ p.read_bytes()
+except PermissionError:
+ blocked=True
+assert blocked, "Chromium UID could read the shared vault master key"'
           container=$(docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml ps -q personal)
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' "$container"
       - name: Diagnose isolated CI container startup
