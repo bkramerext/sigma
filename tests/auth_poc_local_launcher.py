@@ -67,12 +67,12 @@ class SharedBrokerTests(unittest.TestCase):
             server.configure(workspace="a" * 32, name="vnc.sock", port=6080)
             left, right = socket.socketpair()
             try:
-                broker._ACTIVE = "a" * 32
+                vars(broker)["_ACTIVE"] = "a" * 32
                 self.assertTrue(server.authorized())
                 with server.clients_lock:
                     server.clients.add(left)
                 # A's old noVNC stream cannot survive when B begins login.
-                broker._ACTIVE = "b" * 32
+                vars(broker)["_ACTIVE"] = "b" * 32
                 self.assertFalse(server.authorized())
                 server.revoke()
                 right.settimeout(1)
@@ -82,7 +82,7 @@ class SharedBrokerTests(unittest.TestCase):
                 left.close()
                 right.close()
                 server.server_close()
-                broker._ACTIVE = None
+                vars(broker)["_ACTIVE"] = None
 
     def test_compose_restarts_stopped_shared_worker_without_new_user_container(self) -> None:
         broker = self.broker
@@ -102,7 +102,7 @@ class SharedBrokerTests(unittest.TestCase):
     def test_foreign_user_cannot_interrupt_active_signin(self) -> None:
         broker = self.broker
         previous = broker._ACTIVE
-        broker._ACTIVE = "a" * 32
+        vars(broker)["_ACTIVE"] = "a" * 32
         try:
             with (
                 patch.object(broker, "_ensure_shared"),
@@ -116,12 +116,12 @@ class SharedBrokerTests(unittest.TestCase):
             rpc.assert_called_once_with("a" * 32, "status")
             self.assertEqual(relay.call_args.args[1], "model.sock")
         finally:
-            broker._ACTIVE = previous
+            vars(broker)["_ACTIVE"] = previous
 
     def test_new_login_retires_stale_other_user_relay_before_launch(self) -> None:
         broker = self.broker
         previous = broker._ACTIVE
-        broker._ACTIVE = "a" * 32
+        vars(broker)["_ACTIVE"] = "a" * 32
         events: list[tuple[str, str, str]] = []
 
         def rpc(workspace: str, operation: str) -> dict[str, str]:
@@ -151,13 +151,13 @@ class SharedBrokerTests(unittest.TestCase):
                 events.index(("rpc", "b" * 32, "start")),
             )
         finally:
-            broker._ACTIVE = previous
+            vars(broker)["_ACTIVE"] = previous
             broker._GATEWAYS.pop("a" * 32, None)
 
     def test_status_restores_relay_after_private_broker_restart(self) -> None:
         broker = self.broker
         previous = broker._ACTIVE
-        broker._ACTIVE = None
+        vars(broker)["_ACTIVE"] = None
         try:
             with (
                 patch.object(broker, "_ensure_shared"),
@@ -170,7 +170,7 @@ class SharedBrokerTests(unittest.TestCase):
             self.assertEqual(broker._ACTIVE, "a" * 32)
             self.assertIn("vnc.sock", [call.args[1] for call in relay.call_args_list])
         finally:
-            broker._ACTIVE = previous
+            vars(broker)["_ACTIVE"] = previous
 
     def test_all_credential_and_browser_calls_bound_to_workspace(self) -> None:
         broker = self.broker
