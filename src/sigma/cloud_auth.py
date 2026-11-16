@@ -696,6 +696,20 @@ def force_sponsored_mode_enabled() -> bool:
     }
 
 
+def hosted_personal_enabled() -> bool:
+    """The hosted Personal path must be a deliberate, fully configured opt-in."""
+    cfg = config()
+    return (
+        cfg.enabled and not cfg.local and not cfg.error
+        and os.environ.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
+        and os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1"
+        and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1"
+        and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET"))
+        and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT"))
+        and re.fullmatch(r"[0-9a-f]{64}", os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")) is not None
+    )
+
+
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
     """Return the persistent account model, refreshing revocable access fields."""
     workspace_id: str | None = None
@@ -738,7 +752,7 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             model_access,
         )
         if (
-            cfg.local
+            (cfg.local or hosted_personal_enabled())
             and sponsorship_eligible
             and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1"
         ):
@@ -926,8 +940,8 @@ def set_model_access(subject: str, mode: str) -> None:
 def record_personal_authorization(subject: str) -> None:
     """Record successful plan-permitted OAuth for an eligible local subject."""
     cfg = config()
-    if not cfg.enabled or cfg.error or not cfg.local:
-        return
+    if not cfg.enabled or cfg.error or (not cfg.local and not hosted_personal_enabled()):
+        raise RuntimeError("Personal ChatGPT authorization is unavailable.")
     with _db(cfg) as db:
         row = db.execute(
             "SELECT access_active,sponsorship_eligible FROM user_state WHERE subject=?",
@@ -946,8 +960,8 @@ def record_personal_authorization(subject: str) -> None:
 def clear_personal_authorization(subject: str) -> None:
     """Forget local Personal authorization and return eligible users to Sponsored."""
     cfg = config()
-    if not cfg.enabled or cfg.error or not cfg.local:
-        raise RuntimeError("Local Personal ChatGPT is unavailable.")
+    if not cfg.enabled or cfg.error or (not cfg.local and not hosted_personal_enabled()):
+        raise RuntimeError("Personal ChatGPT is unavailable.")
     sponsored_enabled = sponsored_access_enabled()
     with _db(cfg) as db:
         changed = db.execute(
@@ -1361,14 +1375,29 @@ async def middleware(request: Request, call_next):
             return JSONResponse({"error": "Member access requires an invitation."}, status_code=403)
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":
         return JSONResponse({"error": "Administrator access required."}, status_code=403)
-    # Local Google identity gates project access but does not replace the
-    # separate local ChatGPT account flow. Hosted SIGMA must never proxy a
-    # user's personal ChatGPT authorization through the service.
+    # Only the explicitly configured shared worker may serve a hosted Personal
+    # browser. The legacy OAuth routes never become hosted user endpoints.
+    hosted_personal_route = hosted_personal_enabled() and (
+        (request.method == "GET" and path in {
+            "/api/ai/personal-browser/status",
+            "/api/ai/personal-browser/account",
+            "/api/ai/personal-browser/preview-state",
+            "/api/ai/personal-browser/test-account",
+            "/api/ai/personal-browser/view",
+        })
+        or (request.method == "GET" and path.startswith("/api/ai/personal-browser/window/"))
+        or (request.method == "POST" and path in {
+            "/api/ai/personal-browser/start",
+            "/api/ai/personal-browser/stop",
+            "/api/ai/personal-browser/disconnect",
+        })
+    )
     if (
         path.startswith("/api/ai/")
         and not cfg.local
         and not (
-            (request.method == "GET" and path in {"/api/ai/models", "/api/ai/connection"})
+            hosted_personal_route
+            or (request.method == "GET" and path in {"/api/ai/models", "/api/ai/connection"})
             or (request.method == "POST" and path == "/api/ai/mode")
             or (
                 principal.role == "admin"
@@ -1474,7 +1503,7 @@ async def middleware(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    # The authenticated local Personal browser is a same-origin iframe of
+    # The authenticated Personal browser is a same-origin iframe of
     # SIGMA's own noVNC viewer, not an iframe of OpenAI. Its route provides a
     # restrictive nonce-based CSP with frame-ancestors 'self'. Preserve that
     # policy; the global anti-framing override otherwise silently prevents the
@@ -1482,7 +1511,7 @@ async def middleware(request: Request, call_next):
     # All other responses, including failed/hosted viewer requests, fail closed.
     viewer_csp = response.headers.get("Content-Security-Policy", "")
     allow_local_viewer = (
-        cfg.local
+        (cfg.local or hosted_personal_enabled())
         and request.method == "GET"
         and path == "/api/ai/personal-browser/view"
         and response.status_code == 200
@@ -1840,6 +1869,7 @@ def status(request: Request):
         and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
         and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET", ""))
         and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
+        and (cfg.local or hosted_personal_enabled())
     )
     local_setup_missing = []
     if not cfg.enabled or cfg.local:
