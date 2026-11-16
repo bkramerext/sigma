@@ -11,9 +11,7 @@ import hmac
 import json
 import os
 import re
-import secrets
 import socket
-from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -32,7 +30,10 @@ _control_socket = "/run/sigma-browser-control/control.sock"
 app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
 for legacy in (model_app, signin_app):
     for route in legacy.router.routes:
-        app.router.routes.append(route)
+        if getattr(route, "path", "") not in {
+            "/health", "/docs", "/openapi.json", "/redoc"
+        }:
+            app.router.routes.append(route)
 
 
 def _seed() -> bytes:
@@ -66,7 +67,7 @@ def _store(workspace: str) -> Path:
         raise HTTPException(503, "Private credential storage is unavailable.") from exc
 
 
-async def _supervisor(action: str) -> dict:
+async def _supervisor(action: str, workspace: str) -> dict:
     if action not in {"start", "stop", "status", "password"}:
         raise ValueError("Unsupported browser command")
 
@@ -74,7 +75,7 @@ async def _supervisor(action: str) -> dict:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(20)
             client.connect(_control_socket)
-            client.sendall((action + "\n").encode("ascii"))
+            client.sendall((action + " " + workspace + "\n").encode("ascii"))
             received = bytearray()
             while len(received) <= 4096:
                 part = client.recv(4096)
@@ -121,6 +122,8 @@ class WorkspaceMiddleware(BaseHTTPMiddleware):
 
         # ContextVar prevents concurrent requests from changing each other's
         # record selection. The callback stores its own immutable store path.
+        request.state.shared_workspace = workspace
+        request.state.shared_browser_active = workspace == _active_workspace
         with ai_store.use_directory(_store(workspace)):
             return await call_next(request)
 
@@ -133,11 +136,14 @@ async def browser_start(request: Request) -> dict:
     global _active_workspace
     workspace = _workspace(request)
     async with _browser_lock:
+        if _active_workspace is not None:
+            if (await _supervisor("status", _active_workspace))["status"] != "ready":
+                _active_workspace = None
         if _active_workspace not in {None, workspace}:
             raise HTTPException(409, "Another sign-in is in progress.")
         _active_workspace = workspace
         try:
-            state = await _supervisor("start")
+            state = await _supervisor("start", workspace)
         except BaseException:
             _active_workspace = None
             raise
@@ -155,7 +161,7 @@ async def browser_stop(request: Request) -> dict:
         if _active_workspace != workspace:
             return {"status": "stopped"}
         try:
-            return await _supervisor("stop")
+            return await _supervisor("stop", workspace)
         finally:
             _active_workspace = None
 
@@ -165,7 +171,7 @@ async def browser_status(request: Request) -> dict:
     workspace = _workspace(request)
     if workspace != _active_workspace:
         return {"status": "stopped"}
-    return await _supervisor("status")
+    return await _supervisor("status", workspace)
 
 
 @app.post("/v1/browser/password")
@@ -173,7 +179,7 @@ async def browser_password(request: Request) -> dict:
     workspace = _workspace(request)
     if workspace != _active_workspace:
         raise HTTPException(403, "The browser belongs to a different user.")
-    response = await _supervisor("password")
+    response = await _supervisor("password", workspace)
     if response.get("status") != "ready" or not re.fullmatch(
         r"[A-Za-z0-9_-]{8}", str(response.get("password", ""))
     ):
