@@ -27,6 +27,7 @@ _BROWSER: subprocess.Popen | None = None
 _WORKER: subprocess.Popen | None = None
 _OWNER: str | None = None
 _STARTED_AT = 0.0
+_SHUTDOWN = threading.Event()
 
 
 def _alive() -> bool:
@@ -258,35 +259,38 @@ def main() -> None:
     _WORKER = subprocess.Popen(
         ["/usr/bin/setpriv", "--reuid=10001", "--regid=10001",
          "--clear-groups", "/opt/venv/bin/uvicorn", "shared_service:app",
-         "--host", "0.0.0.0", "--port", "8001", "--no-access-log"],
+         "--host", "0.0.0.0", "--port", "8001", "--no-access-log",
+         "--timeout-graceful-shutdown", "20"],
         cwd="/opt/sigma/auth-poc", env=os.environ,
         stdin=subprocess.DEVNULL,
         start_new_session=True,
     )
 
     def shutdown(_signal: int, _frame: object) -> None:
-        server.shutdown()
+        # socketserver.shutdown() alone does NOT exit the parent loop; Docker
+        # would wait for SIGKILL and interrupt credential persistence.
+        _SHUTDOWN.set()
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        while _WORKER.poll() is None:
+        while not _SHUTDOWN.wait(0.5) and _WORKER.poll() is None:
             with _LOCK:
                 if _OWNER is not None and time.monotonic() - _STARTED_AT > 360:
                     _stop()
                     _OWNER = None
-            time.sleep(0.5)
     finally:
         with _LOCK:
             _stop()
+            _OWNER = None
         server.shutdown()
         server.server_close()
         if _WORKER.poll() is None:
             _WORKER.terminate()
             try:
-                _WORKER.wait(timeout=5)
+                _WORKER.wait(timeout=23)
             except subprocess.TimeoutExpired:
                 _WORKER.kill()
                 _WORKER.wait()
