@@ -202,6 +202,7 @@ class SharedBrokerTests(unittest.TestCase):
         }
         vars(broker)["_ACTIVE"] = workspaces[0]
         try:
+
             def unrelay(workspace: str, channel: str) -> None:
                 broker._GATEWAYS[workspace].pop(channel)
 
