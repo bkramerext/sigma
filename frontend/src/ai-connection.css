@@ -57,6 +57,22 @@
   padding: 12px;
   overflow: auto;
 }
+.personal-chatgpt-connect-dialog.is-external {
+  width: min(460px, calc(100vw - 32px));
+  height: auto;
+  padding: 22px 26px;
+}
+.personal-chatgpt-connect-dialog.is-external p[role="status"] {
+  margin-bottom: 0;
+}
+.personal-chatgpt-connect-dialog.is-external a.sigma-text-action {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--sigma-copper-foreground);
+  font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .personal-chatgpt-connect-dialog.is-viewing {
   display: flex;
   flex-direction: column;
