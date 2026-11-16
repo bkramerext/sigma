@@ -800,7 +800,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       // A Docker stop failure cannot undo the committed local disconnect.
       try {
         await stop.catch(() => {
-          reportRequestFailure('ChatGPT was disconnected, but its private browser could not be stopped.');
+          // Personal credentials are already cleared and Sponsored is active.
+          // Cleanup is best-effort and not an actionable user failure.
+          console.warn('SIGMA: private browser cleanup failed after disconnect.');
         });
       } finally {
         if (pendingPersonalStop.current === stop) pendingPersonalStop.current = null;
@@ -885,7 +887,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`}>
     <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={pillTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (localLabAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void selectContainerConnection(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
-      {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
+      {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label={`Sponsored allowance: ${allowanceText}`} aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
   </details>
   {localLabAccount && disconnectOpen && createPortal(
