@@ -102,29 +102,69 @@ def _rpc(workspace: str, operation: str) -> dict:
 
 
 class RelayHandler(socketserver.BaseRequestHandler):
+    """A relay is a revocable lease, not just a socket that stays open."""
+
     def handle(self) -> None:
+        server = self.server
         client = self.request
+        upstream: socket.socket | None = None
+        with server.clients_lock:
+            if server.closed or not server.authorized():
+                return
+            server.clients.add(client)
         try:
             upstream = socket.create_connection(
-                ("127.0.0.1", self.server.upstream_port), timeout=5
+                ("127.0.0.1", server.upstream_port), timeout=5
             )
-            with upstream:
-                while True:
-                    readable, _, _ = select.select([client, upstream], [], [], 300)
-                    if not readable:
-                        continue
-                    for source in readable:
-                        chunk = source.recv(65536)
-                        if not chunk:
-                            return
-                        (upstream if source is client else client).sendall(chunk)
+            with server.clients_lock:
+                if server.closed or not server.authorized():
+                    return
+                server.clients.add(upstream)
+            while not server.closed and server.authorized():
+                # On owner change, existing VNC connections must be closed
+                # even when neither side happens to send another packet.
+                readable, _, _ = select.select([client, upstream], [], [], 0.25)
+                for source in readable:
+                    chunk = source.recv(65536)
+                    if not chunk or server.closed or not server.authorized():
+                        return
+                    (upstream if source is client else client).sendall(chunk)
         except OSError:
             return
+        finally:
+            with server.clients_lock:
+                server.clients.discard(client)
+                if upstream is not None:
+                    server.clients.discard(upstream)
+            if upstream is not None:
+                upstream.close()
 
 
 class RelayServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
     block_on_close = False
+
+    def configure(self, *, workspace: str, name: str, port: int) -> None:
+        self.workspace = workspace
+        self.channel = name
+        self.upstream_port = port
+        self.clients_lock = threading.Lock()
+        self.clients: set[socket.socket] = set()
+        self.closed = False
+
+    def authorized(self) -> bool:
+        return self.channel == "model.sock" or _ACTIVE == self.workspace
+
+    def revoke(self) -> None:
+        # Shutting down the listening socket alone leaves noVNC/WebSocket
+        # threads attached to a later user's browser on the same port.
+        with self.clients_lock:
+            self.closed = True
+            for conn in tuple(self.clients):
+                try:
+                    conn.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
 
 
 def _gateway_dir(workspace: str) -> Path:
@@ -145,7 +185,13 @@ def _gateway_dir(workspace: str) -> Path:
 def _relay(workspace: str, name: str, port: int) -> None:
     active = _GATEWAYS.setdefault(workspace, {})
     existing = active.get(name)
-    if existing and existing[0].is_socket() and existing[2].is_alive():
+    if (
+        existing
+        and existing[0].is_socket()
+        and existing[2].is_alive()
+        and not existing[1].closed
+        and existing[1].upstream_port == port
+    ):
         return
     if existing:
         _unrelay(workspace, name)
@@ -154,7 +200,7 @@ def _relay(workspace: str, name: str, port: int) -> None:
         # Fail rather than unlink unknown filesystem entries.
         raise RuntimeError("Untrusted private relay pathname")
     server = RelayServer(str(path), RelayHandler)
-    server.upstream_port = port
+    server.configure(workspace=workspace, name=name, port=port)
     os.chmod(path, 0o600)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -167,6 +213,7 @@ def _unrelay(workspace: str, name: str) -> None:
     if entry is None:
         return
     path, server, thread = entry
+    server.revoke()
     server.shutdown()
     server.server_close()
     thread.join(timeout=2)
@@ -175,11 +222,10 @@ def _unrelay(workspace: str, name: str) -> None:
 
 
 def _ensure_shared() -> None:
-    # Exactly one shared Compose project for the launching SIGMA checkout.
-    if not _compose("ps", "-q", "personal"):
+    # A stopped or unhealthy worker must not be treated as an active service.
+    # Keep the shared project and its persistent encrypted volumes intact.
+    if not _compose("ps", "--status", "running", "-q", "personal"):
         _compose("up", "-d", "--no-build", "--wait")
-    else:
-        _compose("ps", "--status", "running", "-q", "personal")
 
 
 def operate(action: str, workspace: str) -> dict:
@@ -192,6 +238,17 @@ def operate(action: str, workspace: str) -> dict:
         # Model relay stays available when Chromium closes; no idle browser.
         _relay(workspace, "model.sock", _port(8001))
         if action == "start":
+            # A service/browser restart can invalidate the broker's cached
+            # owner. Never let A's old VNC relay point at a new B browser.
+            if _ACTIVE and _ACTIVE != workspace:
+                previous = _rpc(_ACTIVE, "status")
+                if previous["status"] == "ready":
+                    return {"status": "unavailable", "worker": "sigma-personal-" + workspace}
+            for old in tuple(_GATEWAYS):
+                if old != workspace:
+                    _unrelay(old, "vnc.sock")
+            _unrelay(workspace, "vnc.sock")
+            _ACTIVE = None
             state = _rpc(workspace, "start")
             if state["status"] == "ready":
                 _ACTIVE = workspace
@@ -205,8 +262,16 @@ def operate(action: str, workspace: str) -> dict:
             state = _rpc(workspace, "password")
         else:
             state = _rpc(workspace, "status")
-        if action == "status" and state["status"] != "ready":
-            _unrelay(workspace, "vnc.sock")
+            if state["status"] == "ready":
+                for old in tuple(_GATEWAYS):
+                    if old != workspace:
+                        _unrelay(old, "vnc.sock")
+                _ACTIVE = workspace
+                _relay(workspace, "vnc.sock", _port(6080))
+            else:
+                _unrelay(workspace, "vnc.sock")
+                if _ACTIVE == workspace:
+                    _ACTIVE = None
         result = {"status": state["status"], "worker": "sigma-personal-" + workspace}
         if action == "password" and "password" in state:
             result["password"] = state["password"]
