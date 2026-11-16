@@ -1434,9 +1434,10 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       return;
     }
     if (guest) { setGuestMarkdownPreview(true); return; }
-    setFormatBusy(true);
+    if (formatAbort.current) return;
     const controller = new AbortController();
     formatAbort.current = controller;
+    setFormatError('');
     let finishProviderRequest = () => {};
     try {
       const settingsResponse = await fetch(
@@ -1449,15 +1450,13 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       const queued = textBlocks.filter(item => item.source.trim().length >= 40
         && item.source.length <= 20000 && (formattedBlocks[item.field]?.source !== item.source
         || formattedBlocks[item.field]?.settingsKey !== settingsKey));
-      if (markdownView && !queued.length) {
-        setMarkdownView(false);
-        return;
-      }
       setMarkdownView(true);
       if (!queued.length) {
+        // Cached Markdown needs only a local view change, not formatting UI.
         setFormatSettingsKey(settingsKey);
         return;
       }
+      setFormatBusy(true);
       finishProviderRequest = beginProviderRequest('text-conversion');
       for (let index = 0; index < queued.length; index++) {
         if (controller.signal.aborted) return;
@@ -3239,6 +3238,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [formattedPaper, setFormattedPaper] = useState<{ id: string; markdown: string; settingsKey: string } | null>(null);
   const [renderedPaperId, setRenderedPaperId] = useState('');
   const [formattingPaperId, setFormattingPaperId] = useState('');
+  const paperMarkdownCheck = useRef(false);
   const [paperFormatError, setPaperFormatError] = useState('');
   const [copiedExplanationId, setCopiedExplanationId] = useState('');
   const [copyError, setCopyError] = useState('');
@@ -4212,12 +4212,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     }
   }
   async function togglePaperMarkdown(paperId: string) {
-    if (formattingPaperId) return;
+    if (formattingPaperId || paperMarkdownCheck.current) return;
     if (renderedPaperId === paperId) {
       setRenderedPaperId('');
       return;
     }
-    setFormattingPaperId(paperId); setPaperFormatError('');
+    paperMarkdownCheck.current = true;
+    setPaperFormatError('');
     try {
       const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { cache: 'no-store' });
       const settings = await settingsResponse.json();
@@ -4225,9 +4226,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         throw new Error(settings.message ?? 'Connect ChatGPT to format this paper.');
       const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
       if (formattedPaper?.id === paperId && formattedPaper.settingsKey === settingsKey) {
-        setRenderedPaperId(renderedPaperId === paperId ? '' : paperId);
+        setRenderedPaperId(paperId);
         return;
       }
+      setFormattingPaperId(paperId);
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paperId)}/markdown-preview`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: settings.binding }),
@@ -4238,7 +4240,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setFormattedPaper({ id: paperId, markdown: result.markdown, settingsKey });
       setRenderedPaperId(paperId);
     } catch (cause) { setPaperFormatError(errorMessage(cause)); }
-    finally { setFormattingPaperId(''); }
+    finally { paperMarkdownCheck.current = false; setFormattingPaperId(''); }
   }
   async function copyPaper(id: string) {
     setCopyError('');
@@ -6529,7 +6531,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     } catch (cause) { setError(errorMessage(cause)); }
   }
   async function toggleAnswerMarkdown(record: ResearchQARecord) {
-    if (formattingAnswerId || busy) return;
+    if (formattingAnswerId || formattingRequest.current || busy) return;
     if (renderedAnswerIds.has(record.qa_id)) {
       setRenderedAnswerIds(current => {
         const next = new Set(current);
@@ -6541,8 +6543,8 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     if (guest) { setGuestAnswerMarkdownPreview(true); return; }
     const controller = new AbortController();
     formattingRequest.current = controller;
-    setFormattingAnswerId(record.qa_id); setError('');
-    const finishProviderRequest = beginProviderRequest('text-conversion');
+    setError('');
+    let finishProviderRequest = () => {};
     try {
       const expectedDigest = await sha256Text(record.answer);
       const markdownResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { signal: controller.signal, cache: 'no-store' });
@@ -6559,6 +6561,8 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
         });
         return;
       }
+      setFormattingAnswerId(record.qa_id);
+      finishProviderRequest = beginProviderRequest('text-conversion');
       const response = await fetch('/api/projects/text/convert', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ path, scope: 'research-qa', qa_id: record.qa_id, target: 'markdown',
