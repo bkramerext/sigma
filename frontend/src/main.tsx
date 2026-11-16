@@ -1177,25 +1177,9 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   async function toggleAllMarkdown() {
     const all: OutcomeMarkdownSection[] = ['conclusion', 'reasoning', 'citations', 'assessments'];
     const active = all.every(section => activeSections.has(section));
-    if (active && !guest) {
-      try {
-        const response = await fetch(
-          `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
-          { cache: 'no-store' },
-        );
-        const settings = await response.json();
-        if (response.ok && settings.available) {
-          const key = `${settings.model}:${settings.reasoning_effort}`;
-          const stale = blocks.some(block => block.source.trim().length >= 40
-            && block.source.length <= 20000 && (convertedBlocksRef.current[block.field]?.source !== block.source
-            || convertedBlocksRef.current[block.field]?.settingsKey !== key));
-          if (stale) { void enqueueConversions(all); return; }
-        }
-      } catch (cause) {
-        setConversionError(friendlyProviderError(errorMessage(cause)));
-        return;
-      }
-    }
+    // The pressed toggle says "Show plain text": it must always turn off
+    // Markdown, even if Model/Thinking changed. Re-entering Markdown then
+    // recomputes stale model-bound conversions via enqueueConversions().
     if (active) {
       setMarkdownSections([]);
       conversionQueue.current = [];

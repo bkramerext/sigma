@@ -519,7 +519,11 @@ async def main_async(root: Path):
     dispatched: list[tuple[str, str]] = []
 
     async def live_configuration(*, view, context):
-        return {**config, "model": active_selection["model"], "reasoning_effort": active_selection["effort"]}
+        return {
+            **config,
+            "model": active_selection["model"],
+            "reasoning_effort": active_selection["effort"],
+        }
 
     async def live_handler(request):
         payload = json.loads(request.content)
@@ -536,9 +540,13 @@ async def main_async(root: Path):
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
         patch("sigma.text_conversion.configuration", side_effect=live_configuration),
-        patch("sigma.global_research_settings.load_config", side_effect=lambda: {
-            "ai_model": active_selection["model"], "reasoning_effort": active_selection["effort"],
-        }),
+        patch(
+            "sigma.global_research_settings.load_config",
+            side_effect=lambda: {
+                "ai_model": active_selection["model"],
+                "reasoning_effort": active_selection["effort"],
+            },
+        ),
         patch(
             "sigma.text_conversion.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
