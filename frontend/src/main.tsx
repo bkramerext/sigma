@@ -1168,9 +1168,9 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   }
   const markdownSymbol = <MarkdownGlyph/>;
   const markdownButton = (label: string, active: boolean, onClick: () => void) =>
-    <button type="button" className="sigma-render-toggle" aria-label={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
+    <button type="button" className="sigma-render-toggle sigma-unified-markdown" aria-label={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
       aria-pressed={active}
-      data-tooltip={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
+      data-tooltip={active ? 'Show plain text' : 'Convert to markdown'}
       onClick={onClick}>{markdownSymbol}</button>;
   const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
@@ -1385,6 +1385,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const [guestMarkdownPreview, setGuestMarkdownPreview] = useState(false);
   const [formattedBlocks, setFormattedBlocks] = useState<Record<string, { source: string; body: string }>>({});
   const [formatProgress, setFormatProgress] = useState('');
+  const [formatBusy, setFormatBusy] = useState(false);
   const [formatError, setFormatError] = useState('');
   const formatAbort = useRef<AbortController | null>(null);
   const textBlocks = [
@@ -1402,6 +1403,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     if (markdownView) {
       formatAbort.current?.abort();
       setMarkdownView(false);
+      setFormatBusy(false);
       setFormatProgress('');
       setFormatError('');
       return;
@@ -1410,6 +1412,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     const queued = textBlocks.filter(item => item.source.trim().length >= 40
       && item.source.length <= 20000 && formattedBlocks[item.field]?.source !== item.source);
     if (!queued.length) return;
+    setFormatBusy(true);
     const controller = new AbortController();
     formatAbort.current = controller;
     let finishProviderRequest = () => {};
@@ -1443,6 +1446,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     } finally {
       finishProviderRequest();
       if (formatAbort.current === controller) formatAbort.current = null;
+      setFormatBusy(false);
       setFormatProgress('');
     }
   }
@@ -1562,7 +1566,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     setExpanded(isOpen);
     window.localStorage.setItem(`sigma.currentUnderstanding:${projectId}`, String(isOpen));
   }}>
-    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><button type="button" className="sigma-render-toggle current-understanding-markdown" aria-label={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} aria-pressed={markdownView} data-tooltip={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleUnderstandingMarkdown(); }}><MarkdownGlyph/></button>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was added." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
+    <summary aria-label="Current understanding"><DisclosureChevron expanded={false}/><span>Current understanding</span><span className="sigma-unified-markdown-progress"><button type="button" className={`sigma-render-toggle sigma-unified-markdown current-understanding-markdown${formatBusy ? ' sigma-render-pending' : ''}`} aria-label={markdownView ? "Show original Current Understanding text" : "Format Current Understanding as Markdown"} aria-pressed={markdownView || formatBusy} aria-busy={formatBusy} data-tooltip={formatBusy ? 'Formatting with AI…' : markdownView ? 'Show plain text' : 'Convert to markdown'} onClick={event => { event.preventDefault(); event.stopPropagation(); void toggleUnderstandingMarkdown(); }}>{formatBusy ? <ProjectOpeningHourglass/> : <MarkdownGlyph/>}</button>{formatBusy && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span>{suggestionBusy ? <span className="strategy-suggestion-progress" role="status" aria-live="polite"><span className="generating-hourglass" aria-hidden="true">⌛</span>{inferenceCancelRequested.current ? 'Checking cancellation…' : 'Inferring…'}<button type="button" className="text-view-link" data-tooltip="Request cancellation. If the provider has already received the request, SIGMA checks whether a strategy was added." onClick={event => { event.preventDefault(); event.stopPropagation(); void cancelInference(); }}>Cancel</button></span> : <button type="button" className="text-view-link strategy-suggestion-trigger" aria-label={`Infer strategy #${nextOrdinal}`} data-tooltip="Uses current findings and unresolved research questions to identify and save a new strategy automatically. You can review or remove it afterward. One bounded AI request uses the selected account and existing allowance protections." disabled={suggestionBusy || guest} onClick={event => { event.preventDefault(); event.stopPropagation(); void inferStrategy(); }}>Infer strategy #{nextOrdinal}</button>}</summary>
     {guestMarkdownPreview && createPortal(<GuestFeatureDialog title="Markdown for Current Understanding"
       message="With member access and ChatGPT, SIGMA can reformat the findings, questions and limitations as Markdown. This is a presentation change, not a scientific result. No text was sent or changed."
       onClose={() => setGuestMarkdownPreview(false)}/>, document.body)}
@@ -5130,7 +5134,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           {expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
           ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""} questionHeadingAction={<CopyToClipboardButton name="explaination" copied={copiedExplanationId === paper.paper_id} onCopy={() => void copyExplanation(paper.paper_id, selected.eli5?.markdown ?? '')}/>}/></Suspense></div>
-          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><span className="text-view-format-control"><button type="button" className={`sigma-render-toggle workspace-icon-button${renderedPaperId === paper.paper_id ? " sigma-render-active" : ""}${formattingPaperId === paper.paper_id ? " sigma-render-pending" : ""}`} aria-label={renderedPaperId === paper.paper_id ? "Show plain paper" : "Render paper as Markdown"} aria-pressed={renderedPaperId === paper.paper_id || formattingPaperId === paper.paper_id} data-tooltip={renderedPaperId === paper.paper_id ? "Show plain text" : formattingPaperId === paper.paper_id ? "Formatting with AI…" : "Convert to Markdown"} disabled={!!formattingPaperId} onClick={() => void togglePaperMarkdown(paper.paper_id)}>{formattingPaperId === paper.paper_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingPaperId === paper.paper_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>{paperFormatError && <p className="error" role="alert">{paperFormatError}</p>}{renderedPaperId === paper.paper_id && formattedPaper?.id === paper.paper_id ? <div className="outcome-markdown paper-preview-markdown"><Suspense fallback={<p>Preparing paper preview…</p>}><RenderedMarkdown body={formattedPaper.markdown}/></Suspense></div> : <>
+          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><span className="text-view-format-control sigma-unified-markdown-progress"><button type="button" className={`sigma-render-toggle sigma-unified-markdown${renderedPaperId === paper.paper_id ? ' sigma-render-active' : ''}${formattingPaperId === paper.paper_id ? ' sigma-render-pending' : ''}`} aria-label={renderedPaperId === paper.paper_id ? 'Show plain paper' : 'Render paper as Markdown'} aria-pressed={renderedPaperId === paper.paper_id || formattingPaperId === paper.paper_id} aria-busy={formattingPaperId === paper.paper_id} data-tooltip={formattingPaperId === paper.paper_id ? 'Formatting with AI…' : renderedPaperId === paper.paper_id ? 'Show plain text' : 'Convert to markdown'} disabled={!!formattingPaperId} onClick={() => void togglePaperMarkdown(paper.paper_id)}>{formattingPaperId === paper.paper_id ? <ProjectOpeningHourglass/> : <MarkdownGlyph/>}</button>{formattingPaperId === paper.paper_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>{paperFormatError && <p className="error" role="alert">{paperFormatError}</p>}{renderedPaperId === paper.paper_id && formattedPaper?.id === paper.paper_id ? <div className="outcome-markdown paper-preview-markdown"><Suspense fallback={<p>Preparing paper preview…</p>}><RenderedMarkdown body={formattedPaper.markdown}/></Suspense></div> : <>
         {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
         <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
@@ -5587,7 +5591,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     setExportOpen(false);
     requestAnimationFrame(() => exportTrigger.current?.focus());
   }
-  const markdownToggle = <button type="button" className={`sigma-render-toggle${markdownSlotId ? '' : ' workspace-icon-button'}${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
+  const markdownToggle = <button type="button" className={`sigma-render-toggle sigma-unified-markdown${markdownSlotId ? '' : ' workspace-icon-button'}${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
       aria-label={selected === 'rendered' ? `Show plain ${name}` : plainRecovery ? `Convert ${name} to Plain` : `Render ${name} as Markdown`}
       aria-pressed={selected === 'rendered' || rendering} data-tooltip={renderTooltip}
       aria-hidden={combinedEditMode || undefined} style={combinedEditMode ? { visibility: 'hidden' } : undefined}
@@ -5595,7 +5599,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }}>{rendering ? <ProjectOpeningHourglass/> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+      }}>{rendering ? <ProjectOpeningHourglass/> : <MarkdownGlyph/>}</button>;
   const markdownControl = <span className="text-view-format-control">
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}

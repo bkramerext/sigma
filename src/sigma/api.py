@@ -1341,7 +1341,9 @@ async def paper_eli5_view(paper_id: str, body: PaperScoreRequest):
 @app.post("/api/projects/papers/{paper_id}/markdown-preview")
 async def paper_markdown_preview_view(paper_id: str, body: PaperScoreRequest):
     """AI formatting is a non-destructive view of the immutable saved paper."""
-    await require_cloud_inference_binding(body.expected_binding, body.expected_project_id, body.path)
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
     from sigma.paper_preview_markdown import format_paper_preview
 
     return {"markdown": await format_paper_preview(body.path, paper_id, body.expected_project_id)}
