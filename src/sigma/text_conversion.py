@@ -576,8 +576,7 @@ async def _convert_text(
                 not note.strip() or len(note) > 300 for note in result.warnings
             ):
                 raise ProjectError("Provider returned invalid conversion notes")
-            # Formatting uses an explicit fixed model/effort; the selected research
-            # model can change during this request without changing provenance.
+            # The conversion provenance reflects the user selection at dispatch.
             if scope == "current-understanding":
                 if (
                     field_path is None
