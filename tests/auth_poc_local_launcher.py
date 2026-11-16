@@ -72,22 +72,22 @@ class SharedBrokerTests(unittest.TestCase):
             patch.object(
                 broker.subprocess,
                 "run",
-                return_value=CompletedProcess(
-                    [], 1, "", "Error: permission denied at " + secret
-                ),
+                return_value=CompletedProcess([], 1, "", "Error: permission denied at " + secret),
             ),
+            self.assertRaises(broker.SharedDockerUnavailable) as context,
         ):
-            with self.assertRaises(broker.SharedDockerUnavailable) as context:
-                broker._compose("up", "-d", "--no-build", "--wait")
+            broker._compose("up", "-d", "--no-build", "--wait")
         self.assertEqual(context.exception.stage, "docker_up")
         self.assertEqual(context.exception.failure_class, "permission_denied")
         self.assertNotIn(secret, str(context.exception))
 
     def test_unexpected_compose_port_binding_fails_closed(self) -> None:
         broker = self.broker
-        with patch.object(broker, "_compose", return_value="0.0.0.0:32768"):
-            with self.assertRaises(broker.SharedDockerUnavailable) as context:
-                broker._port(8001)
+        with (
+            patch.object(broker, "_compose", return_value="0.0.0.0:32768"),
+            self.assertRaises(broker.SharedDockerUnavailable) as context,
+        ):
+            broker._port(8001)
         self.assertEqual(context.exception.failure_class, "invalid_loopback_binding")
 
     def test_private_browser_503_preserves_only_safe_broker_codes(self) -> None:
@@ -99,17 +99,17 @@ class SharedBrokerTests(unittest.TestCase):
                 if exposed
                 else {"stage": "/tmp/private/session", "failure_class": "Bearer secret"}
             )
-            transport = httpx.MockTransport(
-                lambda _: httpx.Response(503, json=result)
-            )
+            transport = httpx.MockTransport(lambda _, payload=result: httpx.Response(503, json=payload))
             with (
                 patch.object(personal_browser, "_principal", return_value=object()),
                 patch.object(personal_browser, "_socket", return_value="/tmp/unused.sock"),
-                patch.object(personal_browser, "_workspace_id", new_callable=AsyncMock, return_value="a" * 32),
+                patch.object(
+                    personal_browser, "_workspace_id", new_callable=AsyncMock, return_value="a" * 32
+                ),
                 patch.object(personal_browser.httpx, "AsyncHTTPTransport", return_value=transport),
+                self.assertRaises(personal_browser.PersonalBrowserUnavailable) as context,
             ):
-                with self.assertRaises(personal_browser.PersonalBrowserUnavailable) as context:
-                    asyncio.run(personal_browser.session(None, "start"))
+                asyncio.run(personal_browser.session(None, "start"))
             if exposed:
                 self.assertIn("docker_up (container_unhealthy)", str(context.exception))
             else:

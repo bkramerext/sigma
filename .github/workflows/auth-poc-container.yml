@@ -22,14 +22,22 @@ permissions:
 
 jobs:
   docker-smoke:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
     env:
       SIGMA_RELEASE: "${{ github.sha }}"
       SIGMA_AUTH_POC_RPC_SEED: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
       SIGMA_AUTH_POC_CHECKOUT_ID: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
       SIGMA_AUTH_POC_LOCAL_UID: "10001"
-      SIGMA_SHARED_PLATFORM: linux/amd64
+      SIGMA_SHARED_PLATFORM: "${{ matrix.platform }}"
     steps:
       - uses: actions/checkout@v4
       - name: Validate exactly one shared service and private ports
@@ -43,7 +51,8 @@ jobs:
           assert set(c["services"]) == {"personal"}, c["services"].keys()
           p=c["services"]["personal"]
           assert p["read_only"] is True
-          assert p["platform"] == "linux/amd64"
+          import os
+          assert p["platform"] == os.environ["SIGMA_SHARED_PLATFORM"]
           limit=p["mem_limit"]
           if isinstance(limit, str):
               if limit.isdecimal():

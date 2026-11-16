@@ -106,14 +106,29 @@ async def session(
                 failure = response.json()
                 stage = failure.get("stage") if isinstance(failure, dict) else None
                 failure_class = failure.get("failure_class") if isinstance(failure, dict) else None
-                known_stages = {"docker_up", "docker_ps", "docker_port", "docker_other", "worker_rpc", "broker"}
+                known_stages = {
+                    "docker_up",
+                    "docker_ps",
+                    "docker_port",
+                    "docker_other",
+                    "worker_rpc",
+                    "broker",
+                }
                 known_reasons = {
-                    "docker_daemon_unavailable", "permission_denied", "port_conflict",
-                    "image_platform_mismatch", "container_unhealthy",
-                    "chromium_security_rejected", "resource_exhausted",
-                    "docker_command_failed", "docker_command_timeout",
-                    "docker_command_unavailable", "invalid_loopback_binding",
-                    "worker_rejected", "worker_unreachable", "broker_unavailable",
+                    "docker_daemon_unavailable",
+                    "permission_denied",
+                    "port_conflict",
+                    "image_platform_mismatch",
+                    "container_unhealthy",
+                    "chromium_security_rejected",
+                    "resource_exhausted",
+                    "docker_command_failed",
+                    "docker_command_timeout",
+                    "docker_command_unavailable",
+                    "invalid_loopback_binding",
+                    "worker_rejected",
+                    "worker_unreachable",
+                    "broker_unavailable",
                 }
                 if stage in known_stages and failure_class in known_reasons:
                     raise PersonalBrowserUnavailable(

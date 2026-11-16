@@ -45,6 +45,7 @@ def _matches_conversion_preferences(version: dict[str, Any]) -> bool:
         and provenance.get("reasoning_effort") == selected["reasoning_effort"]
     )
 
+
 STATE = "text-representations.json"
 _gate = threading.Lock()
 

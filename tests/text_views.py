@@ -1489,9 +1489,12 @@ async def main_async(root: Path):
 
 
 def main():
-    with TemporaryDirectory() as directory, patch(
-        "sigma.global_research_settings.load_config",
-        return_value={"ai_model": MODEL, "reasoning_effort": FORMAT_EFFORT},
+    with (
+        TemporaryDirectory() as directory,
+        patch(
+            "sigma.global_research_settings.load_config",
+            return_value={"ai_model": MODEL, "reasoning_effort": FORMAT_EFFORT},
+        ),
     ):
         asyncio.run(main_async(Path(directory)))
 
