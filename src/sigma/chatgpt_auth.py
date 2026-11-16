@@ -777,6 +777,7 @@ async def disconnect() -> dict:
         else "Local tokens cleared. Remote revocation was not confirmed; disconnect SIGMA in ChatGPT Settings → Usage if needed.",
     }
 
+
 async def hosted_callback(identifier: str, query: str) -> None:
     """Forward a public HTTPS OAuth callback to the existing single-use verifier."""
     attempt = _attempts.get(identifier)
