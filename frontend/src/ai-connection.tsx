@@ -279,7 +279,7 @@ function PersonalBrowserDialog({ state, error, external = false, handoff, onClos
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, [state === 'closed']);
   if (state === 'closed') return null;
-  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${!external && state !== 'error' ? ' is-viewing' : ''}`}
+  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${external ? ' is-external' : state !== 'error' ? ' is-viewing' : ''}`}
     aria-labelledby="personal-browser-heading"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="privacy-notice-heading">
