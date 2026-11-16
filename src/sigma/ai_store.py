@@ -111,7 +111,7 @@ def _shared_vault(path: Path):
     """Opt-in encrypted storage, used exclusively inside shared Personal POC."""
     if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") != "1":
         return None
-    from shared_vault import Vault, VaultError
+    from sigma.personal_vault import Vault
 
     workspaces = Path(os.environ.get("SIGMA_PERSONAL_SHARED_WORKSPACES", ""))
     records = Path(os.environ.get("SIGMA_PERSONAL_SHARED_RECORDS", ""))
@@ -144,7 +144,7 @@ def read(path: Path) -> dict[str, Any]:
         try:
             return vault.read(workspace_id) or _blank_credentials()
         except Exception as exc:
-            from shared_vault import VaultError
+            from sigma.personal_vault import VaultError
             if not isinstance(exc, VaultError):
                 raise
             raise ProjectError("Encrypted Personal credentials are unavailable.") from exc
@@ -178,7 +178,7 @@ def write(path: Path, value: dict[str, Any]) -> None:
         try:
             vault.write(workspace_id, value)
         except Exception as exc:
-            from shared_vault import VaultError
+            from sigma.personal_vault import VaultError
             if not isinstance(exc, VaultError):
                 raise
             raise ProjectError("Cannot persist encrypted Personal credentials.") from exc
