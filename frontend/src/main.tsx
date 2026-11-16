@@ -1420,15 +1420,6 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   useEffect(() => () => { formatAbort.current?.abort(); }, [projectId, path, textFingerprint]);
   async function toggleUnderstandingMarkdown() {
     if (guest) { setGuestMarkdownPreview(true); return; }
-    if (markdownView) {
-      formatAbort.current?.abort();
-      setMarkdownView(false);
-      setFormatBusy(false);
-      setFormatProgress('');
-      setFormatError('');
-      return;
-    }
-    setMarkdownView(true);
     setFormatBusy(true);
     const controller = new AbortController();
     formatAbort.current = controller;
@@ -1441,11 +1432,18 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       const settings = await settingsResponse.json();
       if (!settingsResponse.ok || !settings.available) throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
       const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
-      setFormatSettingsKey(settingsKey);
       const queued = textBlocks.filter(item => item.source.trim().length >= 40
         && item.source.length <= 20000 && (formattedBlocks[item.field]?.source !== item.source
         || formattedBlocks[item.field]?.settingsKey !== settingsKey));
-      if (!queued.length) return;
+      if (markdownView && !queued.length) {
+        setMarkdownView(false);
+        return;
+      }
+      setMarkdownView(true);
+      if (!queued.length) {
+        setFormatSettingsKey(settingsKey);
+        return;
+      }
       finishProviderRequest = beginProviderRequest('text-conversion');
       for (let index = 0; index < queued.length; index++) {
         if (controller.signal.aborted) return;
@@ -1462,6 +1460,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
         if (controller.signal.aborted) return;
         setFormattedBlocks(current => ({ ...current, [item.field]: { source: item.source, body: result.body, settingsKey } }));
       }
+      if (!controller.signal.aborted) setFormatSettingsKey(settingsKey);
     } catch (cause) {
       if (!controller.signal.aborted) {
         setFormatError(`Markdown formatting stopped: ${friendlyProviderError(errorMessage(cause))}. Research was not changed.`);
@@ -4200,7 +4199,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function togglePaperMarkdown(paperId: string) {
     if (formattingPaperId) return;
-    if (renderedPaperId === paperId) { setRenderedPaperId(''); return; }
     setFormattingPaperId(paperId); setPaperFormatError('');
     try {
       const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { cache: 'no-store' });
@@ -4209,7 +4207,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         throw new Error(settings.message ?? 'Connect ChatGPT to format this paper.');
       const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
       if (formattedPaper?.id === paperId && formattedPaper.settingsKey === settingsKey) {
-        setRenderedPaperId(paperId);
+        setRenderedPaperId(renderedPaperId === paperId ? '' : paperId);
         return;
       }
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paperId)}/markdown-preview`, {
