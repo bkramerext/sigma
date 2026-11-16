@@ -9,6 +9,7 @@ provider-eligibility gates are satisfied. No provider URL is caller-controlled.
 from __future__ import annotations
 
 import hmac
+import math
 import json
 import os
 import re
@@ -21,7 +22,7 @@ from sigma.model_catalog import CATALOG
 from sigma.projects import ProjectError
 
 _BINDING = re.compile(r"[0-9a-f]{64}\Z")
-_MAX_REQUEST = 256_000
+_MAX_REQUEST = 1_000_000
 _MAX_REPLY = 2_000_000
 
 
@@ -88,7 +89,12 @@ async def _socket(principal: cloud_auth.Principal) -> str:
 
 
 async def _request(
-    principal: cloud_auth.Principal, method: str, endpoint: str, body: dict[str, Any] | None = None
+    principal: cloud_auth.Principal,
+    method: str,
+    endpoint: str,
+    body: dict[str, Any] | None = None,
+    *,
+    timeout_seconds: float = 60,
 ) -> dict[str, Any]:
     if (method, endpoint) not in {
         ("GET", "/v1/account"),
@@ -118,7 +124,7 @@ async def _request(
             base_url="http://private-personal-worker",
             trust_env=False,
             follow_redirects=False,
-            timeout=65,
+            timeout=max(65.0, timeout_seconds + 30.0),
             headers=headers,
         ) as client:
             if method == "GET":
@@ -182,10 +188,21 @@ async def disconnect(principal: cloud_auth.Principal) -> None:
 
 
 async def respond(
-    payload: dict[str, Any], *, expected_binding: str, request_id: str
+    payload: dict[str, Any],
+    *,
+    expected_binding: str,
+    request_id: str,
+    timeout_seconds: float = 60,
 ) -> dict[str, Any]:
     """Execute only for the exact, still-selected Google user and model account."""
     principal = _current_principal()
+    if (
+        not isinstance(timeout_seconds, (int, float))
+        or isinstance(timeout_seconds, bool)
+        or not math.isfinite(timeout_seconds)
+        or not 1 <= timeout_seconds <= 3600
+    ):
+        raise PersonalInferenceUnavailable("Unsupported private model timeout.")
     if (
         not isinstance(expected_binding, str)
         or not _BINDING.fullmatch(expected_binding)
@@ -211,7 +228,13 @@ async def respond(
         principal,
         "POST",
         "/v1/response",
-        {"request_id": request_id, "expected_binding": expected_binding, "payload": payload},
+        {
+            "request_id": request_id,
+            "expected_binding": expected_binding,
+            "payload": payload,
+            "timeout_seconds": math.ceil(timeout_seconds),
+        },
+        timeout_seconds=timeout_seconds,
     )
     if (
         result.get("binding") != expected_binding
