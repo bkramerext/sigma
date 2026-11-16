@@ -196,11 +196,11 @@ class SharedBrokerTests(unittest.TestCase):
                 self.last_used = float(index)
 
         workspaces = [f"{i:032x}" for i in range(40)]
-        broker._GATEWAYS = {
+        vars(broker)["_GATEWAYS"] = {
             workspace: {"model.sock": (Path("/unused"), FakeRelay(i), None)}
             for i, workspace in enumerate(workspaces)
         }
-        broker._ACTIVE = workspaces[0]
+        vars(broker)["_ACTIVE"] = workspaces[0]
         try:
             def unrelay(workspace: str, channel: str) -> None:
                 broker._GATEWAYS[workspace].pop(channel)
@@ -213,8 +213,8 @@ class SharedBrokerTests(unittest.TestCase):
             self.assertIn(workspaces[2], broker._GATEWAYS)  # In-flight RPC
             self.assertNotIn(workspaces[3], broker._GATEWAYS)  # Oldest idle
         finally:
-            broker._GATEWAYS = prior_gateways
-            broker._ACTIVE = prior_active
+            vars(broker)["_GATEWAYS"] = prior_gateways
+            vars(broker)["_ACTIVE"] = prior_active
 
     def test_broker_denies_unknown_peer_credential_protocols(self) -> None:
         broker = self.broker
