@@ -663,12 +663,19 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
                && Date.now() < deadline) {
           await new Promise<void>(resolve => window.setTimeout(resolve, 2000));
           if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
-          const statusResponse = await fetch(windowAuthUrl('/api/ai/personal-browser/status'), {
-            credentials: 'same-origin',
-            headers: { 'X-Sigma-Error-Handled': 'true' },
-          });
+          let statusResponse: Response;
+          try {
+            statusResponse = await fetch(windowAuthUrl('/api/ai/personal-browser/status'), {
+              credentials: 'same-origin',
+              headers: { 'X-Sigma-Error-Handled': 'true' },
+              signal: AbortSignal.timeout(5000),
+            });
+          } catch {
+            // A temporary network interruption during Chromium startup is
+            // not an authorization failure. Retry inside the grace period.
+            continue;
+          }
           if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
-          // A brief relay failure while the container warms up is recoverable.
           if (!statusResponse.ok) continue;
           const status = await statusResponse.json().catch(() => ({})) as {
             browser_status?: string;
@@ -679,7 +686,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           }
         }
         if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
-        throw new Error('Private ChatGPT browser did not become ready after 60 seconds. Retry to try again.');
+        throw new Error('Private ChatGPT browser is still unavailable after 60 seconds.');
       }
     } catch (cause) {
       if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
