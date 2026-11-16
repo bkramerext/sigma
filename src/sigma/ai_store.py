@@ -136,12 +136,29 @@ def _blank_credentials() -> dict[str, Any]:
     }
 
 
+def _validate_credentials(value: Any) -> dict[str, Any]:
+    # The encrypted store needs the same schema checks as the legacy local
+    # store. A valid AES-GCM envelope can still contain malformed or outdated
+    # JSON; never silently turn a bad record into an empty account.
+    if (
+        not isinstance(value, dict)
+        or value.get("version") != 1
+        or value.get("mode") not in {"chatgpt", "api_key"}
+        or not isinstance(value.get("accounts"), dict)
+        or not isinstance(value.get("ext_agent_host_id"), str)
+        or not value["ext_agent_host_id"].startswith("urn:uuid:")
+    ):
+        raise ValueError("Invalid Personal credential record schema")
+    return value
+
+
 def read(path: Path) -> dict[str, Any]:
     sealed = _shared_vault(path)
     if sealed is not None:
         vault, workspace_id = sealed
         try:
-            return vault.read(workspace_id) or _blank_credentials()
+            value = vault.read(workspace_id)
+            return _blank_credentials() if value is None else _validate_credentials(value)
         except VaultError as exc:
             raise ProjectError("Encrypted Personal credentials are unavailable.") from exc
     try:
@@ -156,15 +173,7 @@ def read(path: Path) -> dict[str, Any]:
         if len(raw) > 1000000:
             raise ValueError()
         value = json.loads(raw)
-    if (
-        value.get("version") != 1
-        or value.get("mode") not in {"chatgpt", "api_key"}
-        or not isinstance(value.get("accounts"), dict)
-        or not isinstance(value.get("ext_agent_host_id"), str)
-        or not value["ext_agent_host_id"].startswith("urn:uuid:")
-    ):
-        raise ValueError()
-    return value
+    return _validate_credentials(value)
 
 
 def write(path: Path, value: dict[str, Any]) -> None:
