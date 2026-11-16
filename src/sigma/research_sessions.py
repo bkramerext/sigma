@@ -15629,79 +15629,96 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         timeout_seconds = min(120.0, _call_timeout_seconds(record))
         if timeout_seconds <= 0:
             raise TimeoutError("Reference compilation reached its session time ceiling.")
-        headers = {
-            "Authorization": "Bearer " + credential["token"],
-            "Content-Type": "application/json",
-        }
-        if credential["mode"] == "chatgpt":
-            headers["Accept"] = "text/event-stream"
-        async with (
-            _portfolio_global_gate(session_id),
-            asyncio.timeout(timeout_seconds),
-            httpx.AsyncClient(
-                timeout=timeout_seconds, follow_redirects=False, trust_env=False
-            ) as client,
-            client.stream(
-                "POST",
-                "https://api.openai.com/v1/responses",
-                headers=headers,
-                content=encoded,
-            ) as response,
-        ):
-            wire = bytearray()
-            async for chunk in response.aiter_bytes():
-                wire.extend(chunk)
-                if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
-                    raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
-            provider_http_status = response.status_code
-            if response.status_code == 429:
-                # Respect numeric or HTTP-date Retry-After. An unparseable
-                # header is a hard no-retry rather than a rate-limit bypass.
-                retry_after = response.headers.get("Retry-After")
-                if retry_after:
-                    try:
-                        retry_after_seconds = max(0.0, float(retry_after))
-                        if not math.isfinite(retry_after_seconds):
-                            raise ValueError("nonfinite_retry_after")
-                    except ValueError:
-                        try:
-                            retry_after_seconds = max(
-                                0.0,
-                                (
-                                    parsedate_to_datetime(retry_after) - datetime.now(UTC)
-                                ).total_seconds(),
-                            )
-                        except (ValueError, TypeError, OverflowError):
-                            retry_after_seconds = (
-                                research_reference_compiler.MAX_RETRY_AFTER_SECONDS + 1
-                            )
-            if response.status_code != 200:
-                # Persist safe error metadata, never raw provider bodies or
-                # user/source content. This makes known fallback diagnosable.
-                try:
-                    error_body = json.loads(wire)
-                    error = error_body.get("error") if isinstance(error_body, dict) else None
-                    code = error.get("code") if isinstance(error, dict) else None
-                    if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code):
-                        provider_error_code = code
-                except (ValueError, TypeError):
-                    pass
-                # 5xx/timeout-like responses do not prove zero billable usage.
-                # Only known pre-inference 4xx rejections release the reservation.
-                rejected = response.status_code in {400, 401, 403, 404, 422, 429}
-                raise ProjectError(
-                    f"Reference compilation provider rejected the request (HTTP {response.status_code})."
+        if credential.get("transport") == "personal_worker":
+            # Reference compilation is a separate, durable provider attempt.
+            # Route it through the same verified private worker as research
+            # turns; the SIGMA coordinator never has the OAuth bearer token.
+            from sigma import personal_inference
+
+            async with (
+                _portfolio_global_gate(session_id),
+                asyncio.timeout(timeout_seconds),
+            ):
+                raw = await personal_inference.respond(
+                    payload,
+                    expected_binding=credential["worker_binding"],
+                    request_id=attempt_id.replace("-", ""),
                 )
+            provider_http_status = 200
+        else:
+            headers = {
+                "Authorization": "Bearer " + credential["token"],
+                "Content-Type": "application/json",
+            }
             if credential["mode"] == "chatgpt":
-                raw = await completed(
-                    httpx.Response(
-                        response.status_code, headers=response.headers, content=bytes(wire)
-                    ),
-                    "research",
-                    max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
-                )
-            else:
-                raw = json.loads(wire)
+                headers["Accept"] = "text/event-stream"
+            async with (
+                _portfolio_global_gate(session_id),
+                asyncio.timeout(timeout_seconds),
+                httpx.AsyncClient(
+                    timeout=timeout_seconds, follow_redirects=False, trust_env=False
+                ) as client,
+                client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                    headers=headers,
+                    content=encoded,
+                ) as response,
+            ):
+                wire = bytearray()
+                async for chunk in response.aiter_bytes():
+                    wire.extend(chunk)
+                    if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
+                        raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
+                provider_http_status = response.status_code
+                if response.status_code == 429:
+                    # Respect numeric or HTTP-date Retry-After. An unparseable
+                    # header is a hard no-retry rather than a rate-limit bypass.
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            retry_after_seconds = max(0.0, float(retry_after))
+                            if not math.isfinite(retry_after_seconds):
+                                raise ValueError("nonfinite_retry_after")
+                        except ValueError:
+                            try:
+                                retry_after_seconds = max(
+                                    0.0,
+                                    (
+                                        parsedate_to_datetime(retry_after) - datetime.now(UTC)
+                                    ).total_seconds(),
+                                )
+                            except (ValueError, TypeError, OverflowError):
+                                retry_after_seconds = (
+                                    research_reference_compiler.MAX_RETRY_AFTER_SECONDS + 1
+                                )
+                if response.status_code != 200:
+                    # Persist safe error metadata, never raw provider bodies or
+                    # user/source content. This makes known fallback diagnosable.
+                    try:
+                        error_body = json.loads(wire)
+                        error = error_body.get("error") if isinstance(error_body, dict) else None
+                        code = error.get("code") if isinstance(error, dict) else None
+                        if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code):
+                            provider_error_code = code
+                    except (ValueError, TypeError):
+                        pass
+                    # 5xx/timeout-like responses do not prove zero billable usage.
+                    # Only known pre-inference 4xx rejections release the reservation.
+                    rejected = response.status_code in {400, 401, 403, 404, 422, 429}
+                    raise ProjectError(
+                        f"Reference compilation provider rejected the request (HTTP {response.status_code})."
+                    )
+                if credential["mode"] == "chatgpt":
+                    raw = await completed(
+                        httpx.Response(
+                            response.status_code, headers=response.headers, content=bytes(wire)
+                        ),
+                        "research",
+                        max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
+                    )
+                else:
+                    raw = json.loads(wire)
         provider_response_status = (
             str(raw.get("status", ""))[:40] if isinstance(raw, dict) else None
         )
