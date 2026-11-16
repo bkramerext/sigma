@@ -1383,8 +1383,9 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const [suggestionStatus, setSuggestionStatus] = useState('');
   const [markdownView, setMarkdownView] = useState(false);
   const [guestMarkdownPreview, setGuestMarkdownPreview] = useState(false);
-  const [formattedBlocks, setFormattedBlocks] = useState<Record<string, { source: string; body: string }>>({});
+  const [formattedBlocks, setFormattedBlocks] = useState<Record<string, { source: string; body: string; settingsKey: string }>>({});
   const [formatProgress, setFormatProgress] = useState('');
+  const [formatSettingsKey, setFormatSettingsKey] = useState('');
   const [formatBusy, setFormatBusy] = useState(false);
   const [formatError, setFormatError] = useState('');
   const formatAbort = useRef<AbortController | null>(null);
@@ -1409,9 +1410,6 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       return;
     }
     setMarkdownView(true);
-    const queued = textBlocks.filter(item => item.source.trim().length >= 40
-      && item.source.length <= 20000 && formattedBlocks[item.field]?.source !== item.source);
-    if (!queued.length) return;
     setFormatBusy(true);
     const controller = new AbortController();
     formatAbort.current = controller;
@@ -1423,6 +1421,12 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
       );
       const settings = await settingsResponse.json();
       if (!settingsResponse.ok || !settings.available) throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+      const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
+      setFormatSettingsKey(settingsKey);
+      const queued = textBlocks.filter(item => item.source.trim().length >= 40
+        && item.source.length <= 20000 && (formattedBlocks[item.field]?.source !== item.source
+        || formattedBlocks[item.field]?.settingsKey !== settingsKey));
+      if (!queued.length) return;
       finishProviderRequest = beginProviderRequest('text-conversion');
       for (let index = 0; index < queued.length; index++) {
         if (controller.signal.aborted) return;
@@ -1437,7 +1441,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
         }, controller.signal, true);
         if (result.source_digest !== expectedDigest) throw new Error('Current Understanding changed while formatting.');
         if (controller.signal.aborted) return;
-        setFormattedBlocks(current => ({ ...current, [item.field]: { source: item.source, body: result.body } }));
+        setFormattedBlocks(current => ({ ...current, [item.field]: { source: item.source, body: result.body, settingsKey } }));
       }
     } catch (cause) {
       if (!controller.signal.aborted) {
@@ -1451,7 +1455,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     }
   }
   const narrative = (source: string, field: string, fallback?: string) => markdownView
-    ? <div className="current-understanding-rendered"><Suspense fallback={<p>{fallback ?? source}</p>}><RenderedMarkdown body={formattedBlocks[field]?.source === source ? formattedBlocks[field].body : (fallback ?? source)}/></Suspense></div>
+    ? <div className="current-understanding-rendered"><Suspense fallback={<p>{fallback ?? source}</p>}><RenderedMarkdown body={formattedBlocks[field]?.source === source && formattedBlocks[field]?.settingsKey === formatSettingsKey ? formattedBlocks[field].body : (fallback ?? source)}/></Suspense></div>
     : <p>{fallback ?? source}</p>;
   const inferencePending = useRef(false);
   const inferenceRequestId = useRef<string | null>(null);
@@ -1580,7 +1584,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
         {remainingQuestions.length > 0 && <details><summary>{remainingQuestions.length} more recorded questions / dispositions</summary><ol>{remainingQuestions.map(questionRow)}</ol></details>}
       </section>
     </div>
-    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map((note, index) => <li key={index}>{markdownView ? <div className="current-understanding-rendered"><Suspense fallback={note}><RenderedMarkdown body={formattedBlocks[`limitations.${index}`]?.source === note ? formattedBlocks[`limitations.${index}`].body : note}/></Suspense></div> : note}</li>)}</ul><p>All {state.findings.length} findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
+    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map((note, index) => <li key={index}>{markdownView ? <div className="current-understanding-rendered"><Suspense fallback={note}><RenderedMarkdown body={formattedBlocks[`limitations.${index}`]?.source === note && formattedBlocks[`limitations.${index}`]?.settingsKey === formatSettingsKey ? formattedBlocks[`limitations.${index}`].body : note}/></Suspense></div> : note}</li>)}</ul><p>All {state.findings.length} findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
     <div className="strategy-suggestion-feedback">{suggestionError && <p className="error" role="alert">{suggestionError}</p>}{suggestionStatus && <p role="status">{suggestionStatus}</p>}</div>
   </details>;
 }
@@ -3200,7 +3204,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
   const [copiedPaperId, setCopiedPaperId] = useState('');
-  const [formattedPaper, setFormattedPaper] = useState<{ id: string; markdown: string } | null>(null);
+  const [formattedPaper, setFormattedPaper] = useState<{ id: string; markdown: string; settingsKey: string } | null>(null);
   const [renderedPaperId, setRenderedPaperId] = useState('');
   const [formattingPaperId, setFormattingPaperId] = useState('');
   const [paperFormatError, setPaperFormatError] = useState('');
@@ -4178,13 +4182,17 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   async function togglePaperMarkdown(paperId: string) {
     if (formattingPaperId) return;
     if (renderedPaperId === paperId) { setRenderedPaperId(''); return; }
-    if (formattedPaper?.id === paperId) { setRenderedPaperId(paperId); return; }
     setFormattingPaperId(paperId); setPaperFormatError('');
     try {
       const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { cache: 'no-store' });
       const settings = await settingsResponse.json();
       if (!settingsResponse.ok || !settings.available || !settings.binding)
         throw new Error(settings.message ?? 'Connect ChatGPT to format this paper.');
+      const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
+      if (formattedPaper?.id === paperId && formattedPaper.settingsKey === settingsKey) {
+        setRenderedPaperId(paperId);
+        return;
+      }
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(paperId)}/markdown-preview`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: settings.binding }),
@@ -4192,7 +4200,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const result = await response.json();
       if (!response.ok || typeof result.markdown !== 'string' || !result.markdown.trim())
         throw new Error(result.error ?? 'Paper Markdown formatting failed.');
-      setFormattedPaper({ id: paperId, markdown: result.markdown });
+      setFormattedPaper({ id: paperId, markdown: result.markdown, settingsKey });
       setRenderedPaperId(paperId);
     } catch (cause) { setPaperFormatError(errorMessage(cause)); }
     finally { setFormattingPaperId(''); }
