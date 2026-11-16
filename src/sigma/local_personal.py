@@ -29,8 +29,6 @@ CHECKOUT = re.compile(r"[0-9a-f]{32}\Z")
 COMPOSE_FILES = ("deploy/personal-shared.compose.yaml",)
 
 
-
-
 class LocalPersonalUnavailable(RuntimeError):
     """The optional local Docker Personal browser cannot be started safely."""
 
