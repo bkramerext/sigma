@@ -1,6 +1,8 @@
 # One shared worker and disposable Chromium inside ONE Docker container.
 # The two Linux UIDs are kept distinct despite sharing the Docker lifecycle.
-FROM ghcr.io/astral-sh/uv:0.12.17@sha256:1194b357d63b7bea6c121d8eef5d08d29c26ffbcfc64ec5ebcefd642ea759edb AS uv
+# Install the pinned uv wheel *inside the target architecture*. The old
+# ghcr.io/astral-sh/uv digest pointed at an amd64 binary; copying /uv from
+# it into a native arm64 Chromium image failed with "uv: Exec format error".
 FROM python:3.12.8-slim@sha256:2199a62885a12290dc9c5be3ca0681d367576ab7bf037da120e564723292a2f0
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 PYTHONPATH=/opt/sigma/auth-poc:/opt/sigma/src \
@@ -10,7 +12,7 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1
     SIGMA_PERSONAL_SHARED_WORKSPACES=/var/lib/sigma-shared/workspaces \
     SIGMA_PERSONAL_SHARED_KEY_FILE=/var/lib/sigma-shared-key/master \
     SIGMA_AUTH_HOME=/var/lib/sigma-shared/workspaces
-COPY --from=uv /uv /uvx /usr/local/bin/
+RUN python -m pip install --no-cache-dir "uv==0.12.17" && uv --version
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium xvfb x11vnc novnc websockify ca-certificates fonts-liberation util-linux \
     && rm -rf /var/lib/apt/lists/* \

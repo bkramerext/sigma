@@ -99,7 +99,9 @@ class SharedBrokerTests(unittest.TestCase):
                 if exposed
                 else {"stage": "/tmp/private/session", "failure_class": "Bearer secret"}
             )
-            transport = httpx.MockTransport(lambda _, payload=result: httpx.Response(503, json=payload))
+            transport = httpx.MockTransport(
+                lambda _, payload=result: httpx.Response(503, json=payload)
+            )
             with (
                 patch.object(personal_browser, "_principal", return_value=object()),
                 patch.object(personal_browser, "_socket", return_value="/tmp/unused.sock"),
