@@ -36,6 +36,7 @@ ALLOWED_ENV_KEYS = {
     "SIGMA_CLOUD_SPONSORED_ENABLED",
     "SIGMA_CLOUD_FORCE_SPONSORED_MODE",
     "SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED",
+    "SIGMA_AUTH_POC_LAB_ENABLED",
     "GOOGLE_OIDC_CLIENT_ID",
     "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE",
     "SIGMA_CLOUD_OPENAI_API_KEY_FILE",
@@ -130,6 +131,8 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
         "false",
     }:
         return None, "personal ChatGPT notice setting must be true or false"
+    if values.get("SIGMA_AUTH_POC_LAB_ENABLED", "false") not in {"true", "false"}:
+        return None, "synthetic auth laboratory setting must be true or false"
     if provider not in {"api_key", "chatgpt"}:
         return None, "inference provider is invalid"
     if provider == "chatgpt" and not re.fullmatch(
@@ -738,6 +741,14 @@ class Preflight:
             "--format",
             "json",
         ]
+        auth_lab = self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true"
+        if auth_lab:
+            argv[10:10] = [
+                "-f",
+                str(self.repository / "deploy/auth-poc.compose.yaml"),
+                "-f",
+                str(self.repository / "deploy/auth-poc.gce.yaml"),
+            ]
         try:
             result = self.command(
                 argv,
@@ -793,6 +804,28 @@ class Preflight:
                     edge_dependencies[name].get("condition") == "service_healthy"
                     for name in ("backend", "frontend")
                 )
+                and (
+                    not auth_lab
+                    or (
+                        {"auth-poc", "browser"}.issubset(services)
+                        and not services["auth-poc"].get("ports")
+                        and not services["browser"].get("ports")
+                        and not services["browser"].get("volumes")
+                        and services["auth-poc"].get("read_only") is True
+                        and services["browser"].get("read_only") is True
+                        and services["auth-poc"]
+                        .get("environment", {})
+                        .get("SIGMA_AUTH_POC_REAL_SIGNIN")
+                        == "0"
+                        and volumes["auth-poc-state"]["driver_opts"]["device"]
+                        == "/srv/sigma-state/auth/auth-poc"
+                        and services["browser"].get("network_mode") == "service:auth-poc"
+                        and all(
+                            bool(services[name].get("healthcheck", {}).get("test"))
+                            for name in ("auth-poc", "browser")
+                        )
+                    )
+                )
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             valid = False
@@ -837,6 +870,8 @@ class Preflight:
             "/opt/sigma/current/deploy/start-gce.sh",
             "gce_preflight.py",
         )
+        if self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true":
+            required += ("/opt/sigma/current/deploy/compose-gce.sh",)
         if all(item in content for item in required):
             self.add(
                 "SIGMA systemd service",

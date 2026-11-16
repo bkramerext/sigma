@@ -51,9 +51,25 @@ class AuthContext(Mapping[str, Any]):
     __slots__ = ("_safe", "_token")
 
     def __init__(
-        self, *, token: str, mode: str, status: str, identity: str, account_label: str | None = None
+        self,
+        *,
+        token: str,
+        mode: str,
+        status: str,
+        identity: str,
+        account_label: str | None = None,
+        transport: str | None = None,
+        worker_binding: str | None = None,
     ):
+        if transport is not None and (
+            transport != "personal_worker" or token or not worker_binding
+        ):
+            raise ValueError("Invalid Personal worker credential context")
         self._safe = {"mode": mode, "status": status, "identity": identity}
+        if transport is not None:
+            assert worker_binding is not None
+            self._safe["transport"] = transport
+            self._safe["worker_binding"] = worker_binding
         if account_label is not None:
             self._safe["account_label"] = account_label
         self._token = token
@@ -315,6 +331,37 @@ async def auth_context() -> AuthContext:
     ):
         workspace = cloud_workspaces.workspace_for_subject(local_principal.subject)
         return await _cloud_sponsored_context(workspace.subject_hash)
+    from sigma import personal_browser
+
+    if personal_browser.enabled():
+        # Local Docker POC must exercise the same per-user worker as production.
+        # Never permit a pre-existing Mac-local ChatGPT token or API key to
+        # masquerade as a successful container connection.
+        from sigma import cloud_personal
+
+        workspace = cloud_workspaces.current()
+        if (
+            workspace is None
+            and local_google_principal is not None
+            and local_google_principal.role == "admin"
+            and local_google_principal.subject.startswith("local-admin:")
+            and personal_browser.sign_in_preview_enabled()
+        ):
+            try:
+                workspace = cloud_workspaces.workspace_for_subject(local_google_principal.subject)
+            except (cloud_workspaces.WorkspaceUnavailable, OSError, RuntimeError):
+                pass
+            if workspace is not None:
+                return await cloud_personal.auth_context(workspace.subject_hash)
+        if (
+            local_google_principal is None
+            or workspace is None
+            or workspace.verified_subject != local_google_principal.subject
+        ):
+            return AuthContext(
+                token="", mode="chatgpt", status="unavailable", identity="local_docker_unbound"
+            )
+        return await cloud_personal.auth_context(workspace.subject_hash)
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
     if mode == "api_key":
@@ -461,6 +508,37 @@ async def connection(
             "checked_at": None,
             "ttl_seconds": TTL,
         }
+    if context.get("transport") == "personal_worker":
+        from sigma import personal_inference
+
+        try:
+            account = await personal_inference.account()
+        except personal_inference.PersonalInferenceUnavailable:
+            account = None
+        verified = (
+            account is not None
+            and account["status"] == "verified"
+            and account["binding"] == context.get("worker_binding")
+            and context["status"] == "connected"
+        )
+        return {
+            "mode": "chatgpt",
+            "status": "connected" if verified else "unavailable",
+            "label": "Personal ChatGPT" if verified else "Personal ChatGPT unavailable",
+            "guidance": (
+                "Using the verified personal account; inference limits are not guaranteed."
+                if verified
+                else "The personal account changed or its worker is unavailable."
+            ),
+            "checked_at": datetime.now(UTC).isoformat() if verified else None,
+            "ttl_seconds": TTL,
+            "account_label": (
+                account["account_label"] if verified and account is not None else None
+            ),
+            "sponsor_account_selected": False,
+            **prefs,
+            "welcome_pending": False,
+        }
     key, mode = context["token"], context["mode"]
     identity = hashlib.sha256((mode + key).encode()).hexdigest()
     credential_state = _credential_state(identity) if key else None
@@ -562,6 +640,43 @@ async def models(refresh: bool = False, context: Mapping[str, Any] | None = None
         except ProjectError:
             context = None
     state = await connection(refresh, context)
+    if context is not None and context.get("transport") == "personal_worker":
+        from sigma import personal_inference
+
+        try:
+            account = await personal_inference.account()
+        except personal_inference.PersonalInferenceUnavailable:
+            account = None
+        verified = (
+            state["status"] == "connected"
+            and account is not None
+            and account["status"] == "verified"
+            and account["binding"] == context.get("worker_binding")
+        )
+        known = set(account["models"]) if verified and account is not None else set()
+        choices = [
+            {
+                "id": identifier,
+                **capability,
+                "availability": ("available" if identifier in known else "unavailable")
+                if verified
+                else "unverified",
+            }
+            for identifier, capability in CATALOG.items()
+        ]
+        default = (
+            DEFAULT_MODEL
+            if DEFAULT_MODEL in known or not known
+            else next(identifier for identifier in CATALOG if identifier in known)
+        )
+        return {
+            "models": choices,
+            "connection": {key: value for key, value in state.items() if key != "account_label"},
+            "default_model": default,
+            "default_effort": "high",
+            "default_verified": verified and bool(known),
+            "message": state["guidance"],
+        }
     identity = (
         hashlib.sha256((str(context["mode"]) + str(context["token"])).encode()).hexdigest()
         if context is not None

@@ -1,0 +1,17 @@
+# Optional, NONPUBLIC synthetic-only OAuth laboratory on the GCE host.
+# Combined with compose.yaml, compose.gce.yaml, auth-poc.compose.yaml.
+# User authorization/inference remains disabled by the worker's explicit 403 gate.
+services:
+  auth-poc:
+    image: sigma-auth-poc:${SIGMA_RELEASE:?set SIGMA_RELEASE}
+    ports: !override []
+  browser:
+    image: sigma-auth-browser-poc:${SIGMA_RELEASE:?set SIGMA_RELEASE}
+
+volumes:
+  auth-poc-state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SIGMA_STATE_DISK_MOUNT:?set mounted persistent state disk}/auth/auth-poc

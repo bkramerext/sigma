@@ -1,0 +1,31 @@
+# Explicit opt-in local POC. The host broker creates the Unix sockets itself
+# and forwards them to random host ports bound only on 127.0.0.1.
+# This overlay is appended AFTER the private GCE per-user overlay.
+services:
+  auth-poc:
+    environment:
+      SIGMA_AUTH_POC_LOCAL_DOCKER: "1"
+      SIGMA_AUTH_POC_RPC_KEY: "${SIGMA_AUTH_POC_RPC_KEY:-}"
+      SIGMA_AUTH_POC_REAL_SIGNIN: "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}"
+    labels:
+      io.sigma.personal.owner: "${SIGMA_AUTH_POC_LOCAL_UID:?local POC UID required}"
+      io.sigma.personal.checkout: "${SIGMA_AUTH_POC_CHECKOUT_ID:?local checkout required}"
+    user: "${SIGMA_AUTH_POC_LOCAL_UID:?local POC UID required}:${SIGMA_AUTH_POC_LOCAL_GID:?local POC GID required}"
+    tmpfs:
+      - /tmp:rw,nosuid,size=64m,uid=${SIGMA_AUTH_POC_LOCAL_UID},gid=${SIGMA_AUTH_POC_LOCAL_GID},mode=0700
+    ports: !override
+      - "127.0.0.1::6080"
+      - "127.0.0.1::8002"
+    volumes: !override
+      - type: bind
+        source: ${SIGMA_STATE_DISK_MOUNT:?local per-user state required}/auth/auth-poc
+        target: /var/lib/sigma-poc-auth
+  # The browser is still a different UID and has no credential mount.
+  browser:
+    labels:
+      io.sigma.personal.owner: "${SIGMA_AUTH_POC_LOCAL_UID:?local POC UID required}"
+      io.sigma.personal.checkout: "${SIGMA_AUTH_POC_CHECKOUT_ID:?local checkout required}"
+    # Chromium counts threads against this limit. Leave room for sign-in tabs.
+    pids_limit: 512
+    environment:
+      SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN: "${SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN:-0}"

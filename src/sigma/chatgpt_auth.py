@@ -707,6 +707,12 @@ async def welcome_seen() -> None:
 
 
 async def disconnect() -> dict:
+    """Clear local authorization before attempting bounded remote revocation.
+
+    The caller's Confirm action must not be held hostage by OpenAI discovery or
+    revocation, and a transient provider outage must never leave reusable local
+    credentials behind. Do not perform network IO inside the credential lock.
+    """
     owner_subject = _owner_subject()
     current_store = _attempt_store_directory(sponsor=False).resolve()
     for attempt in list(_attempts.values()):
@@ -721,31 +727,47 @@ async def disconnect() -> dict:
     async with transaction() as state:
         had_api_key = bool(state.pop("api_key", None))
         account = state["accounts"].get(state["active"])
-        if account and account.get("refresh_token"):
-            try:
-                endpoints = await discovery()
-                for delay in (0, 0.2):
-                    if delay:
-                        await asyncio.sleep(delay)
-                    code, _ = await http(
-                        "POST",
-                        endpoints["revocation_endpoint"],
-                        {
-                            "token": account["refresh_token"],
-                            "token_type_hint": "refresh_token",
-                            "client_id": account["client_id"],
-                        },
-                    )
-                    if code == 200:
-                        confirmed = True
-                        break
-                    if code < 500:
-                        break
-            except (httpx.HTTPError, TimeoutError, ValueError, AuthFailure):
-                pass
+        refresh_token = account.get("refresh_token") if account else None
+        client_id = account.get("client_id") if account else None
         if account:
             for key in ("access_token", "refresh_token", "id_token"):
                 account.pop(key, None)
+
+    # Credential removal is committed even if the remote provider is offline.
+    # Never retry indefinitely or keep the credential transaction locked while
+    # asking OpenAI to revoke an already-removed renewable session.
+    if (
+        isinstance(refresh_token, str)
+        and refresh_token
+        and isinstance(client_id, str)
+        and client_id
+    ):
+
+        async def revoke() -> bool:
+            endpoints = await discovery()
+            for delay in (0, 0.2):
+                if delay:
+                    await asyncio.sleep(delay)
+                code, _ = await http(
+                    "POST",
+                    endpoints["revocation_endpoint"],
+                    {
+                        "token": refresh_token,
+                        "token_type_hint": "refresh_token",
+                        "client_id": client_id,
+                    },
+                )
+                if code == 200:
+                    return True
+                if code < 500:
+                    break
+            return False
+
+        try:
+            confirmed = await asyncio.wait_for(revoke(), timeout=4)
+        except (httpx.HTTPError, TimeoutError, ValueError, AuthFailure, ProjectError):
+            pass
+
     return {
         "remote_revocation_confirmed": confirmed,
         "message": "Saved API key removed from SIGMA."

@@ -32,5 +32,17 @@ for (const name of [
 
 export default defineConfig({
   define: { __SIGMA_BUILD_COMMIT__: JSON.stringify(buildCommit()), __SIGMA_VERSION__: JSON.stringify(productVersion()) },
-  server: { proxy: { '/api': process.env.SIGMA_API_TARGET ?? 'http://127.0.0.1:8000' } },
+  server: {
+    proxy: {
+      // Only the opt-in container POC needs an API WebSocket proxy in local Vite.
+      // Keep its HTTP assets and RFB WebSocket on the same authenticated origin.
+      ...(process.env.SIGMA_PERSONAL_BROWSER_LAB_ENABLED === '1'
+        ? { '/api/ai/personal-browser/window': {
+            target: process.env.SIGMA_API_TARGET ?? 'http://127.0.0.1:8000',
+            ws: true,
+          } }
+        : {}),
+      '/api': process.env.SIGMA_API_TARGET ?? 'http://127.0.0.1:8000',
+    },
+  },
 });

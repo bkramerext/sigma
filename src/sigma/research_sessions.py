@@ -8249,149 +8249,166 @@ async def _call_provider(
                 "status": "in_flight",
             },
         )
-    headers = {
-        "Authorization": "Bearer " + credential["token"],
-        "Content-Type": "application/json",
-    }
-    if credential["mode"] == "chatgpt":
-        headers["Accept"] = "text/event-stream"
     timeout_seconds = min(
         timeout_seconds if timeout_seconds is not None else float(CALL_TIMEOUT),
         _call_timeout_seconds(record),
     )
     _sponsor_inference_diagnostic(record, "request_attempted")
-    async with (
-        asyncio.timeout(timeout_seconds),
-        httpx.AsyncClient(
-            timeout=timeout_seconds, follow_redirects=False, trust_env=False
-        ) as client,
-        client.stream(
-            "POST",
-            "https://api.openai.com/v1/responses",
-            headers=headers,
-            content=_serialized_role_request(payload),
-        ) as response,
-    ):
-        _sponsor_inference_diagnostic(record, f"http_{response.status_code}")
-        collected = bytearray()
-        async for chunk in response.aiter_bytes():
-            collected.extend(chunk)
-            if len(collected) > MAX_RESEARCH_RESPONSE_BYTES:
-                _sponsor_inference_diagnostic(record, "response_overflow")
-                raise ProjectError("Research provider transport exceeded the 8 MB safety bound")
-        body = bytes(collected)
-        if response.status_code != 200:
-            try:
-                error_data = json.loads(body)
-            except ValueError:
-                error_data = {}
-            code = None
-            if isinstance(error_data, dict) and isinstance(error_data.get("error"), dict):
-                code = error_data["error"].get("code")
-            suffix = (
-                str(code)
-                if isinstance(code, str) and re.fullmatch(r"[a-zA-Z0-9_]{1,32}", code)
-                else "unknown"
-            )
-            _sponsor_inference_diagnostic(record, f"http_{response.status_code}_{suffix}".lower())
-            if log_context:
-                session_log.append(
-                    record["project_path"],
-                    log_context,
-                    {
-                        "type": "provider_failure",
-                        "request_id": request_id,
-                        "role": role,
-                        "status": "provider_rejected",
-                        "http_status": response.status_code,
-                        "provider_error_code": (
-                            code
-                            if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code)
-                            else None
-                        ),
-                        "provider_request_id": (
-                            response.headers.get("x-request-id")
-                            if re.fullmatch(
-                                r"[A-Za-z0-9_.:-]{1,128}",
-                                response.headers.get("x-request-id", ""),
-                            )
-                            else None
-                        ),
-                        "elapsed_seconds": round(time.monotonic() - started, 3),
-                    },
-                )
-            failure(
-                response.status_code,
-                error_data,
-                credential["mode"],
-                "research",
-                retry_after=response.headers.get("retry-after"),
-                provider_request_id=response.headers.get("x-request-id"),
-                provider_limit_headers=response.headers,
-            )
+
+    from sigma import model_dispatch
+
+    personal_raw = await model_dispatch.private_response_if_selected(
+        credential,
+        payload,
+        timeout_seconds=timeout_seconds,
+        request_id=request_id.replace("-", ""),
+    )
+    if personal_raw is not None:
+        raw = personal_raw
+        body = _serialized_role_request(personal_raw)
+        _sponsor_inference_diagnostic(record, "personal_worker_completed")
+    else:
+        headers = {
+            "Authorization": "Bearer " + credential["token"],
+            "Content-Type": "application/json",
+        }
         if credential["mode"] == "chatgpt":
-            raw = await completed(
-                httpx.Response(response.status_code, headers=response.headers, content=body),
-                "research",
-                max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
-                overflow_message="Research provider stream exceeded the 8 MB safety bound",
-                retry_after=response.headers.get("retry-after"),
-            )
-        else:
-            try:
-                raw = json.loads(body)
-            except ValueError as exc:
-                raise ProjectError("Research provider returned malformed output") from exc
-        if not isinstance(raw, dict):
-            raise ProjectError("Research provider did not complete its research response")
-        if raw.get("status") == "incomplete":
-            details = raw.get("incomplete_details")
-            if isinstance(details, dict) and details.get("reason") == "max_output_tokens":
-                texts = [
-                    content["text"]
-                    for item in raw.get("output", [])
-                    if isinstance(item, dict)
-                    for content in item.get("content", [])
-                    if isinstance(content, dict)
-                    and content.get("type") == "output_text"
-                    and isinstance(content.get("text"), str)
-                ]
-                raise IncompleteResearchResponse(
-                    "Provider clipped the response at the configured output-token limit.",
-                    partial_text="\n".join(texts),
-                    usage=_usage(raw),
-                )
-            raise ProjectError("Research provider did not complete its research response")
-        if raw.get("status") != "completed":
-            raise ProjectError("Research provider did not complete its research response")
-        if any(
-            item.get("type") == "refusal"
-            for item in raw.get("output", [])
-            if isinstance(item, dict)
-            for item in item.get("content", [])
-            if isinstance(item, dict)
+            headers["Accept"] = "text/event-stream"
+        async with (
+            asyncio.timeout(timeout_seconds),
+            httpx.AsyncClient(
+                timeout=timeout_seconds, follow_redirects=False, trust_env=False
+            ) as client,
+            client.stream(
+                "POST",
+                "https://api.openai.com/v1/responses",
+                headers=headers,
+                content=_serialized_role_request(payload),
+            ) as response,
         ):
-            raise ProjectError("Research provider declined the request")
-        texts = [
-            content["text"]
-            for item in raw.get("output", [])
-            if isinstance(item, dict)
-            for content in item.get("content", [])
-            if isinstance(content, dict)
-            and content.get("type") == "output_text"
-            and isinstance(content.get("text"), str)
-        ]
-        if len(texts) != 1:
-            raise ProjectError("Research provider returned malformed output")
-        # ChatGPT controls its own generation ceiling. A fully completed,
-        # schema-valid response remains usable even when provider-reported
-        # usage exceeds SIGMA's conservative internal reservation estimate.
-        # Actual usage is settled below; only an explicitly incomplete provider
-        # response follows the bounded clipped-response recovery path.
-        try:
-            data = json.loads(texts[0])
-        except ValueError as exc:
-            raise ProjectError("Research provider returned malformed output") from exc
+            _sponsor_inference_diagnostic(record, f"http_{response.status_code}")
+            collected = bytearray()
+            async for chunk in response.aiter_bytes():
+                collected.extend(chunk)
+                if len(collected) > MAX_RESEARCH_RESPONSE_BYTES:
+                    _sponsor_inference_diagnostic(record, "response_overflow")
+                    raise ProjectError("Research provider transport exceeded the 8 MB safety bound")
+            body = bytes(collected)
+            if response.status_code != 200:
+                try:
+                    error_data = json.loads(body)
+                except ValueError:
+                    error_data = {}
+                code = None
+                if isinstance(error_data, dict) and isinstance(error_data.get("error"), dict):
+                    code = error_data["error"].get("code")
+                suffix = (
+                    str(code)
+                    if isinstance(code, str) and re.fullmatch(r"[a-zA-Z0-9_]{1,32}", code)
+                    else "unknown"
+                )
+                _sponsor_inference_diagnostic(
+                    record, f"http_{response.status_code}_{suffix}".lower()
+                )
+                if log_context:
+                    session_log.append(
+                        record["project_path"],
+                        log_context,
+                        {
+                            "type": "provider_failure",
+                            "request_id": request_id,
+                            "role": role,
+                            "status": "provider_rejected",
+                            "http_status": response.status_code,
+                            "provider_error_code": (
+                                code
+                                if isinstance(code, str)
+                                and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code)
+                                else None
+                            ),
+                            "provider_request_id": (
+                                response.headers.get("x-request-id")
+                                if re.fullmatch(
+                                    r"[A-Za-z0-9_.:-]{1,128}",
+                                    response.headers.get("x-request-id", ""),
+                                )
+                                else None
+                            ),
+                            "elapsed_seconds": round(time.monotonic() - started, 3),
+                        },
+                    )
+                failure(
+                    response.status_code,
+                    error_data,
+                    credential["mode"],
+                    "research",
+                    retry_after=response.headers.get("retry-after"),
+                    provider_request_id=response.headers.get("x-request-id"),
+                    provider_limit_headers=response.headers,
+                )
+            if credential["mode"] == "chatgpt":
+                raw = await completed(
+                    httpx.Response(response.status_code, headers=response.headers, content=body),
+                    "research",
+                    max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
+                    overflow_message="Research provider stream exceeded the 8 MB safety bound",
+                    retry_after=response.headers.get("retry-after"),
+                )
+            else:
+                try:
+                    raw = json.loads(body)
+                except ValueError as exc:
+                    raise ProjectError("Research provider returned malformed output") from exc
+    if not isinstance(raw, dict):
+        raise ProjectError("Research provider did not complete its research response")
+    if raw.get("status") == "incomplete":
+        details = raw.get("incomplete_details")
+        if isinstance(details, dict) and details.get("reason") == "max_output_tokens":
+            texts = [
+                content["text"]
+                for item in raw.get("output", [])
+                if isinstance(item, dict)
+                for content in item.get("content", [])
+                if isinstance(content, dict)
+                and content.get("type") == "output_text"
+                and isinstance(content.get("text"), str)
+            ]
+            raise IncompleteResearchResponse(
+                "Provider clipped the response at the configured output-token limit.",
+                partial_text="\n".join(texts),
+                usage=_usage(raw),
+            )
+        raise ProjectError("Research provider did not complete its research response")
+    if raw.get("status") != "completed":
+        raise ProjectError("Research provider did not complete its research response")
+    if any(
+        item.get("type") == "refusal"
+        for item in raw.get("output", [])
+        if isinstance(item, dict)
+        for item in item.get("content", [])
+        if isinstance(item, dict)
+    ):
+        raise ProjectError("Research provider declined the request")
+    texts = [
+        content["text"]
+        for item in raw.get("output", [])
+        if isinstance(item, dict)
+        for content in item.get("content", [])
+        if isinstance(content, dict)
+        and content.get("type") == "output_text"
+        and isinstance(content.get("text"), str)
+    ]
+    if len(texts) != 1:
+        raise ProjectError("Research provider returned malformed output")
+    # ChatGPT controls its own generation ceiling. A fully completed,
+    # schema-valid response remains usable even when provider-reported
+    # usage exceeds SIGMA's conservative internal reservation estimate.
+    # Actual usage is settled below; only an explicitly incomplete provider
+    # response follows the bounded clipped-response recovery path.
+    try:
+        data = json.loads(texts[0])
+    except ValueError as exc:
+        raise ProjectError("Research provider returned malformed output") from exc
     if not isinstance(data, dict):
         raise ProjectError("Research provider returned malformed output")
     usage_for_log = _usage(raw)
@@ -15612,79 +15629,94 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         timeout_seconds = min(120.0, _call_timeout_seconds(record))
         if timeout_seconds <= 0:
             raise TimeoutError("Reference compilation reached its session time ceiling.")
-        headers = {
-            "Authorization": "Bearer " + credential["token"],
-            "Content-Type": "application/json",
-        }
-        if credential["mode"] == "chatgpt":
-            headers["Accept"] = "text/event-stream"
-        async with (
-            _portfolio_global_gate(session_id),
-            asyncio.timeout(timeout_seconds),
-            httpx.AsyncClient(
-                timeout=timeout_seconds, follow_redirects=False, trust_env=False
-            ) as client,
-            client.stream(
-                "POST",
-                "https://api.openai.com/v1/responses",
-                headers=headers,
-                content=encoded,
-            ) as response,
-        ):
-            wire = bytearray()
-            async for chunk in response.aiter_bytes():
-                wire.extend(chunk)
-                if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
-                    raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
-            provider_http_status = response.status_code
-            if response.status_code == 429:
-                # Respect numeric or HTTP-date Retry-After. An unparseable
-                # header is a hard no-retry rather than a rate-limit bypass.
-                retry_after = response.headers.get("Retry-After")
-                if retry_after:
-                    try:
-                        retry_after_seconds = max(0.0, float(retry_after))
-                        if not math.isfinite(retry_after_seconds):
-                            raise ValueError("nonfinite_retry_after")
-                    except ValueError:
-                        try:
-                            retry_after_seconds = max(
-                                0.0,
-                                (
-                                    parsedate_to_datetime(retry_after) - datetime.now(UTC)
-                                ).total_seconds(),
-                            )
-                        except (ValueError, TypeError, OverflowError):
-                            retry_after_seconds = (
-                                research_reference_compiler.MAX_RETRY_AFTER_SECONDS + 1
-                            )
-            if response.status_code != 200:
-                # Persist safe error metadata, never raw provider bodies or
-                # user/source content. This makes known fallback diagnosable.
-                try:
-                    error_body = json.loads(wire)
-                    error = error_body.get("error") if isinstance(error_body, dict) else None
-                    code = error.get("code") if isinstance(error, dict) else None
-                    if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code):
-                        provider_error_code = code
-                except (ValueError, TypeError):
-                    pass
-                # 5xx/timeout-like responses do not prove zero billable usage.
-                # Only known pre-inference 4xx rejections release the reservation.
-                rejected = response.status_code in {400, 401, 403, 404, 422, 429}
-                raise ProjectError(
-                    f"Reference compilation provider rejected the request (HTTP {response.status_code})."
-                )
+        from sigma import model_dispatch
+
+        async with _portfolio_global_gate(session_id):
+            personal_raw = await model_dispatch.private_response_if_selected(
+                credential,
+                payload,
+                timeout_seconds=timeout_seconds,
+                request_id=attempt_id.replace("-", ""),
+            )
+        if personal_raw is not None:
+            raw = personal_raw
+            provider_http_status = 200
+        else:
+            headers = {
+                "Authorization": "Bearer " + credential["token"],
+                "Content-Type": "application/json",
+            }
             if credential["mode"] == "chatgpt":
-                raw = await completed(
-                    httpx.Response(
-                        response.status_code, headers=response.headers, content=bytes(wire)
-                    ),
-                    "research",
-                    max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
-                )
-            else:
-                raw = json.loads(wire)
+                headers["Accept"] = "text/event-stream"
+            async with (
+                _portfolio_global_gate(session_id),
+                asyncio.timeout(timeout_seconds),
+                httpx.AsyncClient(
+                    timeout=timeout_seconds, follow_redirects=False, trust_env=False
+                ) as client,
+                client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                    headers=headers,
+                    content=encoded,
+                ) as response,
+            ):
+                wire = bytearray()
+                async for chunk in response.aiter_bytes():
+                    wire.extend(chunk)
+                    if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
+                        raise ProjectError(
+                            "Reference compiler response exceeded the 8 MB safety bound"
+                        )
+                provider_http_status = response.status_code
+                if response.status_code == 429:
+                    # Respect numeric or HTTP-date Retry-After. An unparseable
+                    # header is a hard no-retry rather than a rate-limit bypass.
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            retry_after_seconds = max(0.0, float(retry_after))
+                            if not math.isfinite(retry_after_seconds):
+                                raise ValueError("nonfinite_retry_after")
+                        except ValueError:
+                            try:
+                                retry_after_seconds = max(
+                                    0.0,
+                                    (
+                                        parsedate_to_datetime(retry_after) - datetime.now(UTC)
+                                    ).total_seconds(),
+                                )
+                            except (ValueError, TypeError, OverflowError):
+                                retry_after_seconds = (
+                                    research_reference_compiler.MAX_RETRY_AFTER_SECONDS + 1
+                                )
+                if response.status_code != 200:
+                    # Persist safe error metadata, never raw provider bodies or
+                    # user/source content. This makes known fallback diagnosable.
+                    try:
+                        error_body = json.loads(wire)
+                        error = error_body.get("error") if isinstance(error_body, dict) else None
+                        code = error.get("code") if isinstance(error, dict) else None
+                        if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code):
+                            provider_error_code = code
+                    except (ValueError, TypeError):
+                        pass
+                    # 5xx/timeout-like responses do not prove zero billable usage.
+                    # Only known pre-inference 4xx rejections release the reservation.
+                    rejected = response.status_code in {400, 401, 403, 404, 422, 429}
+                    raise ProjectError(
+                        f"Reference compilation provider rejected the request (HTTP {response.status_code})."
+                    )
+                if credential["mode"] == "chatgpt":
+                    raw = await completed(
+                        httpx.Response(
+                            response.status_code, headers=response.headers, content=bytes(wire)
+                        ),
+                        "research",
+                        max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
+                    )
+                else:
+                    raw = json.loads(wire)
         provider_response_status = (
             str(raw.get("status", ""))[:40] if isinstance(raw, dict) else None
         )

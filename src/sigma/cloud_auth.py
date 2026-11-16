@@ -81,6 +81,16 @@ _WINDOW_ID = re.compile(r"^[a-f0-9]{32}$")
 
 
 def _window_id(request: Request) -> str | None:
+    # Browser-proxy ESM modules and WebSockets cannot inherit fetch headers
+    # or query strings from their parent document. Keep each asset bound to the
+    # same Google window by using its immutable URL path prefix instead.
+    prefix = "/api/ai/personal-browser/window/"
+    path = request.url.path
+    if path.startswith(prefix):
+        identifier = path[len(prefix) :].split("/", 1)[0]
+        if identifier != "unscoped":
+            return identifier if _WINDOW_ID.fullmatch(identifier) else None
+        return None
     value = request.headers.get("x-sigma-window") or request.query_params.get("sigma_window")
     return value if value and _WINDOW_ID.fullmatch(value) else None
 
@@ -727,6 +737,28 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             sponsorship_eligible,
             model_access,
         )
+        if (
+            cfg.local
+            and sponsorship_eligible
+            and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1"
+        ):
+            # The local --prod worker can outlive a cancelled/failed sign-in.
+            # An old Personal selection without a completed, subject-bound
+            # authorization must never strand an eligible account at "Connect".
+            # Preserve legitimate saved authorizations for worker restoration.
+            stale_personal = db.execute(
+                "SELECT 1 FROM user_state WHERE subject=? AND model_access='personal' "
+                "AND NOT EXISTS(SELECT 1 FROM personal_authorizations "
+                "WHERE subject=user_state.subject)",
+                (principal.subject,),
+            ).fetchone()
+            if stale_personal:
+                db.execute(
+                    "UPDATE user_state SET model_access='sponsored',"
+                    "model_access_selected=0,model_access_explicit=0,updated_at=? "
+                    "WHERE subject=? AND model_access='personal'",
+                    (_now(), principal.subject),
+                )
         if first_member_session:
             # A local guest session can become a member when an administrator
             # adds the grant. That path has no new OAuth callback to set the
@@ -909,6 +941,24 @@ def record_personal_authorization(subject: str) -> None:
                 "ON CONFLICT(subject) DO UPDATE SET authorized_at=excluded.authorized_at",
                 (subject, _now()),
             )
+
+
+def clear_personal_authorization(subject: str) -> None:
+    """Forget local Personal authorization and return eligible users to Sponsored."""
+    cfg = config()
+    if not cfg.enabled or cfg.error or not cfg.local:
+        raise RuntimeError("Local Personal ChatGPT is unavailable.")
+    sponsored_enabled = sponsored_access_enabled()
+    with _db(cfg) as db:
+        changed = db.execute(
+            "UPDATE user_state SET model_access=CASE WHEN sponsorship_eligible=1 AND ? "
+            "THEN 'sponsored' ELSE 'personal' END, model_access_selected=1, "
+            "model_access_explicit=1, updated_at=? WHERE subject=? AND access_active=1",
+            (sponsored_enabled, _now(), subject),
+        ).rowcount
+        if changed != 1:
+            raise PermissionError("Authorized account state is unavailable.")
+        db.execute("DELETE FROM personal_authorizations WHERE subject=?", (subject,))
 
 
 def persist_model_connection_status(subject: str, status: str) -> None:
@@ -1424,7 +1474,23 @@ async def middleware(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    # The authenticated local Personal browser is a same-origin iframe of
+    # SIGMA's own noVNC viewer, not an iframe of OpenAI. Its route provides a
+    # restrictive nonce-based CSP with frame-ancestors 'self'. Preserve that
+    # policy; the global anti-framing override otherwise silently prevents the
+    # viewer script and WebSocket from ever starting despite HTTP 200 on /view.
+    # All other responses, including failed/hosted viewer requests, fail closed.
+    viewer_csp = response.headers.get("Content-Security-Policy", "")
+    allow_local_viewer = (
+        cfg.local
+        and request.method == "GET"
+        and path == "/api/ai/personal-browser/view"
+        and response.status_code == 200
+        and viewer_csp.startswith("default-src 'none'; ")
+        and "frame-ancestors 'self'" in viewer_csp
+    )
+    if not allow_local_viewer:
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
     return response
 
 
@@ -1768,6 +1834,13 @@ def status(request: Request):
         and os.environ.get("SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED", "").strip().casefold()
         in {"1", "true", "yes"}
     )
+    personal_browser_lab_configured = (
+        cfg.enabled
+        and not cfg.error
+        and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
+        and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET", ""))
+        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
+    )
     local_setup_missing = []
     if not cfg.enabled or cfg.local:
         local_setup_missing = [
@@ -1844,6 +1917,12 @@ def status(request: Request):
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
         "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
         "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
+        "personal_browser_lab_enabled": bool(
+            personal_browser_lab_configured
+            and principal is not None
+            and principal.role in {"admin", "member"}
+            and not principal.subject.startswith("mock:")
+        ),
     }
 
 

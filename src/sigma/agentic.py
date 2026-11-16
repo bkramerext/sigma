@@ -303,7 +303,10 @@ async def _invoke(
             }
         },
     }
-    headers = {"Authorization": "Bearer " + binding["token"]}
+    from sigma import model_dispatch
+
+    is_personal = model_dispatch.uses_personal_worker(binding)
+    headers = {} if is_personal else {"Authorization": "Bearer " + binding["token"]}
     if binding["mode"] == "chatgpt":
         del payload["max_output_tokens"]
         payload["stream"] = True
@@ -312,7 +315,7 @@ async def _invoke(
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
     attempt = None
     try:
-        if cloud_workspaces.enabled():
+        if cloud_workspaces.enabled() and not is_personal:
             if not cloud_credential(binding):
                 raise ProjectError("Sponsored cloud inference is not configured.")
             attempt = cloud_research.start_provider_attempt(
@@ -324,34 +327,40 @@ async def _invoke(
             )
         if attempt is not None:
             attempt.dispatched = True
-        async with (
-            asyncio.timeout(CALL_SECONDS),
-            httpx.AsyncClient(
-                timeout=CALL_SECONDS, follow_redirects=False, trust_env=False
-            ) as client,
-            client.stream(
-                "POST",
-                "https://api.openai.com/v1/responses",
-                headers=headers,
-                json=payload,
-            ) as response,
-        ):
-            if binding["mode"] == "chatgpt" and response.status_code == 200:
-                raw = await completed(response, guard)
-            else:
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    body.extend(chunk)
-                    if len(body) > MAX_RESPONSE:
-                        raise ProjectError(
-                            "Provider response exceeded the limit; no strategy was saved."
-                        )
-                try:
-                    raw = json.loads(body)
-                except ValueError:
-                    raw = {}
-                if response.status_code != 200:
-                    failure(response.status_code, raw, binding["mode"], guard)
+        personal_raw = await model_dispatch.private_response_if_selected(
+            binding, payload, timeout_seconds=CALL_SECONDS
+        )
+        if personal_raw is not None:
+            raw = personal_raw
+        else:
+            async with (
+                asyncio.timeout(CALL_SECONDS),
+                httpx.AsyncClient(
+                    timeout=CALL_SECONDS, follow_redirects=False, trust_env=False
+                ) as client,
+                client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                    headers=headers,
+                    json=payload,
+                ) as response,
+            ):
+                if binding["mode"] == "chatgpt" and response.status_code == 200:
+                    raw = await completed(response, guard)
+                else:
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        body.extend(chunk)
+                        if len(body) > MAX_RESPONSE:
+                            raise ProjectError(
+                                "Provider response exceeded the limit; no strategy was saved."
+                            )
+                    try:
+                        raw = json.loads(body)
+                    except ValueError:
+                        raw = {}
+                    if response.status_code != 200:
+                        failure(response.status_code, raw, binding["mode"], guard)
         cloud_research.settle_provider_attempt(attempt, raw)
         if not isinstance(raw, dict) or raw.get("status") != "completed":
             raise ProjectError("Provider did not complete a research step; no strategy was saved.")

@@ -116,6 +116,66 @@ class ReleaseImageTests(unittest.TestCase):
         self.assertEqual(document["source_commit"], self.first)
         self.assertIn("repo_digests", document["images"]["frontend"])
 
+    def test_optional_auth_lab_images_are_built_and_attested_by_exact_commit(self) -> None:
+        (self.repository / "auth-poc").mkdir()
+        (self.repository / "auth-poc/Dockerfile").write_text("FROM scratch\nCOPY marker /marker\n")
+        (self.repository / "auth-poc/browser.Dockerfile").write_text(
+            "FROM scratch\nCOPY marker /marker\n"
+        )
+        self.git("add", ".")
+        self.git("commit", "-qm", "add optional lab images")
+        requested = self.git("rev-parse", "HEAD")
+        builds: list[list[str]] = []
+
+        def build_runner(args: list[str]) -> str:
+            builds.append(args)
+            return ""
+
+        release_image.build(self.repository, requested, runner=build_runner, auth_poc=True)
+        self.assertEqual(len(builds), 4)
+        for name, command in zip(
+            ("backend", "frontend", "auth-poc", "auth-browser-poc"), builds, strict=True
+        ):
+            self.assertIn(f"sigma-{name}:{requested}", command)
+            self.assertIn(f"org.opencontainers.image.revision={requested}", command)
+
+        def inspect(args: list[str]) -> str:
+            if args[1] == "image":
+                return json.dumps(
+                    {
+                        "Id": "sha256:" + "a" * 64,
+                        "RepoDigests": [],
+                        "Config": {"Labels": {release_image.LABEL: requested}},
+                    }
+                )
+            return json.dumps(
+                {
+                    "Image": "sha256:" + "a" * 64,
+                    "State": {"Status": "running"},
+                    "Config": {"Labels": {release_image.LABEL: requested}},
+                }
+            )
+
+        info = release_image.verify(requested, runner=inspect, auth_poc=True)
+        self.assertEqual(set(info), {"backend", "frontend", "auth-poc", "auth-browser-poc"})
+        containers = {
+            "backend": "backend-id",
+            "frontend": "frontend-id",
+            "auth-poc": "worker-id",
+            "auth-browser-poc": "browser-id",
+        }
+        record = release_image.record(
+            requested, Path(self.temp.name) / "records-lab", containers, runner=inspect
+        )
+        self.assertEqual(set(json.loads(record.read_text())["images"]), set(containers))
+        with self.assertRaisesRegex(ValueError, "both optional"):
+            release_image.record(
+                requested,
+                Path(self.temp.name) / "bad-record",
+                {"backend": "a", "frontend": "b", "auth-poc": "c"},
+                runner=inspect,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -130,6 +130,37 @@ class Deployment:
             ["install", "-o", "root", "-g", "root", "-m", "0755", str(source), str(self.preflight)],
         )
 
+    def sync_service_unit(self) -> None:
+        """Install the reviewed service unit when deploying on the real GCE host.
+
+        The unit selects the *same* optional Compose overlays on both start
+        and stop, preserving backup quiescence and reliable rollback.
+        """
+        if not self.root_check:
+            return  # Offline release tests never write host systemd state.
+        source = self.repository / "deploy/systemd/sigma.service"
+        try:
+            info = source.lstat()
+        except OSError as error:
+            raise DeployFailure("release SIGMA systemd unit is missing") from error
+        if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            raise DeployFailure("release SIGMA systemd unit must be a regular file")
+        _call(
+            self.runner,
+            [
+                "install",
+                "-o",
+                "root",
+                "-g",
+                "root",
+                "-m",
+                "0644",
+                str(source),
+                "/etc/systemd/system/sigma.service",
+            ],
+        )
+        _call(self.runner, ["systemctl", "daemon-reload"])
+
     def check_preflight(self) -> None:
         argv = [
             "python3",
@@ -219,17 +250,18 @@ class Deployment:
             _call(self.runner, ["git", "-C", str(self.repository), "checkout", "--detach", sha])
             candidate_checkout_changed = True
             self.sync_preflight()
+            self.sync_service_unit()
             self.check_preflight()
-            _call(
-                self.runner,
-                [
-                    "python3",
-                    str(self.repository / "deploy/release_image.py"),
-                    "build",
-                    str(self.repository),
-                    sha,
-                ],
-            )
+            build_command = [
+                "python3",
+                str(self.repository / "deploy/release_image.py"),
+                "build",
+                str(self.repository),
+                sha,
+            ]
+            if self.auth_lab_enabled():
+                build_command.append("--auth-poc")
+            _call(self.runner, build_command)
             if not initial and maintenance_switch.is_file():
                 _call(self.runner, ["python3", str(maintenance_switch), "on"])
                 maintenance_enabled = True
@@ -259,22 +291,27 @@ class Deployment:
                 or release_pin_changed
             ):
                 raise
-            # Restore the code and release pin atomically, preserving every other
-            # deploy.env byte. Existing disk state and credentials are untouched.
+            # Stop the candidate while its own checkout and Compose unit are
+            # still active; otherwise switching to an older release could omit
+            # the optional worker/browser services from ExecStop and orphan them.
+            # Existing disk state and credentials are never deleted.
             try:
+                if candidate_started:
+                    _call(self.runner, ["systemctl", "stop", "sigma.service"])
+                    service_stopped = True
+                    candidate_started = False
                 _replace_release(self.env_file, self.env_file.read_bytes(), previous, owner)
                 _call(
                     self.runner,
                     ["git", "-C", str(self.repository), "checkout", "--detach", previous],
                 )
                 self.sync_preflight()
+                self.sync_service_unit()
                 if initial:
                     _call(self.runner, ["systemctl", "stop", "sigma.service"])
                     _call(self.runner, ["systemctl", "disable", "sigma.service"])
                 elif service_stopped:
                     _call(self.runner, ["systemctl", "start", "sigma.service"])
-                elif candidate_started:
-                    _call(self.runner, ["systemctl", "restart", "sigma.service"])
                 if not initial and service_recovery_needed:
                     self.verify_health(previous)
                 if maintenance_enabled:
@@ -292,6 +329,13 @@ class Deployment:
         )
         return "deployed"
 
+    def auth_lab_enabled(self) -> bool:
+        """Only the deliberately configured, nonpublic synthetic lab is deployed."""
+        try:
+            return b"SIGMA_AUTH_POC_LAB_ENABLED=true" in self.env_file.read_bytes().splitlines()
+        except OSError as exc:
+            raise DeployFailure("cannot read reviewed auth-lab deployment setting") from exc
+
     def verify_health(self, sha: str) -> None:
         compose = [
             "docker",
@@ -305,10 +349,21 @@ class Deployment:
             "-f",
             str(self.repository / "deploy/compose.gce.yaml"),
         ]
+        services = ["backend", "frontend", "edge"]
+        if self.auth_lab_enabled():
+            compose.extend(
+                [
+                    "-f",
+                    str(self.repository / "deploy/auth-poc.compose.yaml"),
+                    "-f",
+                    str(self.repository / "deploy/auth-poc.gce.yaml"),
+                ]
+            )
+            services.extend(["auth-poc", "browser"])
         deadline = time.monotonic() + 180
         while True:
             waiting_for: list[str] = []
-            for service in ("backend", "frontend", "edge"):
+            for service in services:
                 container = _call(self.runner, compose + ["ps", "-q", service])
                 if not container:
                     waiting_for.append(service)
@@ -324,7 +379,8 @@ class Deployment:
                     self.runner,
                     ["docker", "inspect", "--format", "{{.Config.Image}}", container],
                 )
-                expected_image = f"sigma-{service}:{sha}" if service != "edge" else None
+                image_name = "auth-browser-poc" if service == "browser" else service
+                expected_image = f"sigma-{image_name}:{sha}" if service != "edge" else None
                 if expected_image and image != expected_image:
                     raise DeployFailure(
                         f"{service} container image does not match selected release"

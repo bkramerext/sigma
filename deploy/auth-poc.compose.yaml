@@ -1,0 +1,77 @@
+# Single-user technical laboratory only. The two services share a NETWORK
+# namespace, not any credential volume, PID namespace, filesystem, or user ID.
+services:
+  auth-poc:
+    platform: linux/amd64
+    build:
+      context: ..
+      dockerfile: auth-poc/Dockerfile
+    image: sigma-auth-poc:local
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1.0
+    environment:
+      SIGMA_AUTH_HOME: /var/lib/sigma-poc-auth
+      SIGMA_AUTH_POC_LAB: "1"
+      SIGMA_AUTH_POC_REAL_SIGNIN: "0"
+      SIGMA_CLOUD_AUTH_ENABLED: "false"
+      SIGMA_CLOUD_AUTH_LOCAL: "false"
+      SIGMA_STORAGE_BACKEND: local
+    tmpfs:
+      - /tmp:rw,nosuid,size=64m,uid=10001,gid=10001,mode=0700
+    volumes:
+      - auth-poc-state:/var/lib/sigma-poc-auth
+    ports:
+      # Never expose this interactive credential-sign-in UI beyond loopback.
+      - "127.0.0.1:${SIGMA_AUTH_POC_PORT:-16080}:6080"
+    restart: "no"
+    healthcheck:
+      test: [CMD, "/opt/venv/bin/python", "/opt/sigma/auth-poc/healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  browser:
+    platform: ${SIGMA_AUTH_POC_BROWSER_PLATFORM:-linux/amd64}
+    build:
+      context: ..
+      dockerfile: auth-poc/browser.Dockerfile
+    image: sigma-auth-browser-poc:local
+    init: true
+    read_only: true
+    user: "11001:11001"
+    cap_drop: [ALL]
+    # Chromium's zygote sandbox performs chroot("/proc/self/fdinfo/").
+    # Retain only this capability in the isolated browser namespace.
+    cap_add: [SYS_CHROOT]
+    security_opt:
+      - no-new-privileges:true
+      # Retains Docker's syscall restrictions but allows Chromium's namespace
+      # sandbox (clone/setns/unshare), unlike seccomp=unconfined.
+      - seccomp:../auth-poc/chromium-seccomp.json
+    pids_limit: 192
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: 2.0
+    network_mode: "service:auth-poc"
+    depends_on:
+      auth-poc: {condition: service_healthy}
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m,uid=11001,gid=11001,mode=0700
+    restart: "no"
+    healthcheck:
+      # A responsive websockify process alone does not mean Chromium is alive.
+      # Verify Xvfb, VNC, and the actual sandboxed GUI renderer.
+      test: [CMD, "python3", "/opt/sigma/diag_probe.py", "--health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  auth-poc-state:

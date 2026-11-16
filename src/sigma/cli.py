@@ -160,8 +160,8 @@ COMMAND_DETAILS = {
     ),
     "start": (
         "Start or safely restart this checkout's browser UI.",
-        "./sigma start --prod --signin --navigate",
-        "Uses SIGMA local configuration and the configured UI ports; `--prod` previews the hosted Personal ChatGPT notice locally without connecting to production, changing billing, or disabling local OAuth. `--navigate` opens a browser tab.",
+        "./sigma start --prod --navigate",
+        "Uses SIGMA local configuration and the configured UI ports; `--prod` starts the isolated local Personal browser broker automatically when Docker Desktop is available. It never deploys to production or enables unapproved provider access. `--navigate` opens a browser tab.",
     ),
     "shutdown": (
         "Stop identifiable local SIGMA UI servers safely.",
@@ -320,7 +320,7 @@ def main() -> None:
     ui_command.add_argument(
         "--prod",
         action="store_true",
-        help="Preview hosted Personal ChatGPT notice locally (UI only; no live production routing)",
+        help="Start the local production-shaped Personal browser integration (Docker Desktop required for the prototype)",
     )
     ui_command.add_argument(
         "--signin",

@@ -508,7 +508,7 @@ def exercise(origin: str) -> None:
         page.goto(origin + "/not-found", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         fallback_pill = page.locator(".api-connection > summary")
-        expect(fallback_pill).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        expect(fallback_pill).to_have_attribute("aria-label", "ChatGPT Sponsored; connected")
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         funding.update(
@@ -520,13 +520,11 @@ def exercise(origin: str) -> None:
         page.evaluate("window.dispatchEvent(new Event('sigma-sponsored-budget-refresh'))")
         pill = page.locator(".api-connection > summary")
         expect(pill).to_be_visible()
-        expect(pill).to_contain_text("Sponsored ChatGPT")
-        expect(pill.locator(".sponsored-allowance-inline")).to_have_text("Allocation: $1.50")
-        allowance = page.get_by_role("button", name="Show sponsorship details")
+        expect(pill).to_contain_text("ChatGPT Sponsored")
+        expect(pill.locator(".sponsored-allowance-inline")).to_have_text("Allocation: 1.50")
+        allowance = page.get_by_role("button", name=re.compile(r"^Sponsored allowance:"))
         assert allowance.evaluate("e => getComputedStyle(e).backgroundColor") == "rgba(0, 0, 0, 0)"
-        expect(allowance).to_have_attribute(
-            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
-        )
+        assert allowance.get_attribute("data-tooltip") is None
         allowance.hover()
         allowance_text = page.locator(".sponsored-allowance-tooltip")
         expect(allowance_text).to_contain_text(
@@ -543,7 +541,7 @@ def exercise(origin: str) -> None:
         allowance.click()
         expect(allowance).to_have_attribute("aria-expanded", "false")
         pill.click()
-        expect(pill).to_contain_text("Sponsored ChatGPT")
+        expect(pill).to_contain_text("ChatGPT Sponsored")
         expect(allowance_text).to_contain_text(
             "$1.25 remaining of $2.00 per-user sponsored allocation."
         )
@@ -564,9 +562,9 @@ def exercise(origin: str) -> None:
         posts.clear()
         page.reload(wait_until="domcontentloaded")
         forced_pill = page.locator(".api-connection > summary")
-        expect(forced_pill).to_contain_text("Sponsored ChatGPT")
+        expect(forced_pill).to_contain_text("ChatGPT Sponsored")
         expect(forced_pill).to_have_attribute(
-            "aria-label", "Sponsored ChatGPT; sponsored mode required; connected"
+            "aria-label", "ChatGPT Sponsored; sponsored mode required; connected"
         )
         forced_pill.hover()
         expect(forced_pill).to_have_attribute(
@@ -575,7 +573,7 @@ def exercise(origin: str) -> None:
         forced_pill.click()
         assert not any(path.endswith("/api/ai/mode") for path, _ in posts), posts
         page.reload(wait_until="domcontentloaded")
-        expect(page.locator(".api-connection > summary")).to_contain_text("Sponsored ChatGPT")
+        expect(page.locator(".api-connection > summary")).to_contain_text("ChatGPT Sponsored")
 
         def assert_account_pill_geometry() -> None:
             geometry = page.evaluate(
@@ -588,9 +586,13 @@ def exercise(origin: str) -> None:
                     const g = google.getBoundingClientRect();
                     const c = chatgpt.getBoundingClientRect();
                     const s = status.getBoundingClientRect();
+                    const googleDot = google.querySelector('.connection-dot')?.getBoundingClientRect();
+                    const chatgptDot = chatgpt.querySelector('.connection-dot')?.getBoundingClientRect();
                     return {
                         google_left: g.left, google_right: g.right,
                         chatgpt_left: c.left, chatgpt_right: c.right,
+                        google_dot_left: googleDot?.left,
+                        chatgpt_dot_left: chatgptDot?.left,
                         label_right_inset: c.right - s.right,
                     };
                 }"""
@@ -598,6 +600,9 @@ def exercise(origin: str) -> None:
             assert geometry, "Google / ChatGPT header pills not found"
             assert abs(geometry["google_left"] - geometry["chatgpt_left"]) < 1, geometry
             assert abs(geometry["google_right"] - geometry["chatgpt_right"]) < 1, geometry
+            assert geometry["google_dot_left"] is not None, geometry
+            assert geometry["chatgpt_dot_left"] is not None, geometry
+            assert abs(geometry["google_dot_left"] - geometry["chatgpt_dot_left"]) < 1, geometry
             assert geometry["label_right_inset"] >= 10, geometry
 
         # Hosted presentation follows effective runtime routing; the admin's
@@ -609,7 +614,7 @@ def exercise(origin: str) -> None:
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         api_pill = page.locator(".api-connection > summary")
-        expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
+        expect(api_pill.get_by_role("status")).to_have_text("ChatGPT Sponsored")
         expect(api_pill.locator(".sponsored-allowance-inline")).to_have_text("Unlimited")
         assert_account_pill_geometry()
         # Enlarged provider text must grow both pills, not overflow a Google-sized column.
@@ -653,17 +658,16 @@ def exercise(origin: str) -> None:
         # starts a doomed browser authorization or creates a popup.
         sponsor_auth_calls = sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
         api_pill.get_by_role("status").click()
-        expect(page.locator(".connection-pill-message")).to_contain_text(
+        provisioning = page.get_by_role("dialog", name="Sponsored ChatGPT")
+        expect(provisioning).to_contain_text(
             "Hosted inference is currently routed to Sponsored OpenAI API key billing"
         )
-        expect(page.locator(".connection-pill-message")).to_contain_text(
-            "SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt"
-        )
+        expect(provisioning).to_contain_text("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
         assert (
             sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
             == sponsor_auth_calls
         )
-        expect(api_pill.get_by_role("status")).to_have_text("Sponsored OpenAI API")
+        expect(api_pill.get_by_role("status")).to_have_text("ChatGPT Sponsored")
         expect(api_pill).to_have_attribute(
             "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
@@ -674,18 +678,18 @@ def exercise(origin: str) -> None:
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
         sponsor_pill = page.locator(".api-connection > summary")
-        expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(sponsor_pill.get_by_role("status")).to_have_text("ChatGPT Sponsored")
         assert_account_pill_geometry()
         expect(sponsor_pill).to_have_attribute(
             "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         calls_before = sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
         sponsor_pill.get_by_role("status").click()
-        expect(page.locator(".connection-pill-message")).to_contain_text(
+        expect(page.get_by_role("dialog", name="Sponsored ChatGPT")).to_contain_text(
             "Hosted ChatGPT sponsor credentials are not connected"
         )
         assert sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts) == calls_before
-        expect(sponsor_pill.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(sponsor_pill.get_by_role("status")).to_have_text("ChatGPT Sponsored")
         assert not failures, failures
         if os.environ.get("SIGMA_HOSTED_CONNECTION_FOCUSED") == "1":
             browser.close()
@@ -974,14 +978,14 @@ def exercise(origin: str) -> None:
         posts.clear()
         reload_button = page.get_by_role("button", name="Reload me!")
         hosted_summary = page.locator(".api-connection > summary")
-        expect(hosted_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(hosted_summary.get_by_role("status")).to_have_text("ChatGPT Sponsored")
         expect(hosted_summary).to_have_class(re.compile("has-sponsored-allowance"))
         expect(hosted_summary).to_have_attribute(
-            "title", "SIGMA covers eligible ChatGPT model calls."
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         expect(page.get_by_role("button", name="Reload me!")).to_have_count(0)
         hosted_summary.click()
-        expect(hosted_summary.get_by_role("status")).to_have_text("Sponsored ChatGPT")
+        expect(hosted_summary.get_by_role("status")).to_have_text("ChatGPT Sponsored")
         assert any(
             path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
         ), posts
@@ -1015,8 +1019,10 @@ def exercise(origin: str) -> None:
         local_connect_succeeds["value"] = True
         posts.clear()
         with page.expect_request("**/api/ai/auth/begin"):
-            sponsored_summary.click()
-        expect(sponsored_summary).to_have_attribute("aria-label", "Disconnect from ChatGPT")
+            page.get_by_role("dialog", name="Connect to ChatGPT").get_by_role(
+                "button", name="Retry"
+            ).click()
+        expect(sponsored_summary).to_have_attribute("aria-label", "Connected to ChatGPT")
         assert not any(
             path.endswith("/api/ai/mode") and body.get("mode") == "sponsored"
             for path, body in posts
@@ -1025,11 +1031,11 @@ def exercise(origin: str) -> None:
         with page.expect_request("**/api/ai/disconnect") as disconnect_request:
             sponsored_summary.click()
         assert disconnect_request.value.method == "POST"
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        expect(sponsored_summary).to_have_attribute("aria-label", "ChatGPT Sponsored; connected")
         assert any(
             path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
         ), posts
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        expect(sponsored_summary).to_have_attribute("aria-label", "ChatGPT Sponsored; connected")
 
         for personal_status in ("disconnected", "reauth_required", "unavailable"):
             selected["mode"] = "personal"
@@ -1064,14 +1070,16 @@ def exercise(origin: str) -> None:
         assert regular_signin.value.post_data_json == {
             "enable_plan": False,
         }, regular_signin.value.post_data_json
-        expect(page.get_by_text("Complete sign-in in the browser.")).to_be_visible()
+        expect(page.get_by_role("dialog", name="Connect to ChatGPT")).to_contain_text(
+            "Complete ChatGPT sign-in in the browser tab."
+        )
         expect(page.locator(".api-connection").get_by_role("button", name="Cancel")).to_have_count(
             0
         )
         personal_signin_pending["value"] = False
         local_connect_succeeds["value"] = True
         expect(page.locator(".api-connection > summary")).to_have_attribute(
-            "aria-label", "Disconnect from ChatGPT"
+            "aria-label", "Connected to ChatGPT"
         )
         expect(page.locator(".connection-pill-message[role=alert]")).to_have_count(0)
         sponsorship_eligible["value"] = True
@@ -1082,18 +1090,18 @@ def exercise(origin: str) -> None:
         local_connect_succeeds["value"] = False
         page.reload(wait_until="domcontentloaded")
         sponsored_summary = page.locator(".api-connection > summary")
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        expect(sponsored_summary).to_have_attribute("aria-label", "ChatGPT Sponsored")
         expect(sponsored_summary).to_have_attribute(
-            "title", "SIGMA covers eligible ChatGPT model calls."
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
-        details = page.get_by_role("button", name="Show sponsorship details")
+        details = page.get_by_role("button", name=re.compile(r"^Sponsored allowance:"))
         details.click()
         expect(details).to_have_attribute("aria-expanded", "true")
         posts.clear()
         local_connect_succeeds["value"] = True
         with page.expect_request("**/api/ai/auth/begin"):
             sponsored_summary.click(position={"x": 20, "y": 14})
-        expect(sponsored_summary.get_by_role("status")).to_have_text("Disconnect from ChatGPT")
+        expect(sponsored_summary.get_by_role("status")).to_have_text("Connected to ChatGPT")
         assert any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
         assert not any(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts), posts
         expect(page.locator(".connection-pill-message")).to_have_count(0)
@@ -1109,7 +1117,7 @@ def exercise(origin: str) -> None:
         expect(page.locator("#invitation-welcome-dialog")).to_have_count(0)
         posts.clear()
         admin_summary = page.locator(".api-connection > summary")
-        expect(admin_summary).to_have_attribute("aria-label", "Sponsored ChatGPT")
+        expect(admin_summary).to_have_attribute("aria-label", "ChatGPT Sponsored")
         with page.expect_request("**/api/ai/auth/begin"):
             admin_summary.click(position={"x": 20, "y": 14})
         assert any(path.endswith("/api/ai/auth/begin") for path, _ in posts), posts
@@ -1117,7 +1125,7 @@ def exercise(origin: str) -> None:
         personal_signin_pending["value"] = False
         local_connect_succeeds["value"] = True
         expect(page.locator(".api-connection > summary")).to_have_attribute(
-            "aria-label", "Disconnect from ChatGPT"
+            "aria-label", "Connected to ChatGPT"
         )
         page.get_by_role("link", name="Administrator settings").click()
         admin_dialog = page.get_by_role("dialog", name="Administrator Settings")
@@ -1158,25 +1166,25 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary.locator(".sponsored-allowance-inline")).to_have_text(
-            "Allocation: $0.75"
+            "Allocation: 0.75"
         )
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_be_visible()
         expect(sponsored_summary.locator(".connection-dot")).to_have_css(
             "background-color", "rgb(117, 177, 140)"
         )
-        allowance = page.get_by_role("button", name="Show sponsorship details")
+        allowance = page.get_by_role("button", name=re.compile(r"^Sponsored allowance:"))
         allowance.hover()
         expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
             "$0.75 remaining of $1.00 per-user sponsored allocation."
         )
         sponsored_summary.click()
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        expect(sponsored_summary).to_have_attribute("aria-label", "ChatGPT Sponsored; connected")
         expect(sponsored_summary.locator(".connection-dot")).to_have_css(
             "background-color", "rgb(198, 160, 100)"
         )
         page.reload(wait_until="domcontentloaded")
         sponsored_summary = page.locator(".api-connection > summary")
-        expect(sponsored_summary).to_have_attribute("aria-label", "Sponsored ChatGPT; connected")
+        expect(sponsored_summary).to_have_attribute("aria-label", "ChatGPT Sponsored; connected")
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_be_visible()
         browser.close()
 

@@ -2732,6 +2732,61 @@ class CloudAuthTests(CloudAuthFixture):
             ):
                 self.assertEqual(guest.get(admin_route).status_code, 403, admin_route)
 
+    def test_local_prod_disconnected_personal_defaults_back_to_sponsored(self):
+        """A stale, unauthenticated Personal choice must not strand --prod at Connect."""
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin,
+                "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "sponsor@example.test",
+                "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
+                "SIGMA_LOCAL_SPONSORED_TEST_MODE": "0",
+            },
+        ):
+            os.environ["SIGMA_CLOUD_SPONSOR_EMAIL"] = "sponsor@example.test"
+            login = self.finish(
+                email="sponsor@example.test", subject="local-prod-sponsored-default"
+            )
+            self.assertEqual(login.status_code, 303)
+            self.client.cookies.update(login.cookies)
+            status = self.client.get("/api/cloud-auth/status")
+            self.assertEqual(status.status_code, 200, status.text)
+            self.assertEqual(status.json()["account"]["model_access"]["mode"], "sponsored")
+
+            # Reproduce persisted state from an interrupted Personal
+            # disconnect/cancel: explicit choice, but no valid OAuth grant.
+            with cloud_auth._db(cloud_auth.config()) as db:
+                db.execute(
+                    "UPDATE user_state SET model_access='personal',"
+                    "model_access_selected=1,model_access_explicit=1 "
+                    "WHERE subject='local-prod-sponsored-default'"
+                )
+            repaired = self.client.get("/api/cloud-auth/status")
+            self.assertEqual(repaired.status_code, 200, repaired.text)
+            self.assertEqual(repaired.json()["account"]["model_access"]["mode"], "sponsored")
+            with cloud_auth._db(cloud_auth.config()) as db:
+                persisted = db.execute(
+                    "SELECT model_access_selected FROM user_state WHERE subject=?",
+                    ("local-prod-sponsored-default",),
+                ).fetchone()
+            self.assertEqual(persisted["model_access_selected"], 0)
+
+            # Successful Personal authorization remains durable; a status
+            # refresh must not erase a legitimately selected Personal account.
+            self.seed_personal_plan_authorization("local-prod-sponsored-default")
+            cloud_auth.set_model_access("local-prod-sponsored-default", "personal")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "personal",
+            )
+            cloud_auth.clear_personal_authorization("local-prod-sponsored-default")
+            self.assertEqual(
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
+                "sponsored",
+            )
+
     def test_local_admin_pill_request_routes_selected_sponsor_to_sponsor_oauth(self):
         from sigma import ai_store
 

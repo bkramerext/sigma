@@ -151,6 +151,36 @@ class GceHostToolingTests(unittest.TestCase):
             preflight.check_compose()
         self.assertEqual(preflight.results[-1].status, "FAIL")
 
+        # An opted-in cloud laboratory must remain synthetic, nonpublic, and
+        # isolated from the browser's mount namespace.
+        services["edge"]["healthcheck"] = {"test": ["CMD", "wget", "health"]}
+        services["auth-poc"] = {
+            "read_only": True,
+            "ports": [],
+            "environment": {"SIGMA_AUTH_POC_REAL_SIGNIN": "0"},
+            "healthcheck": {"test": ["CMD", "python", "health"]},
+        }
+        services["browser"] = {
+            "read_only": True,
+            "network_mode": "service:auth-poc",
+            "volumes": [],
+            "ports": [],
+            "healthcheck": {"test": ["CMD", "python", "health"]},
+        }
+        configuration["volumes"]["auth-poc-state"] = {
+            "driver_opts": {"device": "/srv/sigma-state/auth/auth-poc"}
+        }
+        preflight.values["SIGMA_AUTH_POC_LAB_ENABLED"] = "true"
+        with patch.object(preflight, "command", side_effect=compose_result) as cmd:
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "PASS")
+        argv = cmd.call_args.args[0]
+        self.assertIn(str(ROOT / "deploy/auth-poc.gce.yaml"), argv)
+        services["browser"]["ports"] = ["0.0.0.0:16080:6080"]
+        with patch.object(preflight, "command", side_effect=compose_result):
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "FAIL")
+
     def test_installer_guard_accepts_ubuntu_os_release_spellings(self) -> None:
         guard = DEPLOY / "gce_host_guard.sh"
         for identity in ('ID=ubuntu\nVERSION_ID="24.04"\n', 'ID="ubuntu"\nVERSION_ID=24.04\n'):
