@@ -87,14 +87,17 @@ publishes the backend or frontend on any non-loopback interface.
 5. Record `docker stats` and VM memory before and after; inspect browser
    memory separately when the temporary Personal GUI is open.
 
-Rollback: while the direct application ports are still alive, restore and
-reload the saved original host Caddyfile **first**, then remove
-`SIGMA_HOST_DIRECT=true` and restart SIGMA to bring Docker edge back.
-Never leave the direct Caddyfile pointing at an old release without direct
-published loopback ports. The deployment tool refuses an upgrade/rollback
-while `SIGMA_HOST_DIRECT=true` if either involved release lacks the direct
-Compose overlay; disable direct mode and restore the original Caddy route
-**before** downgrading to the old edge-only release.
+Rollback **without an avoidable outage**: the edge container is scaled to
+zero in direct mode. **Do not restore the original Caddyfile first**, because
+it would immediately proxy all public requests to a stopped edge.
+Instead, while the direct backend/frontend ports are still healthy, unset
+`SIGMA_HOST_DIRECT=true` and start/health-check Docker `edge` on
+`127.0.0.1:18080` using the same current release. Only after it is healthy,
+restore and reload the original host Caddyfile. Confirm public traffic before
+reverting the application to an older edge-only release. For a downgrade,
+keep the current two loopback endpoints up until Caddy is back on the edge.
+The deployment tool refuses direct-mode upgrades/rollbacks if either release
+lacks the direct Compose overlay; complete this cutover **before** downgrading.
 
 ## Acceptance gates
 
