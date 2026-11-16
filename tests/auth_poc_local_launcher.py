@@ -433,6 +433,34 @@ class ProdLifecycleTests(unittest.TestCase):
             "image_platform_mismatch",
         )
 
+    def test_browser_health_requires_real_gui_not_only_http(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "sigma_browser_health_test", ROOT / "auth-poc/diag_probe.py"
+        )
+        assert spec and spec.loader
+        diagnostic = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(diagnostic)
+        ready = [
+            "component=browser",
+            "x11_socket=present",
+            "vnc_tcp_5900=listening",
+            "websocket_http_6080=http_200",
+            "chromium_processes=5",
+            "xvfb_processes=1",
+            "x11vnc_processes=1",
+            "websockify_processes=1",
+        ]
+        with patch.object(diagnostic, "report", return_value=ready):
+            self.assertTrue(diagnostic.browser_healthy())
+        with patch.object(
+            diagnostic, "report",
+            return_value=[
+                "chromium_processes=0" if line.startswith("chromium_processes=")
+                else line for line in ready
+            ],
+        ):
+            self.assertFalse(diagnostic.browser_healthy())
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)

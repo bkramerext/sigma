@@ -66,7 +66,9 @@ services:
       - /tmp:rw,nosuid,size=512m,uid=11001,gid=11001,mode=0700
     restart: "no"
     healthcheck:
-      test: [CMD, "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6080/vnc.html', timeout=3)"]
+      # A responsive websockify process alone does not mean Chromium is alive.
+      # Verify Xvfb, VNC, and the actual sandboxed GUI renderer.
+      test: [CMD, "python3", "/opt/sigma/diag_probe.py", "--health"]
       interval: 10s
       timeout: 5s
       retries: 6

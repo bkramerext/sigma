@@ -115,7 +115,23 @@ def report(mode: str) -> list[str]:
     return lines
 
 
+def browser_healthy() -> bool:
+    """Require a live Chromium GUI, not just an HTTP-speaking VNC proxy."""
+    status = dict(line.split("=", 1) for line in report("browser"))
+    return (
+        status["x11_socket"] == "present"
+        and status["vnc_tcp_5900"] == "listening"
+        and status["websocket_http_6080"] == "http_200"
+        and int(status["chromium_processes"]) > 0
+        and int(status["xvfb_processes"]) > 0
+        and int(status["x11vnc_processes"]) > 0
+        and int(status["websockify_processes"]) > 0
+    )
+
+
 def main() -> None:
+    if sys.argv[1:] == ["--health"]:
+        raise SystemExit(0 if browser_healthy() else 1)
     if len(sys.argv) != 2 or sys.argv[1] not in {"browser", "worker"}:
         raise SystemExit(2)
     for line in report(sys.argv[1]):
