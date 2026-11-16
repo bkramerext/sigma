@@ -32,7 +32,12 @@ class GceHostToolingTests(unittest.TestCase):
                     "http": {
                         "servers": {
                             "srv0": {
-                                "routes": [{"handle": [proxy(dial) for dial in dials]}]
+                                "routes": [
+                                    {
+                                        "match": [{"host": ["sigma-research.duckdns.org"]}],
+                                        "handle": [proxy(dial) for dial in dials],
+                                    }
+                                ]
                             }
                         }
                     }
@@ -41,7 +46,12 @@ class GceHostToolingTests(unittest.TestCase):
 
         expected = ("127.0.0.1:18081", "127.0.0.1:18082")
         check_host_direct_caddy.validate(document(*expected))
+        decoy = document(*expected)
+        decoy["apps"]["http"]["servers"]["srv0"]["routes"][0]["match"] = [
+            {"host": ["other.example.net"]}
+        ]
         for invalid in (
+            decoy,
             document("127.0.0.1:18080"),
             document("0.0.0.0:18081", "127.0.0.1:18082"),
             document("127.0.0.1:18081"),
