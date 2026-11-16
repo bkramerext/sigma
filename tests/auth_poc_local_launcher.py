@@ -115,6 +115,17 @@ class ProdLifecycleTests(unittest.TestCase):
         # A previously verified token is used before the interactive iframe.
         self.assertIn("await finishContainerBrowserStart(sequence)", source)
         self.assertIn("account?.status === 'verified'", source)
+        launch = source.split("async function startContainerPersonalBrowser()", 1)[1]
+        self.assertIn("setPersonalDialogState('starting')", launch)
+        self.assertLess(
+            launch.index("setPersonalDialogState('starting')"),
+            launch.index("await pendingPersonalStop.current"),
+        )
+        self.assertLess(
+            launch.index("setPersonalDialogState('starting')"),
+            launch.index("fetch(windowAuthUrl('/api/ai/personal-browser/start')"),
+        )
+        self.assertNotIn("setPersonalDialogState('closed')", launch.split("try {", 1)[0])
         self.assertIn("setPersonalDialogState('closed')", source)
         # User confirmation must report progress and surface failures, never
         # leave an unresponsive Confirm button on top of a failed HTTP call.
@@ -122,7 +133,7 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn('{disconnecting ? <span role="status">Disconnecting…</span>', source)
         self.assertIn("if (result.disconnected !== true)", source)
         self.assertIn("await stopContainerPersonalBrowser().catch(", source)
-        self.assertIn("state === 'ready' ? ' is-viewing' : ''", source)
+        self.assertIn("state !== 'error' ? ' is-viewing' : ''", source)
         self.assertNotIn("personal-chatgpt-preview-note", source)
         self.assertNotIn("OpenAI's personal ChatGPT sign-in uses", source)
         boot = (ROOT / "auth-poc/boot.sh").read_text(encoding="utf-8")
