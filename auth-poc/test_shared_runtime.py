@@ -104,7 +104,20 @@ def main() -> None:
     assert call(A, "GET", "/v1/browser/status")[1]["status"] == "stopped"
     assert_no_browser_processes()
     assert call(A, "GET", "/v1/account")[0] == 200
-    print("PASS one shared worker, two encrypted users, one disposable browser, no idle GUI")
+    assert not Path("/tmp/sigma-browser").exists(), "Closed browser retained its profile"
+    # A closed login must not poison the next user's Chrome/X11 startup,
+    # and the first user must never control the second user's browser.
+    try:
+        status, result = call(B, "POST", "/v1/browser/start")
+        assert status == 200 and result["status"] == "ready", (status, result)
+        assert call(A, "POST", "/v1/browser/start")[0] == 409
+        assert call(A, "POST", "/v1/browser/password")[0] == 403
+        assert call(B, "POST", "/v1/browser/password")[1]["status"] == "ready"
+    finally:
+        assert call(B, "POST", "/v1/browser/stop")[1]["status"] == "stopped"
+    assert_no_browser_processes()
+    assert not Path("/tmp/sigma-browser").exists()
+    print("PASS shared worker, two encrypted users, sequential disposable browsers, no idle GUI")
 
 
 if __name__ == "__main__":
