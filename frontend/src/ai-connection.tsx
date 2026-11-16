@@ -277,16 +277,13 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
     return () => { if (dialog.current?.open) dialog.current.close(); };
   }, [state === 'closed']);
   if (state === 'closed') return null;
-  return <dialog ref={dialog} className="google-account-dialog personal-chatgpt-connect-dialog"
+  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${state === 'ready' ? ' is-viewing' : ''}`}
     aria-labelledby="personal-browser-heading"
     onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="privacy-notice-heading">
       <h2 id="personal-browser-heading">Connect to ChatGPT</h2>
       <DialogDismissButton label="Close ChatGPT connection" onClick={onClose}/>
     </div>
-    <p>OpenAI's personal ChatGPT sign-in uses a localhost callback that SIGMA
-      cannot complete from its hosted site. Locally, SIGMA runs a private browser
-      and callback together; your credentials stay inside the isolated worker.</p>
     {state === 'preparing' && <p role="status">Preparing the isolated browser images. SIGMA remains available in Sponsored mode during first-time setup…</p>}
     {state === 'starting' && <p role="status">Starting the private sign-in browser…</p>}
     {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
@@ -297,8 +294,6 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
       className="personal-chatgpt-browser-frame"
       title="Private ChatGPT sign-in browser"
       src={windowAuthUrl('/api/ai/personal-browser/view')}/>}
-    <p className="personal-chatgpt-preview-note">Personal becomes active after your ChatGPT
-      account and plan are verified.</p>
   </dialog>;
 }
 
