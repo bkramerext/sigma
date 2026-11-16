@@ -15,7 +15,12 @@ while [ ! -S /tmp/.X11-unix/X99 ]; do
   sleep 0.1
 done
 echo "SIGMA Personal browser: Xvfb ready; starting x11vnc"
-x11vnc -display :99 -localhost -forever -shared -passwdfile /tmp/sigma-vnc-pass -quiet >/dev/null 2>&1 &
+# noVNC runs in the user's macOS browser, which already applies Caps Lock to
+# typed keysyms. Never toggle a second Caps Lock state in the isolated X server:
+# two independent lock states can make lowercase letters arrive as UPPERCASE.
+# Also clear stale Shift/lock modifiers on startup before accepting credentials.
+x11vnc -display :99 -localhost -forever -shared -skip_lockkeys -clear_all \
+  -passwdfile /tmp/sigma-vnc-pass -quiet >/dev/null 2>&1 &
 websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/dev/null 2>&1 &
 echo "SIGMA Personal browser: VNC relay launched; starting Chromium"
 # Keep Chromium's user namespace + seccomp renderer sandbox enabled.
