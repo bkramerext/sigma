@@ -146,6 +146,27 @@ class GceHostToolingTests(unittest.TestCase):
             preflight.check_compose()
         self.assertEqual(preflight.results[-1].status, "PASS")
 
+        # Direct host-Caddy mode is opt-in; both app ports must bind only to
+        # loopback, preserving the original healthy edge as rollback config.
+        services["backend"]["ports"] = [
+            {"host_ip": "127.0.0.1", "target": 8000, "published": "18081"}
+        ]
+        services["frontend"]["ports"] = [
+            {"host_ip": "127.0.0.1", "target": 8080, "published": "18082"}
+        ]
+        preflight.values["SIGMA_HOST_DIRECT"] = "true"
+        with patch.object(preflight, "command", side_effect=compose_result) as cmd:
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "PASS")
+        self.assertIn(str(ROOT / "deploy/compose.direct.gce.yaml"), cmd.call_args.args[0])
+        services["backend"]["ports"][0]["host_ip"] = "0.0.0.0"
+        with patch.object(preflight, "command", side_effect=compose_result):
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "FAIL")
+        services["backend"].pop("ports")
+        services["frontend"].pop("ports")
+        preflight.values.pop("SIGMA_HOST_DIRECT")
+
         services["edge"].pop("healthcheck")
         with patch.object(preflight, "command", side_effect=compose_result):
             preflight.check_compose()
