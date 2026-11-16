@@ -284,8 +284,8 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
       <h2 id="personal-browser-heading">Connect to ChatGPT</h2>
       <DialogDismissButton label="Close ChatGPT connection" onClick={onClose}/>
     </div>
-    {state === 'preparing' && <p role="status">Preparing the isolated browser images. SIGMA remains available in Sponsored mode during first-time setup…</p>}
-    {state === 'starting' && <p role="status">Starting the private sign-in browser…</p>}
+    {state === 'preparing' && <p role="status">Preparing ChatGPT sign-in… This may take a little longer the first time.</p>}
+    {state === 'starting' && <p role="status">Opening ChatGPT sign-in…</p>}
     {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
       <p>{error || 'The private browser could not be started.'}</p>
       <button className="sigma-text-action" type="button" onClick={onRetry}>Retry</button>
