@@ -425,6 +425,11 @@ with sync_playwright() as playwright:
     expect(card.locator(".outcome-markdown")).to_contain_text("The saved research answers")
     title_line.get_by_role("button", name="Show plain answer").click()
     expect(card.locator(".research-qa-answer-plain")).to_contain_text("The saved research answers")
+    # Switching from Markdown to plain is purely local: no AI formatting,
+    # no hourglass, and no provider conversion request.
+    expect(title_line.get_by_role("status")).to_have_count(0)
+    expect(title_line.locator(".sigma-unified-hourglass")).to_have_count(0)
+    assert len(conversion_requests) == 1, conversion_requests
     title_line.get_by_role("button", name="Render answer as Markdown").click()
     expect(card.locator(".outcome-markdown")).to_contain_text("The saved research answers")
     # The conversion is saved on the answer, not recomputed on a second toggle.
