@@ -1674,7 +1674,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [announcement, setAnnouncement] = useState('');
-  const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
+  const [expanded, setExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1' && window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
   useEffect(() => {
     const opened = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== 'sessions') {
@@ -3090,7 +3090,7 @@ function paperElapsed(seconds: number): string {
 function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, projectOwnerEmail, draftCreatorEmail, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; viewerEmail?: string; projectOwnerEmail?: string | null; draftCreatorEmail?: string; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean, activeRunIds: string[]) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
   const ai = useAI();
   const initialPaperListing = useRef<InitialPaperListing | null>(takeInitialPaperListing(path, projectId));
-  const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
+  const [expanded, setExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') === '1' || window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
   const [paperMenu, setPaperMenu] = useState<{ paperId: string; kind: 'download' | 'actions' } | null>(null);
   const [includeOptionsOpen, setIncludeOptionsOpen] = useState(false);
   const includePopupRef = useRef<HTMLDivElement>(null);
@@ -3146,7 +3146,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [guestScorePreview, setGuestScorePreview] = useState(false);
   const [guestExplainPreview, setGuestExplainPreview] = useState(false);
   const [confirmNewPaper, setConfirmNewPaper] = useState(false);
-  const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
+  const [draftPaperExpanded, setDraftPaperExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1');
   const [expandedOtherPaperRunIds, setExpandedOtherPaperRunIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     const opened = (event: Event) => {
@@ -3690,9 +3690,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const timer = window.setInterval(() => void poll(), 2000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [guest, collaborationRevision, path, paperProgress?.status, selectedRunId, newPaperRequested]);
-  // Notification deep links expand the exact saved paper (or the paused
-  // draft) after initial hydration. Do not repeat this scroll on polling.
+  // Notification links and Home star jumps select the exact saved paper
+  // after listing hydration. Star jumps additionally isolate that paper and
+  // defer scrolling until its full expanded contents have rendered.
   const paperDeepLinkHandled = useRef(false);
+  const [focusedPaperScrollId, setFocusedPaperScrollId] = useState('');
   useEffect(() => {
     if (loading || paperDeepLinkHandled.current) return;
     const params = new URLSearchParams(window.location.search);
@@ -3701,6 +3703,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (!requested && !requestedRun) return;
     if (requestedRun && !paperRuns.some(run => run.run_id === requestedRun)
       && selectedRunIdRef.current !== requestedRun) return;
+    const focusPaper = params.get('focus_paper') === '1' && !!requested && requested !== 'draft';
+    // The star may land before the paper listing has hydrated; do not consume
+    // the deep link or scroll to a fallback heading until its card exists.
+    if (focusPaper && !papers.some(paper => paper.paper_id === requested)) return;
     paperDeepLinkHandled.current = true;
     onSectionOpened();
     setExpanded(true);
@@ -3710,9 +3716,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       else setExpandedOtherPaperRunIds(current => new Set(current).add(requestedRun));
     } else if (requested === 'draft') setDraftPaperExpanded(true);
     else if (requested && papers.some(paper => paper.paper_id === requested)) {
+      if (focusPaper) {
+        setDraftPaperExpanded(false);
+        setExpandedOtherPaperRunIds(new Set());
+        setFocusedPaperScrollId(requested);
+      }
       setExpandedPaperId(requested);
       void openPaper(requested);
     }
+    if (focusPaper) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const element = requestedRun
         ? document.querySelector<HTMLElement>(`[data-paper-run="${CSS.escape(requestedRun)}"]`)
@@ -3724,6 +3736,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
     }));
   }, [loading, papers, paperRuns, path, onSectionOpened]);
+  useEffect(() => {
+    if (!focusedPaperScrollId || !expanded || loading
+      || expandedPaperId !== focusedPaperScrollId
+      || selected?.paper_id !== focusedPaperScrollId) return;
+    let nextFrame = 0;
+    const frame = requestAnimationFrame(() => {
+      nextFrame = requestAnimationFrame(() => {
+        const card = Array.from(document.querySelectorAll<HTMLElement>('.papers-pane [data-paper-id]'))
+          .find(item => item.dataset.paperId === focusedPaperScrollId);
+        if (!card || !card.getClientRects().length) return;
+        card.scrollIntoView({ block: 'start', behavior: 'auto' });
+        setFocusedPaperScrollId('');
+      });
+    });
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(nextFrame); };
+  }, [focusedPaperScrollId, expanded, loading, expandedPaperId, selected?.paper_id]);
   async function fetchUnfinishedPaperSteps(runId: string | null, signal?: AbortSignal, allowActive = false): Promise<UnfinishedPaperRestartOptions> {
     const query = new URLSearchParams({ path });
     if (runId) query.set('run_id', runId);
@@ -8970,13 +8998,13 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const [editorVersion, setEditorVersion] = useState(0);
   const [focusStrategy, setFocusStrategy] = useState('');
   const citationRevealHandled = useRef(false);
-  const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
+  const [strategiesExpanded, setStrategiesExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1' && window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
   const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
   const [textEditSignals, setTextEditSignals] = useState<Record<string, number>>({});
   const [combinedTextDrafts, setCombinedTextDrafts] = useState<Record<string, string>>({});
   const requestTextEdit = (key: string) => setTextEditSignals(current => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
   const updateCombinedTextDraft = (key: string, draft: string) => setCombinedTextDrafts(current => ({ ...current, [key]: draft }));
-  const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
+  const [projectExpanded, setProjectExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1' && window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [exclusiveSections, setExclusiveSections] = useState(false);
   const sectionOpen = useCallback((section: 'project' | 'strategies' | 'sessions' | 'papers') => {
     if (exclusiveSections) window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: section }));
@@ -9785,7 +9813,7 @@ function App() {
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
       setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path);
       navigate(projectUrl(view.path)
-        + (openSettings ? '&settings=collaborators' : revealPaperId ? `&reveal_paper=${encodeURIComponent(revealPaperId)}` : ''));
+        + (openSettings ? '&settings=collaborators' : revealPaperId ? `&reveal_paper=${encodeURIComponent(revealPaperId)}&focus_paper=1` : ''));
     }} onNavigateActivity={(entry, run) => {
       // Use the run ID already displayed on Home; no activity fetch blocks navigation.
       const target = new URL(projectUrl(entry.path), window.location.origin);
