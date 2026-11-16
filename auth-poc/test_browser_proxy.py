@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, Request, WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from sigma import api, cloud_auth, personal_browser_proxy as proxy
 
@@ -52,7 +53,7 @@ async def main() -> None:
                             b"\x82\x03yes"
                         )
                     else:
-                        assert req.startswith(b"GET /app/rfb.js HTTP/1.1")
+                        assert req.startswith(b"GET /core/rfb.js HTTP/1.1")
                         body = ("// only " + subject).encode()
                         writer.write(
                             b"HTTP/1.1 200 OK\r\nContent-Type: text/javascript\r\n"
@@ -87,8 +88,8 @@ async def main() -> None:
                 patch.object(proxy.personal_browser, "browser_password", new=browser_password),
                 patch.object(proxy.cloud_auth, "config", return_value=SimpleNamespace(enabled=True, local=False, origin="https://sigma.example.test")),
             ):
-                a = await proxy.asset(request(A), "app/rfb.js")
-                b = await proxy.asset(request(B), "app/rfb.js")
+                a = await proxy.asset(request(A), "core/rfb.js")
+                b = await proxy.asset(request(B), "core/rfb.js")
                 assert a.body == b"// only subject-a"
                 assert b.body == b"// only subject-b"
                 assert a.headers["cache-control"] == "no-store"
@@ -104,16 +105,16 @@ async def main() -> None:
                     "APIWebSocketRoute",
                 ) in routes
                 window_id = "a" * 32
-                qualified = "/api/ai/personal-browser/window/" + window_id + "/app/rfb.js"
+                qualified = "/api/ai/personal-browser/window/" + window_id + "/core/rfb.js"
                 assert proxy.valid_window(request(A, qualified), window_id)
                 routed = await api.personal_browser_asset(
-                    request(A, qualified), window_id=window_id, path="app/rfb.js"
+                    request(A, qualified), window_id=window_id, path="core/rfb.js"
                 )
                 assert routed.body == b"// only subject-a"
                 assert not proxy.valid_window(request(A, qualified), "b" * 32)
                 try:
                     await api.personal_browser_asset(
-                        request(A, qualified), window_id="invalid", path="app/rfb.js"
+                        request(A, qualified), window_id="invalid", path="core/rfb.js"
                     )
                 except HTTPException as error:
                     assert error.status_code == 404
@@ -125,6 +126,13 @@ async def main() -> None:
                 assert "EF56GH78" not in html_a.body.decode()
                 assert "EF56GH78" in html_b.body.decode()
                 assert html_a.headers["cache-control"] == "no-store"
+                # Viewer must display only the remote Chromium contents.
+                # Connection labels, progress messages, and instructions are
+                # outside the authenticated iframe, not above or below it.
+                assert "<header>" not in html_a.body.decode()
+                assert "Click Continue with ChatGPT" not in html_a.body.decode()
+                assert "id='screen'" in html_a.body.decode()
+                assert "id='connection-status' role='alert' hidden" in html_a.body.decode()
                 for bad in ("../../private", "app/../../private", "http://another-host"):
                     try:
                         await proxy.asset(request(A), bad)
@@ -132,6 +140,18 @@ async def main() -> None:
                         assert error.status_code == 404
                     else:
                         raise AssertionError("Unsafe asset path was proxied")
+                # noVNC's RFB KeyEvent payload must pass through the
+                # authenticated WebSocket bridge byte-exact. A lowercase 'a'
+                # and uppercase 'A' have different X11 keysyms and must not
+                # be normalized, including in password inputs.
+                for keysym in (ord("a"), ord("A"), ord("@"), ord("1"), ord("!")):
+                    key_event = bytes((4, 1, 0, 0)) + keysym.to_bytes(4, "big")
+                    frame = proxy._masked_frame(2, key_event)
+                    assert frame[0] == 0x82
+                    assert frame[1] == 0x80 | len(key_event)
+                    mask = frame[2:6]
+                    decoded = bytes(value ^ mask[i % 4] for i, value in enumerate(frame[6:]))
+                    assert decoded == key_event
                 reader, writer = await proxy._connect_worker(sockets[A.subject])
                 try:
                     fin, opcode, payload = await proxy._remote_frame(reader)
@@ -148,7 +168,10 @@ async def main() -> None:
                 # WebSockets do not traverse SIGMA's HTTP Google auth middleware.
                 # Verify both the immutable window selector and Origin are
                 # rejected before any worker channel is opened.
-                async def denied_ws(path: str, identifier: str, origin: str) -> None:
+                async def denied_ws(
+                    path: str, identifier: str, origin: str,
+                    *, through_app: bool = False, client_gone: bool = False,
+                ) -> None:
                     sent: list[dict[str, object]] = []
 
                     async def receive() -> dict[str, str]:
@@ -156,29 +179,41 @@ async def main() -> None:
 
                     async def send(message: dict[str, object]) -> None:
                         sent.append(message)
+                        if client_gone:
+                            raise WebSocketDisconnect(code=1006)
 
-                    ws = WebSocket(
-                        {
-                            "type": "websocket",
-                            "scheme": "wss",
-                            "path": path,
-                            "query_string": b"",
-                            "headers": [(b"origin", origin.encode("ascii"))],
-                        },
-                        receive,
-                        send,
-                    )
+                    scope = {
+                        "type": "websocket",
+                        "scheme": "wss",
+                        "path": path,
+                        "query_string": b"",
+                        "headers": [(b"host", b"testserver"), (b"origin", origin.encode("ascii"))],
+                    }
                     with patch.object(proxy.personal_browser, "enabled", return_value=True):
-                        await proxy.websocket_bridge(ws, identifier)
+                        if through_app:
+                            await api.app(scope, receive, send)
+                        else:
+                            await proxy.websocket_bridge(WebSocket(scope, receive, send), identifier)
                     assert sent and sent[0]["type"] == "websocket.close"
                     assert sent[0]["code"] == 1008
 
+                # Closing an iframe disconnects the client before SIGMA
+                # sends its final close frame. Starlette raises 1006 in that
+                # situation; do not let it produce an ASGI application error.
+                dead_ws = AsyncMock()
+                dead_ws.close.side_effect = WebSocketDisconnect(code=1006)
+                await proxy._close_websocket(dead_ws)
+                await proxy._close_websocket(dead_ws, code=1008)
+                assert dead_ws.close.await_count == 2
                 ws_path = "/api/ai/personal-browser/window/" + window_id + "/ws"
                 await denied_ws(ws_path, "invalid", "https://sigma.example.test")
+                await denied_ws(
+                    ws_path, "invalid", "https://sigma.example.test", client_gone=True
+                )
                 await denied_ws(ws_path, "b" * 32, "https://sigma.example.test")
                 await denied_ws(ws_path, window_id, "https://attacker.example.test")
                 with patch.object(proxy.cloud_auth, "resolve_session", return_value=None):
-                    await denied_ws(ws_path, window_id, "https://sigma.example.test")
+                    await denied_ws(ws_path, window_id, "https://sigma.example.test", through_app=True)
         finally:
             for server in servers:
                 server.close()

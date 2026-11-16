@@ -21,7 +21,62 @@ and mount namespaces, but deliberately share a Docker network namespace:
   Compose `network_mode: service:auth-poc`. The external desktop browser
   receives only a VNC framebuffer, not the OAuth redirect.
 
-## Local reproduction
+## Local SIGMA `start --prod` real sign-in preview
+
+From your normal SIGMA checkout, start Docker Desktop and run:
+
+```sh
+./sigma start --prod
+```
+
+The standard SIGMA launcher starts the UID-scoped broker and SIGMA's
+existing backend and frontend promptly. It prepares architecture-matched,
+release-tagged Docker images in a supervised subprocess; the connection
+dialog displays preparation progress while Sponsored SIGMA remains usable.
+The broker creates private local Unix-socket gateways when needed.
+It reconciles orphaned Docker projects labeled for this local checkout after
+abnormal exits, and stops the broker and its containers when SIGMA exits or restarts,
+without deleting the separate user-scoped authentication state. No companion,
+custom startup script, VNC password, or Docker command is required.
+
+Click the SIGMA ChatGPT pill to open a standard dialog with an embedded
+**same-origin SIGMA private browser viewer**. OpenAI's login site itself is
+displayed inside isolated Chromium, not embedded in an iframe. The standard X
+closes the viewer and stops its browser without discarding durable state.
+If Docker Desktop is unavailable, SIGMA continues with Sponsored, and does not
+silently use pre-existing Mac-local personal tokens.
+
+**Local --prod enables the existing real sign-in preview.** The isolated
+browser can open the genuine ChatGPT account chooser, and the user may
+authorize a personal account for local-only model requests. A running browser
+is not proof of authorization; SIGMA must receive the worker's verified
+account binding before switching from Sponsored to Personal.
+
+The prior custom-script `--real-signin-preview` experiment stored account
+state in `~/.sigma/personal-signin-preview-state`. Standard `start --prod`
+reuses that directory and keeps worker credentials separate from SIGMA.
+
+The provider-eligibility and security review for **hosted multi-user
+production** remains a separate gate. No hosted production changes are made
+by this local integration PR.
+
+The historical `bash auth-poc/start-sigma-local.sh` only forwards to
+`./sigma start --prod` for compatibility and is not a separate launcher.
+The old `--real-signin-preview` switch is no longer necessary: local
+`start --prod` includes that capability automatically.
+A one-time `./sigma setup` may still be required for a new checkout.
+If local Google OAuth is configured, normal Google sign-in remains required.
+If no Google OAuth client is configured and a designated local admin address
+exists, `start --prod` preserves the former POC's explicit `--signin`
+loopback-only local-admin behavior; it never grants that shortcut on a
+Google-configured or hosted server.
+
+Actual macOS Docker Desktop and browser acceptance still require local testing.
+CI exercises Linux containers, broker isolation, and the integration contract,
+but cannot establish that macOS Docker Desktop works on a particular machine.
+
+## Standalone Docker laboratory (developer diagnostic)
+
 
 Use a separate worktree on PR #872; from that worktree root with Docker running:
 

@@ -12,9 +12,12 @@ COPY src ./src
 COPY samples ./samples
 RUN uv sync --locked --no-dev
 COPY auth-poc /opt/sigma/auth-poc
-RUN mkdir -p /var/lib/sigma-poc-auth && chmod 0700 /var/lib/sigma-poc-auth \
+RUN chmod -R a+rX /opt/sigma/auth-poc /opt/sigma/src /opt/sigma/samples \
+    && mkdir -p /var/lib/sigma-poc-auth && chmod 0700 /var/lib/sigma-poc-auth \
     && chown 10001:10001 /var/lib/sigma-poc-auth
 USER 10001:10001
+# The editable install imports from src at runtime. Check as the worker user.
+RUN /opt/venv/bin/python -c 'from sigma import chat, chatgpt_auth'
 # Intentionally NOT published: browser shares only our network namespace.
 EXPOSE 8001
 ENTRYPOINT ["/bin/sh", "/opt/sigma/auth-poc/worker_boot.sh"]

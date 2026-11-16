@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import './ai-connection.css';
 import { windowAuthUrl } from './window-auth';
-import { sponsoredProviderLabel, type SponsoredInferenceProvider } from './provider-usage-guidance';
+import { type SponsoredInferenceProvider } from './provider-usage-guidance';
 import { reportRequestFailure } from './request-toast';
 import DialogDismissButton from './DialogDismissButton';
 
@@ -262,6 +263,48 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
   </div>;
 }
 
+
+function PersonalBrowserDialog({ state, error, external = false, handoff, onClose, onRetry }: {
+  state: 'closed' | 'preparing' | 'starting' | 'ready' | 'error';
+  error: string;
+  external?: boolean;
+  handoff?: string;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (state === 'closed' || !dialog.current) return;
+    if (!dialog.current.open) dialog.current.showModal();
+    return () => { if (dialog.current?.open) dialog.current.close(); };
+  }, [state === 'closed']);
+  if (state === 'closed') return null;
+  return <dialog ref={dialog} className={`google-account-dialog personal-chatgpt-connect-dialog${external ? ' is-external' : state !== 'error' ? ' is-viewing' : ''}`}
+    aria-labelledby="personal-browser-heading"
+    onCancel={event => { event.preventDefault(); onClose(); }}>
+    <div className="privacy-notice-heading">
+      <h2 id="personal-browser-heading">Connect to ChatGPT</h2>
+      <DialogDismissButton label="Close ChatGPT connection" onClick={onClose}/>
+    </div>
+    {state === 'preparing' && !external && <p role="status">Preparing ChatGPT sign-in… This may take a little longer the first time.</p>}
+    {state === 'starting' && <p role="status">{external
+      ? 'Complete ChatGPT sign-in in the browser tab. This dialog closes after you connect.'
+      : 'Opening ChatGPT sign-in…'}</p>}
+    {external && handoff && state === 'starting' &&
+      <a className="sigma-text-action" href={handoff} target="_blank" rel="noreferrer">
+        Open sign-in tab
+      </a>}
+    {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
+      <p>{error || (external ? 'ChatGPT sign-in did not complete.' : 'The private browser could not be started.')}</p>
+      <button className="sigma-text-action" type="button" onClick={onRetry}>Retry</button>
+    </div>}
+    {!external && state === 'ready' && <iframe
+      className="personal-chatgpt-browser-frame"
+      title="Private ChatGPT sign-in browser"
+      src={windowAuthUrl('/api/ai/personal-browser/view')}/>}
+  </dialog>;
+}
+
 function HostedPersonalChatGPTNotice({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -280,42 +323,242 @@ function HostedPersonalChatGPTNotice({ open, onClose }: { open: boolean; onClose
   </dialog>;
 }
 
+function SponsorProvisioningDialog({ open, message, onClose }: {
+  open: boolean; message: string; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!open || !dialog.current) return;
+    if (!dialog.current.open) dialog.current.showModal();
+    return () => { if (dialog.current?.open) dialog.current.close(); };
+  }, [open]);
+  if (!open) return null;
+  return <dialog ref={dialog} className="google-account-dialog hosted-personal-chatgpt-dialog"
+    aria-labelledby="sponsor-provisioning-heading" onCancel={event => { event.preventDefault(); onClose(); }}>
+    <div className="privacy-notice-heading">
+      <h2 id="sponsor-provisioning-heading">Sponsored ChatGPT</h2>
+      <DialogDismissButton label="Close Sponsored ChatGPT information" onClick={onClose}/>
+    </div>
+    <p>{message}</p>
+  </dialog>;
+}
+
 export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalBrowserLabEnabled?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
-  const [hostedChoiceOpen, setHostedChoiceOpen] = useState(false);
-  const [hostedBrowserError, setHostedBrowserError] = useState('');
-  const hostedChoiceDialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (!hostedChoiceOpen || !hostedChoiceDialog.current) return;
-    hostedChoiceDialog.current.showModal();
-    return () => { if (hostedChoiceDialog.current?.open) hostedChoiceDialog.current.close(); };
-  }, [hostedChoiceOpen]);
+  const openingContainerBrowser = useRef(false);
+  const pendingPersonalStop = useRef<Promise<void> | null>(null);
+  const browserLaunchSequence = useRef(0);
+  const localSignInSequence = useRef(0);
+  const localSignInOptions = useRef<SignInOptions>({});
+  const dialogActive = useRef(false);
+  const activatingPersonal = useRef(false);
+  const restoringSponsored = useRef(false);
+  const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'preparing' | 'starting' | 'ready' | 'error'>('closed');
+  const [personalDialogError, setPersonalDialogError] = useState('');
+  const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
+  const [authorizedPreviewOwner, setAuthorizedPreviewOwner] = useState<string | null>(null);
   const pillTrigger = useRef<HTMLElement>(null);
+  const disconnectPopup = useRef<HTMLDivElement>(null);
+  const disconnectCancel = useRef<HTMLButtonElement>(null);
+  const disconnectPromptId = useId();
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState('');
+  const [restoringPersonal, setRestoringPersonal] = useState(false);
+  const [disconnectPlacement, setDisconnectPlacement] = useState<{ left: number; top: number }>();
+  const closeDisconnectPopup = useCallback(() => {
+    setDisconnectOpen(false);
+    setDisconnectError('');
+    setDisconnectPlacement(undefined);
+    window.requestAnimationFrame(() => pillTrigger.current?.focus());
+  }, []);
+  useLayoutEffect(() => {
+    const anchor = pillTrigger.current;
+    const popup = disconnectPopup.current;
+    if (!disconnectOpen || !anchor || !popup) return;
+    const place = () => {
+      const rect = anchor.getBoundingClientRect();
+      const { offsetWidth: width, offsetHeight: height } = popup;
+      const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+      const top = Math.max(12, Math.min(
+        window.innerHeight - rect.bottom >= height + 18 ? rect.bottom + 6 : rect.top - height - 6,
+        window.innerHeight - height - 12,
+      ));
+      setDisconnectPlacement({ left, top });
+    };
+    function escape(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || disconnecting) return;
+      event.preventDefault();
+      closeDisconnectPopup();
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [disconnectOpen, disconnecting, closeDisconnectPopup]);
+  useEffect(() => {
+    if (disconnectOpen && !disconnecting) disconnectCancel.current?.focus();
+  }, [disconnectOpen, disconnecting]);
   const providerActive = useProviderActivity();
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const hosted = cloudFunding?.target === 'hosted';
   const simulatedSponsored = !!cloudFunding?.simulatedSponsored;
-  const hostedPillLabel = hosted
-    ? sponsoredProviderLabel(cloudFunding?.provider?.provider)
-    : 'Sponsored ChatGPT';
   // --prod previews the production-sponsored pill regardless of the user's
   // saved local connection. Presentation must not mutate credentials, mode or billing.
   const localHostedNoticePreview = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticePreview
     && !!cloudFunding.personalChatGPTNoticeEnabled;
-  const hostedBrowserLab = !!hosted && !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled;
+  const containerBrowserLab = !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled;
+  const localLabAccount = containerBrowserLab && cloudFunding?.target === 'local'
+    ? cloudFunding.googleAccount : null;
+  const testConnected = localLabAccount !== null && testAccountOwner === localLabAccount;
+  const previewAuthorized = localLabAccount !== null && authorizedPreviewOwner === localLabAccount;
+  const selectConnection = cloudFunding?.selectConnection;
+  const selectedConnection = cloudFunding?.selectedConnection;
+  const selectingConnection = cloudFunding?.selectingConnection;
+  const personalSelectionAllowed = !!cloudFunding && !cloudFunding.forcedSponsored;
+  const refreshConnection = ai.refresh;
+  // Reset the isolated preview only when its owner changes. Do not clear the
+  // ordinary-local OAuth dialog every time it changes from closed to starting:
+  // those state updates must not be coupled to the container-only status poll.
+  useEffect(() => {
+    if (localLabAccount) return;
+    dialogActive.current = false;
+    browserLaunchSequence.current += 1;
+    setRestoringPersonal(false);
+    setTestAccountOwner(null);
+    setAuthorizedPreviewOwner(null);
+    setPersonalDialogState('closed');
+  }, [localLabAccount]);
+  useEffect(() => {
+    if (!localLabAccount) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function readStatus(path: string) {
+      const response = await fetch(windowAuthUrl('/api/ai/personal-browser/' + path), {
+        signal: controller.signal,
+        headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
+      return response.ok ? await response.json() : null;
+    }
+    async function check() {
+      const [test, preview] = await Promise.allSettled([
+        readStatus('test-account'),
+        readStatus('preview-state'),
+      ]);
+      if (controller.signal.aborted) return;
+      if (preview.status === 'fulfilled') {
+        setAuthorizedPreviewOwner(preview.value?.phase === 'connected' ? localLabAccount : null);
+      }
+      if (test.status === 'fulfilled') {
+        const verified = test.value?.verified === true;
+        setTestAccountOwner(verified ? localLabAccount : null);
+        if (verified) {
+          setPersonalDialogState('closed');
+          return;
+        }
+      }
+      // A prior Personal selection is not a live connection. If its worker
+      // cannot verify the account, restore the backed Sponsored mode instead
+      // of displaying an inert "Connect to ChatGPT" pill at startup.
+      // Never race an explicit sign-in or downgrade a verified account.
+      if (test.status === 'fulfilled' && preview.status === 'fulfilled'
+          && test.value?.verified !== true
+          && preview.value?.phase !== 'connected'
+          && selectedConnection === 'personal' && !!cloudFunding?.sponsorshipEligible
+          && !dialogActive.current && personalDialogState === 'closed'
+          && !selectingConnection && !restoringSponsored.current && selectConnection) {
+        restoringSponsored.current = true;
+        void selectConnection('sponsored').catch(() => {
+          // Failures remain observable through the normal connection state.
+        }).finally(() => { restoringSponsored.current = false; });
+      }
+      // A saved-session restoration is controlled by the verified fast path,
+      // not by the background preview poll.
+      if (!dialogActive.current || personalDialogState !== 'ready') return;
+      if (preview.status === 'fulfilled' && preview.value?.phase === 'failed') {
+        // An authorization error in the private worker must be a normal SIGMA
+        // dialog error with Retry, not Chromium's raw HTTP error document.
+        setPersonalDialogError('Could not open ChatGPT sign-in. Please retry.');
+        setPersonalDialogState('error');
+        return;
+      }
+      if (preview.status === 'fulfilled' && preview.value?.phase === 'connected'
+          && personalSelectionAllowed && !activatingPersonal.current) {
+        if (selectingConnection) {
+          timer = setTimeout(check, 750);
+          return;
+        }
+        // OAuth completion alone is not proof of an eligible plan or model.
+        // Keep Chromium open until the private worker verifies this account.
+        const account = await readStatus('account').catch(() => null);
+        if (controller.signal.aborted || !dialogActive.current) return;
+        if (account?.status === 'verified') {
+          activatingPersonal.current = true;
+          const activationSequence = browserLaunchSequence.current;
+          try {
+            if (selectedConnection === 'sponsored') await selectConnection?.('personal');
+            if (!dialogActive.current || activationSequence !== browserLaunchSequence.current) {
+              // A click on X cancels the mode change. Keep any durable OAuth
+              // credentials, but do not silently select Personal.
+              if (selectedConnection === 'sponsored') {
+                await selectConnection?.('sponsored');
+                if (!dialogActive.current)
+                  await stopContainerPersonalBrowser().catch(() => undefined);
+              }
+              return;
+            }
+            await refreshConnection('manual');
+            if (dialogActive.current && activationSequence === browserLaunchSequence.current) {
+              dialogActive.current = false;
+              setPersonalDialogState('closed');
+            }
+          } catch (cause) {
+            if (dialogActive.current) {
+              setPersonalDialogError(cause instanceof Error ? cause.message
+                : 'SIGMA could not activate Personal ChatGPT.');
+              setPersonalDialogState('error');
+            } else if (selectedConnection === 'sponsored') {
+              // The user closed the dialog while activation was completing.
+              // Do not switch a cancelled connection behind their back.
+              await selectConnection?.('sponsored').catch(() => undefined);
+            }
+          } finally {
+            activatingPersonal.current = false;
+          }
+          return;
+        }
+      }
+      timer = setTimeout(check, 750);
+    }
+    void check();
+    return () => {
+      controller.abort();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [localLabAccount, personalDialogState, personalSelectionAllowed, refreshConnection,
+    selectConnection, selectedConnection, selectingConnection, cloudFunding?.sponsorshipEligible]);
   const hostedNoticeClick = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticeEnabled
-    && (hosted || localHostedNoticePreview) && !hostedBrowserLab;
+    && (hosted || localHostedNoticePreview) && !containerBrowserLab;
+  // A disconnected local --prod worker never displays a fourth pill state.
+  // Show the available Sponsored mode while its persisted choice is reconciled.
+  const localSponsoredDefault = !!localLabAccount && !!cloudFunding?.sponsorshipEligible
+    && selectedConnection === 'personal' && !testConnected && !previewAuthorized;
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored'
-    || localHostedNoticePreview;
+    || localHostedNoticePreview || localSponsoredDefault;
   const hostedPersonalUnavailable = hosted && !!cloudFunding?.authorized
     && cloudFunding.selectedConnection === 'personal' && !cloudFunding.forcedSponsored
-    && !hostedBrowserLab;
+    && !containerBrowserLab;
   const sponsoredPresentation = sponsoredSelected || hostedPersonalUnavailable;
   const adminSponsored = sponsoredPresentation && !!cloudFunding?.sponsorshipUnlimited;
   const adminNeedsSponsorProvisioning = !!hosted && adminSponsored
@@ -332,17 +575,17 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const connected = (hosted ? hostedConnected : simulatedSponsored
     ? sponsoredPill && sponsoredSelected && cloudFunding?.provider?.status === 'connected'
     : status === 'connected') && !googleRequired;
-  const disabled = (!hosted && !hostedNoticeClick && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection;
+  const disabled = (!hosted && !hostedNoticeClick && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection || disconnecting || restoringPersonal;
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
-  const visibleLabel = sponsoredPill
-    ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
-      ? 'Connecting to SIGMA-sponsored API…'
-      : hostedPillLabel
-    : connected ? 'ChatGPT connected' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
-  const connectionTooltip = hostedBrowserLab
-    ? 'Choose Sponsored ChatGPT or connect your own ChatGPT account in a private browser.'
+  // Connection pill text reflects only stable connection modes. Never turn the
+  // pill into a startup, verification, or disconnect progress indicator.
+  const visibleLabel = testConnected ? 'Connected to ChatGPT'
+    : sponsoredPill ? 'ChatGPT Sponsored'
+    : connected ? 'Connected to ChatGPT' : 'Connect to ChatGPT';
+  const connectionTooltip = containerBrowserLab
+    ? 'Click to attempt your Personal ChatGPT connection using a private container browser.'
     : (hostedNoticeClick || hostedPersonalUnavailable)
     ? cloudFunding?.personalChatGPTNoticeEnabled
       ? 'Click to learn why personal ChatGPT is unavailable in hosted SIGMA.'
@@ -383,47 +626,289 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? 'Hosted inference is currently routed to Sponsored OpenAI API key billing. SIGMA does not fall back between providers. To use the designated ChatGPT sponsor, set SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt and provision the sponsor registration using the supported local sign-in and protected VM import flow.'
     : 'Hosted ChatGPT sponsor credentials are not connected. The production HTTPS callback is not a supported ChatGPT sign-in flow. Complete sign-in locally with the designated account, then securely import its protected registration on the VM; SIGMA validates the account and scopes and keeps the VM host ID.';
   const sponsorTooltip = 'SIGMA covers eligible ChatGPT model calls.';
-  const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode required' : ''}${connected && sponsoredSelected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
+  const sponsoredAccessibleLabel = `ChatGPT Sponsored${forcedSponsored ? '; sponsored mode required' : ''}${connected && sponsoredSelected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
   const allowanceText = !sponsoredPresentation
     ? 'Personal'
     : adminSponsored
       ? 'Unlimited'
-    : globalFundingExhausted
-      ? 'Global limit'
-    : cloudFunding?.error
-      ? 'Allowance unavailable'
-    : cloudFunding?.budget
-      ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `Allocation: $${cloudFunding.budget.remaining_usd.toFixed(2)}`
-    : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
-  async function startHostedPersonalBrowser() {
-    // Opening the popup must happen synchronously on the user's click.
-    // No user ever has to run a Docker command or know a VNC password.
-    const popup = window.open('about:blank', '_blank');
-    if (popup) popup.opener = null;
-    setHostedChoiceOpen(false);
-    setHostedBrowserError('');
+    : cloudFunding?.budget?.remaining_usd !== null && typeof cloudFunding?.budget?.remaining_usd === 'number'
+      ? `Allocation: ${cloudFunding.budget.remaining_usd.toFixed(2)}`
+    : 'Unlimited';
+  async function stopContainerPersonalBrowser() {
+    const response = await fetch(windowAuthUrl('/api/ai/personal-browser/stop'), {
+      method: 'POST',
+      headers: { 'X-Sigma-Error-Handled': 'true' },
+    });
+    if (!response.ok) throw new Error('Could not stop the private browser.');
+  }
+
+  async function closePersonalBrowserDialog() {
+    dialogActive.current = false;
+    browserLaunchSequence.current += 1;
+    const alreadyPersonal = selectedConnection === 'personal' && connected;
+    const activationPending = activatingPersonal.current;
+    const wasReady = personalDialogState === 'ready' || personalDialogState === 'error';
+    setPersonalDialogState('closed');
+    setPersonalDialogError('');
+    // Closing a completed connection must not stop its inference worker.
+    // If activation is in flight, let it finish before touching the worker.
+    // Image preparation and the Sponsored SIGMA application keep running.
+    if (!wasReady || alreadyPersonal || activationPending) return;
     try {
-      if (!popup) throw new Error('Browser popup blocked. Allow popups for SIGMA and retry.');
-      const response = await fetch('/api/ai/personal-browser/start', {
-        method: 'POST', credentials: 'same-origin',
+      await stopContainerPersonalBrowser();
+    } catch (cause) {
+      reportRequestFailure(cause instanceof Error ? cause.message : 'Could not stop the private browser.');
+    }
+  }
+
+  async function finishContainerBrowserStart(sequence: number) {
+    if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+    // Reuse an already validated worker account before exposing the GUI.
+    // OAuth state alone cannot establish model permission or billing identity.
+    try {
+      const response = await fetch(windowAuthUrl('/api/ai/personal-browser/account'), {
+        credentials: 'same-origin',
+        headers: { 'X-Sigma-Error-Handled': 'true' },
+        signal: AbortSignal.timeout(20000),
+      });
+      const account = response.ok ? await response.json() as { status?: string } : null;
+      if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+      if (account?.status === 'verified' && personalSelectionAllowed) {
+        activatingPersonal.current = true;
+        try {
+          if (selectedConnection !== 'personal') await selectConnection?.('personal');
+          if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+          await refreshConnection('manual');
+          if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+          dialogActive.current = false;
+          setPersonalDialogState('closed');
+          return;
+        } catch (cause) {
+          if (sequence === browserLaunchSequence.current && dialogActive.current) {
+            setPersonalDialogError(cause instanceof Error ? cause.message
+              : 'Could not restore the saved ChatGPT connection.');
+            setPersonalDialogState('error');
+          }
+          return;
+        } finally {
+          activatingPersonal.current = false;
+          setRestoringPersonal(false);
+        }
+      }
+    } catch {
+      // A failed verification is not proof of authorization; show the real
+      // sign-in viewer instead of silently selecting an unverified account.
+    } finally {
+      setRestoringPersonal(false);
+    }
+    if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+    setPersonalDialogState('ready');
+  }
+
+  async function startContainerPersonalBrowser() {
+    if (openingContainerBrowser.current || personalDialogState === 'ready'
+        || personalDialogState === 'starting' || personalDialogState === 'preparing') return;
+    if (testConnected) {
+      try {
+        await stopContainerPersonalBrowser();
+        setTestAccountOwner(null);
+      } catch (cause) {
+        reportRequestFailure(cause instanceof Error ? cause.message : 'Could not close the test browser.');
+      }
+      return;
+    }
+    // The user remains in SIGMA. The iframe embeds SIGMA's authenticated VNC
+    // viewer; OpenAI itself is never framed or deprived of its CSP protections.
+    const sequence = ++browserLaunchSequence.current;
+    dialogActive.current = true;
+    openingContainerBrowser.current = true;
+    setPersonalDialogError('');
+    setRestoringPersonal(true);
+    // Show the dialog immediately. The actual iframe remains deferred until
+    // the isolated worker is ready; a saved account may close it automatically.
+    setPersonalDialogState('starting');
+    try {
+      // A new cold connection must never race the preceding Docker stop.
+      if (pendingPersonalStop.current) await pendingPersonalStop.current.catch(() => undefined);
+      while (sequence === browserLaunchSequence.current && dialogActive.current) {
+        const response = await fetch(windowAuthUrl('/api/ai/personal-browser/start'), {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: '{}',
+        });
+        const data = await response.json().catch(() => ({})) as {
+          browser_status?: string; detail?: string; error?: string;
+        };
+        if (sequence !== browserLaunchSequence.current || !dialogActive.current) {
+          // A dismissed attempt may finish while the request is in flight.
+          // Do not stop a worker concurrently being adopted as Personal.
+          if (!activatingPersonal.current && !(selectedConnection === 'personal' && connected))
+            void stopContainerPersonalBrowser().catch(() => {});
+          return;
+        }
+        if (response.status === 202 && data.browser_status === 'preparing') {
+          setPersonalDialogState('preparing');
+          await new Promise<void>(resolve => window.setTimeout(resolve, 1500));
+          continue;
+        }
+        if (!response.ok)
+          throw new Error(data.detail ?? data.error ??
+            `Private ChatGPT browser startup returned HTTP ${response.status}.`);
+        if (data.browser_status === 'ready') {
+          await finishContainerBrowserStart(sequence);
+          return;
+        }
+        if (data.browser_status !== 'unavailable' && data.browser_status !== 'stopped')
+          throw new Error('Private ChatGPT browser returned an unexpected startup status.');
+        // Compose --wait can finish before Chromium, VNC and the private Unix
+        // relays are all responsive. Poll status instead of declaring failure
+        // from the first not-yet-ready response; do NOT POST start repeatedly.
+        const deadline = Date.now() + 60_000;
+        while (sequence === browserLaunchSequence.current && dialogActive.current
+               && Date.now() < deadline) {
+          await new Promise<void>(resolve => window.setTimeout(resolve, 2000));
+          if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+          let statusResponse: Response;
+          try {
+            statusResponse = await fetch(windowAuthUrl('/api/ai/personal-browser/status'), {
+              credentials: 'same-origin',
+              headers: { 'X-Sigma-Error-Handled': 'true' },
+              signal: AbortSignal.timeout(5000),
+            });
+          } catch {
+            // A temporary network interruption during Chromium startup is
+            // not an authorization failure. Retry inside the grace period.
+            continue;
+          }
+          if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+          if (!statusResponse.ok) continue;
+          const status = await statusResponse.json().catch(() => ({})) as {
+            browser_status?: string;
+          };
+          if (status.browser_status === 'ready') {
+            await finishContainerBrowserStart(sequence);
+            return;
+          }
+        }
+        if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+        throw new Error('Private ChatGPT browser is still unavailable after 60 seconds.');
+      }
+    } catch (cause) {
+      if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+      setRestoringPersonal(false);
+      setPersonalDialogError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
+      setPersonalDialogState('error');
+    } finally {
+      openingContainerBrowser.current = false;
+    }
+  }
+
+  async function disconnectContainerConnection() {
+    if (disconnecting) return;
+    setDisconnectError('');
+    setDisconnecting(true);
+    try {
+      const response = await fetch(windowAuthUrl('/api/ai/personal-browser/disconnect'), {
+        method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
         body: '{}',
       });
-      const data = await response.json() as { browser_status?: string; detail?: string };
-      if (!response.ok || data.browser_status !== 'ready')
-        throw new Error(data.detail ?? 'Private ChatGPT browser could not start.');
-      popup.location.replace(windowAuthUrl('/api/ai/personal-browser/view'));
-      // Do not select Personal or show connected until real OAuth completes
-      // and provider credentials are verified for this exact SIGMA user.
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({})) as { detail?: string; error?: string };
+        throw new Error(detail.detail ?? detail.error ?? 'Could not disconnect Personal ChatGPT. Try again.');
+      }
+      const result = await response.json() as { disconnected?: boolean };
+      if (result.disconnected !== true)
+        throw new Error('SIGMA did not confirm that Personal ChatGPT was disconnected.');
+      // The backend has committed local credential removal and the Sponsored
+      // choice. Never leave the confirmation up after successful completion.
+      setAuthorizedPreviewOwner(null);
+      setTestAccountOwner(null);
+      dialogActive.current = false;
+      browserLaunchSequence.current += 1;
+      setPersonalDialogState('closed');
+      // Begin tearing down Chromium before the confirmation disappears, so a
+      // new click can await this precise stop rather than race it.
+      const stop = stopContainerPersonalBrowser();
+      pendingPersonalStop.current = stop;
+      closeDisconnectPopup();
+      window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
+      // The committed disconnect must not turn into a false failure because a
+      // subsequent provider-status refresh happened to be unavailable.
+      await ai.refresh('manual').catch(() => undefined);
+      // Chromium's ephemeral browser login is discarded for the next chooser.
+      // A Docker stop failure cannot undo the committed local disconnect.
+      try {
+        await stop.catch(() => {
+          // Personal credentials are already cleared and Sponsored is active.
+          // Cleanup is best-effort and not an actionable user failure.
+          console.warn('SIGMA: private browser cleanup failed after disconnect.');
+        });
+      } finally {
+        if (pendingPersonalStop.current === stop) pendingPersonalStop.current = null;
+      }
     } catch (cause) {
-      popup?.close();
-      setHostedBrowserError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
-      setHostedChoiceOpen(true);
+      setDisconnectError(cause instanceof Error ? cause.message
+        : 'Could not disconnect Personal ChatGPT. Try again.');
+    } finally {
+      setDisconnecting(false);
     }
+  }
+
+  async function selectContainerConnection() {
+    if (localLabAccount && !testConnected && selectedConnection === 'personal' && (previewAuthorized || connected)) {
+      setDisconnectOpen(true);
+      return;
+    }
+    if (previewAuthorized && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
+      try {
+        await cloudFunding.selectConnection?.('personal');
+        dialogActive.current = false;
+        setPersonalDialogState('closed');
+        await ai.refresh('manual');
+      } catch {
+        // The connection selector reports the error in the SIGMA window.
+      }
+      return;
+    }
+    await startContainerPersonalBrowser();
+  }
+  async function signInLocally(options: SignInOptions): Promise<boolean> {
+    // Local OAuth uses the user's normal browser; keep the same SIGMA modal
+    // shell as the isolated preview, never iframe the provider's login page.
+    const sequence = ++localSignInSequence.current;
+    localSignInOptions.current = options;
+    setPersonalDialogError('');
+    setPersonalDialogState('starting');
+    try {
+      const success = await ai.signIn(options);
+      if (sequence !== localSignInSequence.current) return false;
+      if (success) setPersonalDialogState('closed');
+      else {
+        setPersonalDialogError('ChatGPT sign-in was not completed.');
+        setPersonalDialogState('error');
+      }
+      return success;
+    } catch (cause) {
+      if (sequence === localSignInSequence.current) {
+        setPersonalDialogError(cause instanceof Error ? cause.message : 'ChatGPT sign-in failed.');
+        setPersonalDialogState('error');
+      }
+      return false;
+    }
+  }
+  function closeLocalPersonalDialog() {
+    localSignInSequence.current += 1;
+    ai.cancelSignIn();
+    setPersonalDialogState('closed');
+    setPersonalDialogError('');
   }
   async function connect() {
     if (ai.connecting || ai.transitioning) return;
     try {
+      // A local container POC must NEVER fall back to Mac-local OAuth.
+      if (containerBrowserLab) { await startContainerPersonalBrowser(); return; }
       if (hosted) {
         if (forcedSponsored && sponsoredSelected) return;
         if (adminNeedsSponsorProvisioning) {
@@ -436,10 +921,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       if (cloudFunding?.authorized && cloudFunding.sponsorshipEligible) {
         if (forcedSponsored && sponsoredSelected) return;
         if (sponsoredSelected) {
-          const personalConnected = await ai.signIn({ newAccount: true });
+          const personalConnected = await signInLocally({ newAccount: true });
           if (personalConnected) await cloudFunding.selectConnection?.('personal');
         } else {
-          const connected = await ai.signIn({
+          const connected = await signInLocally({
             accountId: ai.info?.active_account,
             newAccount: false,
             enablePlan: ai.info?.status === 'plan_not_permitted',
@@ -452,7 +937,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       const newLocalMemberAccount = !!cloudFunding?.authenticationEnabled
         && !!cloudFunding.authorized
         && !cloudFunding.sponsorshipEligible;
-      await ai.signIn({
+      await signInLocally({
         accountId: newLocalMemberAccount ? undefined : ai.info?.active_account,
         newAccount: newLocalMemberAccount,
         enablePlan: ai.info?.status === 'plan_not_permitted',
@@ -461,46 +946,58 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       // The connection error is shown beside the pill by the AI provider state.
     }
   }
+  const pillTooltip = containerBrowserLab && !sponsoredSelected && connected
+    ? ai.info?.account_label
+      ? `Connected to ChatGPT using personal account ${ai.info.account_label}.`
+      : 'Connected to ChatGPT using your personal account.'
+    : previewAuthorized && sponsoredSelected
+      ? 'Click to use your ChatGPT plan for SIGMA requests.'
+      : sponsoredPill ? sponsorTooltip : connectionTooltip;
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
-  <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen}>
-    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={sponsoredPill ? sponsorTooltip : connectionTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (hostedBrowserLab) { setHostedChoiceOpen(true); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+  <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`}>
+    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={pillTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (localLabAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void selectContainerConnection(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
-      {sponsoredPill ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
+      {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label={`Sponsored allowance: ${allowanceText}`} aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
-    {ai.connecting && !sponsoredPill && <div className="connection-pill-messages">
-      <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>
-    </div>}
-    {sponsorProvisioningHelpOpen && <div className="connection-pill-messages">
-      <p className="connection-pill-message" role="status">{sponsorProvisioningGuidance}</p>
-      <button type="button" className="connection-text-action" onClick={() => setSponsorProvisioningHelpOpen(false)}>Dismiss</button>
-    </div>}
   </details>
+  {localLabAccount && disconnectOpen && createPortal(
+    <div ref={disconnectPopup} className="paper-step-restart-popup chatgpt-disconnect-popup"
+      role="dialog" aria-modal="false" aria-labelledby={disconnectPromptId} aria-busy={disconnecting}
+      style={disconnectPlacement ?? { left: 12, top: 12, visibility: 'hidden' }}>
+      <p id={disconnectPromptId}>{ai.info?.account_label
+        ? `Disconnect from personal ChatGPT account ${ai.info.account_label}?`
+        : 'Disconnect from your personal ChatGPT account?'}</p>
+      {disconnectError && <p role="alert">{disconnectError}</p>}
+      <div className="session-remove-confirm-actions">
+        {disconnecting ? <span role="status">Disconnecting…</span>
+          : <button type="button" className="text-view-link"
+              onClick={() => void disconnectContainerConnection()}>Confirm</button>}
+        <button ref={disconnectCancel} type="button" className="text-view-link" disabled={disconnecting}
+          onClick={closeDisconnectPopup}>Cancel</button>
+      </div>
+    </div>, document.body)}
+  {createPortal(
+    <PersonalBrowserDialog state={personalDialogState}
+      error={personalDialogError || (!containerBrowserLab ? ai.error : '')}
+      external={!containerBrowserLab && !hosted}
+      handoff={ai.handoff}
+      onClose={() => {
+        if (containerBrowserLab) void closePersonalBrowserDialog();
+        else closeLocalPersonalDialog();
+      }}
+      onRetry={() => {
+        if (containerBrowserLab) void startContainerPersonalBrowser();
+        else void signInLocally(localSignInOptions.current);
+      }}/>,
+    document.body,
+  )}
+  <SponsorProvisioningDialog open={sponsorProvisioningHelpOpen} message={sponsorProvisioningGuidance}
+    onClose={() => setSponsorProvisioningHelpOpen(false)}/>
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
     setPersonalHostedNoticeOpen(false);
     window.requestAnimationFrame(() => pillTrigger.current?.focus());
   }}/>
-  {hostedChoiceOpen && <dialog ref={hostedChoiceDialog} className="google-account-dialog hosted-personal-chatgpt-dialog"
-    aria-labelledby="hosted-chatgpt-connection-heading"
-    onClose={() => setHostedChoiceOpen(false)}>
-    <div className="privacy-notice-heading">
-      <h2 id="hosted-chatgpt-connection-heading">ChatGPT connection</h2>
-      <DialogDismissButton label="Close ChatGPT connection choices" onClick={() => setHostedChoiceOpen(false)}/>
-    </div>
-    <p>Choose which account SIGMA should use.</p>
-    <div className="ai-connect-actions">
-      <button type="button" className="connection-text-action"
-        onClick={() => { setHostedChoiceOpen(false); void cloudFunding?.selectConnection?.('sponsored'); }}>
-        Sponsored ChatGPT
-      </button>
-      <button type="button" className="connection-text-action"
-        onClick={() => void startHostedPersonalBrowser()}>
-        Personal ChatGPT
-      </button>
-    </div>
-    <p>Technical preview: Personal sign-in and real inference remain disabled until the browser security checks are complete.</p>
-    {hostedBrowserError && <p role="alert">{hostedBrowserError}</p>}
-  </dialog>}
   {zeroAllowance && zeroAllowanceAction}
   </>;
 }

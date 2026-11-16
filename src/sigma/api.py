@@ -10,6 +10,7 @@ import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from dataclasses import asdict, replace
+from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import quote, urlencode
@@ -26,6 +27,7 @@ from fastapi.responses import (
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.requests import HTTPConnection
 
 from sigma import (
     chat,
@@ -89,8 +91,14 @@ from sigma.text_conversion import convert_text
 from sigma.text_views import inspect_text, save_source
 
 
-async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
+async def cloud_workspace_scope(request: HTTPConnection) -> AsyncIterator[None]:
     """Bind each protected cloud request to its verified subject's durable root."""
+    if request.scope["type"] == "websocket":
+        # The personal browser bridge verifies its window session and resolves
+        # its workspace before it opens the private socket.
+        yield
+        return
+    method = request.scope["method"]
     guest_workspace = getattr(request.state, "cloud_guest_workspace", None)
     if isinstance(guest_workspace, cloud_workspaces.Workspace):
         token = cloud_workspaces.bind_workspace(guest_workspace)
@@ -104,11 +112,11 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
         or request.url.path == "/api/ui-instance"
         or (
             request.url.path == "/api/local-runtime/build"
-            and request.method == "GET"
+            and method == "GET"
             and cloud_auth.config().local
         )
         or request.url.path == "/api/projects/samples"
-        or cloud_auth.public_sample_paper_path(request.method, request.url.path)
+        or cloud_auth.public_sample_paper_path(method, request.url.path)
         or request.url.path.startswith("/api/cloud-auth/")
         or request.url.path.startswith("/api/ai/auth/callback/")
     ):
@@ -117,7 +125,7 @@ async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
     principal = getattr(request.state, "cloud_principal", None)
     if (
         request.url.path == "/api/project-types"
-        and request.method == "GET"
+        and method == "GET"
         and (not isinstance(principal, cloud_auth.Principal) or principal.role == "guest")
     ):
         yield
@@ -3202,6 +3210,27 @@ def _personal_browser_principal(request: Request) -> cloud_auth.Principal:
 
 async def _personal_browser_action(request: Request, action: str) -> JSONResponse:
     principal = _personal_browser_principal(request)
+    if action == "start":
+        if os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"):
+            # A trusted static launcher diagnostic, never user input.
+            raise HTTPException(503, os.environ["SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"])
+        marker = os.environ.get("SIGMA_LOCAL_PERSONAL_PREPARATION_FILE")
+        if marker:
+            try:
+                phase = Path(marker).read_text(encoding="ascii").strip()
+            except OSError as exc:
+                raise HTTPException(503, "Personal browser preparation is unavailable.") from exc
+            if phase == "preparing":
+                return JSONResponse(
+                    {"browser_status": "preparing"},
+                    status_code=202,
+                    headers={"Cache-Control": "no-store", "Retry-After": "2"},
+                )
+            if phase != "ready":
+                raise HTTPException(
+                    503,
+                    "Personal browser preparation failed. Check Docker Desktop and restart SIGMA.",
+                )
     try:
         snapshot = await personal_browser.session(principal, action)
     except personal_browser.PersonalBrowserUnavailable as exc:
@@ -3211,7 +3240,7 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
 
 @app.post("/api/ai/personal-browser/start")
 async def personal_browser_start(request: Request):
-    """Start the user's own synthetic container pair; does not start OAuth."""
+    """Start the user's own isolated browser and local-only real sign-in worker."""
     return await _personal_browser_action(request, "start")
 
 
@@ -3242,6 +3271,38 @@ async def personal_browser_account(request: Request):
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.post("/api/ai/personal-browser/disconnect")
+async def personal_browser_disconnect(request: Request):
+    principal = _personal_browser_principal(request)
+    if not cloud_auth.config().local or not personal_browser.sign_in_preview_enabled():
+        raise HTTPException(404, "Personal ChatGPT disconnect is unavailable.")
+    try:
+        await personal_inference.disconnect(principal)
+        await run_in_threadpool(cloud_auth.clear_personal_authorization, principal.subject)
+    except (
+        personal_inference.PersonalInferenceUnavailable,
+        OSError,
+        RuntimeError,
+        ValueError,
+    ) as exc:
+        raise HTTPException(503, "Could not disconnect Personal ChatGPT. Try again.") from exc
+    return JSONResponse({"disconnected": True}, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/ai/personal-browser/test-account")
+async def personal_browser_test_account(request: Request):
+    principal = _personal_browser_principal(request)
+    verified = await personal_browser.test_account_verified(principal)
+    return JSONResponse({"verified": verified}, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/ai/personal-browser/preview-state")
+async def personal_browser_preview_state(request: Request):
+    principal = _personal_browser_principal(request)
+    phase = await personal_browser.sign_in_preview_phase(principal)
+    return JSONResponse({"phase": phase}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/ai/personal-browser/view")
@@ -3491,10 +3552,28 @@ async def auth_mode(body: AuthModeRequest, request: Request):
             raise HTTPException(422, "Choose personal or sponsored access.")
         if body.mode == "sponsored" and not cloud_auth.sponsored_access_enabled():
             raise HTTPException(403, "Sponsored access is disabled.")
+        if body.mode == "personal" and personal_browser.enabled():
+            if not personal_browser.sign_in_preview_enabled():
+                raise HTTPException(403, "Real Personal ChatGPT is disabled in this preview.")
+            try:
+                account = await personal_inference.account(principal)
+                if account["status"] != "verified":
+                    raise personal_inference.PersonalInferenceUnavailable(
+                        "The worker did not verify the account."
+                    )
+                await run_in_threadpool(cloud_auth.record_personal_authorization, principal.subject)
+            except (personal_inference.PersonalInferenceUnavailable, PermissionError) as exc:
+                raise HTTPException(
+                    403, "Connect your ChatGPT plan before switching to Personal."
+                ) from exc
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise HTTPException(503, "Personal authorization could not be saved.") from exc
         try:
             cloud_auth.set_model_access(principal.subject, body.mode)
         except PermissionError as exc:
-            raise HTTPException(403, "This account cannot select sponsored access.") from exc
+            raise HTTPException(
+                403, "This account cannot select the requested connection."
+            ) from exc
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(503, "Connection choice could not be saved.") from exc
         return connection_view_state(await connection(refresh=True), request)

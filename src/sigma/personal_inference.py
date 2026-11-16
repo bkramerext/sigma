@@ -8,7 +8,10 @@ provider-eligibility gates are satisfied. No provider URL is caller-controlled.
 
 from __future__ import annotations
 
+import hmac
 import json
+import math
+import os
 import re
 from typing import Any
 
@@ -19,7 +22,7 @@ from sigma.model_catalog import CATALOG
 from sigma.projects import ProjectError
 
 _BINDING = re.compile(r"[0-9a-f]{64}\Z")
-_MAX_REQUEST = 256_000
+_MAX_REQUEST = 1_000_000
 _MAX_REPLY = 2_000_000
 
 
@@ -31,14 +34,25 @@ def _current_principal() -> cloud_auth.Principal:
     """Both independently verified context bindings must identify the same user."""
     principal = cloud_auth.current_principal()
     workspace = cloud_workspaces.current()
+    local_admin_preview = (
+        workspace is None
+        and isinstance(principal, cloud_auth.Principal)
+        and principal.role == "admin"
+        and principal.subject.startswith("local-admin:")
+        and personal_browser.sign_in_preview_enabled()
+    )
     if (
         not isinstance(principal, cloud_auth.Principal)
         or principal.role not in {"admin", "member"}
         or principal.subject.startswith("mock:")
-        or workspace is None
-        or workspace.guest
-        or not workspace.verified_subject
-        or workspace.verified_subject != principal.subject
+        or (
+            not local_admin_preview
+            and (
+                workspace is None
+                or workspace.guest
+                or workspace.verified_subject != principal.subject
+            )
+        )
     ):
         raise PersonalInferenceUnavailable("A verified personal workspace is required.")
     try:
@@ -50,20 +64,59 @@ def _current_principal() -> cloud_auth.Principal:
 
 
 async def _socket(principal: cloud_auth.Principal) -> str:
+    # User -> workspace ID -> model socket comes only from the server-verified
+    # Google principal, never a user-supplied path, ID or Docker project.
     try:
-        # User -> workspace ID -> mode socket comes exclusively from SIGMA's
-        # authenticated workspace mapping, never a request body or URL.
         return await personal_browser.model_socket(principal)
     except (PermissionError, personal_browser.PersonalBrowserUnavailable) as exc:
-        raise PersonalInferenceUnavailable("Personal model worker is unavailable.") from exc
+        if not personal_browser.sign_in_preview_enabled():
+            raise PersonalInferenceUnavailable("Personal model worker is unavailable.") from exc
+        # The local launcher stops browser/worker containers at exit while
+        # keeping each user's encrypted authorization state. If this verified
+        # user has already selected Personal, lazily restart their private
+        # worker after SIGMA --prod restarts; never require reauthorization.
+        try:
+            state = await personal_browser.session(principal, action="start")
+            if state["browser_status"] == "ready":
+                return await personal_browser.model_socket(principal)
+        except (PermissionError, personal_browser.PersonalBrowserUnavailable) as restore_exc:
+            raise PersonalInferenceUnavailable(
+                "Previously authorized Personal ChatGPT could not be restored."
+            ) from restore_exc
+        raise PersonalInferenceUnavailable(
+            "Previously authorized Personal ChatGPT could not be restored."
+        ) from exc
 
 
 async def _request(
-    principal: cloud_auth.Principal, method: str, endpoint: str, body: dict[str, Any] | None = None
+    principal: cloud_auth.Principal,
+    method: str,
+    endpoint: str,
+    body: dict[str, Any] | None = None,
+    *,
+    timeout_seconds: float = 60,
 ) -> dict[str, Any]:
-    if (method, endpoint) not in {("GET", "/v1/account"), ("POST", "/v1/response")}:
+    if (method, endpoint) not in {
+        ("GET", "/v1/account"),
+        ("POST", "/v1/response"),
+        ("POST", "/v1/disconnect"),
+    }:
         raise PersonalInferenceUnavailable("Unsupported model operation.")
     socket_path = await _socket(principal)
+    headers: dict[str, str] = {}
+    if personal_browser.sign_in_preview_enabled():
+        seed = os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")
+        if not _BINDING.fullmatch(seed):
+            raise PersonalInferenceUnavailable(
+                "Local Personal worker authentication is unavailable."
+            )
+        try:
+            workspace_id = await personal_browser._workspace_id(principal)
+        except personal_browser.PersonalBrowserUnavailable as exc:
+            raise PersonalInferenceUnavailable("Personal model worker is unavailable.") from exc
+        headers["X-Sigma-Worker-Key"] = hmac.digest(
+            bytes.fromhex(seed), workspace_id.encode("ascii"), "sha256"
+        ).hex()
     transport = httpx.AsyncHTTPTransport(uds=socket_path)
     try:
         async with httpx.AsyncClient(
@@ -71,7 +124,8 @@ async def _request(
             base_url="http://private-personal-worker",
             trust_env=False,
             follow_redirects=False,
-            timeout=65,
+            timeout=max(65.0, timeout_seconds + 30.0),
+            headers=headers,
         ) as client:
             if method == "GET":
                 response = await client.get(endpoint)
@@ -125,11 +179,30 @@ async def account(principal: cloud_auth.Principal | None = None) -> dict[str, An
     return _account(await _request(verified, "GET", "/v1/account"))
 
 
+async def disconnect(principal: cloud_auth.Principal) -> None:
+    if not personal_browser.sign_in_preview_enabled():
+        raise PersonalInferenceUnavailable("Personal ChatGPT disconnect is unavailable.")
+    verified = personal_browser._principal(principal)
+    if (await _request(verified, "POST", "/v1/disconnect")).get("disconnected") is not True:
+        raise PersonalInferenceUnavailable("The Personal worker did not confirm disconnect.")
+
+
 async def respond(
-    payload: dict[str, Any], *, expected_binding: str, request_id: str
+    payload: dict[str, Any],
+    *,
+    expected_binding: str,
+    request_id: str,
+    timeout_seconds: float = 60,
 ) -> dict[str, Any]:
     """Execute only for the exact, still-selected Google user and model account."""
     principal = _current_principal()
+    if (
+        not isinstance(timeout_seconds, (int, float))
+        or isinstance(timeout_seconds, bool)
+        or not math.isfinite(timeout_seconds)
+        or not 1 <= timeout_seconds <= 3600
+    ):
+        raise PersonalInferenceUnavailable("Unsupported private model timeout.")
     if (
         not isinstance(expected_binding, str)
         or not _BINDING.fullmatch(expected_binding)
@@ -155,7 +228,13 @@ async def respond(
         principal,
         "POST",
         "/v1/response",
-        {"request_id": request_id, "expected_binding": expected_binding, "payload": payload},
+        {
+            "request_id": request_id,
+            "expected_binding": expected_binding,
+            "payload": payload,
+            "timeout_seconds": math.ceil(timeout_seconds),
+        },
+        timeout_seconds=timeout_seconds,
     )
     if (
         result.get("binding") != expected_binding

@@ -15,6 +15,7 @@ from urllib.request import urlopen
 from uuid import uuid4
 
 from sigma.local_config import load_local_config
+from sigma.local_personal import LocalPersonalRuntime, LocalPersonalUnavailable
 from sigma.projects import ROOT
 from sigma.ui_instance import Instance, stop_registered_instances
 from sigma.ui_orphans import listener_details, recover_orphans
@@ -117,6 +118,7 @@ def run_ui(
         return 2
     children: list[subprocess.Popen[bytes]] = []
     replacement: socket.socket | None = None
+    personal_runtime = None
 
     def interrupted(signum: int, frame: object) -> None:
         raise KeyboardInterrupt
@@ -156,6 +158,23 @@ def run_ui(
                 if orphan_failures := recover_orphans():
                     raise RuntimeError(" ".join(orphan_failures))
                 wait_for_ports()
+                if prod:
+                    # Local --prod owns its Personal broker exactly as it owns
+                    # the UI children. A missing Docker Desktop never prevents
+                    # sponsored SIGMA from starting or enables host-local OAuth.
+                    try:
+                        personal_runtime = LocalPersonalRuntime.start()
+                        print(
+                            "Private Personal broker ready; image preparation continues separately.",
+                            flush=True,
+                        )
+                    except (LocalPersonalUnavailable, OSError, RuntimeError) as exc:
+                        print(
+                            f"Personal container unavailable: {exc} "
+                            "SIGMA will continue with Sponsored.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                 print("Starting SIGMA backend and frontend…", flush=True)
                 commands = [
                     [
@@ -172,26 +191,59 @@ def run_ui(
                     ["npm", "--prefix", "frontend", "run", "dev"],
                 ]
                 instance_id = uuid4().hex
-                child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
+                child_env = {
+                    **os.environ,
+                    **(personal_runtime.env if personal_runtime is not None else {}),
+                    "SIGMA_UI_INSTANCE_ID": instance_id,
+                }
+                if prod and personal_runtime is None:
+                    # Never accidentally fall back to host-local ChatGPT OAuth
+                    # after --prod's isolated Docker startup fails. Keep the
+                    # Personal UI available to explain the missing prerequisite.
+                    child_env.update(
+                        {
+                            "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
+                            "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
+                            "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": "/nonexistent/sigma-personal-broker.sock",
+                            "SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT": "/nonexistent/sigma-personal-gateways",
+                            "SIGMA_LOCAL_PERSONAL_STARTUP_ERROR": (
+                                "Start Docker Desktop and restart SIGMA to connect Personal ChatGPT."
+                            ),
+                        }
+                    )
                 child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
                 child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
                 # This launcher owns its API process. Never let a shell-level
                 # Vite proxy override route browser sign-ins to another backend.
                 child_env["SIGMA_API_TARGET"] = "http://127.0.0.1:8000"
-                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = "true" if signin else "false"
+                # The former POC launcher explicitly used --signin. Preserve
+                # its single-user loopback identity only when Google OIDC is
+                # wholly unconfigured. Never bypass a configured Google login.
+                legacy_local_admin = (
+                    prod
+                    and bool(admin_email)
+                    and not os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip()
+                    and not os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip()
+                    and not os.environ.get("GOOGLE_OIDC_CLIENT_SECRET_FILE", "").strip()
+                )
+                child_env["SIGMA_LOCAL_AUTO_ADMIN"] = (
+                    "true" if signin or legacy_local_admin else "false"
+                )
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
-                # A presentation-only rehearsal. Authentication, credentials and inference stay local.
-                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "true" if prod else "false"
-                child_env["SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED"] = (
-                    "true" if prod else "false"
-                )
+                # --prod now exercises the real local container path, never
+                # the hosted "Oh, Darn" informational notice.
+                child_env["SIGMA_LOCAL_HOSTED_NOTICE_PREVIEW"] = "false"
+                child_env["SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED"] = "false"
                 child_env.setdefault(
                     "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
                 )
-                if prod:
-                    print("Previewing hosted Personal ChatGPT notice (local UI only).", flush=True)
+                if prod and personal_runtime is None:
+                    print(
+                        "The Personal browser is unavailable; SIGMA remains in local Sponsored mode.",
+                        flush=True,
+                    )
                 for command in commands:
                     children.append(
                         subprocess.Popen(
@@ -213,6 +265,7 @@ def run_ui(
                                         "GOOGLE_OIDC_CLIENT_SECRET",
                                         "SIGMA_CLOUD_AUTH_HOME",
                                         "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+                                        "SIGMA_AUTH_POC_RPC_SEED",
                                     }
                                 )
                             },
@@ -229,6 +282,8 @@ def run_ui(
                             raise RuntimeError(
                                 f"{name} server exited (status {code}); stopping both servers."
                             )
+                    if personal_runtime is not None:
+                        personal_runtime.refresh_preparation()
                     if not announced:
                         if (
                             ready(API_URL + "/api/ui-instance", instance_id)
@@ -262,6 +317,12 @@ def run_ui(
                             raise RuntimeError("Servers did not become ready within 30 seconds.")
                     replacement = instance.replacement_request()
                     if replacement is not None:
+                        replacement.sendall(
+                            (
+                                json.dumps({"identity": instance.identity, "status": "stopping"})
+                                + "\n"
+                            ).encode()
+                        )
                         break
                     time.sleep(0.1)
             finally:
@@ -271,8 +332,32 @@ def run_ui(
                     stop_servers(list(children))
                     children.clear()
                 finally:
-                    signal.signal(signal.SIGINT, prior_int)
-                    signal.signal(signal.SIGTERM, previous)
+                    try:
+                        if personal_runtime is not None:
+                            # Complete container shutdown BEFORE confirming that
+                            # the old launcher has stopped. A replacement must
+                            # never race the prior instance's Docker cleanup.
+                            personal_runtime.close(
+                                progress=(
+                                    lambda: replacement.sendall(
+                                        (
+                                            json.dumps(
+                                                {
+                                                    "identity": instance.identity,
+                                                    "status": "stopping",
+                                                }
+                                            )
+                                            + "\n"
+                                        ).encode()
+                                    )
+                                )
+                                if replacement is not None
+                                else None
+                            )
+                            personal_runtime = None
+                    finally:
+                        signal.signal(signal.SIGINT, prior_int)
+                        signal.signal(signal.SIGTERM, previous)
         if replacement is not None:
             replacement.sendall(
                 (json.dumps({"identity": instance.identity, "status": "stopped"}) + "\n").encode()
@@ -293,8 +378,12 @@ def run_ui(
             if children:
                 stop_servers(children)
         finally:
-            signal.signal(signal.SIGINT, prior_int)
-            signal.signal(signal.SIGTERM, previous)
+            try:
+                if personal_runtime is not None:
+                    personal_runtime.close()
+            finally:
+                signal.signal(signal.SIGINT, prior_int)
+                signal.signal(signal.SIGTERM, previous)
 
 
 def run_shutdown() -> int:

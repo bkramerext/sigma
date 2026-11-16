@@ -132,6 +132,41 @@ async def main() -> None:
             assert dispatch.await_args.args[0]["store"] is False
             assert dispatch.await_args.args[0]["stream"] is True
         # The real worker remains disabled; simulation cannot enable it.
+    # Opt-in LOCAL POC must never read the Mac-local ChatGPT credential store,
+    # even when a previous host sign-in exists. It uses the same private worker
+    # as a hosted user (or fails closed if that worker is disconnected).
+    local_subject = SimpleNamespace(subject="local-google-subject")
+    local_workspace = SimpleNamespace(
+        verified_subject="local-google-subject", subject_hash="local-subject-hash"
+    )
+    with (
+        patch.object(cloud_workspaces, "enabled", return_value=False),
+        patch.object(cloud_workspaces, "current", return_value=local_workspace),
+        patch.object(cloud_auth, "config", return_value=SimpleNamespace(local=True)),
+        patch.object(cloud_auth, "local_sponsored_principal", return_value=None),
+        patch.object(cloud_auth, "current_principal", return_value=local_subject),
+        patch.object(personal_browser, "enabled", return_value=True),
+        patch.object(
+            openai_connection.chatgpt_auth,
+            "session",
+            new=AsyncMock(side_effect=AssertionError("Local host OAuth fallback attempted")),
+        ),
+        patch.object(
+            personal_inference,
+            "account",
+            new=AsyncMock(return_value={"status": "disabled"}),
+        ) as check_account,
+    ):
+        disconnected = await openai_connection.auth_context()
+        assert disconnected["token"] == ""
+        assert disconnected["status"] == "unavailable"
+        check_account.return_value = ACCOUNT
+        connected = await openai_connection.auth_context()
+        assert connected["status"] == "connected"
+        assert connected["transport"] == "personal_worker"
+        assert connected["worker_binding"] == BINDING
+        assert connected["token"] == ""
+
     print("PASS SIGMA chat/strategies route Personal via worker; sponsor and direct HTTP untouched")
 
 

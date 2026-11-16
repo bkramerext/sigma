@@ -1,11 +1,12 @@
-"""Identity-bound, fail-closed SIGMA client for the synthetic browser supervisor.
+"""Identity-bound, fail-closed SIGMA client for the isolated browser supervisor.
 
 The API never receives a Docker project, hostname, container ID, credential
 directory or OAuth token from the browser. Only the server-verified Google
 principal determines the durable workspace ID sent over the private Unix socket.
 
 This is a lifecycle protocol, not a claim that Personal ChatGPT is connected.
-No real OpenAI authorization or inference is enabled here.
+The local-only real sign-in preview may authorize a Personal account, but
+browser readiness is never sufficient proof of connection.
 """
 
 from __future__ import annotations
@@ -139,7 +140,7 @@ async def _gateway_socket(principal: cloud_auth.Principal | None, *, filename: s
         or not stat.S_ISSOCK(info.st_mode)
         or path.is_symlink()
         or info.st_uid != os.geteuid()
-        or info.st_mode & 0o077
+        or (info.st_mode & 0o077)
     ):
         raise PersonalBrowserUnavailable("Private browser gateway is unavailable.")
     return str(path)
@@ -151,6 +152,65 @@ async def browser_socket(principal: cloud_auth.Principal | None) -> str:
 
 async def model_socket(principal: cloud_auth.Principal | None) -> str:
     return await _gateway_socket(principal, filename="model.sock")
+
+
+async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
+    """Read only the isolated worker's test status. Never select a billing mode."""
+    if os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") != "1":
+        return False
+    try:
+        path = await model_socket(principal)
+        transport = httpx.AsyncHTTPTransport(uds=path)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://private-personal-worker",
+            trust_env=False,
+            timeout=3,
+        ) as client:
+            response = await client.get("/v1/test-account")
+            return response.status_code == 200 and response.json() == {"verified": True}
+    except (PersonalBrowserUnavailable, httpx.HTTPError, OSError, ValueError):
+        return False
+
+
+def sign_in_preview_enabled() -> bool:
+    return (
+        enabled()
+        and os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN") == "1"
+    )
+
+
+async def sign_in_preview_phase(principal: cloud_auth.Principal | None) -> str:
+    if not sign_in_preview_enabled():
+        return "unavailable"
+    try:
+        path = await model_socket(principal)
+        transport = httpx.AsyncHTTPTransport(uds=path)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://private-personal-worker",
+            trust_env=False,
+            timeout=3,
+        ) as client:
+            response = await client.get("/v1/preview-state")
+            response.raise_for_status()
+            phase = response.json()["phase"]
+            if phase in (
+                "rendering",
+                "ready",
+                "connecting",
+                "connected",
+                "plan_not_permitted",
+                "declined",
+                "cancelled",
+                "expired",
+                "failed",
+            ):
+                return phase
+    except (PersonalBrowserUnavailable, httpx.HTTPError, OSError, ValueError, KeyError, TypeError):
+        pass
+    return "unavailable"
 
 
 async def browser_password(principal: cloud_auth.Principal | None) -> str:

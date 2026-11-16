@@ -1,11 +1,16 @@
 #!/bin/sh
-# Host-broker-created per-user workers publish a private Unix relay, never TCP.
-# The original standalone synthetic POC has no relay mount and is unchanged.
+# Host-broker-created per-user workers expose only private loopback host ports.
+# Hosted workers keep their direct Unix-socket relays.
 set -eu
 umask 077
-if [ -d /run/sigma-personal ]; then
-  # A stopped container leaves its bind-mounted socket inode behind. Before
-  # restart, unlink only our own stale socket; reject symlinks and foreign files.
+if [ "${SIGMA_AUTH_POC_LOCAL_DOCKER:-0}" = "1" ]; then
+  # Local POC only: Compose publishes these ports on host 127.0.0.1, and the
+  # browser shares this worker's private network namespace.
+  echo "SIGMA Personal worker: starting model gateway on private port 8002"
+  /opt/venv/bin/uvicorn model_gateway:app --host 0.0.0.0 --port 8002 --no-access-log &
+elif [ -d /run/sigma-personal ]; then
+  # A stopped container may leave bind-mounted socket inodes behind. Unlink
+  # only our own stale model socket; reject symlinks and foreign files.
   /opt/venv/bin/python - <<'PY'
 import os
 import stat
@@ -30,4 +35,5 @@ PY
     sleep 0.1
   done
 fi
+echo "SIGMA Personal worker: starting localhost OAuth callback on port 8001"
 exec /opt/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001 --no-access-log

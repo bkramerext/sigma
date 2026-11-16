@@ -3,7 +3,8 @@
 Never publish noVNC directly. Static noVNC assets and binary RFB frames are
 forwarded only after SIGMA validates the current Google session. The remote
 worker name is derived from the server's private workspace mapping, not input.
-All OpenAI OAuth and inference requests remain disabled in this synthetic POC.
+Real authorization is permitted only by the explicit local preview. Hosted
+deployment remains separately gated and cannot borrow local credentials.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import secrets
 import httpx
 from fastapi import HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, Response
+from starlette.websockets import WebSocketDisconnect
 
 from sigma import cloud_auth, personal_browser
 
@@ -69,21 +71,28 @@ async def view(request: Request) -> HTMLResponse:
     prefix = "/api/ai/personal-browser/window/" + (window_id or "unscoped")
     nonce = secrets.token_urlsafe(20)
     script = """
-import RFB from '__BASE__/app/rfb.js';
-const target = document.querySelector('#screen');
-const status = document.querySelector('#connection-status');
-const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const rfb = new RFB(
-  target,
-  scheme + '//' + location.host + '__BASE__/ws',
-  {credentials: {password: __PASSWORD__}}
-);
-rfb.scaleViewport = true;
-rfb.resizeSession = true;
-rfb.addEventListener('connect', () => { status.textContent = 'Browser ready'; });
-rfb.addEventListener('disconnect', () => {
-  status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
-});
+function showFailure(message) {
+  const status = document.querySelector('#connection-status');
+  status.textContent = message;
+  status.hidden = false;
+}
+try {
+  const {default: RFB} = await import('__BASE__/core/rfb.js');
+  const target = document.querySelector('#screen');
+  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const rfb = new RFB(
+    target,
+    scheme + '//' + location.host + '__BASE__/ws',
+    {credentials: {password: __PASSWORD__}}
+  );
+  rfb.scaleViewport = true;
+  rfb.resizeSession = true;
+  rfb.addEventListener('disconnect', () => {
+    showFailure('ChatGPT browser disconnected. Close this dialog and reconnect.');
+  });
+} catch {
+  showFailure('Could not load the ChatGPT browser. Close this dialog and reconnect.');
+}
 """
     script = script.replace("__BASE__", prefix).replace("__PASSWORD__", json.dumps(password))
     html = (
@@ -91,14 +100,16 @@ rfb.addEventListener('disconnect', () => {
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         "<title>Connect ChatGPT · SIGMA</title>"
         f"<style nonce='{nonce}'>"
-        "html,body{margin:0;background:#171b20;color:white;font:14px system-ui;height:100%}"
-        "main{display:flex;flex-direction:column;height:100%;overflow:hidden}"
-        "header{padding:8px 16px;background:#20252b;display:flex;gap:16px}"
-        "#screen{flex:1;min-height:0;overflow:hidden}#screen canvas{outline:none}"
-        "</style></head><body><main>"
-        "<header><strong>Connect ChatGPT</strong><span id='connection-status'>"
-        "Opening your private browser…</span></header>"
-        "<div id='screen'></div></main>"
+        "html,body{margin:0;background:#171b20;color:white;font:14px system-ui;"
+        "height:100%;overflow:hidden}"
+        "#screen{position:absolute;inset:0;overflow:hidden}"
+        "#screen canvas{outline:none}"
+        "#connection-status:not([hidden]){position:absolute;inset:0;display:flex;"
+        "align-items:center;justify-content:center;background:#171b20;"
+        "padding:20px;text-align:center;z-index:2}"
+        "</style></head><body>"
+        "<div id='screen'></div>"
+        "<div id='connection-status' role='alert' hidden></div>"
         f"<script type='module' nonce='{nonce}'>{script}</script></body></html>"
     )
     connect = " 'self' ws: wss:"
@@ -113,7 +124,7 @@ rfb.addEventListener('disconnect', () => {
                 "default-src 'none'; "
                 f"script-src 'self' 'nonce-{nonce}'; "
                 f"style-src 'nonce-{nonce}'; connect-src{connect}; "
-                "img-src 'self' data:; font-src 'self'; frame-ancestors 'none'"
+                "img-src 'self' data:; font-src 'self'; frame-ancestors 'self'"
             ),
         },
     )
@@ -126,7 +137,7 @@ async def asset(request: Request, path: str) -> Response:
     if (
         not _ASSET.fullmatch(path)
         or ".." in path.split("/")
-        or not path.startswith(("app/", "vendor/", "images/"))
+        or not path.startswith(("app/", "core/", "vendor/", "images/"))
     ):
         raise HTTPException(404, "Browser asset unavailable.")
     try:
@@ -222,6 +233,19 @@ async def _connect_worker(socket_path: str) -> tuple[asyncio.StreamReader, async
         raise
 
 
+async def _close_websocket(websocket: WebSocket, *, code: int = 1000) -> None:
+    """Best-effort close after a peer disappears.
+
+    Starlette wraps Uvicorn's ClientDisconnected in WebSocketDisconnect(1006)
+    when sending a close frame to an already-gone iframe. This is normal when
+    the user closes the SIGMA dialog and must not leak an ASGI traceback.
+    """
+    try:
+        await websocket.close(code=code)
+    except (WebSocketDisconnect, RuntimeError, OSError):
+        pass
+
+
 async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
     """Explicit Google-session gate: HTTP auth middleware does not gate WS routes."""
     cfg = cloud_auth.config()
@@ -232,7 +256,7 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
         or not cfg.origin
         or websocket.headers.get("origin") != cfg.origin
     ):
-        await websocket.close(code=1008)
+        await _close_websocket(websocket, code=1008)
         return
     # WebSocket has the same cookie/header/query accessors as Request. The
     # scoped session must match the initiating SIGMA browser window.
@@ -243,7 +267,7 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
         or principal.role not in {"admin", "member"}
         or principal.subject.startswith("mock:")
     ):
-        await websocket.close(code=1008)
+        await _close_websocket(websocket, code=1008)
         return
     writer: asyncio.StreamWriter | None = None
     try:
@@ -343,6 +367,7 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
         HTTPException,
         PermissionError,
         personal_browser.PersonalBrowserUnavailable,
+        WebSocketDisconnect,
     ):
         pass
     finally:
@@ -352,7 +377,4 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
                 await writer.wait_closed()
             except OSError:
                 pass
-        try:
-            await websocket.close()
-        except (RuntimeError, OSError):
-            pass
+        await _close_websocket(websocket)

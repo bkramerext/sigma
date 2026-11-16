@@ -5,35 +5,45 @@ This service is intentionally not a hosted multi-user authorization broker.
 """
 from __future__ import annotations
 
+import asyncio
 import os
-import secrets
+import time
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from sigma import chat, chatgpt_auth
-from sigma.openai_connection import connection
+import synthetic_signin
+from model_gateway import _valid_rpc_key
+
+from sigma import ai_store, chatgpt_auth
+from sigma.projects import ProjectError
 
 if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
     raise RuntimeError("This is a local laboratory; hosted integration is not enabled")
 
 app = FastAPI()
+app.include_router(synthetic_signin.router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
 _ATTEMPT_ID: str | None = None
+_SIGNIN_START_LOCK = asyncio.Lock()
+_SIGNIN_FAILED = False
 
 
 def real_signin_enabled() -> bool:
-    # Explicitly fail closed while the nested Chromium sandbox is unavailable.
-    return os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") == "1"
+    return (
+        os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") == "1"
+    )
 
 
 def require_real_signin() -> None:
     if not real_signin_enabled():
         raise HTTPException(
             403,
-            "Real ChatGPT sign-in is disabled pending browser-sandbox and provider-eligibility review",
+            "Real ChatGPT sign-in is available only in the explicit local authorization preview.",
         )
 
 
@@ -43,8 +53,74 @@ def same_origin(request: Request) -> None:
         raise HTTPException(403, "Invalid browser origin")
 
 
+async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
+    """Go straight to the verified OpenAI chooser in this isolated browser.
+
+    The broker starts a browser only after a deliberate SIGMA user action.
+    Never display an intermediary button or open a popup. Preserve saved
+    sessions without starting a second OAuth attempt.
+    """
+    global _ATTEMPT_ID, _SIGNIN_FAILED
+    require_real_signin()
+    _SIGNIN_FAILED = False
+    try:
+        saved = await chatgpt_auth.session()
+    except (ProjectError, OSError, ValueError, KeyError, TypeError) as exc:
+        _SIGNIN_FAILED = True
+        raise HTTPException(503, "Could not check the saved ChatGPT account.") from exc
+    if saved.get("status") == "connected" and (saved.get("account") or {}).get("plan_authorized") is True:
+        return HTMLResponse(
+            "<!doctype html><html lang='en'><head><title>ChatGPT connected</title></head>"
+            "<body></body></html>",
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
+    if saved.get("status") == "unavailable":
+        _SIGNIN_FAILED = True
+        raise HTTPException(503, "Saved ChatGPT credentials could not be verified.")
+
+    async with _SIGNIN_START_LOCK:
+        # Opening the isolated browser's start page is a new sign-in, not a
+        # replay of its previous OAuth handoff. authorization_url() consumes
+        # the URL exactly once. A canceled/recreated Chromium can revisit /
+        # while the worker and its in-memory _ATTEMPT_ID survive Docker stop.
+        # Reusing that ID raises ProjectError ("already opened") and used to
+        # leak a 500 Internal Server Error into the iframe.
+        previous_id = _ATTEMPT_ID
+        _ATTEMPT_ID = None
+        if previous_id:
+            try:
+                chatgpt_auth.cancel(previous_id)
+            except ProjectError:
+                # The prior attempt may have completed or expired. It cannot
+                # authorize the new browser; never replay a consumed handoff.
+                pass
+        try:
+            attempt = await chatgpt_auth.begin()
+            _ATTEMPT_ID = attempt["id"]
+            url = chatgpt_auth.authorization_url(_ATTEMPT_ID)
+            parsed = urlsplit(url)
+            if parsed.scheme != "https" or parsed.hostname != "auth.openai.com":
+                raise ProjectError("Unexpected authorization endpoint")
+        except ProjectError as exc:
+            # No raw OAuth exception or internal server error in the iframe.
+            # Also release a partially started attempt before the next retry.
+            if _ATTEMPT_ID is not None:
+                try:
+                    chatgpt_auth.cancel(_ATTEMPT_ID)
+                except ProjectError:
+                    pass
+                _ATTEMPT_ID = None
+            _SIGNIN_FAILED = True
+            raise HTTPException(503, "Could not start ChatGPT sign-in. Please retry.") from exc
+    return RedirectResponse(
+        url, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
-async def index() -> HTMLResponse:
+async def index() -> Response:
+    if real_signin_enabled():
+        return await _direct_local_signin()
     html = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>SIGMA · Container OAuth laboratory</title>
 <style>body{font:16px system-ui;margin:3rem auto;max-width:43rem;background:#171b20;
@@ -55,52 +131,58 @@ code{color:#d7b58e}</style></head>
 holds credentials in another container. They share a localhost network only.
 <strong>Real ChatGPT sign-in is disabled for this synthetic test.</strong></p>
 <button id="start" disabled>Open ChatGPT account chooser (disabled)</button>
-<button id="verify" disabled>Verify model catalog (disabled)</button>
-<button id="infer" disabled>Test one real model response (disabled)</button>
 <p id="status" role="status">No sign-in started.</p>
 <script>
 const status=document.getElementById('status');
+const start=document.getElementById('start');
+if(start.dataset.preview==='1'){
+ const observer=new PerformanceObserver(async(list)=>{
+  if(!list.getEntries().some(entry=>entry.name==='first-contentful-paint'))return;
+  observer.disconnect();
+  try{
+   await req('/lab-painted');
+   start.disabled=false;
+  }catch{status.textContent='SIGMA could not confirm the sign-in page. Reopen the browser to try again.';}
+ });
+ observer.observe({type:'paint',buffered:true});
+}
 async function req(path) {
  const response=await fetch(path,{method:'POST',cache:'no-store'});
  const data=await response.json();
  if(!response.ok)throw new Error(data.detail||'Request failed');
  return data;
 }
-document.getElementById('start').onclick=async()=>{
+start.onclick=async()=>{
  status.textContent='Opening OpenAI sign-in...';
  const popup=window.open('about:blank','_blank');
  try{const r=await req('/begin');
-  if(popup)popup.location.replace('/open/'+encodeURIComponent(r.id));
+  if(popup){popup.opener=null;popup.location.replace('/open/'+encodeURIComponent(r.id));}
   else status.textContent='Popup blocked. Enable popups for this browser.';
  }catch(e){if(popup)popup.close();status.textContent=String(e);}
-};
-document.getElementById('verify').onclick=async()=>{
- status.textContent='Checking available models...';
- try{const r=await req('/verify');
- status.textContent=r.connected?'OpenAI model catalog verified.':'Not connected: '+r.status;
- }catch(e){status.textContent=String(e);}
-};
-document.getElementById('infer').onclick=async()=>{
- status.textContent='Requesting a bounded model response...';
- try{const r=await req('/inference');
- status.textContent=r.completed?'A real Responses API request completed.':'Inference failed.';
- }catch(e){status.textContent=String(e);}
 };
 let last='';
 async function poll(){
  try{const r=await fetch('/status',{cache:'no-store'}).then(r=>r.json());
- if(r.attempt&&r.attempt!==last){last=r.attempt;status.textContent='OAuth: '+r.attempt;}
+ if(r.attempt&&r.attempt!==last){
+  last=r.attempt;
+  status.textContent=r.message||('OAuth: '+r.attempt);
+ }
+ if(!r.attempt&&start.dataset.preview==='1'){
+  const preview=await fetch('/preview-state',{cache:'no-store'});
+  if(preview.ok&&(await preview.json()).phase==='connected')
+   status.textContent='Using your saved ChatGPT authorization.';
+ }
  }catch{}
 }
 setInterval(poll,1800);
 </script></body></html>"""
-    # The default synthetic lab never presents fake account selection. Only a
-    # separately reviewed and explicitly activated real-sign-in mode may open
-    # OpenAI's actual account chooser and perform model/inference checks.
-    if real_signin_enabled():
-        html = html.replace('id="start" disabled', 'id="start"')
-        html = html.replace('id="verify" disabled', 'id="verify"')
-        html = html.replace('id="infer" disabled', 'id="infer"')
+    if synthetic_signin.enabled():
+        html = html.replace(
+            '<button id="start" disabled>Open ChatGPT account chooser (disabled)</button>',
+            '<form method="post" action="/test-signin/begin">'
+            '<button type="submit">Choose a test account</button></form>'
+            '<button id="start" hidden disabled></button>',
+        )
     return HTMLResponse(
         html,
         headers={
@@ -110,21 +192,57 @@ setInterval(poll,1800);
     )
 
 
+def _saved_preview_is_authorized() -> bool:
+    """Expose only the result of validation, never the stored account record."""
+    try:
+        state = ai_store.read(ai_store.directory() / "credentials.json")
+        account = state["accounts"].get(state["active"]) if state["mode"] == "chatgpt" else None
+        return (
+            isinstance(account, dict)
+            and account.get("plan_authorized") is True
+            and bool(account.get("access_token"))
+            and float(account.get("expires_at", 0)) > time.time()
+        )
+    except (OSError, ValueError, TypeError, KeyError, ProjectError):
+        return False
+
+
+@app.get("/preview-state")
+async def preview_state() -> dict[str, str]:
+    require_real_signin()
+    # A verified stored account is authoritative even when an earlier OAuth
+    # attempt failed. Never leave a newly connected browser displaying a stale
+    # error until the worker process happens to restart.
+    if await run_in_threadpool(_saved_preview_is_authorized):
+        return {"phase": "connected"}
+    if _SIGNIN_FAILED:
+        return {"phase": "failed"}
+    attempt = (await status())["attempt"]
+    if attempt is not None:
+        return {"phase": attempt}
+    return {"phase": "ready"}
+
+
 @app.post("/begin")
 async def begin(request: Request) -> dict[str, str]:
-    global _ATTEMPT_ID
+    global _ATTEMPT_ID, _SIGNIN_FAILED
     same_origin(request)
     require_real_signin()
     if _ATTEMPT_ID is not None:
         if chatgpt_auth.attempt_status(_ATTEMPT_ID)["status"] == "connecting":
             raise HTTPException(409, "Complete or cancel the previous sign-in")
-    attempt = await chatgpt_auth.begin()
+    try:
+        attempt = await chatgpt_auth.begin()
+    except ProjectError as exc:
+        raise HTTPException(503, "Could not begin ChatGPT authorization. Try again.") from exc
     _ATTEMPT_ID = attempt["id"]
+    _SIGNIN_FAILED = False
     return {"id": _ATTEMPT_ID}
 
 
 @app.get("/open/{identifier}")
 async def open_auth(identifier: str) -> RedirectResponse:
+    require_real_signin()
     if _ATTEMPT_ID is None or identifier != _ATTEMPT_ID:
         raise HTTPException(404, "Sign-in attempt unavailable")
     url = chatgpt_auth.authorization_url(identifier)
@@ -137,39 +255,30 @@ async def open_auth(identifier: str) -> RedirectResponse:
 
 @app.get("/status")
 async def status() -> dict[str, str | None]:
-    if _ATTEMPT_ID is None:
+    if not real_signin_enabled() or _ATTEMPT_ID is None:
         return {"attempt": None}
-    return {"attempt": chatgpt_auth.attempt_status(_ATTEMPT_ID)["status"]}
+    try:
+        attempt = chatgpt_auth.attempt_status(_ATTEMPT_ID)
+    except ProjectError:
+        return {"attempt": "expired", "message": "Sign-in expired. Start another attempt."}
+    return {"attempt": attempt["status"], "message": attempt["message"]}
+
+
+@app.post("/disconnect")
+async def disconnect(request: Request) -> dict[str, bool]:
+    global _ATTEMPT_ID
+    if not _valid_rpc_key(request):
+        raise HTTPException(403, "Personal ChatGPT disconnect is unavailable.")
+    await chatgpt_auth.disconnect()
+    _ATTEMPT_ID = None
+    return {"disconnected": True}
 
 
 @app.post("/verify")
-async def verify(request: Request) -> dict[str, str | bool]:
-    same_origin(request)
-    require_real_signin()
-    result = await connection(refresh=True)
-    return {
-        "connected": result.get("status") == "connected",
-        "status": str(result.get("status", "unavailable")),
-    }
-
-
 @app.post("/inference")
-async def inference(request: Request) -> dict[str, bool]:
+async def inference_disabled(request: Request) -> None:
     same_origin(request)
-    require_real_signin()
-    config = await chat.configuration()
-    if not config["available"]:
-        raise HTTPException(503, "No verified Personal ChatGPT model available")
-    # Deliberately fixed and bounded; not a general-purpose inference proxy.
-    result = await chat.respond(
-        speaker="ai_1",
-        messages=[{"speaker": "human", "text": "Reply with a brief greeting."}],
-        conversation_id=secrets.token_hex(16),
-        expected_binding=config["binding"],
-        model=config["model"],
-        reasoning_effort=config["reasoning_effort"],
-    )
-    return {"completed": bool(result.strip())}
+    raise HTTPException(403, "Use Personal ChatGPT from the main SIGMA window.")
 
 
 @app.get("/health")

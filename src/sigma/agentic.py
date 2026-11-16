@@ -13,7 +13,7 @@ from uuid import uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research, cloud_workspaces, personal_inference, research_sessions
+from sigma import cloud_research, cloud_workspaces, research_sessions
 from sigma.agentic_evidence import now as evidence_now
 from sigma.agentic_evidence import save as save_evidence
 from sigma.openai_connection import auth_context, cloud_credential
@@ -303,7 +303,9 @@ async def _invoke(
             }
         },
     }
-    is_personal = binding.get("transport") == "personal_worker"
+    from sigma import model_dispatch
+
+    is_personal = model_dispatch.uses_personal_worker(binding)
     headers = {} if is_personal else {"Authorization": "Bearer " + binding["token"]}
     if binding["mode"] == "chatgpt":
         del payload["max_output_tokens"]
@@ -325,12 +327,11 @@ async def _invoke(
             )
         if attempt is not None:
             attempt.dispatched = True
-        if is_personal:
-            raw = await personal_inference.respond(
-                payload,
-                expected_binding=binding["worker_binding"],
-                request_id=uuid4().hex,
-            )
+        personal_raw = await model_dispatch.private_response_if_selected(
+            binding, payload, timeout_seconds=CALL_SECONDS
+        )
+        if personal_raw is not None:
+            raw = personal_raw
         else:
             async with (
                 asyncio.timeout(CALL_SECONDS),

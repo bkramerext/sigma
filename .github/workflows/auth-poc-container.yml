@@ -22,6 +22,19 @@ on:
       - 'deploy/deploy-gce-release.py'
       - 'deploy/gce_preflight.py'
       - '.github/workflows/auth-poc-container.yml'
+  pull_request:
+    paths:
+      - 'auth-poc/**'
+      - 'deploy/auth-poc*.yaml'
+      - 'frontend/src/ai-connection.tsx'
+      - 'frontend/src/ai-connection.css'
+      - 'src/sigma/ui.py'
+      - 'src/sigma/cli.py'
+      - 'src/sigma/local_personal.py'
+      - 'src/sigma/personal_browser_proxy.py'
+      - 'src/sigma/personal_browser.py'
+      - 'tests/auth_poc_local_launcher.py'
+      - '.github/workflows/auth-poc-container.yml'
   workflow_dispatch:
 
 permissions:
@@ -31,10 +44,55 @@ jobs:
   docker-smoke:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      SIGMA_AUTH_POC_CHECKOUT_ID: cccccccccccccccccccccccccccccccc
     steps:
       - uses: actions/checkout@v4
       - name: Check user-scoped Docker broker security invariants
         run: python3 tests/auth_poc_host_broker.py
+      - name: Verify local --prod lifecycle, embedded viewer and broker UID separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n auth-poc/start-sigma-local.sh
+          python3 tests/auth_poc_local_launcher.py
+          export SIGMA_RELEASE="$GITHUB_SHA"
+          export SIGMA_AUTH_POC_WORKSPACE_ID="$(printf 'a%.0s' {1..32})"
+          export SIGMA_STATE_DISK_MOUNT="/tmp/sigma-poc-local-smoke"
+          export SIGMA_AUTH_POC_GATEWAY_DIR="/tmp/sigma-poc-local-gateway"
+          export SIGMA_AUTH_POC_LOCAL_UID="$(id -u)"
+          export SIGMA_AUTH_POC_LOCAL_GID="$(id -g)"
+          export SIGMA_AUTH_POC_CHECKOUT_ID="$(printf 'c%.0s' {1..32})"
+          docker compose --project-name sigma-poc-config-check \
+            -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+            -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \
+            config --format json > /tmp/sigma-poc-local-compose.json
+          python3 - <<'PY'
+          import json, os
+          config = json.load(open("/tmp/sigma-poc-local-compose.json"))
+          worker, browser = config["services"]["auth-poc"], config["services"]["browser"]
+          assert worker["user"] == f'{os.getuid()}:{os.getgid()}'
+          assert worker["labels"]["io.sigma.personal.checkout"] == os.environ["SIGMA_AUTH_POC_CHECKOUT_ID"]
+          assert browser["labels"]["io.sigma.personal.owner"] == str(os.getuid())
+          assert worker["environment"]["SIGMA_AUTH_POC_LOCAL_DOCKER"] == "1"
+          ports = worker.get("ports", [])
+          assert {port["target"] for port in ports} == {6080, 8002}, ports
+          assert all(port["host_ip"] == "127.0.0.1" for port in ports), ports
+          assert not browser.get("ports"), browser.get("ports")
+          mounts = {m["target"]: m for m in worker["volumes"]}
+          assert mounts["/var/lib/sigma-poc-auth"]["type"] == "bind"
+          assert "/run/sigma-personal" not in mounts
+          assert not browser.get("volumes"), browser.get("volumes")
+          PY
+          # The Apple Silicon path must select arm64 BEFORE image build,
+          # while the pinned auth worker remains amd64.
+          SIGMA_AUTH_POC_BROWSER_PLATFORM=linux/arm64 docker compose             --project-name sigma-arm64-config-check             -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml             -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml             config --format json > /tmp/sigma-poc-arm64-compose.json
+          python3 - <<'PY'
+          import json
+          services = json.load(open("/tmp/sigma-poc-arm64-compose.json"))["services"]
+          assert services["browser"]["platform"] == "linux/arm64"
+          assert services["auth-poc"]["platform"] == "linux/amd64"
+          PY
       - name: Verify GCE Compose overlay remains nonpublic and persistent
         shell: bash
         run: |
@@ -122,6 +180,83 @@ jobs:
           [[ $(docker inspect "$browser" --format '{{.HostConfig.NetworkMode}}') == container:* ]] || { echo "Browser not sharing localhost"; exit 1; }
           docker compose -f deploy/auth-poc.compose.yaml exec -T browser python3 -c 'import urllib.request; assert urllib.request.urlopen("http://127.0.0.1:8001/health", timeout=3).status==200'
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc sh -c '! command -v chromium'
+      - name: Exercise local non-root broker with real Docker containers and private relays
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_dir=$(mktemp -d)
+          gateway_dir=$(mktemp -d)
+          chmod 0700 "$state_dir"
+          chmod 0711 "$gateway_dir"
+          workspace=$(printf 'e%.0s' {1..32})
+          export SIGMA_AUTH_BROKER_LOCAL_POC=1
+          export SIGMA_AUTH_BROKER_STATE_ROOT="$state_dir"
+          export SIGMA_AUTH_BROKER_GATEWAY_ROOT="$gateway_dir"
+          export SIGMA_RELEASE="$GITHUB_SHA"
+          docker tag sigma-auth-poc:local "sigma-auth-poc:$GITHUB_SHA"
+          docker tag sigma-auth-browser-poc:local "sigma-auth-browser-poc:$GITHUB_SHA"
+          cleanup_local() {
+            SIGMA_AUTH_POC_WORKSPACE_ID="$workspace" \
+            SIGMA_STATE_DISK_MOUNT="$state_dir/$workspace" \
+            SIGMA_AUTH_POC_GATEWAY_DIR="$gateway_dir/$workspace" \
+            SIGMA_AUTH_POC_LOCAL_UID="$(id -u)" \
+            SIGMA_AUTH_POC_LOCAL_GID="$(id -g)" \
+              docker compose --project-name "sigma-personal-$workspace" \
+                -f deploy/auth-poc.compose.yaml -f deploy/auth-poc.gce.yaml \
+                -f deploy/auth-poc.user.gce.yaml -f deploy/auth-poc.user.local.yaml \
+                down --remove-orphans || true
+            rm -rf -- "$state_dir" "$gateway_dir"
+          }
+          trap cleanup_local EXIT
+          python3 - <<'PY'
+          import contextlib
+          import importlib.util
+          import io
+          import socket
+          import stat
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("local_poc_broker", Path("auth-poc/host_broker.py").resolve())
+          assert spec and spec.loader
+          broker = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(broker)
+          workspace = "e" * 32
+          assert broker.operate("start", workspace)["status"] == "ready"
+          relay = broker.gateway_root() / workspace / "vnc.sock"
+          assert relay.is_socket(), "Private browser relay was not published"
+          model = broker.gateway_root() / workspace / "model.sock"
+          assert model.is_socket(), "Private model relay was not published"
+          assert stat.S_IMODE(relay.stat().st_mode) == 0o600
+          assert stat.S_IMODE(model.stat().st_mode) == 0o600
+          with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+              conn.settimeout(8)
+              conn.connect(str(relay))
+              conn.sendall(b"GET /vnc.html HTTP/1.1\r\nHost: private-browser\r\nConnection: close\r\n\r\n")
+              assert b"200 OK" in conn.recv(1000), "Private browser could not stream"
+          with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+              conn.settimeout(8)
+              conn.connect(str(model))
+              conn.sendall(b"GET /v1/account HTTP/1.1\r\nHost: private-model\r\nConnection: close\r\n\r\n")
+              response = conn.recv(1000)
+              assert response.startswith(b"HTTP/1.1 200 "), "Private model relay did not answer"
+          # Exercise the real local worker+browser diagnostic path, not
+          # merely the default synthetic Compose configuration.
+          captured = io.StringIO()
+          with contextlib.redirect_stdout(captured):
+              broker._container_diagnostics(workspace, "ci_local_probe", force=True)
+          safe_report = captured.getvalue()
+          assert "auth-poc.model_http_8002=http_200" in safe_report, safe_report
+          assert "auth-poc.oauth_http_8001=http_200" in safe_report, safe_report
+          assert "browser.websocket_http_6080=http_200" in safe_report, safe_report
+          assert "host.loopback_vnc=http_200" in safe_report, safe_report
+          assert "host.loopback_model=http_200" in safe_report, safe_report
+          assert "host.private_vnc=http_200" in safe_report, safe_report
+          assert "host.private_model=http_200" in safe_report, safe_report
+          assert "auth-poc.local_model_gateway_enabled=yes" in safe_report, safe_report
+          assert "auth.openai.com" not in safe_report
+          assert "access_token" not in safe_report
+          assert broker.operate("stop", workspace)["status"] == "stopped"
+          print("PASS: host-user-owned Docker worker and native host Unix-socket relays")
+          PY
       - name: Verify two isolated user-scoped stacks
         shell: bash
         run: |
@@ -225,8 +360,29 @@ jobs:
           [[ "$bind" == 127.0.0.1:* ]] || { echo "Unexpected noVNC bind: $bind"; exit 1; }
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import json, urllib.request; v=json.load(urllib.request.urlopen("http://127.0.0.1:8001/health")); assert v["ready"], v'
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc             /opt/venv/bin/python -c 'import urllib.request; html=urllib.request.urlopen("http://127.0.0.1:8001/").read(); assert b"Open ChatGPT account chooser" in html'
+      - name: Verify private browser and worker diagnostic probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f deploy/auth-poc.compose.yaml exec -T browser \
+            python3 /opt/sigma/diag_probe.py browser | tee /tmp/sigma-browser-probe.txt
+          docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc \
+            /opt/venv/bin/python /opt/sigma/auth-poc/diag_probe.py worker | tee /tmp/sigma-worker-probe.txt
+          grep -Fqx 'component=browser' /tmp/sigma-browser-probe.txt
+          grep -Fqx 'component=worker' /tmp/sigma-worker-probe.txt
+          grep -Fqx 'websocket_http_6080=http_200' /tmp/sigma-browser-probe.txt
+          grep -Fqx 'oauth_http_8001=http_200' /tmp/sigma-worker-probe.txt
+          # Synthetic CI omits the real-only local model gateway by design.
+          grep -Fqx 'local_model_gateway_enabled=no' /tmp/sigma-worker-probe.txt
+          grep -Fqx 'model_http_8002=unreachable' /tmp/sigma-worker-probe.txt
+          if grep -Ei 'token|secret|auth.openai.com|/home/' /tmp/sigma-browser-probe.txt /tmp/sigma-worker-probe.txt; then
+            echo 'Unexpected sensitive text in diagnostics'
+            exit 1
+          fi
       - name: Verify browser-origin gate
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_security.py
+      - name: Verify real local ChatGPT preview routes without provider calls
+        run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_local_real_preview.py
       - name: Verify backend user binding through real Unix socket
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_broker_client.py
       - name: Verify identity-bound HTTPS browser proxy without any credentials

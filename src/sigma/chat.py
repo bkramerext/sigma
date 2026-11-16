@@ -5,11 +5,10 @@ import hashlib
 import json
 from collections.abc import Mapping
 from typing import Any, Literal
-from uuid import uuid4
 
 import httpx
 
-from sigma import cloud_research, cloud_workspaces, personal_inference
+from sigma import cloud_research, cloud_workspaces, model_dispatch
 from sigma.model_catalog import CATALOG, DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, cloud_credential, models
 from sigma.plan_stream import completed, failure
@@ -152,7 +151,7 @@ async def respond(
         raise ProjectError("Repeated text must be a string.")
 
     credential = await auth_context()
-    is_personal = credential.get("transport") == "personal_worker"
+    is_personal = model_dispatch.uses_personal_worker(credential)
     if (not credential["token"] and not is_personal) or credential["status"] != "connected":
         raise ProjectError("Connect ChatGPT or select API-key billing before starting a chat.")
     if credential["identity"] != expected_binding:
@@ -211,14 +210,12 @@ async def respond(
             )
         if attempt is not None:
             attempt.dispatched = True
-        if is_personal:
-            raw = await personal_inference.respond(
-                payload,
-                expected_binding=credential["worker_binding"],
-                request_id=uuid4().hex,
-            )
-            response_data = raw
-            text = _response_text(raw, model)
+        personal_raw = await model_dispatch.private_response_if_selected(
+            credential, payload, timeout_seconds=TIMEOUT_SECONDS
+        )
+        if personal_raw is not None:
+            response_data = personal_raw
+            text = _response_text(personal_raw, model)
         else:
             async with (
                 asyncio.timeout(TIMEOUT_SECONDS),

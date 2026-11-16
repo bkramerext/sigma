@@ -40,3 +40,97 @@
 .hosted-personal-chatgpt-dialog p { margin: 0; color: #bcc5cc; font: 14px/1.65 Inter, ui-sans-serif, system-ui, sans-serif; }
 .google-connection-details .cloud-auth-button:hover { background: linear-gradient(112deg, #d09a61, #f5d4a0 52%, #ce9a60); }
 .google-connection-details .cloud-auth-button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+
+.paper-step-restart-popup.chatgpt-disconnect-popup {
+  width: min(330px, calc(100vw - 24px));
+  overflow-wrap: anywhere;
+}
+
+.personal-chatgpt-connect-dialog {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: min(1200px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 12px;
+  overflow: auto;
+}
+.personal-chatgpt-connect-dialog.is-external {
+  width: min(460px, calc(100vw - 32px));
+  height: auto;
+  padding: 22px 26px;
+}
+.personal-chatgpt-connect-dialog.is-external p[role="status"] {
+  margin-bottom: 0;
+}
+.personal-chatgpt-connect-dialog.is-external a.sigma-text-action {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--sigma-copper-foreground);
+  font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.personal-chatgpt-connect-dialog.is-viewing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+.personal-chatgpt-connect-dialog .privacy-notice-heading {
+  position: static;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.personal-chatgpt-connect-dialog p {
+  margin: 8px 0 14px;
+  color: #bcc5cc;
+  font: 13px/1.55 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.personal-chatgpt-browser-frame {
+  display: block;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 5px;
+  background: #171b20;
+}
+.personal-chatgpt-connection-error { padding: 12px 0; }
+/* Dialogs may be rendered in a portal outside .home-page/.workspace-page.
+   Keep SIGMA's standard compact underlined action in every placement. */
+.personal-chatgpt-connect-dialog button.sigma-text-action,
+.personal-chatgpt-connect-dialog button.sigma-text-action:hover:not(:disabled),
+.personal-chatgpt-connect-dialog button.sigma-text-action:active:not(:disabled) {
+  appearance: none;
+  display: inline-block;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--sigma-copper-foreground);
+  font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.personal-chatgpt-connect-dialog button.sigma-text-action:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
+@media (max-width: 650px) {
+  .personal-chatgpt-connect-dialog { padding: 10px; }
+}
