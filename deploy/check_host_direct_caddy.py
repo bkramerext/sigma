@@ -85,8 +85,7 @@ def validate(config: Any) -> None:
             for route in server.get("routes", []):
                 matchers = route.get("match", [])
                 if any(
-                    isinstance(matcher, dict)
-                    and EXPECTED_HOST in matcher.get("host", [])
+                    isinstance(matcher, dict) and EXPECTED_HOST in matcher.get("host", [])
                     for matcher in matchers
                 ):
                     matched += 1

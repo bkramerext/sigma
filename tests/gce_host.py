@@ -77,9 +77,9 @@ class GceHostToolingTests(unittest.TestCase):
             "routes"
         ].pop()
         extra_edge = document()
-        extra_edge["apps"]["http"]["servers"]["srv0"]["routes"][0]["handle"][0][
-            "routes"
-        ].append({"handle": [proxy("127.0.0.1:18080")]})
+        extra_edge["apps"]["http"]["servers"]["srv0"]["routes"][0]["handle"][0]["routes"].append(
+            {"handle": [proxy("127.0.0.1:18080")]}
+        )
         for invalid in (
             decoy,
             document(backend="127.0.0.1:18082", frontend="127.0.0.1:18081"),
