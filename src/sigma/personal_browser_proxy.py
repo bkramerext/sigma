@@ -70,37 +70,10 @@ async def view(request: Request) -> HTMLResponse:
     prefix = "/api/ai/personal-browser/window/" + (window_id or "unscoped")
     nonce = secrets.token_urlsafe(20)
     script = """
-const status = document.querySelector('#connection-status');
-const previewUrl = __PREVIEW_URL__;
-const messages = {
-  ready: 'Ready to sign in. Click Continue with ChatGPT in the browser below.',
-  connecting: 'Waiting for ChatGPT sign-in to finish.',
-  connected: 'ChatGPT authorization verified. Finishing the connection in SIGMA…',
-  plan_not_permitted: 'Signed in. ChatGPT plan permission was not granted.',
-  declined: 'ChatGPT authorization was declined.',
-  cancelled: 'Sign-in ended before authorization completed. Start a new sign-in to retry.',
-  expired: 'Sign-in expired. Start a new sign-in to retry.',
-  failed: 'ChatGPT authorization failed. Start a new sign-in to retry.',
-};
-let displayConnected = false;
-async function watchPreview() {
-  const started = Date.now();
-  while (displayConnected) {
-    let phase = 'unavailable';
-    try {
-      const response = await fetch(previewUrl, {cache: 'no-store', signal: AbortSignal.timeout(4000)});
-      if (response.ok) phase = (await response.json()).phase;
-    } catch {}
-    if (!displayConnected) return;
-    if (phase === 'rendering' || phase === 'unavailable') {
-      status.textContent = Date.now() - started < 15000
-        ? 'Waiting for the sign-in page to render…'
-        : 'Could not confirm that the sign-in page loaded. Close this window and reopen sign-in.';
-    } else if (Object.hasOwn(messages, phase)) {
-      status.textContent = messages[phase];
-    }
-    await new Promise(resolve => setTimeout(resolve, 1200));
-  }
+function showFailure(message) {
+  const status = document.querySelector('#connection-status');
+  status.textContent = message;
+  status.hidden = false;
 }
 try {
   const {default: RFB} = await import('__BASE__/core/rfb.js');
@@ -113,44 +86,29 @@ try {
   );
   rfb.scaleViewport = true;
   rfb.resizeSession = true;
-  rfb.addEventListener('connect', () => {
-    displayConnected = true;
-    if (previewUrl) void watchPreview();
-    else status.textContent = 'Browser ready';
-  });
   rfb.addEventListener('disconnect', () => {
-    displayConnected = false;
-    status.textContent = 'Browser disconnected. Close this window and reconnect from SIGMA.';
+    showFailure('ChatGPT browser disconnected. Close this dialog and reconnect.');
   });
 } catch {
-  status.textContent = 'Could not load the private browser. Close this window and reconnect from SIGMA.';
+  showFailure('Could not load the ChatGPT browser. Close this dialog and reconnect.');
 }
 """
-    preview_url = "/api/ai/personal-browser/preview-state"
-    if window_id:
-        preview_url += "?sigma_window=" + window_id
-    script = (
-        script.replace("__BASE__", prefix)
-        .replace("__PASSWORD__", json.dumps(password))
-        .replace(
-            "__PREVIEW_URL__",
-            json.dumps(preview_url if personal_browser.sign_in_preview_enabled() else None),
-        )
-    )
+    script = script.replace("__BASE__", prefix).replace("__PASSWORD__", json.dumps(password))
     html = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
         "<title>Connect ChatGPT · SIGMA</title>"
         f"<style nonce='{nonce}'>"
-        "html,body{margin:0;background:#171b20;color:white;font:14px system-ui;height:100%}"
-        "main{display:flex;flex-direction:column;height:100%;overflow:hidden}"
-        "header{padding:8px 16px;background:#20252b;display:flex;gap:16px}"
-        "#screen{flex:1;min-height:0;overflow:hidden}#screen canvas{outline:none}"
-        "</style></head><body><main>"
-        "<header><strong>Connect ChatGPT</strong><span id='connection-status'>"
-        "Connecting to the ChatGPT sign-in browser…</span>"
-        "</header>"
-        "<div id='screen'></div></main>"
+        "html,body{margin:0;background:#171b20;color:white;font:14px system-ui;"
+        "height:100%;overflow:hidden}"
+        "#screen{position:absolute;inset:0;overflow:hidden}"
+        "#screen canvas{outline:none}"
+        "#connection-status:not([hidden]){position:absolute;inset:0;display:flex;"
+        "align-items:center;justify-content:center;background:#171b20;"
+        "padding:20px;text-align:center;z-index:2}"
+        "</style></head><body>"
+        "<div id='screen'></div>"
+        "<div id='connection-status' role='alert' hidden></div>"
         f"<script type='module' nonce='{nonce}'>{script}</script></body></html>"
     )
     connect = " 'self' ws: wss:"
