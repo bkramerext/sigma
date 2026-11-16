@@ -1,10 +1,9 @@
-"""Private model RPC contract for the Personal ChatGPT worker.
+"""Private model RPC for both legacy tests and shared Personal POC.
 
-Hosted workers bind this server to /run/sigma-personal/model.sock. The local
-Docker POC binds it to worker port 8002, published only on host loopback; its
-browser still has no credential mount. Only the explicit local preview allows
-provider dispatch with a per-workspace RPC key.
-No token, refresh token, cookie or OAuth code is ever returned over this API.
+The greenfield shared Docker service uses port 8001 and per-workspace HMACs.
+Its credential worker is UID-isolated from on-demand Chromium. Provider
+credentials remain private; no OAuth code or token is returned over this API.
+Hosted plan usage requires separate acceptance before deployment.
 """
 
 from __future__ import annotations
