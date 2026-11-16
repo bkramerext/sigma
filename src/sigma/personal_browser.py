@@ -11,7 +11,9 @@ browser readiness is never sufficient proof of connection.
 
 from __future__ import annotations
 
+import hmac
 import os
+import re
 import stat
 from pathlib import Path
 from typing import Any
@@ -154,6 +156,21 @@ async def model_socket(principal: cloud_auth.Principal | None) -> str:
     return await _gateway_socket(principal, filename="model.sock")
 
 
+async def _shared_rpc_headers(principal: cloud_auth.Principal | None) -> dict[str, str]:
+    if os.environ.get("SIGMA_PERSONAL_SHARED_MODE") != "1":
+        return {}
+    seed = os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")
+    if not re.fullmatch(r"[0-9a-f]{64}", seed):
+        raise PersonalBrowserUnavailable("Shared Personal authentication unavailable.")
+    workspace = await _workspace_id(_principal(principal))
+    return {
+        "X-Sigma-Workspace": workspace,
+        "X-Sigma-Worker-Key": hmac.digest(
+            bytes.fromhex(seed), workspace.encode("ascii"), "sha256"
+        ).hex(),
+    }
+
+
 async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
     """Read only the isolated worker's test status. Never select a billing mode."""
     if os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") != "1":
@@ -167,7 +184,7 @@ async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
             trust_env=False,
             timeout=3,
         ) as client:
-            response = await client.get("/v1/test-account")
+            response = await client.get("/v1/test-account", headers=await _shared_rpc_headers(principal))
             return response.status_code == 200 and response.json() == {"verified": True}
     except (PersonalBrowserUnavailable, httpx.HTTPError, OSError, ValueError):
         return False
@@ -193,7 +210,7 @@ async def sign_in_preview_phase(principal: cloud_auth.Principal | None) -> str:
             trust_env=False,
             timeout=3,
         ) as client:
-            response = await client.get("/v1/preview-state")
+            response = await client.get("/v1/preview-state", headers=await _shared_rpc_headers(principal))
             response.raise_for_status()
             phase = response.json()["phase"]
             if phase in (
