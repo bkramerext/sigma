@@ -21,6 +21,16 @@ permissions:
   contents: read
 
 jobs:
+  macos-peer-auth:
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify native Darwin shared-broker peer UID authentication
+        env:
+          PYTHONPATH: src
+        run: python3 tests/macos_personal_peer_auth.py
+
   docker-smoke:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
