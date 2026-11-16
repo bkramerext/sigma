@@ -178,6 +178,14 @@ async def main_async(root: Path):
         assert len(calls) == 1
         assert inspect_text(path, "project")["markdown"]["body"] == markdown
         assert len(calls) == 1
+        with patch(
+            "sigma.global_research_settings.load_config",
+            return_value={"ai_model": MODEL, "reasoning_effort": "high"},
+        ):
+            stale = inspect_text(path, "project")
+            assert stale["markdown"]["body"] == markdown
+            assert not stale["markdown"]["current"]
+        assert inspect_text(path, "project")["markdown"]["current"]
 
         edited = markdown + "\n\nKeep the stated proof obligations."
         save_source(path, "project", edited, "markdown", plain["source_digest"])
@@ -1481,7 +1489,10 @@ async def main_async(root: Path):
 
 
 def main():
-    with TemporaryDirectory() as directory:
+    with TemporaryDirectory() as directory, patch(
+        "sigma.global_research_settings.load_config",
+        return_value={"ai_model": MODEL, "reasoning_effort": FORMAT_EFFORT},
+    ):
         asyncio.run(main_async(Path(directory)))
 
 
