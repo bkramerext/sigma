@@ -204,7 +204,7 @@ def _down_shared(env: dict[str, str]) -> None:
             "--remove-orphans",
         ],
         env=safe_env,
-        timeout=45,
+        timeout=70,
     )
 
 
