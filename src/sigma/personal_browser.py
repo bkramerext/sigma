@@ -285,8 +285,17 @@ async def _shared_rpc_headers(principal: cloud_auth.Principal | None) -> dict[st
 
 async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
     """Read only the isolated worker's test status. Never select a billing mode."""
-    if os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") != "1":
+    if not sign_in_preview_enabled():
         return False
+    if os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1":
+        # Synthetic /v1/test-account is intentionally always false in the
+        # shared service; verify the real account with its own scoped RPC.
+        from sigma import personal_inference
+
+        try:
+            return (await personal_inference.account(principal))["status"] == "verified"
+        except personal_inference.PersonalInferenceUnavailable:
+            return False
     try:
         path = await model_socket(principal)
         transport = httpx.AsyncHTTPTransport(uds=path)
@@ -305,11 +314,20 @@ async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
 
 
 def sign_in_preview_enabled() -> bool:
-    return (
-        enabled()
+    """Allow verified real sign-in only for an explicit local or hosted shared worker."""
+    cfg = cloud_auth.config()
+    local_preview = (
+        cfg.local
         and os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
         and os.environ.get("SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN") == "1"
     )
+    hosted_shared = (
+        not cfg.local
+        and os.environ.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
+        and os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "") != ""
+    )
+    return enabled() and (local_preview or hosted_shared)
 
 
 async def sign_in_preview_phase(principal: cloud_auth.Principal | None) -> str:
