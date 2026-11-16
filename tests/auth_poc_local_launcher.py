@@ -160,6 +160,15 @@ class ProdLifecycleTests(unittest.TestCase):
         # reset any held Shift/Caps Lock on X11 VNC startup as well.
         self.assertIn("x11vnc -display :99", boot)
         self.assertIn("-skip_lockkeys -clear_all", boot)
+        # Moving "Use passkey from another device" to the context menu avoids
+        # obscuring the Google email field, without disabling WebAuthn itself.
+        self.assertIn(
+            "--enable-features=WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot
+        )
+        self.assertIn(
+            "--disable-features=AutofillReintroduceHybridPasskeyDropdownItem", boot
+        )
+        self.assertNotIn("--disable-features=WebAuthentication", boot)
 
     def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
         mod = self.module
