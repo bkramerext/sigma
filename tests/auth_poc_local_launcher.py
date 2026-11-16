@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import socket
 import stat
 import sys
@@ -92,6 +93,35 @@ class ProdLifecycleTests(unittest.TestCase):
         cls.module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = cls.module
         spec.loader.exec_module(cls.module)
+
+    def test_mac_long_tmpdir_uses_short_secure_gateway_paths(self) -> None:
+        mod = self.module
+        with patch.dict(
+            os.environ,
+            {"TMPDIR": "/private/var/folders/" + ("q" * 90) + "/T/"},
+        ):
+            runtime = mod._local_runtime_directory()
+            try:
+                self.assertEqual(runtime.parent, Path("/tmp"))
+                self.assertEqual(stat.S_IMODE(runtime.stat().st_mode), 0o700)
+                for name in ("vnc.sock", "model.sock"):
+                    socket_path = runtime / "gateways" / ("a" * 32) / name
+                    self.assertLess(len(os.fsencode(socket_path)), 104)
+            finally:
+                shutil.rmtree(runtime)
+
+    def test_personal_connect_and_disconnect_ui_guards(self) -> None:
+        source = (ROOT / "frontend/src/ai-connection.tsx").read_text(encoding="utf-8")
+        # A previously verified token is used before the interactive iframe.
+        self.assertIn("await finishContainerBrowserStart(sequence)", source)
+        self.assertIn("account?.status === 'verified'", source)
+        self.assertIn("setPersonalDialogState('closed')", source)
+        # User confirmation must report progress and surface failures, never
+        # leave an unresponsive Confirm button on top of a failed HTTP call.
+        self.assertIn("setDisconnectError", source)
+        self.assertIn("disconnecting ? 'Disconnecting…' : 'Confirm'", source)
+        self.assertIn("if (result.disconnected !== true)", source)
+        self.assertIn("await stopContainerPersonalBrowser().catch(", source)
 
     def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
         mod = self.module
