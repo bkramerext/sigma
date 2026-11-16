@@ -139,6 +139,18 @@ async def main() -> None:
                         assert error.status_code == 404
                     else:
                         raise AssertionError("Unsafe asset path was proxied")
+                # noVNC's RFB KeyEvent payload must pass through the
+                # authenticated WebSocket bridge byte-exact. A lowercase 'a'
+                # and uppercase 'A' have different X11 keysyms and must not
+                # be normalized, including in password inputs.
+                for keysym in (ord("a"), ord("A"), ord("@"), ord("1"), ord("!")):
+                    key_event = bytes((4, 1, 0, 0)) + keysym.to_bytes(4, "big")
+                    frame = proxy._masked_frame(2, key_event)
+                    assert frame[0] == 0x82
+                    assert frame[1] == 0x80 | len(key_event)
+                    mask = frame[2:6]
+                    decoded = bytes(value ^ mask[i % 4] for i, value in enumerate(frame[6:]))
+                    assert decoded == key_event
                 reader, writer = await proxy._connect_worker(sockets[A.subject])
                 try:
                     fin, opcode, payload = await proxy._remote_frame(reader)
