@@ -103,12 +103,75 @@ keep the current two loopback endpoints up until Caddy is back on the edge.
 The deployment tool refuses direct-mode upgrades/rollbacks if either release
 lacks the direct Compose overlay; complete this cutover **before** downgrading.
 
-## Acceptance gates
+## Acceptance sequence: local first, Red deployment afterward
 
-Do not merge, deploy or call this feature complete until GitHub CI is green
-and real sign-in, account selection, inference, Q/A, research, papers,
-markdown conversions, Stop/Resume, backend restart, browser close,
-cross-user isolation, idle/peak RSS and the host-Caddy rollback are exercised.
-The hosted OpenAI plan/OAuth eligibility policy is a separate authorization
-gate; local loopback success alone does not establish permission to deploy
-hosted Personal ChatGPT.
+**Acceptance is deliberately split into two local user-facing passes.** Automated
+CI and provider-free Docker tests are prerequisites, not substitutes for these
+passes. Use the **same reviewed PR #881 SHA** for both passes; if a fix changes
+the SHA, rerun affected end-to-end scenarios before passing the gate.
+
+### Gate 1 — normal local SIGMA (no `--prod`)
+
+Run `./sigma start` (without `--prod`) on the user's machine. This is the
+baseline local experience and must remain functional independently of the
+shared Personal Docker service. Acceptance must cover:
+
+- Startup, login/identity where applicable, normal SIGMA navigation and
+  settings, Sponsored/Personal account state as actually offered by this mode.
+- Real model requests through research sessions and all enabled strategies,
+  paper generation, Q/A, and Markdown conversion (including Current
+  Understanding, sessions/strategies and paper fields).
+- Streaming/progress reporting, Stop, restart and Resume for sessions and papers,
+  with persisted state and no silently successful fallback responses.
+- Existing collaboration and user-scope behavior without unexpected prompts,
+  blank dialogs or a `--prod`-only dependency.
+
+**Pass means the normal local path is demonstrably healthy.** Do not excuse a
+failure as unrelated to the Docker consolidation merely because `--prod`
+behaves differently.
+
+### Gate 2 — local production simulation (`--prod`)
+
+Run `./sigma start --prod` **on the same local machine**. This is not a GCE
+deployment. Exercise the same SIGMA end-to-end workflows as Gate 1, plus:
+
+- Starts in Sponsored mode when Sponsored is available; no unsolicited personal
+  connection prompt. Connect explicitly through the ChatGPT pill.
+- Real ChatGPT account chooser/sign-in and loopback OAuth callback, close/cancel,
+  disconnect/reconnect, saved account reuse after SIGMA and worker restarts.
+  Dialog controls must work repeatedly, including refocusing the login input.
+- Confirm **actual Personal** inference for sessions, papers, Q/A and all
+  Markdown paths; never silently use Sponsored as a replacement when a Personal
+  request fails. Verify streaming, stop and resume across restarts.
+- Exactly one shared Personal container with user-bound encrypted records and
+  temporary Chromium processes; two-user isolation, one active login browser
+  at a time, no idle Chromium/Xvfb/VNC, browser shutdown after closing the
+  dialog, and recorded container/VM memory while idle and during login.
+- Verify that any unrelated existing SIGMA behavior from Gate 1 remains
+  functional with `--prod`.
+
+Only **two passed local gates** authorize preparing the new deployment handoff.
+A successful local OAuth loopback does not imply hosted production OAuth or
+account/plan eligibility.
+
+### Gate 3 — reset Red's deployment plan and deploy separately
+
+After the two local passes, give Red a **fresh handoff** for the exact accepted
+commit SHA and the new low-memory topology. Reset Red's old *deployment plan*,
+not the production VM, auth data, or persistent SIGMA state:
+
+1. Treat the earlier per-user-container/browser work as experimental. No
+   migration or importing legacy credentials; initialize the shared vault fresh.
+2. Retain the host Caddy for TLS/maintenance. Stage direct loopback routing to
+   frontend/backend and remove Docker Edge **only after** validating the
+   cutover and safe edge-first rollback specified above.
+3. Deploy the shared Personal service only after confirming hosted-provider
+   eligibility. Preserve the existing healthy Sponsored production route until
+   real hosted sign-in/inference are separately authorized and verified.
+4. Recheck authenticated routing, API, SSE, WebSockets, all model request paths,
+   pause/resume, cross-user isolation and idle/peak memory on GCE. Restore the
+   previous known-good release on any failed deployment gate.
+
+**No automatic production deployment or merge is authorized by local tests
+alone.** Red's work begins with the accepted SHA and explicit deployment
+checks, not the previous deployment assumptions.
