@@ -132,7 +132,10 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn("setDisconnectError", source)
         self.assertIn('{disconnecting ? <span role="status">Disconnecting…</span>', source)
         self.assertIn("if (result.disconnected !== true)", source)
-        self.assertIn("await stopContainerPersonalBrowser().catch(", source)
+        self.assertIn("const stop = stopContainerPersonalBrowser()", source)
+        self.assertIn("console.warn('SIGMA: private browser cleanup failed after disconnect.')", source)
+        self.assertNotIn("ChatGPT was disconnected, but its private browser could not be stopped.", source)
+        self.assertNotIn('aria-label="Show sponsorship details"', source)
         self.assertIn("state !== 'error' ? ' is-viewing' : ''", source)
         # Project header disables pointer events on its container and explicitly
         # re-enables only buttons/links/summaries. An iframe rendered there
