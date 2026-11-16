@@ -798,7 +798,7 @@ function ContextManifestNotes({ manifest }: { manifest: ContextManifest }) {
 
 type OutcomeMarkdownSection = 'conclusion' | 'reasoning' | 'citations' | 'assessments';
 type OutcomeMarkdownBlock = { field: string; source: string; section: OutcomeMarkdownSection };
-type FormattedOutcomeBlock = { source: string; body: string };
+type FormattedOutcomeBlock = { source: string; body: string; settingsKey: string };
 
 function outcomeTextBlocks(session: ResearchSession): OutcomeMarkdownBlock[] {
   const blocks: OutcomeMarkdownBlock[] = [];
@@ -832,9 +832,10 @@ function formattedOutcomeSession(
   session: ResearchSession,
   selected: ReadonlySet<OutcomeMarkdownSection>,
   blocks: Record<string, FormattedOutcomeBlock>,
+  settingsKey: string,
 ): ResearchSession {
   const resolve = (section: OutcomeMarkdownSection, field: string, text: string) =>
-    selected.has(section) && blocks[field]?.source === text ? blocks[field].body : text;
+    selected.has(section) && blocks[field]?.source === text && blocks[field]?.settingsKey === settingsKey ? blocks[field].body : text;
   const review = session.outcome.solution_review;
   const newReview = review ? {
     ...review,
@@ -958,6 +959,8 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const [markdownSections, setMarkdownSections] = useState<OutcomeMarkdownSection[]>(() =>
     containsMathNotation(session.outcome.conclusion || '') ? ['conclusion'] : []);
   const [convertedBlocks, setConvertedBlocks] = useState<Record<string, FormattedOutcomeBlock>>({});
+  const [conversionSettingsKey, setConversionSettingsKey] = useState("");
+  const conversionSettingsRef = useRef("");
   const convertedBlocksRef = useRef<Record<string, FormattedOutcomeBlock>>({});
   const [conversionError, setConversionError] = useState('');
   const [conversionProgress, setConversionProgress] = useState('');
@@ -972,8 +975,8 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const blocks = useMemo(() => outcomeTextBlocks(session), [session]);
   const activeSections = useMemo(() => new Set(markdownSections), [markdownSections]);
   const renderSession = useMemo(() =>
-    formattedOutcomeSession(session, activeSections, convertedBlocks),
-    [session, activeSections, convertedBlocks]);
+    formattedOutcomeSession(session, activeSections, convertedBlocks, conversionSettingsKey),
+    [session, activeSections, convertedBlocks, conversionSettingsKey]);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
   const [interventionKind, setInterventionKind] = useState<ResearchIntervention['kind']>('priority');
   const [interventionText, setInterventionText] = useState('');
@@ -1112,6 +1115,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
           if (!settingsResponse.ok || !settings.available) {
             throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
           }
+          const settingsKey = `${settings.model}:${settings.reasoning_effort}`;
           finishProviderRequest = beginProviderRequest('text-conversion');
           const converted = await post<{ body: string; source_digest: string; warnings: string[] }>(
             'text/convert',
@@ -1124,7 +1128,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
           );
           if (converted.source_digest !== expectedDigest)
             throw new Error('Research text changed while formatting. The original source is unchanged.');
-          const next = { ...convertedBlocksRef.current, [block.field]: { source: block.source, body: converted.body } };
+          const next = { ...convertedBlocksRef.current, [block.field]: { source: block.source, body: converted.body, settingsKey } };
           convertedBlocksRef.current = next;
           setConvertedBlocks(next);
         } catch (cause) {
@@ -1144,16 +1148,31 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
       setConversionProgress('');
     }
   }
-  function enqueueConversions(target: OutcomeMarkdownSection[]) {
-    const candidates = blocks.filter(block => target.includes(block.section) && block.source.trim().length >= 40
-      && block.source.length <= 20000 && convertedBlocksRef.current[block.field]?.source !== block.source
-      && !conversionQueue.current.some(item => item.field === block.field && item.source === block.source));
-    if (!candidates.length) return;
-    if (!conversionWorker.current) { completedConversions.current = 0; totalConversions.current = 0; }
-    totalConversions.current += candidates.length;
-    conversionQueue.current.push(...candidates);
-    setConversionError('');
-    void drainConversions();
+  async function enqueueConversions(target: OutcomeMarkdownSection[]) {
+    try {
+      const response = await fetch(
+        `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
+        { cache: 'no-store' },
+      );
+      const settings = await response.json();
+      if (!response.ok || !settings.available)
+        throw new Error(settings.message ?? 'Markdown formatting is unavailable.');
+      const key = `${settings.model}:${settings.reasoning_effort}`;
+      const candidates = blocks.filter(block => target.includes(block.section) && block.source.trim().length >= 40
+        && block.source.length <= 20000 && (convertedBlocksRef.current[block.field]?.source !== block.source
+        || convertedBlocksRef.current[block.field]?.settingsKey !== key)
+        && !conversionQueue.current.some(item => item.field === block.field && item.source === block.source));
+      conversionSettingsRef.current = key;
+      setConversionSettingsKey(key);
+      if (!candidates.length) return;
+      if (!conversionWorker.current) { completedConversions.current = 0; totalConversions.current = 0; }
+      totalConversions.current += candidates.length;
+      conversionQueue.current.push(...candidates);
+      setConversionError('');
+      void drainConversions();
+    } catch (cause) {
+      setConversionError(friendlyProviderError(errorMessage(cause)));
+    }
   }
   function toggleAllMarkdown() {
     const all: OutcomeMarkdownSection[] = ['conclusion', 'reasoning', 'citations', 'assessments'];
@@ -6268,7 +6287,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
 type Destination = { root: string; path: string | null; exists: boolean };
 
 type ResearchQASource = { source_id: string; session_number: number | null; kind: string; label?: string; navigation_available?: boolean; navigation_url?: string; navigation_unavailable_reason?: string };
-type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; author_email?: string; created_by?: string; markdown_answer?: string | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
+type ResearchQARecord = { qa_id: string; request_id: string; question: string; answer: string; author_email?: string; created_by?: string; markdown_answer?: string | null; markdown_provenance?: { model: string; reasoning_effort: string } | null; sources: ResearchQASource[]; created_at: string; snapshot_sha256: string; generation: { model: string; reasoning_effort: string; generation_elapsed_seconds: number } };
 
 function GuestFeatureCard({ title, message, onClose }: { title: string; message: string; onClose: () => void }) {
   return <section className="research-pause-guidance guest-feature-card" role="status" aria-label={title}>
@@ -6480,10 +6499,6 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       setRenderedAnswerIds(current => { const next = new Set(current); next.delete(record.qa_id); return next; });
       return;
     }
-    if (record.markdown_answer) {
-      setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
-      return;
-    }
     if (guest) { setGuestAnswerMarkdownPreview(true); return; }
     const controller = new AbortController();
     formattingRequest.current = controller;
@@ -6494,6 +6509,12 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       const markdownResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { signal: controller.signal });
       const markdownSettings = await markdownResponse.json();
       if (!markdownResponse.ok || !markdownSettings.available) throw new Error(markdownSettings.message ?? 'Markdown formatting is unavailable.');
+      if (record.markdown_answer
+        && record.markdown_provenance?.model === markdownSettings.model
+        && record.markdown_provenance?.reasoning_effort === markdownSettings.reasoning_effort) {
+        setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
+        return;
+      }
       const response = await fetch('/api/projects/text/convert', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ path, scope: 'research-qa', qa_id: record.qa_id, target: 'markdown',
@@ -6503,7 +6524,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       if (!response.ok) throw new Error(data.error ?? 'Markdown conversion failed; original answer was kept.');
       const converted = data.markdown?.body;
       if (typeof converted !== 'string' || !converted.trim()) throw new Error('Markdown conversion did not produce text.');
-      setAnswers(current => current.map(item => item.qa_id === record.qa_id ? { ...item, markdown_answer: converted } : item));
+      setAnswers(current => current.map(item => item.qa_id === record.qa_id ? { ...item, markdown_answer: converted, markdown_provenance: data.markdown?.provenance ?? { model: markdownSettings.model, reasoning_effort: markdownSettings.reasoning_effort } } : item));
       setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
     } catch (cause) {
       if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
