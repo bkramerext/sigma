@@ -149,6 +149,15 @@ async def preview_state() -> dict[str, str]:
 async def disconnect(request: Request) -> dict[str, bool]:
     if not _valid_rpc_key(request):
         raise HTTPException(403, "Personal ChatGPT disconnect is unavailable.")
+    if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1":
+        # Shared service already binds the verified workspace context in its
+        # middleware. Calling legacy /disconnect would instead use whichever
+        # browser is currently active, violating user isolation.
+        try:
+            await chatgpt_auth.disconnect()
+        except ProjectError as exc:
+            raise HTTPException(503, "Could not disconnect ChatGPT account.") from exc
+        return {"disconnected": True}
     try:
         async with httpx.AsyncClient(timeout=45, trust_env=False) as client:
             result = await client.post(
