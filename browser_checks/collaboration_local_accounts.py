@@ -1176,8 +1176,17 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner.get_by_role("button", name="Project settings", exact=True).click()
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()
+        # No delayed draft or click-batching race may make Close save the old ACL.
+        expect(owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}")).to_have_count(0)
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
         expect(owner_dialog).not_to_be_visible()
+        committed = get_json(
+            owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
+        )
+        assert COLLABORATOR not in committed["collaborators"], (
+            "Settings closed without committing the collaborator revocation",
+            committed["collaborators"],
+        )
 
         # Revocation must be enforced by the server, not just by a hidden icon.
         revoked = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
