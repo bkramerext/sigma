@@ -155,8 +155,8 @@ async def main_async(root: Path):
     }
 
     async def cheap_configuration(**kwargs):
-        assert kwargs["frozen_model"] == FORMAT_MODEL
-        assert kwargs["frozen_effort"] == FORMAT_EFFORT
+        assert "frozen_model" not in kwargs
+        assert "frozen_effort" not in kwargs
         return config
 
     with (
