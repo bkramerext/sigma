@@ -175,3 +175,27 @@ not the production VM, auth data, or persistent SIGMA state:
 **No automatic production deployment or merge is authorized by local tests
 alone.** Red's work begins with the accepted SHA and explicit deployment
 checks, not the previous deployment assumptions.
+
+### Local `--prod` Personal ChatGPT diagnostics
+
+If the Connect to ChatGPT dialog cannot open its embedded Chromium browser,
+click **Copy diagnostics** on the error state and paste the copied report to
+the developer. You do not need to interpret Docker logs or collect a series
+of incremental screenshots.
+
+Each local `--prod` launch creates a private mode-0600 diagnostic log at
+`~/.sigma/personal-shared-poc/diagnostics/personal-<date>-<random>.log`.
+SIGMA prints the exact location in its starting terminal. The log follows
+the launch, image reconciliation, Docker Compose, Unix broker authentication,
+worker RPC and browser-start requests, with the same 12-digit hexadecimal
+attempt identifier shown in the error dialog. It records fixed stage/reason
+codes, HTTP status, elapsed time and selected architecture, **not** tokens,
+cookies, account identities, workspace IDs, browser contents or raw Docker
+stderr. Old logs are retained only for a bounded set of recent launches.
+
+The Copy action is available only for an authenticated user on the local
+`--prod` server; it returns a bounded, filtered excerpt. If copying fails,
+paste the `SIGMA_PERSONAL_DIAG` lines from the terminal or the private log.
+Do not attach unredacted Docker/browser logs containing sign-in details.
+This facility is for POC acceptance diagnostics and does not enable hosted
+Personal ChatGPT.

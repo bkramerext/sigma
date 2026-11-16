@@ -15,13 +15,14 @@ import hmac
 import os
 import re
 import stat
+import time
 from pathlib import Path
 from typing import Any
 
 import httpx
 from starlette.concurrency import run_in_threadpool
 
-from sigma import cloud_auth, cloud_workspaces
+from sigma import cloud_auth, cloud_workspaces, personal_diagnostics
 
 
 class PersonalBrowserUnavailable(RuntimeError):
@@ -38,22 +39,36 @@ def enabled() -> bool:
 
 def _socket() -> str:
     configured = os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET", "")
+    personal_diagnostics.emit(
+        "api", "socket_check", enabled=int(enabled()), configured=int(bool(configured)),
+    )
     if not enabled() or not configured:
+        personal_diagnostics.emit("api", "socket_failed", reason="integration_disabled")
         raise PersonalBrowserUnavailable("Personal browser integration is disabled.")
     path = Path(configured)
     if not path.is_absolute() or ".." in path.parts:
+        personal_diagnostics.emit("api", "socket_failed", reason="invalid_path")
         raise PersonalBrowserUnavailable("Personal browser integration is unavailable.")
     try:
         info = path.lstat()
     except OSError as exc:
-        raise PersonalBrowserUnavailable("Personal browser integration is unavailable.") from exc
+        personal_diagnostics.emit("api", "socket_failed", reason="socket_missing",
+                                  failure=type(exc).__name__)
+        raise PersonalBrowserUnavailable("Personal broker socket is missing; see diagnostics.") from exc
     if (
         not stat.S_ISSOCK(info.st_mode)
         or path.is_symlink()
         or info.st_uid not in {0, os.geteuid()}
         or info.st_mode & 0o077
     ):
-        raise PersonalBrowserUnavailable("Personal browser integration is unavailable.")
+        personal_diagnostics.emit(
+            "api", "socket_failed", reason="socket_unsafe",
+            is_socket=int(stat.S_ISSOCK(info.st_mode)),
+            owner_ok=int(info.st_uid in {0, os.geteuid()}),
+            permissions_ok=int(not (info.st_mode & 0o077)),
+        )
+        raise PersonalBrowserUnavailable("Personal broker socket validation failed; see diagnostics.")
+    personal_diagnostics.emit("api", "socket_ok")
     return configured
 
 
@@ -73,6 +88,7 @@ async def _workspace_id(principal: cloud_auth.Principal) -> str:
             cloud_workspaces.workspace_for_subject, principal.subject
         )
     except (cloud_workspaces.WorkspaceUnavailable, OSError, RuntimeError) as exc:
+        personal_diagnostics.emit("api", "workspace_failed", failure=type(exc).__name__)
         raise PersonalBrowserUnavailable("Private user workspace is unavailable.") from exc
     return workspace.workspace_id
 
@@ -85,9 +101,16 @@ async def session(
     trusted = _principal(principal)
     if action not in {"start", "status", "stop"}:
         raise ValueError("Unsupported browser lifecycle action")
+    began = time.monotonic()
+    personal_diagnostics.emit("api", "browser_operation_begin", operation=action)
     socket_path = _socket()
     workspace_id = await _workspace_id(trusted)
     transport = httpx.AsyncHTTPTransport(uds=socket_path)
+    diagnostic_id = personal_diagnostics.current_attempt()
+    headers = (
+        {"X-Sigma-Personal-Attempt": diagnostic_id}
+        if diagnostic_id != "-" else {}
+    )
     try:
         async with httpx.AsyncClient(
             transport=transport,
@@ -99,9 +122,17 @@ async def session(
             timeout=230,
         ) as client:
             if action == "status":
-                response = await client.get("/v1/status", params={"workspace_id": workspace_id})
+                response = await client.get(
+                    "/v1/status", params={"workspace_id": workspace_id}, headers=headers,
+                )
             else:
-                response = await client.post("/v1/" + action, json={"workspace_id": workspace_id})
+                response = await client.post(
+                    "/v1/" + action, json={"workspace_id": workspace_id}, headers=headers,
+                )
+            personal_diagnostics.emit(
+                "api", "broker_http_response", operation=action, http_status=response.status_code,
+                elapsed_ms=int((time.monotonic() - began) * 1000),
+            )
             if response.status_code == 503:
                 failure = response.json()
                 stage = failure.get("stage") if isinstance(failure, dict) else None
@@ -133,18 +164,38 @@ async def session(
                 if stage in known_stages and failure_class in known_reasons:
                     raise PersonalBrowserUnavailable(
                         f"Personal browser failed at {stage} ({failure_class}). "
-                        "See the SIGMA terminal for diagnostics."
+                        "Use Copy diagnostics for details."
                     )
-            response.raise_for_status()
+            if response.status_code != 200:
+                personal_diagnostics.emit(
+                    "api", "broker_http_failed", operation=action,
+                    http_status=response.status_code,
+                )
+                raise PersonalBrowserUnavailable(
+                    f"Personal broker returned HTTP {response.status_code}; "
+                    "use Copy diagnostics for details."
+                )
             payload = response.json()
     except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
-        raise PersonalBrowserUnavailable("Personal browser is unavailable.") from exc
+        personal_diagnostics.emit(
+            "api", "broker_transport_failed", operation=action, failure=type(exc).__name__,
+            elapsed_ms=int((time.monotonic() - began) * 1000),
+        )
+        raise PersonalBrowserUnavailable(
+            f"Personal broker transport failed ({type(exc).__name__}); "
+            "use Copy diagnostics for details."
+        ) from exc
     if (
         not isinstance(payload, dict)
         or payload.get("status") not in {"ready", "stopped", "unavailable"}
         or payload.get("worker") != "sigma-personal-" + workspace_id
     ):
+        personal_diagnostics.emit("api", "broker_invalid_payload", operation=action)
         raise PersonalBrowserUnavailable("Invalid personal browser response.")
+    personal_diagnostics.emit(
+        "api", "browser_operation_ok", operation=action,
+        browser_status=payload["status"], elapsed_ms=int((time.monotonic() - began) * 1000),
+    )
     # Deliberately no model connection or account label is returned. The
     # authenticated HTTPS browser stream and credential validation are separate
     # acceptance gates, and must never be represented by 'ready' alone.

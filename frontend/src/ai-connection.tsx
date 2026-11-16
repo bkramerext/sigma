@@ -273,6 +273,23 @@ function PersonalBrowserDialog({ state, error, external = false, handoff, onClos
   onRetry: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  useEffect(() => { setDiagnosticsStatus('idle'); }, [state, error]);
+  async function copyDiagnostics() {
+    try {
+      const response = await fetch(windowAuthUrl('/api/ai/personal-browser/diagnostics'), {
+        credentials: 'same-origin', cache: 'no-store',
+        headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
+      if (!response.ok) throw new Error('Diagnostics unavailable');
+      const report = await response.json() as { diagnostics?: string };
+      if (!report.diagnostics) throw new Error('Missing diagnostic report');
+      await navigator.clipboard.writeText(report.diagnostics);
+      setDiagnosticsStatus('copied');
+    } catch {
+      setDiagnosticsStatus('failed');
+    }
+  }
   useEffect(() => {
     if (state === 'closed' || !dialog.current) return;
     if (!dialog.current.open) dialog.current.showModal();
@@ -297,6 +314,12 @@ function PersonalBrowserDialog({ state, error, external = false, handoff, onClos
     {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
       <p>{error || (external ? 'ChatGPT sign-in did not complete.' : 'The private browser could not be started.')}</p>
       <button className="sigma-text-action" type="button" onClick={onRetry}>Retry</button>
+      {!external && <button className="sigma-text-action" type="button"
+        onClick={() => void copyDiagnostics()}>Copy diagnostics</button>}
+      {diagnosticsStatus === 'copied' && <span role="status">Diagnostics copied.</span>}
+      {diagnosticsStatus === 'failed' && <span role="alert">
+        Could not copy diagnostics. See the diagnostic file printed in the SIGMA terminal.
+      </span>}
     </div>}
     {!external && state === 'ready' && <iframe
       className="personal-chatgpt-browser-frame"
@@ -727,6 +750,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     // The user remains in SIGMA. The iframe embeds SIGMA's authenticated VNC
     // viewer; OpenAI itself is never framed or deprived of its CSP protections.
     const sequence = ++browserLaunchSequence.current;
+    const diagnosticAttempt = crypto.randomUUID().replaceAll('-', '').slice(0, 12);
+    console.info('[SIGMA Personal] browser launch', diagnosticAttempt);
     dialogActive.current = true;
     openingContainerBrowser.current = true;
     setPersonalDialogError('');
@@ -740,9 +765,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       while (sequence === browserLaunchSequence.current && dialogActive.current) {
         const response = await fetch(windowAuthUrl('/api/ai/personal-browser/start'), {
           method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Sigma-Error-Handled': 'true',
+            'X-Sigma-Personal-Attempt': diagnosticAttempt,
+          },
           body: '{}',
         });
+        console.info('[SIGMA Personal] start status', diagnosticAttempt, response.status);
         const data = await response.json().catch(() => ({})) as {
           browser_status?: string; detail?: string; error?: string;
         };
@@ -779,7 +809,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           try {
             statusResponse = await fetch(windowAuthUrl('/api/ai/personal-browser/status'), {
               credentials: 'same-origin',
-              headers: { 'X-Sigma-Error-Handled': 'true' },
+              headers: {
+                'X-Sigma-Error-Handled': 'true',
+                'X-Sigma-Personal-Attempt': diagnosticAttempt,
+              },
               signal: AbortSignal.timeout(5000),
             });
           } catch {
@@ -788,7 +821,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
             continue;
           }
           if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
-          if (!statusResponse.ok) continue;
+          if (!statusResponse.ok) {
+            console.info('[SIGMA Personal] poll status', diagnosticAttempt, statusResponse.status);
+            continue;
+          }
           const status = await statusResponse.json().catch(() => ({})) as {
             browser_status?: string;
           };
@@ -803,7 +839,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     } catch (cause) {
       if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
       setRestoringPersonal(false);
-      setPersonalDialogError(cause instanceof Error ? cause.message : 'Private browser unavailable.');
+      const message = cause instanceof Error ? cause.message : 'Private browser unavailable.';
+      console.info('[SIGMA Personal] launch failed', diagnosticAttempt, message);
+      setPersonalDialogError(`${message} (diagnostic attempt ${diagnosticAttempt})`);
       setPersonalDialogState('error');
     } finally {
       openingContainerBrowser.current = false;

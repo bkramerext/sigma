@@ -22,6 +22,8 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from sigma import personal_diagnostics
+
 ROOT = Path(__file__).resolve().parents[1]
 _WORKSPACE = re.compile(r"[0-9a-f]{32}\Z")
 _PORT = re.compile(r"127\.0\.0\.1:(\d+)\Z")
@@ -71,6 +73,8 @@ def _compose(*args: str) -> str:
         raise RuntimeError("Invalid checkout identity")
     env = dict(os.environ)
     stage = "docker_" + (args[0] if args and args[0] in {"up", "ps", "port", "down"} else "other")
+    began = time.monotonic()
+    personal_diagnostics.emit("broker", "compose_start", operation=stage)
     try:
         result = subprocess.run(
             ["docker", "compose", "--project-name", "sigma-shared-" + checkout,
@@ -79,11 +83,23 @@ def _compose(*args: str) -> str:
             check=False, timeout=150 if "up" in args else 20,
         )
     except subprocess.TimeoutExpired as exc:
+        personal_diagnostics.emit("broker", "compose_timeout", operation=stage,
+                                  elapsed_ms=int((time.monotonic() - began) * 1000))
         raise SharedDockerUnavailable(stage, "docker_command_timeout") from exc
     except OSError as exc:
+        personal_diagnostics.emit("broker", "compose_exception", operation=stage,
+                                  failure=type(exc).__name__)
         raise SharedDockerUnavailable(stage, "docker_command_unavailable") from exc
     if result.returncode:
-        raise SharedDockerUnavailable(stage, _docker_failure_class(result.stderr or ""))
+        failure = _docker_failure_class(result.stderr or "")
+        personal_diagnostics.emit(
+            "broker", "compose_failed", operation=stage,
+            exit_code=result.returncode, failure=failure,
+            elapsed_ms=int((time.monotonic() - began) * 1000),
+        )
+        raise SharedDockerUnavailable(stage, failure)
+    personal_diagnostics.emit("broker", "compose_ok", operation=stage,
+                              elapsed_ms=int((time.monotonic() - began) * 1000))
     return result.stdout.strip()
 
 
@@ -298,7 +314,10 @@ def _ensure_shared() -> None:
     # A stopped or unhealthy worker must not be treated as an active service.
     # Keep the shared project and its persistent encrypted volumes intact.
     if not _compose("ps", "--status", "running", "-q", "personal"):
+        personal_diagnostics.emit("broker", "worker_start_required")
         _compose("up", "-d", "--no-build", "--wait")
+    else:
+        personal_diagnostics.emit("broker", "worker_already_running")
 
 
 def operate(action: str, workspace: str) -> dict:
@@ -307,6 +326,7 @@ def operate(action: str, workspace: str) -> dict:
     if action not in {"start", "stop", "status", "password"}:
         raise ValueError("Unsupported operation")
     with _LOCK:
+        personal_diagnostics.emit("broker", "operation_begin", operation=action)
         _ensure_shared()
         # Model relay stays available when Chromium closes; no idle browser.
         _relay(workspace, "model.sock", _port(8001))
@@ -356,6 +376,8 @@ def operate(action: str, workspace: str) -> dict:
         if action == "password" and "password" in state:
             result["password"] = state["password"]
         _prune_idle_gateways(preserve=workspace)
+        personal_diagnostics.emit("broker", "operation_ok", operation=action,
+                                  browser_status=state["status"])
         return result
 
 
@@ -375,19 +397,37 @@ class Handler(BaseHTTPRequestHandler):
 
     def _authorized(self) -> bool:
         uid = int(os.environ.get("SIGMA_AUTH_BROKER_CLIENT_UID", "10001"))
-        if hasattr(socket, "SO_PEERCRED"):
-            _pid, peer_uid, _gid = struct.unpack(
-                "3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-            )
-            return peer_uid == uid
-        if hasattr(self.connection, "getpeereid"):
-            peer_uid, _peer_gid = self.connection.getpeereid()
-            return peer_uid == uid
+        try:
+            if hasattr(socket, "SO_PEERCRED"):
+                _pid, peer_uid, _gid = struct.unpack(
+                    "3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+                )
+                authorized = peer_uid == uid
+                personal_diagnostics.emit("broker", "peer_auth",
+                                          mechanism="so_peercred", permitted=int(authorized))
+                return authorized
+            if hasattr(self.connection, "getpeereid"):
+                peer_uid, _peer_gid = self.connection.getpeereid()
+                authorized = peer_uid == uid
+                personal_diagnostics.emit("broker", "peer_auth",
+                                          mechanism="getpeereid", permitted=int(authorized))
+                return authorized
+        except (OSError, struct.error) as exc:
+            personal_diagnostics.emit("broker", "peer_auth_error", failure=type(exc).__name__)
+            return False
         # Never silently disable peer authentication on an unknown OS.
+        personal_diagnostics.emit("broker", "peer_auth_unsupported")
         return False
 
     def _dispatch(self, operation: str) -> None:
+        attempt_id = personal_diagnostics.attempt(self.headers.get("X-Sigma-Personal-Attempt"))
+        with personal_diagnostics.attempt_scope(attempt_id):
+            self._dispatch_scoped(operation)
+
+    def _dispatch_scoped(self, operation: str) -> None:
+        personal_diagnostics.emit("broker", "request_received", operation=operation)
         if not self._authorized():
+            personal_diagnostics.emit("broker", "request_denied", reason="peer_auth")
             self._send(403, {"error": "Forbidden"})
             return
         try:
@@ -405,15 +445,14 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Invalid request")
                 workspace = body["workspace_id"]
             self._send(200, operate(operation, _valid(workspace)))
-        except (ValueError, TypeError, json.JSONDecodeError):
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            personal_diagnostics.emit("broker", "request_invalid", failure=type(exc).__name__)
             self._send(400, {"error": "Invalid request"})
         except SharedDockerUnavailable as exc:
             # Distinguish Docker and worker failures without disclosing raw
             # Docker diagnostics, user paths, keys, or tokens.
-            print(
-                f"SIGMA Personal broker: stage={exc.stage} failure_class={exc.failure_class}",
-                flush=True,
-            )
+            personal_diagnostics.emit("broker", "request_failed", failure_stage=exc.stage,
+                                      failure=exc.failure_class)
             self._send(
                 503,
                 {
@@ -423,7 +462,8 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
         except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
-            print(f"SIGMA Personal broker: stage=broker failure_class={type(exc).__name__}", flush=True)
+            personal_diagnostics.emit("broker", "request_failed", failure_stage="broker",
+                                      failure=type(exc).__name__)
             self._send(
                 503,
                 {
@@ -460,9 +500,16 @@ def main() -> None:
         raise RuntimeError("Private broker owner mismatch")
     with Server(str(path), Handler) as service:
         os.chmod(path, 0o600)
+        personal_diagnostics.emit(
+            "broker", "socket_listening", mechanism=(
+                "so_peercred" if hasattr(socket, "SO_PEERCRED")
+                else "getpeereid" if hasattr(socket.socket, "getpeereid") else "none"
+            ),
+        )
         try:
             service.serve_forever(poll_interval=0.2)
         finally:
+            personal_diagnostics.emit("broker", "shutdown")
             for workspace, names in list(_GATEWAYS.items()):
                 for name in list(names):
                     _unrelay(workspace, name)

@@ -42,6 +42,7 @@ from sigma import (
     papers,
     personal_browser,
     personal_browser_proxy,
+    personal_diagnostics,
     personal_inference,
     project_collaboration,
     project_diagnostics,
@@ -3206,8 +3207,18 @@ def _personal_browser_principal(request: Request) -> cloud_auth.Principal:
 
 async def _personal_browser_action(request: Request, action: str) -> JSONResponse:
     principal = _personal_browser_principal(request)
+    trace = personal_diagnostics.attempt(request.headers.get("X-Sigma-Personal-Attempt"))
+    with personal_diagnostics.attempt_scope(trace):
+        return await _personal_browser_action_scoped(request, action, principal)
+
+
+async def _personal_browser_action_scoped(
+    request: Request, action: str, principal: cloud_auth.Principal,
+) -> JSONResponse:
+    personal_diagnostics.emit("api", "browser_route_start", operation=action)
     if action == "start":
         if os.environ.get("SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"):
+            personal_diagnostics.emit("api", "launcher_unavailable")
             # A trusted static launcher diagnostic, never user input.
             raise HTTPException(503, os.environ["SIGMA_LOCAL_PERSONAL_STARTUP_ERROR"])
         marker = os.environ.get("SIGMA_LOCAL_PERSONAL_PREPARATION_FILE")
@@ -3215,7 +3226,11 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
             try:
                 phase = Path(marker).read_text(encoding="ascii").strip()
             except OSError as exc:
+                personal_diagnostics.emit(
+                    "api", "preparation_marker_missing", failure=type(exc).__name__,
+                )
                 raise HTTPException(503, "Personal browser preparation is unavailable.") from exc
+            personal_diagnostics.emit("api", "preparation_marker", phase=phase)
             if phase == "preparing":
                 return JSONResponse(
                     {"browser_status": "preparing"},
@@ -3223,16 +3238,21 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
                     headers={"Cache-Control": "no-store", "Retry-After": "2"},
                 )
             if phase != "ready":
+                personal_diagnostics.emit("api", "preparation_not_ready", phase=phase)
                 raise HTTPException(
                     503,
-                    "Personal browser preparation failed. Check Docker Desktop and restart SIGMA.",
+                    "Personal browser preparation failed. Use Copy diagnostics for details.",
                 )
     try:
         snapshot = await personal_browser.session(principal, action)
     except personal_browser.PersonalBrowserUnavailable as exc:
+        personal_diagnostics.emit("api", "browser_route_failed", operation=action,
+                                  failure=type(exc).__name__)
         # The broker exports only predefined stage/reason identifiers, never
         # Docker stderr or credential material. Preserve the actionable code.
         raise HTTPException(503, str(exc)) from exc
+    personal_diagnostics.emit("api", "browser_route_ok", operation=action,
+                              browser_status=snapshot["browser_status"])
     return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
 
 
@@ -3251,6 +3271,19 @@ async def personal_browser_status(request: Request):
 async def personal_browser_stop(request: Request):
     """Pause only this user's browser; do not erase credentials or claim logout."""
     return await _personal_browser_action(request, "stop")
+
+
+@app.get("/api/ai/personal-browser/diagnostics")
+async def personal_browser_diagnostics(request: Request):
+    """Bounded, redacted local-only diagnostics for the Connect dialog."""
+    _personal_browser_principal(request)
+    if not cloud_auth.config().local or os.environ.get("SIGMA_PERSONAL_SHARED_MODE") != "1":
+        raise HTTPException(404, "Local Personal diagnostics unavailable.")
+    personal_diagnostics.emit("api", "diagnostics_requested")
+    return JSONResponse(
+        {"diagnostics": personal_diagnostics.report()},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/api/ai/personal-browser/account")

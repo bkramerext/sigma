@@ -22,6 +22,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from sigma import personal_diagnostics
+
 ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE = re.compile(r"[0-9a-f]{32}\Z")
 RELEASE = re.compile(r"[0-9a-f]{40}\Z")
@@ -79,6 +81,8 @@ def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
         if len(args) > 1 and args[1] in {"compose", "info", "image", "tag", "ps"}
         else ""
     )
+    begun = time.monotonic()
+    personal_diagnostics.emit("preparation", "command_start", operation=stage.replace(" ", "_"))
     try:
         result = subprocess.run(
             args,
@@ -90,18 +94,26 @@ def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        print(f"SIGMA Personal preparation: {stage} unavailable/timeout", flush=True)
+        failure = "timeout" if isinstance(exc, subprocess.TimeoutExpired) else type(exc).__name__
+        personal_diagnostics.emit(
+            "preparation", "command_exception", operation=stage.replace(" ", "_"),
+            failure=failure, elapsed_ms=int((time.monotonic() - begun) * 1000),
+        )
         raise LocalPersonalUnavailable("Local Personal container preparation failed.") from exc
     if result.returncode:
         # Docker output can include credentials/host paths; keep errors generic.
-        print(
-            f"SIGMA Personal preparation: {stage} exit={result.returncode} "
-            f"failure_class={_docker_failure_class(result.stderr or '')}",
-            flush=True,
+        personal_diagnostics.emit(
+            "preparation", "command_failed", operation=stage.replace(" ", "_"),
+            exit_code=result.returncode, failure=_docker_failure_class(result.stderr or ""),
+            elapsed_ms=int((time.monotonic() - begun) * 1000),
         )
         raise LocalPersonalUnavailable(
             "Local Personal container preparation failed. Check Docker Desktop."
         )
+    personal_diagnostics.emit(
+        "preparation", "command_ok", operation=stage.replace(" ", "_"),
+        elapsed_ms=int((time.monotonic() - begun) * 1000),
+    )
     return result.stdout.strip()
 
 
@@ -147,7 +159,7 @@ def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, st
     env["SIGMA_RELEASE"] = release
     env["SIGMA_SHARED_PLATFORM"] = platform
     env["SIGMA_AUTH_POC_BROWSER_PLATFORM"] = platform
-    print(f"SIGMA Personal preparation: shared_platform={platform}", flush=True)
+    personal_diagnostics.emit("preparation", "platform_selected", platform=platform)
     if build and not _images_compatible(env):
         # No live RPC secret is available to Docker image-build operations.
         build_env = {**env, "SIGMA_AUTH_POC_RPC_SEED": "0" * 64}
@@ -222,15 +234,19 @@ def _prepare(env: dict[str, str]) -> int:
     marker = Path(env["SIGMA_LOCAL_PERSONAL_PREPARATION_FILE"])
     phase = "docker_reconciliation"
     try:
+        personal_diagnostics.emit("preparation", "phase_begin", phase=phase)
         _down_shared(env)
         phase = "native_image_build"
+        personal_diagnostics.emit("preparation", "phase_begin", phase=phase)
         _release_images(env)
         _preparation_state(marker, "ready")
-        print("SIGMA Personal preparation: shared container ready", flush=True)
+        personal_diagnostics.emit("preparation", "ready")
         return 0
-    except (OSError, RuntimeError, ValueError, KeyError):
+    except (OSError, RuntimeError, ValueError, KeyError) as exc:
         _preparation_state(marker, "failed")
-        print(f"SIGMA Personal preparation: failed_at={phase}", file=sys.stderr, flush=True)
+        personal_diagnostics.emit(
+            "preparation", "failed", phase=phase, failure=type(exc).__name__,
+        )
         return 1
 
 
@@ -246,11 +262,21 @@ class LocalPersonalRuntime:
 
     @classmethod
     def start(cls) -> LocalPersonalRuntime:
-        env = _docker_environment()
-        release, platform = _release_images(env, build=False)
-        # Fresh shared POC. No migration or reuse of experimental per-user stores.
+        # Create the private per-launch log before Docker preflight. Even a
+        # missing Docker daemon now leaves useful, copyable diagnostics.
         state_root = Path.home() / ".sigma" / "personal-shared-poc"
         _private_directory(state_root, 0o700)
+        capture = personal_diagnostics.create_capture(state_root)
+        os.environ["SIGMA_PERSONAL_DIAGNOSTICS_FILE"] = str(capture)
+        print(f"SIGMA Personal diagnostics: {capture}", flush=True)
+        personal_diagnostics.emit("launcher", "begin")
+        try:
+            env = _docker_environment()
+            env["SIGMA_PERSONAL_DIAGNOSTICS_FILE"] = str(capture)
+            release, platform = _release_images(env, build=False)
+        except (OSError, RuntimeError) as exc:
+            personal_diagnostics.emit("launcher", "preflight_failed", failure=type(exc).__name__)
+            raise
         runtime = _local_runtime_directory()
         broker: subprocess.Popen[bytes] | None = None
         preparation: subprocess.Popen[bytes] | None = None
@@ -283,7 +309,7 @@ class LocalPersonalRuntime:
                 }
             )
             # The RPC seed is intentionally short lived: rederived per launch.
-            print("SIGMA Personal launch: starting protected host broker", flush=True)
+            personal_diagnostics.emit("launcher", "broker_spawn")
             broker = subprocess.Popen(
                 [sys.executable, str(ROOT / "auth-poc" / "shared_broker.py")],
                 cwd=ROOT,
@@ -299,11 +325,8 @@ class LocalPersonalRuntime:
                     if info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o600:
                         prepare_env = dict(env)
                         prepare_env.pop("SIGMA_AUTH_POC_RPC_SEED", None)
-                        print(
-                            "SIGMA Personal launch: protected broker ready; "
-                            "background image preparation starting",
-                            flush=True,
-                        )
+                        personal_diagnostics.emit("launcher", "broker_ready")
+                        personal_diagnostics.emit("launcher", "preparation_spawn")
                         preparation = subprocess.Popen(
                             [sys.executable, "-m", "sigma.local_personal", "--prepare"],
                             cwd=ROOT,
@@ -319,7 +342,8 @@ class LocalPersonalRuntime:
             raise LocalPersonalUnavailable(
                 "Private Personal container broker did not become ready."
             )
-        except BaseException:
+        except BaseException as exc:
+            personal_diagnostics.emit("launcher", "startup_failed", failure=type(exc).__name__)
             if preparation is not None and preparation.poll() is None:
                 preparation.terminate()
                 preparation.wait(timeout=5)
@@ -343,11 +367,14 @@ class LocalPersonalRuntime:
         except OSError:
             return
         if phase == "preparing":
-            print("SIGMA Personal preparation: worker exited before readiness", flush=True)
+            personal_diagnostics.emit(
+                "launcher", "preparation_exited", exit_code=self.preparation.returncode,
+            )
             _preparation_state(marker, "failed")
 
     def close(self, progress: Callable[[], None] | None = None) -> None:
         """Stop one shared container while retaining encrypted credential volumes."""
+        personal_diagnostics.emit("launcher", "shutdown_begin")
         failure: LocalPersonalUnavailable | None = None
         try:
             if self.preparation.poll() is None:
@@ -375,6 +402,7 @@ class LocalPersonalRuntime:
                     self.broker.kill()
                     self.broker.wait()
             shutil.rmtree(self.runtime, ignore_errors=True)
+            personal_diagnostics.emit("launcher", "shutdown_finished")
         if failure is not None:
             raise LocalPersonalUnavailable(
                 "Could not stop the shared Personal container."

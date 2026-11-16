@@ -118,6 +118,52 @@ class SharedBrokerTests(unittest.TestCase):
                 self.assertNotIn("Bearer secret", str(context.exception))
                 self.assertNotIn("/tmp/private/session", str(context.exception))
 
+    def test_local_diagnostic_log_is_private_bounded_and_redacted(self) -> None:
+        from sigma import personal_diagnostics
+
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            state = home / ".sigma" / "personal-shared-poc"
+            state.mkdir(parents=True, mode=0o700)
+            with patch.object(personal_diagnostics.Path, "home", return_value=home):
+                log = personal_diagnostics.create_capture(state)
+                self.assertEqual(stat.S_IMODE(log.stat().st_mode), 0o600)
+                with patch.dict(
+                    os.environ, {"SIGMA_PERSONAL_DIAGNOSTICS_FILE": str(log)}
+                ):
+                    with personal_diagnostics.attempt_scope("a" * 12):
+                        personal_diagnostics.emit(
+                            "broker", "compose_failed", failure="permission_denied",
+                            secret="Bearer my-private-token", docker_stderr="/Users/me/.ssh",
+                        )
+                    report = personal_diagnostics.report()
+                    self.assertIn("attempt=" + "a" * 12, report)
+                    self.assertIn("failure=permission_denied", report)
+                    self.assertIn("secret=redacted", report)
+                    self.assertIn("docker_stderr=redacted", report)
+                    self.assertNotIn("my-private-token", report)
+                    self.assertNotIn("/Users/me", report)
+
+    def test_broker_403_exposes_status_instead_of_generic_unavailable(self) -> None:
+        from sigma import personal_browser
+
+        transport = httpx.MockTransport(
+            lambda _: httpx.Response(403, json={"error": "Forbidden"})
+        )
+        with (
+            patch.object(personal_browser, "_principal", return_value=object()),
+            patch.object(personal_browser, "_socket", return_value="/tmp/not-used"),
+            patch.object(
+                personal_browser, "_workspace_id",
+                new_callable=AsyncMock, return_value="a" * 32,
+            ),
+            patch.object(personal_browser.httpx, "AsyncHTTPTransport", return_value=transport),
+            self.assertRaises(personal_browser.PersonalBrowserUnavailable) as raised,
+        ):
+            asyncio.run(personal_browser.session(None, "start"))
+        self.assertIn("HTTP 403", str(raised.exception))
+        self.assertNotIn("Personal browser is unavailable.", str(raised.exception))
+
     def test_relay_revocation_closes_already_connected_vnc_clients(self) -> None:
         broker = self.broker
         with tempfile.TemporaryDirectory() as temp:
@@ -395,6 +441,9 @@ class SharedLocalLifecycleTests(unittest.TestCase):
             ):
                 running = mod.LocalPersonalRuntime.start()
                 self.assertEqual(running.state_root.name, "personal-shared-poc")
+                diagnostics = Path(running.env["SIGMA_PERSONAL_DIAGNOSTICS_FILE"])
+                self.assertTrue(diagnostics.exists())
+                self.assertEqual(stat.S_IMODE(diagnostics.stat().st_mode), 0o600)
                 self.assertEqual(stat.S_IMODE((runtime / "broker").stat().st_mode), 0o711)
                 running.close()
                 down.assert_called_once()
@@ -418,6 +467,8 @@ class SharedLocalLifecycleTests(unittest.TestCase):
         self.assertIn("const stop = stopContainerPersonalBrowser()", source)
         self.assertIn("createPortal(", source)
         self.assertIn("personal-chatgpt-browser-frame", source)
+        self.assertIn("Copy diagnostics", source)
+        self.assertIn("X-Sigma-Personal-Attempt", source)
         self.assertIn("if (result.disconnected !== true)", source)
         self.assertIn("setDisconnectError", source)
 
