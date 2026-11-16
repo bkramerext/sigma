@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import stat
 import tempfile
 from contextlib import asynccontextmanager, contextmanager
@@ -106,18 +107,51 @@ def use_directory(path: Path):
         _DIRECTORY_OVERRIDE.reset(token)
 
 
+def _shared_vault(path: Path):
+    """Opt-in encrypted storage, used exclusively inside shared Personal POC."""
+    if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") != "1":
+        return None
+    from shared_vault import Vault, VaultError
+
+    workspaces = Path(os.environ.get("SIGMA_PERSONAL_SHARED_WORKSPACES", ""))
+    records = Path(os.environ.get("SIGMA_PERSONAL_SHARED_RECORDS", ""))
+    key = Path(os.environ.get("SIGMA_PERSONAL_SHARED_KEY_FILE", ""))
+    if (
+        not all(p.is_absolute() for p in (workspaces, records, key))
+        or path.name != "credentials.json"
+        or path.parent.parent != workspaces
+        or not re.fullmatch(r"[0-9a-f]{32}", path.parent.name)
+    ):
+        raise ProjectError("Unsafe shared Personal credential path")
+    return Vault(records, key), path.parent.name
+
+
+def _blank_credentials() -> dict[str, Any]:
+    return {
+        "version": 1,
+        "ext_agent_host_id": "urn:uuid:" + str(uuid4()),
+        "mode": "chatgpt",
+        "active": None,
+        "accounts": {},
+        "welcome_seen": False,
+    }
+
+
 def read(path: Path) -> dict[str, Any]:
+    sealed = _shared_vault(path)
+    if sealed is not None:
+        vault, workspace_id = sealed
+        try:
+            return vault.read(workspace_id) or _blank_credentials()
+        except Exception as exc:
+            from shared_vault import VaultError
+            if not isinstance(exc, VaultError):
+                raise
+            raise ProjectError("Encrypted Personal credentials are unavailable.") from exc
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
-        return {
-            "version": 1,
-            "ext_agent_host_id": "urn:uuid:" + str(uuid4()),
-            "mode": "chatgpt",
-            "active": None,
-            "accounts": {},
-            "welcome_seen": False,
-        }
+        return _blank_credentials()
     with os.fdopen(descriptor, encoding="utf-8") as stream:
         info = os.fstat(stream.fileno())
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
@@ -138,6 +172,17 @@ def read(path: Path) -> dict[str, Any]:
 
 
 def write(path: Path, value: dict[str, Any]) -> None:
+    sealed = _shared_vault(path)
+    if sealed is not None:
+        vault, workspace_id = sealed
+        try:
+            vault.write(workspace_id, value)
+        except Exception as exc:
+            from shared_vault import VaultError
+            if not isinstance(exc, VaultError):
+                raise
+            raise ProjectError("Cannot persist encrypted Personal credentials.") from exc
+        return
     encoded = json.dumps(value).encode("utf-8")
     if len(encoded) > 1000000:
         raise ProjectError("Account storage limit reached; existing credentials were retained.")
@@ -176,7 +221,13 @@ async def transaction_at(path: Path):
         state_path = path / "credentials.json"
         value = read(state_path)
         # Persist a newly allocated host ID even before first authorization.
-        if not state_path.exists():
+        sealed = _shared_vault(state_path)
+        first_write = (
+            not (sealed[0].root / (sealed[1] + ".sealed")).exists()
+            if sealed is not None
+            else not state_path.exists()
+        )
+        if first_write:
             write(state_path, value)
         previous = json.dumps(value, sort_keys=True)
         yield value
