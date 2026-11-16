@@ -139,11 +139,11 @@ class ProdLifecycleTests(unittest.TestCase):
         # displays remote frames but cannot accept pointer input. The modal
         # MUST be portaled out to body instead of inheriting the header mask.
         self.assertIn(
-            "createPortal(\\n    <PersonalBrowserDialog state={personalDialogState}",
+            "createPortal(\n    <PersonalBrowserDialog state={personalDialogState}",
             source,
         )
         self.assertIn(
-            "onRetry={() => void startContainerPersonalBrowser()}/>,\\n    document.body,",
+            "onRetry={() => void startContainerPersonalBrowser()}/>,\n    document.body,",
             source,
         )
         workspace_css = (ROOT / "frontend/src/workspace.css").read_text(encoding="utf-8")
