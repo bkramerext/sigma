@@ -171,8 +171,21 @@ class Control(socketserver.StreamRequestHandler):
             elif action == "password" and _OWNER == workspace:
                 password = BROWSER_HOME / "vnc-pass"
                 try:
-                    value = password.read_text(encoding="ascii").strip()
-                except OSError:
+                    result = subprocess.run(
+                        [
+                            "/usr/bin/setpriv",
+                            "--reuid=11001",
+                            "--regid=11001",
+                            "--clear-groups",
+                            "/usr/bin/cat",
+                            str(password),
+                        ],
+                        capture_output=True,
+                        check=False,
+                        timeout=2,
+                    )
+                    value = result.stdout.decode("ascii").strip() if result.returncode == 0 else ""
+                except (OSError, UnicodeDecodeError, subprocess.TimeoutExpired):
                     value = ""
                 result = (
                     {"status": "ready", "password": value}
