@@ -167,6 +167,13 @@ jobs:
           PY
       - name: Build and run production-architecture Linux/amd64 image
         run: docker compose -f deploy/auth-poc.compose.yaml up -d --build --wait
+      - name: Test shared per-user encrypted vault (no migration)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /opt/venv/bin/python \
+            -v "$PWD/tests:/tests:ro" -v "$PWD/auth-poc:/auth-poc:ro" \
+            sigma-auth-poc:local /tests/shared_personal_vault.py
       - name: Verify browser and worker are isolated
         shell: bash
         run: |
