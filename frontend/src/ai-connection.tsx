@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffe
 import { createPortal } from 'react-dom';
 import './ai-connection.css';
 import { windowAuthUrl } from './window-auth';
-import { sponsoredProviderLabel, type SponsoredInferenceProvider } from './provider-usage-guidance';
+import { type SponsoredInferenceProvider } from './provider-usage-guidance';
 import { reportRequestFailure } from './request-toast';
 import DialogDismissButton from './DialogDismissButton';
 
@@ -320,6 +320,26 @@ function HostedPersonalChatGPTNotice({ open, onClose }: { open: boolean; onClose
   </dialog>;
 }
 
+function SponsorProvisioningDialog({ open, message, onClose }: {
+  open: boolean; message: string; onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!open || !dialog.current) return;
+    if (!dialog.current.open) dialog.current.showModal();
+    return () => { if (dialog.current?.open) dialog.current.close(); };
+  }, [open]);
+  if (!open) return null;
+  return <dialog ref={dialog} className="google-account-dialog hosted-personal-chatgpt-dialog"
+    aria-labelledby="sponsor-provisioning-heading" onCancel={event => { event.preventDefault(); onClose(); }}>
+    <div className="privacy-notice-heading">
+      <h2 id="sponsor-provisioning-heading">Sponsored ChatGPT</h2>
+      <DialogDismissButton label="Close Sponsored ChatGPT information" onClick={onClose}/>
+    </div>
+    <p>{message}</p>
+  </dialog>;
+}
+
 export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalBrowserLabEnabled?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
@@ -386,9 +406,6 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const hosted = cloudFunding?.target === 'hosted';
   const simulatedSponsored = !!cloudFunding?.simulatedSponsored;
-  const hostedPillLabel = hosted
-    ? sponsoredProviderLabel(cloudFunding?.provider?.provider)
-    : 'Sponsored ChatGPT';
   // --prod previews the production-sponsored pill regardless of the user's
   // saved local connection. Presentation must not mutate credentials, mode or billing.
   const localHostedNoticePreview = !!cloudFunding?.authorized
@@ -526,11 +543,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const dotStatus = simulatedSponsored
     ? (connected ? 'connected' : 'disconnected')
     : projectHeader ? (connected ? 'connected' : 'disconnected') : hosted ? (connected ? 'connected' : 'disconnected') : status;
-  const visibleLabel = restoringPersonal ? 'Checking ChatGPT…' : testConnected ? 'Personal (test)' : sponsoredPill
-    ? (hosted || simulatedSponsored) && (cloudFunding?.selectingConnection || cloudFunding?.providerLoading)
-      ? 'Connecting to SIGMA-sponsored API…'
-      : hostedPillLabel
-    : connected ? 'Disconnect from ChatGPT' : ai.connecting ? 'Connecting to ChatGPT…' : 'Connect to ChatGPT';
+  // Connection pill text reflects only stable connection modes. Never turn the
+  // pill into a startup, verification, or disconnect progress indicator.
+  const visibleLabel = testConnected ? 'Connected to ChatGPT'
+    : sponsoredPill ? 'ChatGPT Sponsored'
+    : connected ? 'Connected to ChatGPT' : 'Connect to ChatGPT';
   const connectionTooltip = containerBrowserLab
     ? 'Click to attempt your Personal ChatGPT connection using a private container browser.'
     : (hostedNoticeClick || hostedPersonalUnavailable)
@@ -573,18 +590,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     ? 'Hosted inference is currently routed to Sponsored OpenAI API key billing. SIGMA does not fall back between providers. To use the designated ChatGPT sponsor, set SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt and provision the sponsor registration using the supported local sign-in and protected VM import flow.'
     : 'Hosted ChatGPT sponsor credentials are not connected. The production HTTPS callback is not a supported ChatGPT sign-in flow. Complete sign-in locally with the designated account, then securely import its protected registration on the VM; SIGMA validates the account and scopes and keeps the VM host ID.';
   const sponsorTooltip = 'SIGMA covers eligible ChatGPT model calls.';
-  const sponsoredAccessibleLabel = `${hostedPillLabel}${forcedSponsored ? '; sponsored mode required' : ''}${connected && sponsoredSelected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
+  const sponsoredAccessibleLabel = `ChatGPT Sponsored${forcedSponsored ? '; sponsored mode required' : ''}${connected && sponsoredSelected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
   const allowanceText = !sponsoredPresentation
     ? 'Personal'
     : adminSponsored
       ? 'Unlimited'
-    : globalFundingExhausted
-      ? 'Global limit'
-    : cloudFunding?.error
-      ? 'Allowance unavailable'
-    : cloudFunding?.budget
-      ? cloudFunding.budget.remaining_usd === null ? 'Unlimited' : `Allocation: $${cloudFunding.budget.remaining_usd.toFixed(2)}`
-    : cloudFunding?.loading ? 'Allowance loading' : 'Allowance details';
+    : cloudFunding?.budget?.remaining_usd !== null && typeof cloudFunding?.budget?.remaining_usd === 'number'
+      ? `Allocation: ${cloudFunding.budget.remaining_usd.toFixed(2)}`
+    : 'Unlimited';
   async function stopContainerPersonalBrowser() {
     const response = await fetch(windowAuthUrl('/api/ai/personal-browser/stop'), {
       method: 'POST',
@@ -874,18 +887,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       : sponsoredPill ? sponsorTooltip : connectionTooltip;
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
-  <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={!sponsoredPill && (ai.connecting || !!ai.handoff) || sponsorProvisioningHelpOpen}>
+  <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`}>
     <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={pillTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (localLabAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void selectContainerConnection(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
       {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label="Show sponsorship details" aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} data-tooltip={sponsorTooltip} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
     </summary>
-    {ai.connecting && !sponsoredPill && <div className="connection-pill-messages">
-      <p className="connection-pill-message" role="status">Complete sign-in in the browser. {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>}</p>
-    </div>}
-    {sponsorProvisioningHelpOpen && <div className="connection-pill-messages">
-      <p className="connection-pill-message" role="status">{sponsorProvisioningGuidance}</p>
-      <button type="button" className="connection-text-action" onClick={() => setSponsorProvisioningHelpOpen(false)}>Dismiss</button>
-    </div>}
   </details>
   {localLabAccount && disconnectOpen && createPortal(
     <div ref={disconnectPopup} className="paper-step-restart-popup chatgpt-disconnect-popup"
@@ -896,18 +902,18 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         : 'Disconnect from your personal ChatGPT account?'}</p>
       {disconnectError && <p role="alert">{disconnectError}</p>}
       <div className="session-remove-confirm-actions">
-        <button type="button" className="text-view-link" disabled={disconnecting}
-          onClick={() => void disconnectContainerConnection()}>{disconnecting ? 'Disconnecting…' : 'Confirm'}</button>
+        {disconnecting ? <span role="status">Disconnecting…</span>
+          : <button type="button" className="text-view-link"
+              onClick={() => void disconnectContainerConnection()}>Confirm</button>}
         <button ref={disconnectCancel} type="button" className="text-view-link" disabled={disconnecting}
           onClick={closeDisconnectPopup}>Cancel</button>
       </div>
     </div>, document.body)}
-  {restoringPersonal && <div className="connection-pill-messages" role="status">
-    <p className="connection-pill-message">Checking saved ChatGPT authorization…</p>
-  </div>}
   <PersonalBrowserDialog state={personalDialogState} error={personalDialogError}
     onClose={() => void closePersonalBrowserDialog()}
     onRetry={() => void startContainerPersonalBrowser()}/>
+  <SponsorProvisioningDialog open={sponsorProvisioningHelpOpen} message={sponsorProvisioningGuidance}
+    onClose={() => setSponsorProvisioningHelpOpen(false)}/>
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
     setPersonalHostedNoticeOpen(false);
     window.requestAnimationFrame(() => pillTrigger.current?.focus());
