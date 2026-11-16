@@ -38,6 +38,8 @@ _LOCK = threading.Lock()
 _GATEWAY_SERVERS: dict[str, list[tuple[Path, socketserver.BaseServer, threading.Thread]]] = {}
 _LAST_READINESS: dict[str, str] = {}
 _LAST_DIAGNOSTIC_AT: dict[str, float] = {}
+_DIAGNOSTIC_THREADS: dict[str, threading.Thread] = {}
+_DIAGNOSTIC_LOCK = threading.Lock()
 _DIAGNOSTIC_INTERVAL_SECONDS = 18.0
 _SAFE_PROBE_FIELDS = {
     "component": r"browser|worker",
@@ -289,6 +291,34 @@ def _host_readiness_snapshot(workspace_id: str, environment: dict[str, str]) -> 
         print(f"  host.private_{label}={relay_result}", flush=True)
 
 
+def _schedule_diagnostics(workspace_id: str, cause: str, *, force: bool = False) -> None:
+    """Run costly Docker probes without blocking SIGMA's browser status API.
+
+    One probe per user at a time; throttle repeated unavailable statuses.
+    This keeps a frozen or emulated Docker Desktop from turning a quick status
+    check into a second multi-minute timeout. No diagnostics leave the host.
+    """
+    if not local_poc():
+        return
+    now = time.monotonic()
+    with _DIAGNOSTIC_LOCK:
+        current = _DIAGNOSTIC_THREADS.get(workspace_id)
+        if current is not None and current.is_alive():
+            return
+        if not force and now - _LAST_DIAGNOSTIC_AT.get(workspace_id, -1e9) < _DIAGNOSTIC_INTERVAL_SECONDS:
+            return
+        _LAST_DIAGNOSTIC_AT[workspace_id] = now
+        task = threading.Thread(
+            target=_container_diagnostics,
+            args=(workspace_id, cause),
+            kwargs={"force": True},
+            name="sigma-personal-diagnostics",
+            daemon=True,
+        )
+        _DIAGNOSTIC_THREADS[workspace_id] = task
+        task.start()
+
+
 def _container_diagnostics(workspace_id: str, cause: str, *, force: bool = False) -> None:
     """Diagnose BOTH Docker containers and their internals without raw logs.
 
@@ -407,7 +437,7 @@ def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
         )
     except (OSError, subprocess.TimeoutExpired):
         print(f"Personal Docker {args[0]} timed out or failed to launch.", flush=True)
-        _container_diagnostics(workspace_id, "compose_execution_failed", force=True)
+        _schedule_diagnostics(workspace_id, "compose_execution_failed", force=True)
         raise
     if result.returncode:
         # Docker stderr can include private host paths. Print only the fixed
@@ -416,7 +446,7 @@ def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
             f"Personal Docker {args[0]} failed (exit {result.returncode}).",
             flush=True,
         )
-        _container_diagnostics(workspace_id, "compose_" + args[0] + "_failed", force=True)
+        _schedule_diagnostics(workspace_id, "compose_" + args[0] + "_failed", force=True)
         raise RuntimeError("Container supervisor action failed")
     return result.stdout.strip()
 
@@ -627,7 +657,7 @@ def operate(action: str, workspace_id: str) -> dict[str, str]:
                 status = "ready" if reason == "ready" else "unavailable"
                 _readiness_report(workspace_id, reason)
         if status != "ready" and action != "stop":
-            _container_diagnostics(workspace_id, "readiness_" + status)
+            _schedule_diagnostics(workspace_id, "readiness_" + status)
         result = {"status": status, "worker": "sigma-personal-" + workspace_id}
         if action == "password":
             if status != "ready":

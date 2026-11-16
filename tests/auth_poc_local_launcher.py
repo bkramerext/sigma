@@ -372,6 +372,46 @@ class ProdLifecycleTests(unittest.TestCase):
         source = (ROOT / "auth-poc/host_broker.py").read_text(encoding="utf-8")
         self.assertIn('compose_args(workspace_id, "ps", "--all", "-q", service)', source)
 
+    def test_diagnostics_are_backgrounded_and_deduplicated(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "sigma_broker_async_diagnostics_test", ROOT / "auth-poc/host_broker.py"
+        )
+        assert spec and spec.loader
+        broker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(broker)
+
+        class DeferredThread:
+            def __init__(self, *, target, args, kwargs, name, daemon):
+                self.target = target
+                self.args = args
+                self.kwargs = kwargs
+                self.daemon = daemon
+                self.started = False
+
+            def is_alive(self):
+                return self.started
+
+            def start(self):
+                self.started = True
+
+        created = []
+        def factory(**kwargs):
+            task = DeferredThread(**kwargs)
+            created.append(task)
+            return task
+
+        with (
+            patch.object(broker, "local_poc", return_value=True),
+            patch.object(broker.threading, "Thread", side_effect=factory),
+            patch.object(broker, "_container_diagnostics"),
+        ):
+            broker._schedule_diagnostics("a" * 32, "readiness_unavailable")
+            broker._schedule_diagnostics("a" * 32, "readiness_unavailable", force=True)
+            self.assertEqual(len(created), 1)
+            self.assertTrue(created[0].daemon)
+            self.assertTrue(created[0].started)
+            self.assertEqual(created[0].args, ("a" * 32, "readiness_unavailable"))
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)
