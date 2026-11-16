@@ -1,6 +1,6 @@
 """Read-only Markdown conversion for the saved paper preview.
 
-Uses the same Cheap/Medium model and formatting instructions as text views.
+Uses the selected user Model/Thinking and the shared formatting instructions.
 Does not change the paper, PDF, TeX, or checkpoint accounting.
 """
 
@@ -14,7 +14,7 @@ from sigma import papers
 from sigma.openai_connection import auth_context
 from sigma.projects import ProjectError, inspect_project
 from sigma.proposals import configuration
-from sigma.text_conversion import FORMAT_EFFORT, FORMAT_MODEL, INSTRUCTIONS
+from sigma.text_conversion import INSTRUCTIONS
 
 
 class PaperPreviewMarkdown(BaseModel):
@@ -31,7 +31,7 @@ async def format_paper_preview(path: str, paper_id: str, expected_project_id: st
         raise ProjectError("Paper preview is too long for one Markdown conversion.")
     auth = await auth_context()
     config = await configuration(
-        view=view, context=auth, frozen_model=FORMAT_MODEL, frozen_effort=FORMAT_EFFORT
+        view=view, context=auth
     )
     if not config["available"]:
         raise ProjectError(config["message"])
