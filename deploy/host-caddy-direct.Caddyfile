@@ -7,9 +7,10 @@ sigma-research.duckdns.org {
         rewrite * /index.html
         file_server
     }
+    @api path /api /api/*
+
     route {
         import /etc/caddy/sigma-maintenance/*.caddy
-        @api path /api /api/*
         handle @api {
             reverse_proxy 127.0.0.1:18081
         }
