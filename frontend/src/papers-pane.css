@@ -853,9 +853,9 @@
   right: 8px !important;
 }
 
-/* Match saved-paper warnings as well as expanded and contextual paper
-   notices; these are separate DOM elements. Reserve the top row for the
-   upper-left dismiss X rather than putting it beside the warning text. */
+/* All paper warning and error cards follow the compact app-level
+   error toast layout: text near the top, reserved right space for the X.
+   Saved and expanded review notices are separate DOM elements. */
 .workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error,
 .workspace-page .papers-pane .paper-inline-feedback,
 .workspace-page .papers-pane .paper-score-error-card,
@@ -867,7 +867,7 @@
   max-inline-size: 100%;
   max-block-size: min(44dvh, 360px);
   overflow-y: auto;
-  padding: 44px 14px 12px;
+  padding: 12px 48px 12px 14px;
   overflow-wrap: anywhere;
 }
 .workspace-page .papers-pane :is(
@@ -878,9 +878,9 @@
   .paper-preview-review-notice
 ) .sigma-dialog-dismiss.sigma-dialog-dismiss {
   position: absolute;
-  top: 8px !important;
-  left: 8px !important;
-  right: auto !important;
+  top: 9px !important;
+  right: 9px !important;
+  left: auto !important;
 }
 @media (max-width: 720px) {
   .workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error,
