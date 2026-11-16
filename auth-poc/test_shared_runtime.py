@@ -60,6 +60,24 @@ async def storage_check() -> None:
     assert not (root / A / "credentials.json").exists()
     assert not (root / B / "credentials.json").exists()
 
+    # AES authentication is necessary but not sufficient: a validly sealed
+    # malformed record must fail closed, not silently replace a user's
+    # stored account with an empty default.
+    from sigma.personal_vault import Vault
+
+    invalid_workspace = "c" * 32
+    invalid_dir = root / invalid_workspace
+    invalid_dir.mkdir(mode=0o700, exist_ok=True)
+    vault = Vault(vault_root, Path(os.environ["SIGMA_PERSONAL_SHARED_KEY_FILE"]))
+    vault.write(invalid_workspace, {})
+    with ai_store.use_directory(invalid_dir):
+        try:
+            ai_store.read(invalid_dir / "credentials.json")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Malformed encrypted account was silently accepted")
+
 
 def assert_no_browser_processes() -> None:
     """Chromium, X11 and noVNC must not consume memory when the viewer is closed."""
