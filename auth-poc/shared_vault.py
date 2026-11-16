@@ -18,7 +18,7 @@ from typing import Any
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
-_SCOPE = re.compile(r"[0-9a-f]{32}\\Z")
+_SCOPE = re.compile(r"[0-9a-f]{32}\Z")
 _AAD = b"sigma-shared-personal-v1:"
 _MAX = 1_000_000
 
