@@ -1,6 +1,7 @@
 #!/bin/sh
-# Chromium is a distinct container from the OAuth worker. Compose shares the
-# NETWORK namespace only, giving both the same 127.0.0.1 address.
+# In the shared low-memory POC, Chromium runs under a different Linux UID
+# inside the same Docker container as the OAuth worker. Its HOME/profile are
+# disposable; it never mounts the protected token or key directories.
 set -eu
 export DISPLAY=:99 HOME="${SIGMA_BROWSER_HOME:-/tmp}"
 export XDG_CONFIG_HOME="$HOME/sigma-config" XDG_CACHE_HOME="$HOME/sigma-cache"
