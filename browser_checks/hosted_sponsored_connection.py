@@ -655,9 +655,7 @@ def exercise(origin: str) -> None:
         expect(provisioning).to_contain_text(
             "Hosted inference is currently routed to Sponsored OpenAI API key billing"
         )
-        expect(provisioning).to_contain_text(
-            "SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt"
-        )
+        expect(provisioning).to_contain_text("SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt")
         assert (
             sum(path.endswith("/api/ai/sponsor-auth/begin") for path, _ in posts)
             == sponsor_auth_calls
