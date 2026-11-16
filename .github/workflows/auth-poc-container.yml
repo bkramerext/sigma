@@ -350,9 +350,17 @@ jobs:
             python3 /opt/sigma/diag_probe.py browser | tee /tmp/sigma-browser-probe.txt
           docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc \
             /opt/venv/bin/python /opt/sigma/auth-poc/diag_probe.py worker | tee /tmp/sigma-worker-probe.txt
-          grep -qx 'component=browser' /tmp/sigma-browser-probe.txt
-          grep -qx 'component=worker' /tmp/sigma-worker-probe.txt
-          grep -q '^websocket_http_6080=http_200
+          grep -Fqx 'component=browser' /tmp/sigma-browser-probe.txt
+          grep -Fqx 'component=worker' /tmp/sigma-worker-probe.txt
+          grep -Fqx 'websocket_http_6080=http_200' /tmp/sigma-browser-probe.txt
+          grep -Fqx 'oauth_http_8001=http_200' /tmp/sigma-worker-probe.txt
+          grep -Fqx 'model_http_8002=http_200' /tmp/sigma-worker-probe.txt
+          if grep -Ei 'token|secret|auth.openai.com|/home/' /tmp/sigma-browser-probe.txt /tmp/sigma-worker-probe.txt; then
+            echo 'Unexpected sensitive text in diagnostics'
+            exit 1
+          fi
+      - name: Verify browser-origin gate
+        run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_security.py
       - name: Verify real local ChatGPT preview routes without provider calls
         run: docker compose -f deploy/auth-poc.compose.yaml exec -T auth-poc /opt/venv/bin/python /opt/sigma/auth-poc/test_local_real_preview.py
       - name: Verify backend user binding through real Unix socket
