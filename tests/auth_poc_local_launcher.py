@@ -144,6 +144,10 @@ class ProdLifecycleTests(unittest.TestCase):
         # Normal local uses the same SIGMA modal without Docker/Chromium, but
         # its provider's protected OAuth pages still open in the system browser.
         self.assertIn("async function signInLocally(options: SignInOptions)", source)
+        self.assertIn(
+            "}, [localLabAccount]);\n  useEffect(() => {\n    if (!localLabAccount) return;",
+            source,
+        )
         self.assertIn("const success = await ai.signIn(options)", source)
         self.assertIn("external={!containerBrowserLab && !hosted}", source)
         self.assertIn("else closeLocalPersonalDialog();", source)
@@ -190,6 +194,8 @@ class ProdLifecycleTests(unittest.TestCase):
         browser_image = (ROOT / "auth-poc/browser.Dockerfile").read_text(encoding="utf-8")
         self.assertIn('"PasswordManagerPasskeysEnabled":false', browser_image)
         self.assertIn('"PasswordManagerEnabled":false', browser_image)
+        self.assertIn("printf '%s' ", browser_image)
+        self.assertNotIn("printf '%s\\\\n'", browser_image)
 
     def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
         mod = self.module
