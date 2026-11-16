@@ -98,6 +98,12 @@ jobs:
             -v "/tmp/sigma-caddy-check/sigma-maintenance:/etc/caddy/sigma-maintenance:ro" \
             --entrypoint caddy caddy:2.9.1-alpine \
             validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm \
+            -v "$PWD/deploy/host-caddy-direct.Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "/tmp/sigma-caddy-check/sigma-maintenance:/etc/caddy/sigma-maintenance:ro" \
+            --entrypoint caddy caddy:2.9.1-alpine \
+            adapt --config /etc/caddy/Caddyfile --adapter caddyfile \
+            | python3 deploy/check_host_direct_caddy.py
       - name: Build and launch single worker/browser image
         run: docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml up -d --build --wait
       - name: Verify one shared container and no GUI at idle
