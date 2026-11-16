@@ -125,7 +125,10 @@ class SharedBrokerTests(unittest.TestCase):
             home = Path(temp)
             state = home / ".sigma" / "personal-shared-poc"
             state.mkdir(parents=True, mode=0o700)
-            with patch.object(personal_diagnostics.Path, "home", return_value=home):
+            with (
+                patch.object(personal_diagnostics.Path, "home", return_value=home),
+                patch.dict(os.environ, {"SIGMA_PERSONAL_DIAGNOSTICS_ENABLED": "1"}),
+            ):
                 log = personal_diagnostics.create_capture(state)
                 self.assertEqual(stat.S_IMODE(log.stat().st_mode), 0o600)
                 with patch.dict(os.environ, {"SIGMA_PERSONAL_DIAGNOSTICS_FILE": str(log)}):
@@ -144,6 +147,33 @@ class SharedBrokerTests(unittest.TestCase):
                     self.assertIn("docker_stderr=redacted", report)
                     self.assertNotIn("my-private-token", report)
                     self.assertNotIn("/Users/me", report)
+
+    def test_personal_diagnostics_default_disabled_even_with_stale_file(self) -> None:
+        from sigma import personal_diagnostics
+
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            state = home / ".sigma" / "personal-shared-poc"
+            state.mkdir(parents=True, mode=0o700)
+            log = state / "diagnostics" / "personal-stale.log"
+            with (
+                patch.object(personal_diagnostics.Path, "home", return_value=home),
+                patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_PERSONAL_DIAGNOSTICS_ENABLED": "0",
+                        "SIGMA_PERSONAL_DIAGNOSTICS_FILE": str(log),
+                    },
+                ),
+            ):
+                self.assertFalse(personal_diagnostics.enabled())
+                personal_diagnostics.emit("api", "request", failure="test")
+                self.assertFalse(log.exists())
+                self.assertFalse(log.parent.exists())
+                self.assertIsNone(personal_diagnostics._log_path())
+                with self.assertRaises(RuntimeError):
+                    personal_diagnostics.create_capture(state)
+                self.assertIn("not active", personal_diagnostics.report())
 
     def test_broker_403_exposes_status_instead_of_generic_unavailable(self) -> None:
         from sigma import personal_browser
@@ -498,6 +528,7 @@ class SharedLocalLifecycleTests(unittest.TestCase):
                 patch.object(mod.Path, "home", return_value=home),
                 patch.object(mod.tempfile, "mkdtemp", return_value=str(runtime)),
                 patch.object(mod.subprocess, "Popen", side_effect=process),
+                patch.dict(os.environ, {"SIGMA_PERSONAL_DIAGNOSTICS_ENABLED": "1"}),
                 patch.object(mod, "_down_shared") as down,
             ):
                 running = mod.LocalPersonalRuntime.start()
@@ -529,6 +560,7 @@ class SharedLocalLifecycleTests(unittest.TestCase):
         self.assertIn("createPortal(", source)
         self.assertIn("personal-chatgpt-browser-frame", source)
         self.assertIn("Copy diagnostics", source)
+        self.assertIn("personalDiagnosticsEnabled &&", source)
         self.assertIn("X-Sigma-Personal-Attempt", source)
         self.assertIn("if (result.disconnected !== true)", source)
         self.assertIn("setDisconnectError", source)

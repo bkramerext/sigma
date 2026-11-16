@@ -150,7 +150,14 @@ deployment. Exercise the same SIGMA end-to-end workflows as Gate 1, plus:
 - Verify that any unrelated existing SIGMA behavior from Gate 1 remains
   functional with `--prod`.
 
-Only **two passed local gates** authorize preparing the new deployment handoff.
+**Local acceptance status (November 16, 2026):** The user reported Gate 1
+healthy and accepted Gate 2 after the real local containerized ChatGPT sign-in
+flow succeeded. The Mac failure was traced to Python's missing Unix
+`getpeereid` binding and corrected through native Darwin `libSystem`;
+a real macOS CI peer-auth check passed. These user-accepted local gates
+authorize a fresh Red deployment handoff. They do not certify hosted Personal
+OAuth, production inference or the GCE Caddy cutover.
+
 A successful local OAuth loopback does not imply hosted production OAuth or
 account/plan eligibility.
 
@@ -176,26 +183,33 @@ not the production VM, auth data, or persistent SIGMA state:
 alone.** Red's work begins with the accepted SHA and explicit deployment
 checks, not the previous deployment assumptions.
 
-### Local `--prod` Personal ChatGPT diagnostics
+### Local `--prod` Personal ChatGPT diagnostics (opt-in; OFF by default)
 
-If the Connect to ChatGPT dialog cannot open its embedded Chromium browser,
-click **Copy diagnostics** on the error state and paste the copied report to
-the developer. You do not need to interpret Docker logs or collect a series
-of incremental screenshots.
+Successful local acceptance on November 16, 2026 permitted disabling the
+verbose diagnostic capture. Normal launches create **no diagnostic log**, emit
+no `SIGMA_PERSONAL_DIAG` lines or browser diagnostic console messages, and
+do not display a **Copy diagnostics** button. A stale diagnostic file path in
+the environment does not enable logging.
 
-Each local `--prod` launch creates a private mode-0600 diagnostic log at
-`~/.sigma/personal-shared-poc/diagnostics/personal-<date>-<random>.log`.
-SIGMA prints the exact location in its starting terminal. The log follows
-the launch, image reconciliation, Docker Compose, Unix broker authentication,
-worker RPC and browser-start requests, with the same 12-digit hexadecimal
-attempt identifier shown in the error dialog. It records fixed stage/reason
-codes, HTTP status, elapsed time and selected architecture, **not** tokens,
-cookies, account identities, workspace IDs, browser contents or raw Docker
-stderr. Old logs are retained only for a bounded set of recent launches.
+To diagnose a future local connection failure, explicitly opt in:
 
-The Copy action is available only for an authenticated user on the local
-`--prod` server; it returns a bounded, filtered excerpt. If copying fails,
-paste the `SIGMA_PERSONAL_DIAG` lines from the terminal or the private log.
-Do not attach unredacted Docker/browser logs containing sign-in details.
-This facility is for POC acceptance diagnostics and does not enable hosted
-Personal ChatGPT.
+```sh
+SIGMA_PERSONAL_DIAGNOSTICS_ENABLED=1 ./sigma start --prod
+```
+
+Restart SIGMA when changing the flag. The launcher enables the option for its
+API, broker, and frontend together. An enabled launch creates a private
+mode-0600 diagnostic log at
+`~/.sigma/personal-shared-poc/diagnostics/personal-<date>-<random>.log`;
+its exact path is printed in the SIGMA terminal. On a failed connection,
+click **Copy diagnostics** to obtain a bounded, safe excerpt.
+
+The log follows Docker image/preparation, Unix broker authentication, worker
+RPC, and browser-start requests, correlated by a hexadecimal attempt ID.
+Fields are restricted to safe stage/reason codes, HTTP statuses and timings:
+no tokens, cookies, raw provider/Docker error output, account identities,
+workspace IDs or browser contents. Earlier opt-in logs are not removed by
+disabling the feature; remove retained private historical logs manually when
+no longer needed. The reporting endpoint returns 404 while diagnostics are
+disabled. This is a local troubleshooting feature only, never production
+telemetry or a hosted Personal authorization mechanism.

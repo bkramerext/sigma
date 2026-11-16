@@ -273,17 +273,23 @@ class LocalPersonalRuntime:
 
     @classmethod
     def start(cls) -> LocalPersonalRuntime:
-        # Create the private per-launch log before Docker preflight. Even a
-        # missing Docker daemon now leaves useful, copyable diagnostics.
+        # No diagnostic log, file path or verbose output during normal use.
+        # Explicit SIGMA_PERSONAL_DIAGNOSTICS_ENABLED=1 opts into a private
+        # per-launch log, even if Docker fails before the broker is ready.
         state_root = Path.home() / ".sigma" / "personal-shared-poc"
         _private_directory(state_root, 0o700)
-        capture = personal_diagnostics.create_capture(state_root)
-        os.environ["SIGMA_PERSONAL_DIAGNOSTICS_FILE"] = str(capture)
-        print(f"SIGMA Personal diagnostics: {capture}", flush=True)
-        personal_diagnostics.emit("launcher", "begin")
+        os.environ.pop("SIGMA_PERSONAL_DIAGNOSTICS_FILE", None)
+        capture = None
+        if personal_diagnostics.enabled():
+            capture = personal_diagnostics.create_capture(state_root)
+            os.environ["SIGMA_PERSONAL_DIAGNOSTICS_FILE"] = str(capture)
+            print(f"SIGMA Personal diagnostics: {capture}", flush=True)
+            personal_diagnostics.emit("launcher", "begin")
         try:
             env = _docker_environment()
-            env["SIGMA_PERSONAL_DIAGNOSTICS_FILE"] = str(capture)
+            env.pop("SIGMA_PERSONAL_DIAGNOSTICS_FILE", None)
+            if capture is not None:
+                env["SIGMA_PERSONAL_DIAGNOSTICS_FILE"] = str(capture)
             release, platform = _release_images(env, build=False)
         except (OSError, RuntimeError) as exc:
             personal_diagnostics.emit("launcher", "preflight_failed", failure=type(exc).__name__)

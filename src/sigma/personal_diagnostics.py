@@ -26,6 +26,11 @@ _PREFIX = "SIGMA_PERSONAL_DIAG"
 _MAX_LOG_BYTES = 2 * 1024 * 1024
 
 
+def enabled() -> bool:
+    """Off by default; only an explicit 1 enables local verbose diagnostics."""
+    return os.environ.get("SIGMA_PERSONAL_DIAGNOSTICS_ENABLED") == "1"
+
+
 def attempt(value: str | None) -> str:
     return value if isinstance(value, str) and _REQUEST.fullmatch(value) else secrets.token_hex(6)
 
@@ -49,6 +54,8 @@ def _field(value: object) -> str:
 
 
 def _log_path() -> Path | None:
+    if not enabled():
+        return None
     raw = os.environ.get("SIGMA_PERSONAL_DIAGNOSTICS_FILE", "")
     if not raw:
         return None
@@ -75,7 +82,7 @@ def _fd(path: Path, flags: int) -> int:
 
 def emit(stage: str, event: str, **fields: object) -> None:
     """Emit a restricted one-line diagnostic, including across child processes."""
-    if not os.environ.get("SIGMA_PERSONAL_DIAGNOSTICS_FILE"):
+    if not enabled() or not os.environ.get("SIGMA_PERSONAL_DIAGNOSTICS_FILE"):
         return
     line = (
         f"{_PREFIX} utc={datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%S.%fZ')}"
@@ -102,7 +109,9 @@ def emit(stage: str, event: str, **fields: object) -> None:
 
 
 def create_capture(root: Path) -> Path:
-    """Create a new private file; keep recent evidence without retaining secrets."""
+    """Create a new private file only when explicitly enabled."""
+    if not enabled():
+        raise RuntimeError("Local Personal diagnostics are disabled")
     folder = root / "diagnostics"
     folder.mkdir(mode=0o700, exist_ok=True)
     info = folder.lstat()

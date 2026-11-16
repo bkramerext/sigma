@@ -3245,7 +3245,7 @@ async def _personal_browser_action_scoped(
                 personal_diagnostics.emit("api", "preparation_not_ready", phase=phase)
                 raise HTTPException(
                     503,
-                    "Personal browser preparation failed. Use Copy diagnostics for details.",
+                    "Personal browser preparation failed. Check Docker Desktop and restart SIGMA.",
                 )
     try:
         snapshot = await personal_browser.session(principal, action)
@@ -3283,7 +3283,11 @@ async def personal_browser_stop(request: Request):
 async def personal_browser_diagnostics(request: Request):
     """Bounded, redacted local-only diagnostics for the Connect dialog."""
     _personal_browser_principal(request)
-    if not cloud_auth.config().local or os.environ.get("SIGMA_PERSONAL_SHARED_MODE") != "1":
+    if (
+        not cloud_auth.config().local
+        or os.environ.get("SIGMA_PERSONAL_SHARED_MODE") != "1"
+        or not personal_diagnostics.enabled()
+    ):
         raise HTTPException(404, "Local Personal diagnostics unavailable.")
     personal_diagnostics.emit("api", "diagnostics_requested")
     return JSONResponse(
