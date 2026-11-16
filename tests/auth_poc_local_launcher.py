@@ -136,7 +136,16 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn("console.warn('SIGMA: private browser cleanup failed after disconnect.')", source)
         self.assertNotIn("ChatGPT was disconnected, but its private browser could not be stopped.", source)
         self.assertNotIn('aria-label="Show sponsorship details"', source)
-        self.assertIn("state !== 'error' ? ' is-viewing' : ''", source)
+        self.assertIn("external ? ' is-external' : state !== 'error' ? ' is-viewing'", source)
+        # Normal local uses the same SIGMA modal without Docker/Chromium, but
+        # its provider's protected OAuth pages still open in the system browser.
+        self.assertIn("async function signInLocally(options: SignInOptions)", source)
+        self.assertIn("const success = await ai.signIn(options)", source)
+        self.assertIn("external={!containerBrowserLab && !hosted}", source)
+        self.assertIn("else closeLocalPersonalDialog();", source)
+        self.assertIn("ai.cancelSignIn();", source)
+        self.assertIn("else void signInLocally(localSignInOptions.current);", source)
+        self.assertIn("!external && state === 'ready' && <iframe", source)
         # Project header disables pointer events on its container and explicitly
         # re-enables only buttons/links/summaries. An iframe rendered there
         # displays remote frames but cannot accept pointer input. The modal
@@ -146,7 +155,11 @@ class ProdLifecycleTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "onRetry={() => void startContainerPersonalBrowser()}/>,\n    document.body,",
+            "else void signInLocally(localSignInOptions.current);",
+            source,
+        )
+        self.assertIn(
+            "    document.body,\n  )}",
             source,
         )
         workspace_css = (ROOT / "frontend/src/workspace.css").read_text(encoding="utf-8")
@@ -167,7 +180,12 @@ class ProdLifecycleTests(unittest.TestCase):
         # obscuring the Google email field, without disabling WebAuthn itself.
         self.assertIn("--enable-features=WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot)
         self.assertIn("--disable-features=AutofillReintroduceHybridPasskeyDropdownItem", boot)
+        self.assertIn("WebAuthnPasskeyUpgrade,WebAuthnAmbientSignin", boot)
+        self.assertIn("--disable-save-password-bubble", boot)
         self.assertNotIn("--disable-features=WebAuthentication", boot)
+        browser_image = (ROOT / "auth-poc/browser.Dockerfile").read_text(encoding="utf-8")
+        self.assertIn('"PasswordManagerPasskeysEnabled":false', browser_image)
+        self.assertIn('"PasswordManagerEnabled":false', browser_image)
 
     def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
         mod = self.module
