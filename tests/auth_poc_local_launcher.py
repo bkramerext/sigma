@@ -38,24 +38,26 @@ class SharedBrokerTests(unittest.TestCase):
 
     def test_one_shared_docker_project_no_user_containers(self) -> None:
         broker = self.broker
-        with patch.dict(
-            os.environ,
-            {
-                "SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32,
-                "SIGMA_RELEASE": "d" * 40,
-            },
-        ):
-            with patch.object(
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32,
+                    "SIGMA_RELEASE": "d" * 40,
+                },
+            ),
+            patch.object(
                 broker.subprocess, "run", return_value=CompletedProcess([], 0, "", "")
-            ) as run:
-                broker._compose("ps", "-q", "personal")
-                argv = run.call_args.args[0]
-                self.assertEqual(
-                    argv[:4], ["docker", "compose", "--project-name", "sigma-shared-" + "c" * 32]
-                )
-                self.assertEqual(argv[4:6], ["-f", "deploy/personal-shared.compose.yaml"])
-                self.assertNotIn("sigma-personal-", " ".join(argv))
-                self.assertEqual(argv[-3:], ["ps", "-q", "personal"])
+            ) as run,
+        ):
+            broker._compose("ps", "-q", "personal")
+            argv = run.call_args.args[0]
+            self.assertEqual(
+                argv[:4], ["docker", "compose", "--project-name", "sigma-shared-" + "c" * 32]
+            )
+            self.assertEqual(argv[4:6], ["-f", "deploy/personal-shared.compose.yaml"])
+            self.assertNotIn("sigma-personal-", " ".join(argv))
+            self.assertEqual(argv[-3:], ["ps", "-q", "personal"])
 
     def test_all_credential_and_browser_calls_bound_to_workspace(self) -> None:
         broker = self.broker
