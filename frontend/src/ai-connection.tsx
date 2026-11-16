@@ -355,6 +355,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const localSignInOptions = useRef<SignInOptions>({});
   const dialogActive = useRef(false);
   const activatingPersonal = useRef(false);
+  const restoringSponsored = useRef(false);
   const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'preparing' | 'starting' | 'ready' | 'error'>('closed');
   const [personalDialogError, setPersonalDialogError] = useState('');
   const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
@@ -466,6 +467,21 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           return;
         }
       }
+      // A prior Personal selection is not a live connection. If its worker
+      // cannot verify the account, restore the backed Sponsored mode instead
+      // of displaying an inert "Connect to ChatGPT" pill at startup.
+      // Never race an explicit sign-in or downgrade a verified account.
+      if (test.status === 'fulfilled' && preview.status === 'fulfilled'
+          && test.value?.verified !== true
+          && preview.value?.phase !== 'connected'
+          && selectedConnection === 'personal' && !!cloudFunding?.sponsorshipEligible
+          && !dialogActive.current && personalDialogState === 'closed'
+          && !selectingConnection && !restoringSponsored.current && selectConnection) {
+        restoringSponsored.current = true;
+        void selectConnection('sponsored').catch(() => {
+          // Failures remain observable through the normal connection state.
+        }).finally(() => { restoringSponsored.current = false; });
+      }
       // A saved-session restoration is controlled by the verified fast path,
       // not by the background preview poll.
       if (!dialogActive.current || personalDialogState !== 'ready') return;
@@ -530,12 +546,16 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       if (timer !== undefined) clearTimeout(timer);
     };
   }, [localLabAccount, personalDialogState, personalSelectionAllowed, refreshConnection,
-    selectConnection, selectedConnection, selectingConnection]);
+    selectConnection, selectedConnection, selectingConnection, cloudFunding?.sponsorshipEligible]);
   const hostedNoticeClick = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticeEnabled
     && (hosted || localHostedNoticePreview) && !containerBrowserLab;
+  // A disconnected local --prod worker never displays a fourth pill state.
+  // Show the available Sponsored mode while its persisted choice is reconciled.
+  const localSponsoredDefault = !!localLabAccount && !!cloudFunding?.sponsorshipEligible
+    && selectedConnection === 'personal' && !testConnected && !previewAuthorized;
   const sponsoredSelected = cloudFunding?.selectedConnection === 'sponsored'
-    || localHostedNoticePreview;
+    || localHostedNoticePreview || localSponsoredDefault;
   const hostedPersonalUnavailable = hosted && !!cloudFunding?.authorized
     && cloudFunding.selectedConnection === 'personal' && !cloudFunding.forcedSponsored
     && !containerBrowserLab;
