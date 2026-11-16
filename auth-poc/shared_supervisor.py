@@ -79,8 +79,8 @@ def _start() -> bool:
         return True
     _stop()
     BROWSER_HOME.mkdir(mode=0o700)
-    os.chown(BROWSER_HOME, BROWSER_UID, BROWSER_UID)
     os.chmod(BROWSER_HOME, 0o700)
+    os.chown(BROWSER_HOME, BROWSER_UID, BROWSER_UID)
     env = dict(os.environ)
     for key in tuple(env):
         # Browser never receives the shared worker's RPC secret or vault paths.
@@ -180,9 +180,12 @@ def _prepare_volumes() -> None:
             raise SystemExit("Shared Personal storage contains a symlink")
         directory.mkdir(parents=True, exist_ok=True)
         info = directory.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != WORKER_UID:
-            raise SystemExit("Shared Personal storage ownership is invalid")
-        os.chmod(directory, 0o700)
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != WORKER_UID
+            or stat.S_IMODE(info.st_mode) != 0o700
+        ):
+            raise SystemExit("Shared Personal storage permissions are invalid")
     key = key_home / "master"
     try:
         fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
