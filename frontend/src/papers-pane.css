@@ -628,6 +628,9 @@
   margin: 4px 0 3px 28px;
 }
 .workspace-page .papers-pane .saved-paper-card .paper-unified-timeline .saved-paper-meta {
+  /* Metadata uses inline dot separators, like Session metadata. The shared
+     flex gap added 14px between every text/span node and inflated spacing. */
+  display: block;
   margin: 0;
   color: #9baebb;
   font-size: 12px;
