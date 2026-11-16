@@ -119,7 +119,7 @@ class ProdLifecycleTests(unittest.TestCase):
         # User confirmation must report progress and surface failures, never
         # leave an unresponsive Confirm button on top of a failed HTTP call.
         self.assertIn("setDisconnectError", source)
-        self.assertIn("disconnecting ? 'Disconnecting…' : 'Confirm'", source)
+        self.assertIn('{disconnecting ? <span role="status">Disconnecting…</span>', source)
         self.assertIn("if (result.disconnected !== true)", source)
         self.assertIn("await stopContainerPersonalBrowser().catch(", source)
         self.assertIn("state === 'ready' ? ' is-viewing' : ''", source)
@@ -310,7 +310,8 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn("'/api/ai/personal-browser/status'", dialog)
         self.assertIn("data.browser_status === 'ready'", dialog)
         self.assertNotIn("if (data.browser_status !== 'ready')", dialog)
-        self.assertIn("OpenAI's personal ChatGPT sign-in uses a localhost callback", dialog)
+        self.assertNotIn("OpenAI's personal ChatGPT sign-in uses a localhost callback", dialog)
+        self.assertIn('className="personal-chatgpt-browser-frame"', dialog)
 
     def test_broker_health_accepts_http_10_and_http_11_only(self) -> None:
         from unittest.mock import MagicMock
