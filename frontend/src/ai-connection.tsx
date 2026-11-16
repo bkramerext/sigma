@@ -469,6 +469,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       // A saved-session restoration is controlled by the verified fast path,
       // not by the background preview poll.
       if (!dialogActive.current || personalDialogState !== 'ready') return;
+      if (preview.status === 'fulfilled' && preview.value?.phase === 'failed') {
+        // An authorization error in the private worker must be a normal SIGMA
+        // dialog error with Retry, not Chromium's raw HTTP error document.
+        setPersonalDialogError('Could not open ChatGPT sign-in. Please retry.');
+        setPersonalDialogState('error');
+        return;
+      }
       if (preview.status === 'fulfilled' && preview.value?.phase === 'connected'
           && personalSelectionAllowed && !activatingPersonal.current) {
         if (selectingConnection) {
