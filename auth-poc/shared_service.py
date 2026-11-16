@@ -24,7 +24,7 @@ from sigma.ui_instance import private_directory
 from model_gateway import app as model_app
 from server import app as signin_app
 
-_WORKSPACE = re.compile(r"[0-9a-f]{32}\\Z")
+_WORKSPACE = re.compile(r"[0-9a-f]{32}\Z")
 _active_workspace: str | None = None
 _browser_lock = asyncio.Lock()
 _control_socket = "/run/sigma-browser-control/control.sock"
