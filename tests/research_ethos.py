@@ -153,8 +153,8 @@ def main() -> None:
                 {"abstract": "A concise summary.", "conclusions": ["A concise summary."]}
             )
 
-            # Resume adopts the user's current Model/Thinking selection, but
-            # refuses an unapproved change to the billing account.
+            # Resume adopts current Model/Thinking and connection without
+            # losing paid checkpoints when the selected account changes.
             fake_fingerprint = "a" * 64
             checkpoint = {
                 "model": "gpt-6.1-sol",
@@ -164,12 +164,9 @@ def main() -> None:
             assert papers._resume_provider_choice(
                 checkpoint, fake_fingerprint, "other-model", "low"
             ) == ("other-model", "low")
-            try:
-                papers._resume_provider_choice(checkpoint, "b" * 64, "other-model", "low")
-            except ProjectError as exc:
-                assert "explicit approval" in str(exc)
-            else:
-                raise AssertionError("Provider change must require approval")
+            assert papers._resume_provider_choice(
+                checkpoint, "b" * 64, "other-model", "low"
+            ) == ("other-model", "low")
             assert papers._resume_provider_choice(
                 checkpoint, "b" * 64, "other-model", "low", True
             ) == ("other-model", "low")

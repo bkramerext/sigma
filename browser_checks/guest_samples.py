@@ -351,9 +351,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
         expect(paper_row.locator(".paper-unified-timeline")).to_be_visible()
         # The header can rerender as a sample loads; native click still tests
         # navigation without flaky Playwright stability polling.
-        page.get_by_role("link", name="Go back to home page").evaluate(
-            "element => element.click()"
-        )
+        page.get_by_role("link", name="Go back to home page").evaluate("element => element.click()")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         samples_tab = page.get_by_role("tab", name="Samples")
         if samples_tab.get_attribute("aria-selected") != "true":
@@ -439,9 +437,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
 
         # The header can rerender as a sample loads; native click still tests
         # navigation without flaky Playwright stability polling.
-        page.get_by_role("link", name="Go back to home page").evaluate(
-            "element => element.click()"
-        )
+        page.get_by_role("link", name="Go back to home page").evaluate("element => element.click()")
         expect(page.get_by_role("heading", name="Projects")).to_be_visible()
         my_work = page.get_by_role("tab", name="My Work")
         if my_work.get_attribute("aria-selected") != "true":
@@ -540,9 +536,7 @@ def exercise(ui_url: str, root: Path, public_pdf: bytes) -> None:
 
         # The header can rerender as a sample loads; native click still tests
         # navigation without flaky Playwright stability polling.
-        page.get_by_role("link", name="Go back to home page").evaluate(
-            "element => element.click()"
-        )
+        page.get_by_role("link", name="Go back to home page").evaluate("element => element.click()")
         page.get_by_role("tab", name="My Work").click()
         warm_group = page.locator("#recent-panel details.recent-type-group").filter(
             has_text="Did Jesus Use Cannabis?"

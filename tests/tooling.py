@@ -257,7 +257,12 @@ def check_start_cli() -> None:
             else:
                 raise AssertionError("start did not exit")
         launch.assert_called_once_with(
-            navigate=False, signin=False, mock_auth=mock_auth, sponsored=True, prod=False, brainstorm=False
+            navigate=False,
+            signin=False,
+            mock_auth=mock_auth,
+            sponsored=True,
+            prod=False,
+            brainstorm=False,
         )
     # --prod is forwarded to the local UI launcher, not a production backend.
     with (

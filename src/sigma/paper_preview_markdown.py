@@ -6,6 +6,8 @@ Does not change the paper, PDF, TeX, or checkpoint accounting.
 
 from __future__ import annotations
 
+from typing import cast
+
 from pydantic import BaseModel, ConfigDict
 
 from sigma import papers
@@ -47,7 +49,7 @@ async def format_paper_preview(path: str, paper_id: str, expected_project_id: st
         project_id=expected_project_id,
         project_path_value=path,
     )
-    markdown = result.body
+    markdown = cast(PaperPreviewMarkdown, result).body
     if not markdown.strip() or len(markdown) < max(1, len(text.strip()) // 5):
         raise ProjectError(
             "Paper formatting appears incomplete; the original preview is unchanged."

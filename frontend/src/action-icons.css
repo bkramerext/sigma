@@ -578,3 +578,48 @@ body[data-sigma-control-hover-hold] .workspace-page button.process-control:hover
 .workspace-page .outcome-subsection.current-understanding > summary > .sigma-unified-markdown-progress {
   flex: 0 0 auto; margin-left: 5px;
 }
+
+/* Pending AI operations show a passive 28px hourglass, never a button.
+   Keep it visually inert across every SIGMA surface. */
+.workspace-page .sigma-unified-hourglass {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px; min-width: 28px;
+  height: 28px; min-height: 28px;
+  margin: 0; padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  box-shadow: none;
+  filter: none;
+  cursor: default;
+  pointer-events: none;
+}
+.workspace-page .sigma-unified-hourglass .project-opening-hourglass {
+  display: inline-block;
+  margin: 0;
+  color: inherit;
+  background: transparent !important;
+}
+.workspace-page :is(.project-opening-hourglass, .generating-hourglass, .sigma-inert-progress, .ai-paper-explaining) {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  cursor: default;
+}
+.workspace-page :is(.project-opening-hourglass, .generating-hourglass, .ai-paper-explaining > span) {
+  pointer-events: none;
+}
+.workspace-page .sigma-inert-progress { display: inline-flex; align-items: center; gap: 3px; }
+.workspace-page :is(.recent-open, .sample-open)[aria-busy="true"]:is(:hover, :focus-visible) {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  cursor: default;
+}

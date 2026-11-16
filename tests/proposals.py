@@ -378,15 +378,16 @@ async def check(path):
             assert cancelled_before_send.status_code == 200
             assert cancelled_before_send.json()["status"] == "cancelled"
 
-            count_before_account_rejection = len(inference_calls)
-            account_rejected = api.post(
+            count_before_account_switch = len(inference_calls)
+            account_switched = api.post(
                 "/api/projects/strategy-inference",
                 json=inference_request(
                     "00000000-0000-4000-8000-000000000337", binding="different-account"
                 ),
             )
-            assert account_rejected.status_code == 400
-            assert len(inference_calls) == count_before_account_rejection
+            assert account_switched.status_code == 200
+            assert account_switched.json()["strategy"]["provenance"]["provider"] == "openai"
+            assert len(inference_calls) == count_before_account_switch + 1
 
             async def provider_failure_hook():
                 return httpx.Response(503, json={"error": {"message": "fixture provider failure"}})
@@ -506,15 +507,16 @@ async def check(path):
                     "/api/projects/strategy-inference", json=inference_request(changed_account_id)
                 )
             account_changed = False
-            assert account_changed_response.status_code >= 400
-            assert not any(
+            assert account_changed_response.status_code == 200
+            assert any(
                 row.provenance and row.provenance.inference_request_id == changed_account_id
                 for row in inspect_project(path).project.strategies
             )
             account_retry = api.post(
                 "/api/projects/strategy-inference", json=inference_request(changed_account_id)
             )
-            assert account_retry.status_code >= 400
+            assert account_retry.status_code == 200
+            assert account_retry.json() == account_changed_response.json()
             assert len(inference_calls) == before_account_change + 1
 
             inference_hook = None
@@ -906,7 +908,7 @@ async def check(path):
                 ).status_code
                 == 400
             )
-        assert len(inference_calls) == 14
+        assert len(inference_calls) == 15
         unchanged = (path / "project.json").read_bytes()
         original_binding = {
             "identity": "proposal-account",
