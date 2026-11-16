@@ -284,25 +284,21 @@ function PersonalBrowserDialog({ state, error, onClose, onRetry }: {
       <h2 id="personal-browser-heading">Connect to ChatGPT</h2>
       <DialogDismissButton label="Close ChatGPT connection" onClick={onClose}/>
     </div>
-    <p>ChatGPT authorization uses a localhost callback. SIGMA runs Chromium and
-      the callback worker together inside isolated containers, so the callback
-      stays with the browser. This dialog shows an authenticated, same-origin
-      view of Chromium. SIGMA relays its screen and input, while ChatGPT account
-      tokens stay with the private worker.</p>
+    <p>OpenAI's personal ChatGPT sign-in uses a localhost callback that SIGMA
+      cannot complete from its hosted site. Locally, SIGMA runs a private browser
+      and callback together; your credentials stay inside the isolated worker.</p>
     {state === 'preparing' && <p role="status">Preparing the isolated browser images. SIGMA remains available in Sponsored mode during first-time setup…</p>}
     {state === 'starting' && <p role="status">Starting the private sign-in browser…</p>}
     {state === 'error' && <div className="personal-chatgpt-connection-error" role="alert">
       <p>{error || 'The private browser could not be started.'}</p>
-      <button className="text-view-link" type="button" onClick={onRetry}>Retry</button>
+      <button className="sigma-text-action" type="button" onClick={onRetry}>Retry</button>
     </div>}
     {state === 'ready' && <iframe
       className="personal-chatgpt-browser-frame"
       title="Private ChatGPT sign-in browser"
       src={windowAuthUrl('/api/ai/personal-browser/view')}/>}
-    <p className="personal-chatgpt-preview-note">This local preview supports signing in to a
-      personal ChatGPT account. SIGMA switches to Personal only after the isolated
-      worker verifies that account and its plan permission. Hosted deployment
-      remains disabled pending separate approval.</p>
+    <p className="personal-chatgpt-preview-note">Personal becomes active after your ChatGPT
+      account and plan are verified.</p>
   </dialog>;
 }
 
@@ -653,10 +649,37 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         if (!response.ok)
           throw new Error(data.detail ?? data.error ??
             `Private ChatGPT browser startup returned HTTP ${response.status}.`);
-        if (data.browser_status !== 'ready')
-          throw new Error('Private ChatGPT browser did not become ready.');
-        setPersonalDialogState('ready');
-        return;
+        if (data.browser_status === 'ready') {
+          setPersonalDialogState('ready');
+          return;
+        }
+        if (data.browser_status !== 'unavailable' && data.browser_status !== 'stopped')
+          throw new Error('Private ChatGPT browser returned an unexpected startup status.');
+        // Compose --wait can finish before Chromium, VNC and the private Unix
+        // relays are all responsive. Poll status instead of declaring failure
+        // from the first not-yet-ready response; do NOT POST start repeatedly.
+        const deadline = Date.now() + 60_000;
+        while (sequence === browserLaunchSequence.current && dialogActive.current
+               && Date.now() < deadline) {
+          await new Promise<void>(resolve => window.setTimeout(resolve, 2000));
+          if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+          const statusResponse = await fetch(windowAuthUrl('/api/ai/personal-browser/status'), {
+            credentials: 'same-origin',
+            headers: { 'X-Sigma-Error-Handled': 'true' },
+          });
+          if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+          // A brief relay failure while the container warms up is recoverable.
+          if (!statusResponse.ok) continue;
+          const status = await statusResponse.json().catch(() => ({})) as {
+            browser_status?: string;
+          };
+          if (status.browser_status === 'ready') {
+            setPersonalDialogState('ready');
+            return;
+          }
+        }
+        if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+        throw new Error('Private ChatGPT browser did not become ready after 60 seconds. Retry to try again.');
       }
     } catch (cause) {
       if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
