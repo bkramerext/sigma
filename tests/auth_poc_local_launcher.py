@@ -589,6 +589,7 @@ class PersonalModelDispatchAuditTests(unittest.TestCase):
         # This is a closed inventory, not a whitelist of features to forget:
         # adding any new direct Responses caller requires transport review.
         expected = {
+            "agentic.py": {"_invoke"},
             "chat.py": {"respond"},
             "papers.py": {"_provider", "_provider_structured"},
             "proposals.py": {"generate_proposal"},
@@ -596,6 +597,7 @@ class PersonalModelDispatchAuditTests(unittest.TestCase):
             "text_conversion.py": {"_convert_text"},
         }
         observed: dict[str, set[str]] = {}
+        bypasses: list[str] = []
         for path in (ROOT / "src/sigma").rglob("*.py"):
             source = path.read_text(encoding="utf-8")
             if (
@@ -613,13 +615,11 @@ class PersonalModelDispatchAuditTests(unittest.TestCase):
                     and 'provider_endpoint("responses")' not in body
                 ):
                     continue
-                self.assertIn(
-                    "model_dispatch.private_response_if_selected(",
-                    body,
-                    f"{path.name}:{node.name} bypasses Personal worker dispatch",
-                )
+                if "model_dispatch.private_response_if_selected(" not in body:
+                    bypasses.append(f"{path.name}:{node.name}")
                 functions.add(node.name)
             observed[path.name] = functions
+        self.assertFalse(bypasses, f"Unreviewed provider call sites: {bypasses}")
         self.assertEqual(observed, expected)
 
         # Q/A, ELI5 and the section/proofreading generators must reuse the
