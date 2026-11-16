@@ -1423,6 +1423,16 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
   const textFingerprint = JSON.stringify(textBlocks);
   useEffect(() => () => { formatAbort.current?.abort(); }, [projectId, path, textFingerprint]);
   async function toggleUnderstandingMarkdown() {
+    // "Show plain text" is always a local view switch, never an AI request.
+    // A later click to show Markdown checks Model/Thinking and refreshes if stale.
+    if (markdownView) {
+      formatAbort.current?.abort();
+      setMarkdownView(false);
+      setFormatBusy(false);
+      setFormatProgress('');
+      setFormatError('');
+      return;
+    }
     if (guest) { setGuestMarkdownPreview(true); return; }
     setFormatBusy(true);
     const controller = new AbortController();
@@ -4203,6 +4213,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }
   async function togglePaperMarkdown(paperId: string) {
     if (formattingPaperId) return;
+    if (renderedPaperId === paperId) {
+      setRenderedPaperId('');
+      return;
+    }
     setFormattingPaperId(paperId); setPaperFormatError('');
     try {
       const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { cache: 'no-store' });
@@ -5627,6 +5641,11 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       disabled={editing || busy || combinedEditMode} onClick={() => {
         void (async () => {
           if (!data) return;
+          if (selected === 'rendered') {
+            chooseView('plain');
+            setError('');
+            return;
+          }
           if (plainRecovery) { await convert('plain'); return; }
           try {
             const query = new URLSearchParams({ path, scope, ...(strategyId ? { strategy_id: strategyId } : {}) });
@@ -5668,7 +5687,9 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     </div>
     {editing ? <form ref={editorForm} id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : MAX_STRATEGY_APPROACH} rows={8} required disabled={busy} onChange={event => { setDraft(event.target.value); onCombinedDraftChange?.(event.target.value); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
-    </form> : current && version ? selected === 'rendered'
+    </form> : selected === 'plain' && data?.source_format === 'markdown' && !data.plain?.current
+      ? <p className={contentClass}>{data.markdown?.body ?? source}</p>
+      : current && version ? selected === 'rendered'
       ? <div ref={renderedContent} className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
@@ -6509,6 +6530,14 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   }
   async function toggleAnswerMarkdown(record: ResearchQARecord) {
     if (formattingAnswerId || busy) return;
+    if (renderedAnswerIds.has(record.qa_id)) {
+      setRenderedAnswerIds(current => {
+        const next = new Set(current);
+        next.delete(record.qa_id);
+        return next;
+      });
+      return;
+    }
     if (guest) { setGuestAnswerMarkdownPreview(true); return; }
     const controller = new AbortController();
     formattingRequest.current = controller;
