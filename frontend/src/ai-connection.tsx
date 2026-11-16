@@ -351,6 +351,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const openingContainerBrowser = useRef(false);
   const pendingPersonalStop = useRef<Promise<void> | null>(null);
   const browserLaunchSequence = useRef(0);
+  const localSignInSequence = useRef(0);
+  const localSignInOptions = useRef<SignInOptions>({});
   const dialogActive = useRef(false);
   const activatingPersonal = useRef(false);
   const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'preparing' | 'starting' | 'ready' | 'error'>('closed');
@@ -841,6 +843,36 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     }
     await startContainerPersonalBrowser();
   }
+  async function signInLocally(options: SignInOptions): Promise<boolean> {
+    // Local OAuth uses the user's normal browser; keep the same SIGMA modal
+    // shell as the isolated preview, never iframe the provider's login page.
+    const sequence = ++localSignInSequence.current;
+    localSignInOptions.current = options;
+    setPersonalDialogError('');
+    setPersonalDialogState('starting');
+    try {
+      const success = await ai.signIn(options);
+      if (sequence !== localSignInSequence.current) return false;
+      if (success) setPersonalDialogState('closed');
+      else {
+        setPersonalDialogError('ChatGPT sign-in was not completed.');
+        setPersonalDialogState('error');
+      }
+      return success;
+    } catch (cause) {
+      if (sequence === localSignInSequence.current) {
+        setPersonalDialogError(cause instanceof Error ? cause.message : 'ChatGPT sign-in failed.');
+        setPersonalDialogState('error');
+      }
+      return false;
+    }
+  }
+  function closeLocalPersonalDialog() {
+    localSignInSequence.current += 1;
+    ai.cancelSignIn();
+    setPersonalDialogState('closed');
+    setPersonalDialogError('');
+  }
   async function connect() {
     if (ai.connecting || ai.transitioning) return;
     try {
@@ -858,10 +890,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       if (cloudFunding?.authorized && cloudFunding.sponsorshipEligible) {
         if (forcedSponsored && sponsoredSelected) return;
         if (sponsoredSelected) {
-          const personalConnected = await ai.signIn({ newAccount: true });
+          const personalConnected = await signInLocally({ newAccount: true });
           if (personalConnected) await cloudFunding.selectConnection?.('personal');
         } else {
-          const connected = await ai.signIn({
+          const connected = await signInLocally({
             accountId: ai.info?.active_account,
             newAccount: false,
             enablePlan: ai.info?.status === 'plan_not_permitted',
@@ -874,7 +906,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       const newLocalMemberAccount = !!cloudFunding?.authenticationEnabled
         && !!cloudFunding.authorized
         && !cloudFunding.sponsorshipEligible;
-      await ai.signIn({
+      await signInLocally({
         accountId: newLocalMemberAccount ? undefined : ai.info?.active_account,
         newAccount: newLocalMemberAccount,
         enablePlan: ai.info?.status === 'plan_not_permitted',
@@ -915,9 +947,18 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       </div>
     </div>, document.body)}
   {createPortal(
-    <PersonalBrowserDialog state={personalDialogState} error={personalDialogError}
-      onClose={() => void closePersonalBrowserDialog()}
-      onRetry={() => void startContainerPersonalBrowser()}/>,
+    <PersonalBrowserDialog state={personalDialogState}
+      error={personalDialogError || (!containerBrowserLab ? ai.error : '')}
+      external={!containerBrowserLab && !hosted}
+      handoff={ai.handoff}
+      onClose={() => {
+        if (containerBrowserLab) void closePersonalBrowserDialog();
+        else closeLocalPersonalDialog();
+      }}
+      onRetry={() => {
+        if (containerBrowserLab) void startContainerPersonalBrowser();
+        else void signInLocally(localSignInOptions.current);
+      }}/>,
     document.body,
   )}
   <SponsorProvisioningDialog open={sponsorProvisioningHelpOpen} message={sponsorProvisioningGuidance}
