@@ -1,4 +1,5 @@
 """Adversarial offline tests for the greenfield multi-user Personal vault."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -63,7 +64,9 @@ def main() -> None:
         inner_key.write_bytes(os.urandom(32))
         inner_key.chmod(0o600)
         rejects(lambda: Vault(store, inner_key).read(A))
-    print("PASS shared Personal vault: identity isolation, authenticated encryption, tamper rejection, key permissions")
+    print(
+        "PASS shared Personal vault: identity isolation, authenticated encryption, tamper rejection, key permissions"
+    )
 
 
 if __name__ == "__main__":
