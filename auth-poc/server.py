@@ -210,19 +210,22 @@ def _saved_preview_is_authorized() -> bool:
 @app.get("/preview-state")
 async def preview_state() -> dict[str, str]:
     require_real_signin()
+    # A verified stored account is authoritative even when an earlier OAuth
+    # attempt failed. Never leave a newly connected browser displaying a stale
+    # error until the worker process happens to restart.
+    if await run_in_threadpool(_saved_preview_is_authorized):
+        return {"phase": "connected"}
     if _SIGNIN_FAILED:
         return {"phase": "failed"}
     attempt = (await status())["attempt"]
     if attempt is not None:
         return {"phase": attempt}
-    if await run_in_threadpool(_saved_preview_is_authorized):
-        return {"phase": "connected"}
     return {"phase": "ready"}
 
 
 @app.post("/begin")
 async def begin(request: Request) -> dict[str, str]:
-    global _ATTEMPT_ID
+    global _ATTEMPT_ID, _SIGNIN_FAILED
     same_origin(request)
     require_real_signin()
     if _ATTEMPT_ID is not None:
@@ -233,6 +236,7 @@ async def begin(request: Request) -> dict[str, str]:
     except ProjectError as exc:
         raise HTTPException(503, "Could not begin ChatGPT authorization. Try again.") from exc
     _ATTEMPT_ID = attempt["id"]
+    _SIGNIN_FAILED = False
     return {"id": _ATTEMPT_ID}
 
 
