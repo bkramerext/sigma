@@ -125,6 +125,142 @@ async def check_research_worker_dispatch() -> None:
         assert original["reference_compilation"]["status"] == "completed"
 
 
+
+async def check_shared_private_model_dispatch() -> None:
+    """Every model path reaches the same worker, never a coordinator HTTP request."""
+    from pydantic import BaseModel
+
+    from sigma import chat, model_dispatch, papers, personal_inference, proposals
+
+    binding = {
+        "mode": "chatgpt",
+        "status": "connected",
+        "token": "",
+        "identity": "private-personal-fixture",
+        "transport": "personal_worker",
+        "worker_binding": "b" * 64,
+    }
+    config = {"model": "gpt-6-luna", "reasoning_effort": "medium", "available": True}
+    payload = {
+        "model": "gpt-6-luna", "store": False, "stream": True,
+        "input": [{"role": "user", "content": "offline test"}],
+    }
+    response = {
+        "status": "completed",
+        "model": "gpt-6-luna",
+        "output": [{"type": "message", "content": [
+            {"type": "output_text", "text": '{"value":"ok"}'}
+        ]}],
+        "usage": {"input_tokens": 20, "output_tokens": 30},
+    }
+
+    class SampleOutput(BaseModel):
+        value: str
+
+    with patch.object(
+        personal_inference, "respond", new_callable=AsyncMock, return_value=response
+    ) as rpc:
+        actual = await model_dispatch.private_response_if_selected(
+            binding, payload, timeout_seconds=3600
+        )
+        assert actual is response
+        assert rpc.await_args.kwargs["timeout_seconds"] == 3600
+        assert rpc.await_args.kwargs["expected_binding"] == "b" * 64
+        assert len(rpc.await_args.kwargs["request_id"]) == 32
+        rpc.reset_mock()
+        sponsor = {**binding, "transport": "sponsored", "token": "sponsor-secret"}
+        assert await model_dispatch.private_response_if_selected(
+            sponsor, payload, timeout_seconds=60
+        ) is None
+        rpc.assert_not_awaited()
+        rpc.return_value = None
+        try:
+            await model_dispatch.private_response_if_selected(
+                binding, payload, timeout_seconds=60
+            )
+        except ProjectError as exc:
+            assert "returned no valid response" in str(exc)
+        else:
+            raise AssertionError("An invalid private RPC silently fell back to sponsored")
+        rpc.return_value = response
+        rpc.reset_mock()
+
+    with (
+        patch.object(
+            personal_inference, "respond", new_callable=AsyncMock, return_value=response
+        ) as rpc,
+        patch.object(papers.httpx, "AsyncClient",
+                     side_effect=AssertionError("Paper bypassed private worker")),
+        patch.object(papers.cloud_research, "start_provider_attempt",
+                     side_effect=AssertionError("Personal entered sponsored ledger")),
+    ):
+        for schema in ("sigma_research_qa", "sigma_long_paper_section"):
+            output, model = await papers._provider_structured(
+                {"question": "offline validation"},
+                binding, config, instructions="Return the JSON output.",
+                schema_name=schema, response_model=SampleOutput,
+            )
+            assert output.value == "ok"
+            assert model == "gpt-6-luna"
+            assert rpc.await_args.kwargs["timeout_seconds"] == 3600
+        assert rpc.await_count == 2
+        try:
+            await papers._provider({}, binding, config, include_diagrams=False)
+        except papers.PaperTransientFailure:
+            pass  # Mock output deliberately isn't a full PaperDraft schema.
+        else:
+            raise AssertionError("A malformed one-shot paper was accepted")
+        assert rpc.await_count == 3
+
+    response["output"][0]["content"][0]["text"] = "Brainstorm reply"
+    with (
+        patch.object(chat, "auth_context", new_callable=AsyncMock, return_value=binding),
+        patch.object(chat, "models", new_callable=AsyncMock, return_value={
+            "connection": {"status": "connected"},
+            "models": [{"id": "gpt-6-luna", "availability": "available"}],
+        }),
+        patch.object(chat.cloud_research, "billing_enabled", return_value=False),
+        patch.object(
+            personal_inference, "respond", new_callable=AsyncMock, return_value=response
+        ) as rpc,
+        patch.object(chat.httpx, "AsyncClient",
+                     side_effect=AssertionError("Brainstorm bypassed private worker")),
+    ):
+        answer = await chat.respond(
+            speaker="ai_1", messages=[{"speaker": "human", "text": "Hello"}],
+            conversation_id="test", expected_binding=binding["identity"],
+            model="gpt-6-luna", reasoning_effort="low",
+        )
+        assert answer == "Brainstorm reply"
+        rpc.assert_awaited_once()
+        assert rpc.await_args.kwargs["timeout_seconds"] == chat.TIMEOUT_SECONDS
+
+    response["status"] = "failed"
+    with (
+        patch.object(proposals, "auth_context", new_callable=AsyncMock, return_value=binding),
+        patch.object(proposals, "configuration",
+                     new_callable=AsyncMock, return_value=config),
+        patch.object(proposals, "inspect_project", return_value=SimpleNamespace(
+            project=SimpleNamespace(id="test-project"),
+        )),
+        patch.object(proposals, "suggestion_context_for",
+                     return_value=("test-project", "some project context")),
+        patch.object(
+            personal_inference, "respond", new_callable=AsyncMock, return_value=response
+        ) as rpc,
+        patch.object(proposals.httpx, "AsyncClient",
+                     side_effect=AssertionError("Proposal bypassed private worker")),
+    ):
+        try:
+            await proposals.generate_proposal(
+                "/not-used", seed="ignored", suggestion_only=True,
+            )
+        except ProjectError:
+            pass  # The mock explicitly returns an incomplete model response.
+        else:
+            raise AssertionError("A failed proposal incorrectly completed")
+        rpc.assert_awaited_once()
+
 async def main() -> None:
     key = "a" * 64
     with patch.dict(
@@ -395,7 +531,8 @@ async def main() -> None:
             )
             assert denied.status_code == 403
     await check_research_worker_dispatch()
-    print("PASS: gated local sign-in and credential-free research/compilation worker dispatch")
+    await check_shared_private_model_dispatch()
+    print("PASS: private model transport across research, paper, Q/A, Brainstorm and proposals")
 
 
 if __name__ == "__main__":
