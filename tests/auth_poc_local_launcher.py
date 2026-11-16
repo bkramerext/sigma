@@ -3,6 +3,7 @@
 The separate Docker CI workflow exercises real Chromium, OAuth helper routes,
 encrypted vaults, and the two-user boundary. No per-user Docker compatibility.
 """
+
 from __future__ import annotations
 
 import ast
@@ -15,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,17 +38,21 @@ class SharedBrokerTests(unittest.TestCase):
 
     def test_one_shared_docker_project_no_user_containers(self) -> None:
         broker = self.broker
-        with patch.dict(os.environ, {
-            "SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32,
-            "SIGMA_RELEASE": "d" * 40,
-        }):
-            from subprocess import CompletedProcess
-            with patch.object(broker.subprocess, "run", return_value=CompletedProcess([], 0, "", "")) as run:
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32,
+                "SIGMA_RELEASE": "d" * 40,
+            },
+        ):
+            with patch.object(
+                broker.subprocess, "run", return_value=CompletedProcess([], 0, "", "")
+            ) as run:
                 broker._compose("ps", "-q", "personal")
                 argv = run.call_args.args[0]
-                self.assertEqual(argv[:4], [
-                    "docker", "compose", "--project-name", "sigma-shared-" + "c" * 32
-                ])
+                self.assertEqual(
+                    argv[:4], ["docker", "compose", "--project-name", "sigma-shared-" + "c" * 32]
+                )
                 self.assertEqual(argv[4:6], ["-f", "deploy/personal-shared.compose.yaml"])
                 self.assertNotIn("sigma-personal-", " ".join(argv))
                 self.assertEqual(argv[-3:], ["ps", "-q", "personal"])
@@ -108,10 +114,12 @@ class SharedLocalLifecycleTests(unittest.TestCase):
     def test_docker_shutdown_keeps_encrypted_volumes(self) -> None:
         mod = self.mod
         with patch.object(mod, "_command") as command:
-            mod._down_shared({
-                "SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32,
-                "SIGMA_AUTH_POC_RPC_SEED": "a" * 64,
-            })
+            mod._down_shared(
+                {
+                    "SIGMA_AUTH_POC_CHECKOUT_ID": "c" * 32,
+                    "SIGMA_AUTH_POC_RPC_SEED": "a" * 64,
+                }
+            )
             argv = command.call_args.args[0]
             self.assertEqual(argv[-2:], ["down", "--remove-orphans"])
             self.assertNotIn("-v", argv)
@@ -129,10 +137,13 @@ class SharedLocalLifecycleTests(unittest.TestCase):
 
             class Process:
                 dead = False
+
                 def poll(self):
                     return 0 if self.dead else None
+
                 def terminate(self):
                     self.dead = True
+
                 def wait(self, timeout=None):
                     return 0
 
@@ -156,7 +167,7 @@ class SharedLocalLifecycleTests(unittest.TestCase):
 
             with (
                 patch.object(mod, "_docker_environment", return_value={"PATH": "/usr/bin"}),
-                patch.object(mod, "_release_images", return_value=("a"*40, "linux/arm64")),
+                patch.object(mod, "_release_images", return_value=("a" * 40, "linux/arm64")),
                 patch.object(mod.Path, "home", return_value=home),
                 patch.object(mod.tempfile, "mkdtemp", return_value=str(runtime)),
                 patch.object(mod.subprocess, "Popen", side_effect=process),
@@ -178,7 +189,7 @@ class SharedLocalLifecycleTests(unittest.TestCase):
         inference = (ROOT / "src/sigma/personal_inference.py").read_text()
         self.assertIn('headers["X-Sigma-Workspace"] = workspace_id', inference)
         self.assertIn("def _shared_rpc_headers(", browser)
-        self.assertIn("personal_browser.session(principal, action=\"status\")", inference)
+        self.assertIn('personal_browser.session(principal, action="status")', inference)
         self.assertNotIn("_owned_workspaces", (ROOT / "src/sigma/local_personal.py").read_text())
 
     def test_pill_and_dialog_remain_protected_and_close_reclaims_browser(self) -> None:
@@ -192,10 +203,10 @@ class SharedLocalLifecycleTests(unittest.TestCase):
 
     def test_mac_socket_path_remains_short(self) -> None:
         mod = self.mod
-        with patch.dict(os.environ, {"TMPDIR": "/private/var/folders/" + "x"*100}):
+        with patch.dict(os.environ, {"TMPDIR": "/private/var/folders/" + "x" * 100}):
             p = mod._local_runtime_directory()
             try:
-                path = p / "gateways" / ("a"*32) / "model.sock"
+                path = p / "gateways" / ("a" * 32) / "model.sock"
                 self.assertLess(len(os.fsencode(path)), 104)
             finally:
                 shutil.rmtree(p)
