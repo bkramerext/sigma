@@ -122,6 +122,12 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn("disconnecting ? 'Disconnecting…' : 'Confirm'", source)
         self.assertIn("if (result.disconnected !== true)", source)
         self.assertIn("await stopContainerPersonalBrowser().catch(", source)
+        self.assertIn("state === 'ready' ? ' is-viewing' : ''", source)
+        self.assertNotIn("personal-chatgpt-preview-note", source)
+        self.assertNotIn("OpenAI's personal ChatGPT sign-in uses", source)
+        boot = (ROOT / "auth-poc/boot.sh").read_text(encoding="utf-8")
+        self.assertIn("--app=http://127.0.0.1:8001/", boot)
+        self.assertNotIn("set -- http://127.0.0.1:8001/", boot)
 
     def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
         mod = self.module
