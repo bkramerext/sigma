@@ -453,10 +453,11 @@ class ProdLifecycleTests(unittest.TestCase):
         with patch.object(diagnostic, "report", return_value=ready):
             self.assertTrue(diagnostic.browser_healthy())
         with patch.object(
-            diagnostic, "report",
+            diagnostic,
+            "report",
             return_value=[
-                "chromium_processes=0" if line.startswith("chromium_processes=")
-                else line for line in ready
+                "chromium_processes=0" if line.startswith("chromium_processes=") else line
+                for line in ready
             ],
         ):
             self.assertFalse(diagnostic.browser_healthy())
