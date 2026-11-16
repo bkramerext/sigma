@@ -14,9 +14,11 @@ import socket
 import stat
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from subprocess import CompletedProcess
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -181,6 +183,51 @@ class SharedBrokerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 broker._valid(invalid)
         self.assertEqual(broker._valid("a" * 32), "a" * 32)
+
+    def test_idle_gateway_cache_is_bounded_without_interrupting_active_streams(self) -> None:
+        broker = self.broker
+        prior_gateways = broker._GATEWAYS
+        prior_active = broker._ACTIVE
+
+        class FakeRelay:
+            def __init__(self, index: int) -> None:
+                self.clients_lock = threading.Lock()
+                self.clients = {object()} if index == 2 else set()
+                self.last_used = float(index)
+
+        workspaces = [f"{i:032x}" for i in range(40)]
+        broker._GATEWAYS = {
+            workspace: {"model.sock": (Path("/unused"), FakeRelay(i), None)}
+            for i, workspace in enumerate(workspaces)
+        }
+        broker._ACTIVE = workspaces[0]
+        try:
+            def unrelay(workspace: str, channel: str) -> None:
+                broker._GATEWAYS[workspace].pop(channel)
+
+            with patch.object(broker, "_unrelay", side_effect=unrelay):
+                broker._prune_idle_gateways(preserve=workspaces[1])
+            self.assertEqual(len(broker._GATEWAYS), broker.MAX_IDLE_GATEWAYS)
+            self.assertIn(workspaces[0], broker._GATEWAYS)  # Browser owner
+            self.assertIn(workspaces[1], broker._GATEWAYS)  # Caller
+            self.assertIn(workspaces[2], broker._GATEWAYS)  # In-flight RPC
+            self.assertNotIn(workspaces[3], broker._GATEWAYS)  # Oldest idle
+        finally:
+            broker._GATEWAYS = prior_gateways
+            broker._ACTIVE = prior_active
+
+    def test_broker_denies_unknown_peer_credential_protocols(self) -> None:
+        broker = self.broker
+        fake = SimpleNamespace(connection=SimpleNamespace())
+        with (
+            patch.object(broker, "socket", SimpleNamespace()),
+            patch.dict(os.environ, {"SIGMA_AUTH_BROKER_CLIENT_UID": "1001"}),
+        ):
+            self.assertFalse(broker.Handler._authorized(fake))
+            fake.connection = SimpleNamespace(getpeereid=lambda: (1002, 1001))
+            self.assertFalse(broker.Handler._authorized(fake))
+            fake.connection = SimpleNamespace(getpeereid=lambda: (1001, 1002))
+            self.assertTrue(broker.Handler._authorized(fake))
 
     def test_workspace_only_owns_private_relay_directory(self) -> None:
         broker = self.broker
