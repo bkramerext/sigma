@@ -419,7 +419,9 @@ class ProdLifecycleTests(unittest.TestCase):
             "port_conflict",
         )
         self.assertEqual(
-            broker._diagnostic_failure_class("Failed to move to new namespace: Operation not permitted"),
+            broker._diagnostic_failure_class(
+                "Failed to move to new namespace: Operation not permitted"
+            ),
             "chromium_sandbox",
         )
         self.assertEqual(

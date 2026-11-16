@@ -44,8 +44,14 @@ def _docker_failure_class(message: str) -> str:
     categories = (
         ("docker_desktop_file_sharing", ("mounts denied", "file sharing is not enabled")),
         ("port_conflict", ("port is already allocated", "address already in use")),
-        ("docker_daemon_unavailable", ("cannot connect to the docker daemon", "is the docker daemon running")),
-        ("image_platform_mismatch", ("no matching manifest", "exec format error", "requested image's platform")),
+        (
+            "docker_daemon_unavailable",
+            ("cannot connect to the docker daemon", "is the docker daemon running"),
+        ),
+        (
+            "image_platform_mismatch",
+            ("no matching manifest", "exec format error", "requested image's platform"),
+        ),
         ("insufficient_memory", ("out of memory", "oomkilled", "resource exhausted")),
         ("disk_full", ("no space left on device",)),
         ("permission_denied", ("permission denied", "operation not permitted", "access is denied")),
