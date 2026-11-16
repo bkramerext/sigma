@@ -2800,10 +2800,9 @@ async def proposal_config(path: str | None = None, purpose: str | None = None):
         }
     if purpose is not None and purpose != "markdown":
         raise ProjectError("Unknown proposal configuration purpose")
-    if purpose == "markdown":
-        from sigma.text_conversion import FORMAT_EFFORT, FORMAT_MODEL
-
-        return await configuration(path, frozen_model=FORMAT_MODEL, frozen_effort=FORMAT_EFFORT)
+    # Markdown uses the same live user-scoped Model/Thinking selection as research.
+    # Never freeze it here: the client uses these values to decide whether
+    # an existing Markdown preview needs refreshing on the next button click.
     return await configuration(path)
 
 
