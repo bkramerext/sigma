@@ -354,7 +354,9 @@ jobs:
           grep -Fqx 'component=worker' /tmp/sigma-worker-probe.txt
           grep -Fqx 'websocket_http_6080=http_200' /tmp/sigma-browser-probe.txt
           grep -Fqx 'oauth_http_8001=http_200' /tmp/sigma-worker-probe.txt
-          grep -Fqx 'model_http_8002=http_200' /tmp/sigma-worker-probe.txt
+          # Synthetic CI omits the real-only local model gateway by design.
+          grep -Fqx 'local_model_gateway_enabled=no' /tmp/sigma-worker-probe.txt
+          grep -Fqx 'model_http_8002=unreachable' /tmp/sigma-worker-probe.txt
           if grep -Ei 'token|secret|auth.openai.com|/home/' /tmp/sigma-browser-probe.txt /tmp/sigma-worker-probe.txt; then
             echo 'Unexpected sensitive text in diagnostics'
             exit 1
