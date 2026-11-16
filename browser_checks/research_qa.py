@@ -89,7 +89,9 @@ with sync_playwright() as playwright:
     current_panel = page.locator(".current-understanding")
     expect(current_panel).to_have_count(1)
     current_button = current_panel.locator("button.current-understanding-markdown")
-    expect(current_button).to_have_attribute("aria-label", "Format Current Understanding as Markdown")
+    expect(current_button).to_have_attribute(
+        "aria-label", "Format Current Understanding as Markdown"
+    )
     current_requests = []
 
     def current_markdown_fixture(route):
@@ -101,10 +103,12 @@ with sync_playwright() as playwright:
         route.fulfill(
             status=200,
             content_type="application/json",
-            body=json.dumps({
-                "body": "Cached preview fixture for " + payload["field_path"],
-                "source_digest": payload["expected_digest"],
-            }),
+            body=json.dumps(
+                {
+                    "body": "Cached preview fixture for " + payload["field_path"],
+                    "source_digest": payload["expected_digest"],
+                }
+            ),
         )
 
     context.route("**/api/projects/text/convert", current_markdown_fixture)
