@@ -168,7 +168,10 @@ async def main() -> None:
                 # WebSockets do not traverse SIGMA's HTTP Google auth middleware.
                 # Verify both the immutable window selector and Origin are
                 # rejected before any worker channel is opened.
-                async def denied_ws(path: str, identifier: str, origin: str, *, through_app: bool = False) -> None:
+                async def denied_ws(
+                    path: str, identifier: str, origin: str,
+                    *, through_app: bool = False, client_gone: bool = False,
+                ) -> None:
                     sent: list[dict[str, object]] = []
 
                     async def receive() -> dict[str, str]:
@@ -176,6 +179,8 @@ async def main() -> None:
 
                     async def send(message: dict[str, object]) -> None:
                         sent.append(message)
+                        if client_gone:
+                            raise WebSocketDisconnect(code=1006)
 
                     scope = {
                         "type": "websocket",
@@ -202,6 +207,9 @@ async def main() -> None:
                 assert dead_ws.close.await_count == 2
                 ws_path = "/api/ai/personal-browser/window/" + window_id + "/ws"
                 await denied_ws(ws_path, "invalid", "https://sigma.example.test")
+                await denied_ws(
+                    ws_path, "invalid", "https://sigma.example.test", client_gone=True
+                )
                 await denied_ws(ws_path, "b" * 32, "https://sigma.example.test")
                 await denied_ws(ws_path, window_id, "https://attacker.example.test")
                 with patch.object(proxy.cloud_auth, "resolve_session", return_value=None):
