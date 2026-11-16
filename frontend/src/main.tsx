@@ -5649,8 +5649,8 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
             const response = await fetch(`/api/projects/text?${query}`, { cache: 'no-store' });
             const fresh = await response.json() as TextRepresentations;
             if (!response.ok) throw new Error('Could not check Markdown cache.');
-            setData(fresh);
             if (fresh.markdown?.current) {
+              setData(fresh);
               chooseView(selected === 'rendered' ? 'plain' : 'rendered');
               setError('');
             } else await convert('markdown');
