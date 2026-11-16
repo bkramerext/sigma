@@ -133,8 +133,12 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertIn('{disconnecting ? <span role="status">Disconnecting…</span>', source)
         self.assertIn("if (result.disconnected !== true)", source)
         self.assertIn("const stop = stopContainerPersonalBrowser()", source)
-        self.assertIn("console.warn('SIGMA: private browser cleanup failed after disconnect.')", source)
-        self.assertNotIn("ChatGPT was disconnected, but its private browser could not be stopped.", source)
+        self.assertIn(
+            "console.warn('SIGMA: private browser cleanup failed after disconnect.')", source
+        )
+        self.assertNotIn(
+            "ChatGPT was disconnected, but its private browser could not be stopped.", source
+        )
         self.assertNotIn('aria-label="Show sponsorship details"', source)
         self.assertIn("external ? ' is-external' : state !== 'error' ? ' is-viewing'", source)
         # Normal local uses the same SIGMA modal without Docker/Chromium, but
