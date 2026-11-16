@@ -42,9 +42,14 @@ async def private_response_if_selected(
     # Import lazily so non-Personal callers do not initialize the Docker adapter.
     from sigma import personal_inference
 
-    return await personal_inference.respond(
+    result = await personal_inference.respond(
         payload,
         expected_binding=binding["worker_binding"],
         request_id=request_id or uuid4().hex,
         timeout_seconds=timeout_seconds,
     )
+    if not isinstance(result, dict):
+        # None is reserved for explicitly non-Personal transports. A faulty
+        # Personal RPC must never trigger the direct HTTP/sponsored branch.
+        raise ProjectError("Personal model worker returned no valid response.")
+    return result
