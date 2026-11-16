@@ -206,7 +206,7 @@ def _prepare_volumes() -> None:
 
 
 def main() -> None:
-    global _WORKER
+    global _WORKER, _OWNER
     if os.geteuid() != 0:
         raise SystemExit("Shared Personal supervisor requires root for UID separation")
     _prepare_volumes()
