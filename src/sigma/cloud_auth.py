@@ -1459,7 +1459,23 @@ async def middleware(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    # The authenticated local Personal browser is a same-origin iframe of
+    # SIGMA's own noVNC viewer, not an iframe of OpenAI. Its route provides a
+    # restrictive nonce-based CSP with frame-ancestors 'self'. Preserve that
+    # policy; the global anti-framing override otherwise silently prevents the
+    # viewer script and WebSocket from ever starting despite HTTP 200 on /view.
+    # All other responses, including failed/hosted viewer requests, fail closed.
+    viewer_csp = response.headers.get("Content-Security-Policy", "")
+    allow_local_viewer = (
+        cfg.local
+        and request.method == "GET"
+        and path == "/api/ai/personal-browser/view"
+        and response.status_code == 200
+        and viewer_csp.startswith("default-src 'none'; ")
+        and "frame-ancestors 'self'" in viewer_csp
+    )
+    if not allow_local_viewer:
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
     return response
 
 
