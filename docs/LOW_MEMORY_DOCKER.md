@@ -91,10 +91,14 @@ Rollback **without an avoidable outage**: the edge container is scaled to
 zero in direct mode. **Do not restore the original Caddyfile first**, because
 it would immediately proxy all public requests to a stopped edge.
 Instead, while the direct backend/frontend ports are still healthy, unset
-`SIGMA_HOST_DIRECT=true` and start/health-check Docker `edge` on
-`127.0.0.1:18080` using the same current release. Only after it is healthy,
-restore and reload the original host Caddyfile. Confirm public traffic before
-reverting the application to an older edge-only release. For a downgrade,
+`SIGMA_HOST_DIRECT=true` and execute
+`deploy/compose-gce.sh up -d --no-build --no-deps edge` **from the active
+release checkout**. `--no-deps` is essential: normal `up edge` may recreate
+the backend/frontend without their direct port mappings *before* Caddy moves
+off those ports. Check Docker `edge` healthy on `127.0.0.1:18080`, then
+restore and reload the original host Caddyfile. Finally restart
+`sigma.service` to reconcile Compose with the restored edge mode. Confirm
+public traffic before reverting to an older edge-only release. For a downgrade,
 keep the current two loopback endpoints up until Caddy is back on the edge.
 The deployment tool refuses direct-mode upgrades/rollbacks if either release
 lacks the direct Compose overlay; complete this cutover **before** downgrading.
