@@ -8264,6 +8264,7 @@ async def _call_provider(
         request_id=request_id.replace("-", ""),
     )
     if personal_raw is not None:
+        raw = personal_raw
         body = _serialized_role_request(personal_raw)
         _sponsor_inference_diagnostic(record, "personal_worker_completed")
     else:
