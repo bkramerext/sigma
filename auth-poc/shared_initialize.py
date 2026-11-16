@@ -36,6 +36,13 @@ def main() -> None:
             stream.write(os.urandom(32))
             stream.flush()
             os.fsync(stream.fileno())
+        # A credential record without its durable encryption key is
+        # unrecoverable. fsync the directory entry before the worker starts.
+        parent_fd = os.open(key_path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(parent_fd)
+        finally:
+            os.close(parent_fd)
     fd = os.open(key_path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
         info = os.fstat(stream.fileno())
