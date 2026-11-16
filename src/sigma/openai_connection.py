@@ -298,8 +298,8 @@ async def _cloud_sponsored_context(subject_hash: str | None) -> AuthContext:
 
 async def auth_context() -> AuthContext:
     # Google OIDC identifies a cloud workspace; it does not grant use of the
-    # local operator's account or API key. Hosted personal access remains behind
-    # an unavailable adapter. Sponsor access requires an explicit stored choice.
+    # operator's account or API key. Hosted Personal access requires the
+    # separate, explicitly enabled user-scoped worker and stored mode choice.
     from sigma import cloud_workspaces
 
     if cloud_workspaces.enabled():
