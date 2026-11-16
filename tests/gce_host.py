@@ -22,11 +22,15 @@ import prepare_state_disk  # pyright: ignore[reportMissingImports]
 
 
 class GceHostToolingTests(unittest.TestCase):
-    def test_adapted_caddy_routes_reject_comments_and_extra_upstreams(self) -> None:
+    def test_adapted_caddy_routes_validate_api_vs_frontend(self) -> None:
         def proxy(dial: str) -> dict:
             return {"handler": "reverse_proxy", "upstreams": [{"dial": dial}]}
 
-        def document(*dials: str) -> dict:
+        def document(
+            backend: str = "127.0.0.1:18081",
+            frontend: str = "127.0.0.1:18082",
+            api_paths: list[str] | None = None,
+        ) -> dict:
             return {
                 "apps": {
                     "http": {
@@ -35,7 +39,26 @@ class GceHostToolingTests(unittest.TestCase):
                                 "routes": [
                                     {
                                         "match": [{"host": ["sigma-research.duckdns.org"]}],
-                                        "handle": [proxy(dial) for dial in dials],
+                                        "handle": [
+                                            {
+                                                "handler": "subroute",
+                                                "routes": [
+                                                    {
+                                                        "match": [
+                                                            {
+                                                                "path": (
+                                                                    api_paths
+                                                                    if api_paths is not None
+                                                                    else ["/api", "/api/*"]
+                                                                )
+                                                            }
+                                                        ],
+                                                        "handle": [proxy(backend)],
+                                                    },
+                                                    {"handle": [proxy(frontend)]},
+                                                ],
+                                            }
+                                        ],
                                     }
                                 ]
                             }
@@ -44,18 +67,28 @@ class GceHostToolingTests(unittest.TestCase):
                 }
             }
 
-        expected = ("127.0.0.1:18081", "127.0.0.1:18082")
-        check_host_direct_caddy.validate(document(*expected))
-        decoy = document(*expected)
+        check_host_direct_caddy.validate(document())
+        decoy = document()
         decoy["apps"]["http"]["servers"]["srv0"]["routes"][0]["match"] = [
             {"host": ["other.example.net"]}
         ]
+        missing_frontend = document()
+        missing_frontend["apps"]["http"]["servers"]["srv0"]["routes"][0]["handle"][0][
+            "routes"
+        ].pop()
+        extra_edge = document()
+        extra_edge["apps"]["http"]["servers"]["srv0"]["routes"][0]["handle"][0][
+            "routes"
+        ].append({"handle": [proxy("127.0.0.1:18080")]})
         for invalid in (
             decoy,
-            document("127.0.0.1:18080"),
-            document("0.0.0.0:18081", "127.0.0.1:18082"),
-            document("127.0.0.1:18081"),
-            document(*expected, "127.0.0.1:18080"),
+            document(backend="127.0.0.1:18082", frontend="127.0.0.1:18081"),
+            document(backend="127.0.0.1:18080"),
+            document(backend="0.0.0.0:18081"),
+            document(api_paths=["/api/*"]),
+            document(api_paths=["/api", "/api/*", "/admin"]),
+            missing_frontend,
+            extra_edge,
             {"comment": "127.0.0.1:18081 127.0.0.1:18082"},
             [],
         ):
@@ -64,6 +97,19 @@ class GceHostToolingTests(unittest.TestCase):
                 self.assertRaises(check_host_direct_caddy.InvalidDirectRouting),
             ):
                 check_host_direct_caddy.validate(invalid)
+
+    def test_host_direct_caddy_preserves_edge_security_headers(self) -> None:
+        direct = (DEPLOY / "host-caddy-direct.Caddyfile").read_text(encoding="utf-8")
+        edge = (DEPLOY / "Caddyfile").read_text(encoding="utf-8")
+        for setting in (
+            "encode zstd gzip",
+            'Strict-Transport-Security "max-age=31536000"',
+            'X-Content-Type-Options "nosniff"',
+            'Referrer-Policy "no-referrer"',
+        ):
+            with self.subTest(setting=setting):
+                self.assertIn(setting, edge)
+                self.assertIn(setting, direct)
 
     def test_host_readiness_derives_rootless_socket_without_production_environment(self) -> None:
         preflight = gce_preflight.Preflight(host_readiness=True)

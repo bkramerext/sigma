@@ -1,6 +1,13 @@
 # POC optional direct host routing. Host Caddy remains up during SIGMA restarts.
 # Install only after 127.0.0.1:18081 and :18082 are healthy.
 sigma-research.duckdns.org {
+    # Preserve headers/compression previously supplied by the Docker edge.
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
     handle_errors {
         root * /var/www/sigma-maintenance
         header Cache-Control "no-store, max-age=0"
