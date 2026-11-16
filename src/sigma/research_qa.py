@@ -734,8 +734,8 @@ async def _answer_locked(
     if view.project.id != expected_project_id:
         raise ProjectError("The project changed before Q/A started")
     binding = await auth_context()
-    if not isinstance(binding, Mapping) or binding.get("identity") != expected_binding:
-        raise ProjectError("AI connection changed before Q/A started")
+    if not isinstance(binding, Mapping):
+        raise ProjectError("An active AI connection is required before Q/A can start")
     if not re.fullmatch(r"[0-9a-f]{32}", request_id):
         raise ProjectError("Invalid Q/A request identifier")
     from sigma import project_collaboration

@@ -2692,10 +2692,6 @@ async def strategy_inference_view(body: ProposalRequest):
         body.expected_binding, body.expected_project_id, body.path
     )
     credential = await auth_context()
-    if body.expected_binding != credential["identity"] or body.expected_mode != credential["mode"]:
-        raise ProjectError(
-            "AI account or billing mode changed. Review the current connection and retry; no request was sent."
-        )
     if body.request_id is None:
         raise ProjectError("Inference request identifier is required; no request was sent.")
     request_id = str(body.request_id)
@@ -2703,8 +2699,8 @@ async def strategy_inference_view(body: ProposalRequest):
         body.path,
         body.expected_project_id,
         request_id,
-        body.expected_binding,
-        body.expected_mode,
+        credential["identity"],
+        credential["mode"],
     )
     if action == "return":
         current = proposals.inference_status(body.path, body.expected_project_id, request_id)
@@ -2722,8 +2718,8 @@ async def strategy_inference_view(body: ProposalRequest):
     task = asyncio.create_task(
         generate_proposal(
             body.path,
-            expected_binding=body.expected_binding,
-            expected_mode=body.expected_mode,
+            expected_binding=credential["identity"],
+            expected_mode=credential["mode"],
             expected_project_id=body.expected_project_id,
             infer_strategy=True,
             request_id=request_id,
@@ -2858,11 +2854,6 @@ async def cancel_proposal(body: ProposalCancelRequest):
     await require_cloud_inference_binding(
         body.expected_binding, body.expected_project_id, body.path
     )
-    credential = await auth_context()
-    if credential["identity"] != body.expected_binding:
-        raise ProjectError(
-            "AI account changed; reopen the connection before checking cancellation status."
-        )
     return await proposals.cancel_inference(
         body.path, body.expected_project_id, str(body.request_id)
     )
@@ -2873,11 +2864,6 @@ async def strategy_inference_status(
     path: str, expected_project_id: str, expected_binding: str, request_id: UUID
 ):
     await require_cloud_inference_binding(expected_binding, expected_project_id, path)
-    credential = await auth_context()
-    if credential["identity"] != expected_binding:
-        raise ProjectError(
-            "AI account changed; reopen the connection before checking inference status."
-        )
     return proposals.inference_status(path, expected_project_id, str(request_id))
 
 

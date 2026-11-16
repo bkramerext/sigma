@@ -221,6 +221,25 @@ def _select_paper_call_config(
     return selected
 
 
+async def _paper_connection_at_dispatch(
+    binding: Mapping[str, Any], config: dict[str, Any], project_path_value: str | None
+) -> tuple[Mapping[str, Any], dict[str, Any]]:
+    """Use the selected connection for future dispatches, never repeat old calls."""
+    selector = _paper_model_for_call.get()
+    if selector is None:
+        return binding, config
+    from sigma.openai_connection import auth_context
+
+    active = await auth_context()
+    if (active["identity"], active["mode"]) != (binding["identity"], binding["mode"]):
+        if not project_path_value:
+            raise ProjectError("Paper project is unavailable for connection selection.")
+        config = await configuration(view=inspect_project(project_path_value), context=active)
+        if not config["available"]:
+            raise ProjectError(config["message"])
+    return active, selector(config)
+
+
 class PaperStageCallback(Protocol):
     def __call__(
         self,
@@ -5110,19 +5129,7 @@ def _resume_provider_choice(
     current_effort: str,
     authorized_provider_change: bool = False,
 ) -> tuple[str, str]:
-    """Use current Model/Thinking at resume, preserving completed work and identity.
-
-    A changed account or billing connection still needs explicit approval.
-    Changing only Model/Thinking is a per-call choice, not an account transfer.
-    """
-    if authorized_provider_change:
-        return current_model, current_effort
-    if checkpoint.get("binding_fingerprint") != binding_fingerprint:
-        raise ProjectError(
-            "Paper Resume requires explicit approval to switch the AI account or "
-            "billing connection. Work is intact; confirm the provider change "
-            "before authorizing further paid calls."
-        )
+    """Resume on the selected connection while preserving previous paid work."""
     if not isinstance(checkpoint.get("model"), str) or not isinstance(
         checkpoint.get("reasoning_effort"), str
     ):
@@ -5231,8 +5238,6 @@ async def _restart_work_locked(
     # still requires a fresh, matching preflight.
     package, snapshot_hash = _snapshot(path)
     auth = await auth_context()
-    if auth["identity"] != expected_binding:
-        raise ProjectError("AI account or billing mode changed; review it and retry")
     config = await configuration(view=view, context=auth)
     if not config["available"]:
         raise ProjectError(config["message"])
@@ -7579,9 +7584,7 @@ async def _provider(
     project_path_value: str | None = None,
     include_diagrams: bool = True,
 ) -> tuple[PaperDraft, str]:
-    model_selector = _paper_model_for_call.get()
-    if model_selector is not None:
-        config = model_selector(config)
+    binding, config = await _paper_connection_at_dispatch(binding, config, project_path_value)
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
     )
@@ -7773,9 +7776,7 @@ async def _provider_structured(
     on_output_delta: Callable[[], Awaitable[None]] | None = None,
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
-    model_selector = _paper_model_for_call.get()
-    if model_selector is not None:
-        config = model_selector(config)
+    binding, config = await _paper_connection_at_dispatch(binding, config, project_path_value)
     input_text = _provider_input_text(input_value, schema_name, max_input_bytes)
     stage_timeout_seconds = _long_paper_call_timeout(schema_name)
     payload: dict[str, Any] = {
@@ -10827,8 +10828,7 @@ async def _generate_impl(
         if expected_project_id and view.project.id != expected_project_id:
             raise ProjectError("Project identity changed; reopen and retry")
         initial_auth = await auth_context()
-        if expected_binding and initial_auth["identity"] != expected_binding:
-            raise ProjectError("AI account or billing mode changed; review it and retry")
+        # The submitted UI binding is not a veto on active account selection.
         config = await configuration(view=view, context=initial_auth)
 
         def model_for_next_paper_call(base: dict[str, Any]) -> dict[str, Any]:
@@ -11057,7 +11057,7 @@ async def _generate_impl(
                     if not expected_binding or not expected_project_id:
                         raise ProjectError("Automatic scoring requires an AI connection")
                     await paper_scores.score_paper(
-                        path, paper_id, expected_binding, expected_project_id
+                        path, paper_id, initial_auth["identity"], expected_project_id
                     )
                 except Exception as exc:  # noqa: BLE001 - never invalidate a published PDF
                     logging.getLogger("sigma.lifecycle").warning(
@@ -12764,11 +12764,7 @@ def preflight(
                 or work_state.get("reasoning_effort") != reasoning_effort
             )
         ),
-        "provider_change_requires_confirmation": bool(
-            resume_available
-            and binding_fingerprint
-            and work_state.get("binding_fingerprint") != binding_fingerprint
-        ),
+        "provider_change_requires_confirmation": False,
         "draft_recovery_available": resume_available and one_shot_draft_available,
         "proofreading_status": saved_proofreading_status or "not_started",
         "publication_status": preflight_publication_status,

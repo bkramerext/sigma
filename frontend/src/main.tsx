@@ -3262,47 +3262,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const paperStepRestartAnchor = useRef<HTMLButtonElement | null>(null);
   const paperStepRestartPopup = useRef<HTMLDivElement | null>(null);
   const [paperStepRestartPlacement, setPaperStepRestartPlacement] = useState<{ left: number; top: number } | null>(null);
-  const [providerChangePrompt, setProviderChangePrompt] = useState<{ savedModel: string; nextModel: string } | null>(null);
-  const providerChangeResolver = useRef<((allowed: boolean) => void) | null>(null);
-  const providerChangeAnchor = useRef<HTMLElement | null>(null);
-  const providerChangePopup = useRef<HTMLDivElement>(null);
-  const [providerChangePlacement, setProviderChangePlacement] = useState<{ left: number; top: number } | null>(null);
-  const answerProviderChange = (allowed: boolean) => {
-    const resolve = providerChangeResolver.current;
-    providerChangeResolver.current = null;
-    setProviderChangePrompt(null);
-    resolve?.(allowed);
-  };
-  useEffect(() => () => { providerChangeResolver.current?.(false); providerChangeResolver.current = null; }, []);
-  useLayoutEffect(() => {
-    if (!providerChangePrompt) { setProviderChangePlacement(null); return; }
-    const place = () => {
-      const anchor = providerChangeAnchor.current?.isConnected
-        ? providerChangeAnchor.current : document.querySelector<HTMLElement>('.papers-pane-heading');
-      const popup = providerChangePopup.current;
-      if (!anchor || !popup) return;
-      const rect = anchor.getBoundingClientRect();
-      const width = popup.offsetWidth, height = popup.offsetHeight;
-      const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-      const top = Math.max(12, Math.min(
-        window.innerHeight - rect.bottom >= height + 18 ? rect.bottom + 6 : rect.top - height - 6,
-        window.innerHeight - height - 12,
-      ));
-      setProviderChangePlacement({ left, top });
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); answerProviderChange(false); }
-    };
-    place();
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
-    document.addEventListener('keydown', escape);
-    return () => {
-      window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [providerChangePrompt]);
   const dismissPaperStepRestart = () => {
     paperStepCheckAbort.current?.abort();
     paperStepCheckAbort.current = null;
@@ -4535,18 +4494,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         setCheckpointMismatch(preflight);
         throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
-      // A different account/billing connection must never silently take over
-      // already-started paper work. Model/Thinking can change at the next call.
-      let authorizedProviderChange = false;
-      if (preflight.provider_change_requires_confirmation) {
-        const savedModel = preflight.saved_provider_model ?? 'previous model';
-        authorizedProviderChange = await new Promise<boolean>(resolve => {
-          providerChangeResolver.current = resolve;
-          setProviderChangePrompt({ savedModel, nextModel: model });
-        });
-        if (!authorizedProviderChange) throw new Error('Paper Resume cancelled. Work remains unchanged.');
-      }
-      if (preflight.resume_uses_saved_model && !authorizedProviderChange) {
+      if (preflight.resume_uses_saved_model) {
         setPhase('Resuming work; the current Model/Thinking selection applies to the next AI call.');
       }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
@@ -4562,7 +4510,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' }, signal: controller.signal,
         body: JSON.stringify({ path, run_id: runId, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, browser_presence_required: true, long_form: false, include_claim_details: includeClaimDetails, include_validation_notes: includeValidationNotes, include_research_excerpts: includeResearchExcerpts, include_sigma_issues: includeSigmaIssues, include_diagrams: includeDiagramsOverride ?? includeDiagramsAndTables,
           ...(pendingRecovery.length ? { authorized_recovery_sections: pendingRecovery } : {}),
-          authorized_provider_change: authorizedProviderChange }) });
+          authorized_provider_change: false }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -4807,7 +4755,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // The step-bar and icon controls share these actions, including every
   // confirmation and creator authorization check. Do not duplicate dispatch.
   const beginPaperFromControl = (anchor: HTMLButtonElement) => {
-    providerChangeAnchor.current = anchor;
     setDraftPaperExpanded(true);
     if (checkpointMismatch) {
       positionPaperPopup(anchor, 280, 180);
@@ -4846,7 +4793,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }, [resumeAfterActiveRewind, busy, unfinishedRestartBusy, paperStepRestartBusy, binding]);
 
   const resumeOtherPaperRun = (run: PaperRun, anchor?: HTMLButtonElement) => {
-    if (anchor) providerChangeAnchor.current = anchor;
     selectPaperRun(run.run_id);
     setPaperProgress(run.progress as PaperProgress | null);
     setNewPaperRequested(true);
@@ -4863,19 +4809,6 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }, [allPapersRunning, activePaperRunIdsKey, onRunningChange]);
   useEffect(() => { onQueuedChange(allPapersQueued); return () => onQueuedChange(false); }, [allPapersQueued, onQueuedChange]);
   return <section className={`workspace-pane papers-pane ai-paper-dialog${expanded ? "" : " is-collapsed"}`} aria-labelledby="papers-heading">
-    {providerChangePrompt && createPortal(
-      <div ref={providerChangePopup} className="paper-step-restart-popup" role="dialog"
-        aria-label="Confirm AI connection change" aria-modal="false"
-        style={providerChangePlacement
-          ? { left: providerChangePlacement.left, top: providerChangePlacement.top }
-          : { left: 12, top: 12, visibility: 'hidden' }}>
-        <p>Continue this paper with {providerChangePrompt.nextModel} and the current AI connection?</p>
-        <div className="session-remove-confirm-actions">
-          <button type="button" className="text-view-link" onClick={() => answerProviderChange(true)}>Confirm</button>
-          <button type="button" className="text-view-link" onClick={() => answerProviderChange(false)}>Cancel</button>
-        </div>
-      </div>, document.body
-    )}
     <header className="workspace-pane-heading papers-pane-heading">
       <h2 id="papers-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" data-tooltip={`${expanded ? "Collapse" : "Expand"} Papers section`} aria-expanded={expanded} aria-controls="papers-pane-content" onClick={() => { if (!expanded) onSectionOpened(); setExpanded(value => { window.localStorage.setItem(`sigma.papersPane:${path}`, String(!value)); return !value; }); }}><DisclosureChevron expanded={expanded}/>Papers</button></h2>
       <div className="papers-heading-actions strategy-heading-actions">
@@ -5124,7 +5057,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </div></div>}
                 </span>}
               </>}/>
-            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <><span className="paper-meta-dot" aria-hidden="true"> · </span><span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}<span className="paper-meta-dot" aria-hidden="true"> · </span>{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}<span className="paper-meta-dot" aria-hidden="true"> · </span><button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
+            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <>{' · '}<span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}{' · '}{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}{' · '}<button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
               progress={{
                 status: scoringId === paper.paper_id ? 'active' : paper.score ? 'complete' : 'interrupted',
                 stage: scoringId === paper.paper_id ? 'scoring' : paper.score ? 'complete' : 'score_failed',
@@ -8066,12 +7999,13 @@ function SharedCollaboratorWelcome({ invite, cloud, onDismiss }: {
   </dialog>;
 }
 
-function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrainstorm, cacheScope }: {
+function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrainstorm, brainstormEnabled, cacheScope }: {
   initialPath: string;
   onOpen: (view: ProjectView, openSettings?: boolean, fromCache?: boolean, revealPaperId?: string) => Promise<void> | void;
   getCachedView: (path: string) => ProjectView | undefined;
   onNavigateActivity: (entry: RecentProject, run: ActivityRunTarget | null) => void;
   onBrainstorm: () => void;
+  brainstormEnabled: boolean;
   cacheScope: string;
 }) {
   const cloud = useCloudIdentity();
@@ -8189,7 +8123,7 @@ function Home({ initialPath, onOpen, getCachedView, onNavigateActivity, onBrains
               <div className="sigma-header-secondary-row">
                 <div className="home-brainstorm-actions">
                   {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
-                  {(!cloud?.enabled || cloud.target === 'local') && <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>}
+                  {brainstormEnabled && (!cloud?.enabled || cloud.target === 'local') && <button type="button" className="administrator-settings-link home-brainstorm-pill" onClick={onBrainstorm}>Brainstorm</button>}
                 </div>
                 <div className="sigma-header-about-model-anchor">
                   <div className="sigma-header-first-row">
@@ -9632,6 +9566,11 @@ function App() {
     const viewer = new EventSource(windowAuthUrl(`/api/projects/research-presence?${new URLSearchParams({ path: presencePath })}`));
     return () => viewer.close();
   }, [presencePath, cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
+  const [brainstormActivated, setBrainstormActivated] = useState(() =>
+    import.meta.env.VITE_SIGMA_BRAINSTORM_ENABLED === '1' || window.location.pathname === '/brainstorm');
+  useEffect(() => {
+    if (route.pathname === '/brainstorm') setBrainstormActivated(true);
+  }, [route.pathname]);
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
   useEffect(() => {
@@ -9663,7 +9602,7 @@ function App() {
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onBrainstorm={() => navigate('/brainstorm')} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} brainstormEnabled={brainstormActivated} onBrainstorm={() => { setBrainstormActivated(true); navigate('/brainstorm'); }} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
       await preloadProjectArtwork();
       setArtworkDecoded(true);
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);

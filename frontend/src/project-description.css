@@ -77,6 +77,11 @@
   bottom: 0;
   border-bottom: 1px solid var(--workspace-line);
 }
+.workspace-page .sigma-description-editor :is(.project-markdown-slot,.project-copy-slot) { display: inline-flex; align-items: center; margin-left: 12px; }
+.workspace-page .sigma-description-editor :is(.project-markdown-slot .sigma-render-toggle,.project-copy-slot .workspace-icon-button) { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 2px; border: 0; background: transparent; color: var(--sigma-copper-foreground); cursor: pointer; }
+.workspace-page .sigma-description-editor .project-markdown-slot .markdown-logo { width: 26px; height: 22px; color: #8b9296; }
+.workspace-page .sigma-description-editor .project-markdown-slot .sigma-render-active .markdown-logo { color: var(--sigma-copper-foreground); }
+.workspace-page .sigma-description-editor .project-markdown-slot .text-view-format-status { margin-left: 6px; color: #c5d3df; font-size: 12px; }
 .sigma-description-fields {
   display: grid;
   gap: 1rem;

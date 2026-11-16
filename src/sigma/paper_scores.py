@@ -406,8 +406,6 @@ async def score_paper(
     memory_guard.require_capacity()
 
     auth = await auth_context()
-    if auth["identity"] != expected_binding:
-        raise ProjectError("AI connection changed; review the connection and retry")
     config = await configuration(view=inspect_project(path), context=auth)
     if not config["available"]:
         raise ProjectError(config["message"])
