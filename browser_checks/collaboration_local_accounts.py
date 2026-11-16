@@ -419,6 +419,23 @@ def exercise(ui: str, workspaces: Path) -> None:
         invite = owner_dialog.get_by_label("New collaborator email")
         invite.fill("third@example.org")
         invite.press("Tab")
+        expect(owner_dialog.get_by_text("third@example.org")).to_be_visible()
+        # Establish the owner's debounced collaboration write committed,
+        # then test N's already-open dialog update. This distinguishes a
+        # discarded draft from an unsynchronized remote collaborator list.
+        saved_members: list[str] = []
+        for _attempt in range(100):
+            owner_state = get_json(
+                owner_context.request.get(ui + "/api/projects/collaboration", params={"path": path})
+            )
+            saved_members = owner_state["collaborators"]
+            if "third@example.org" in saved_members:
+                break
+            time.sleep(0.2)
+        assert "third@example.org" in saved_members, (
+            "Owner's staged collaborator was lost before persistence",
+            saved_members,
+        )
         expect(member_dialog.get_by_text("third@example.org")).to_be_visible(timeout=20000)
         expect(member_dialog).to_be_visible()
         # Remove the temporary guest so later revoke-last-member coverage still

@@ -1674,7 +1674,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [announcement, setAnnouncement] = useState('');
-  const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
+  const [expanded, setExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1' && window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
   useEffect(() => {
     const opened = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== 'sessions') {
@@ -3090,7 +3090,7 @@ function paperElapsed(seconds: number): string {
 function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, projectOwnerEmail, draftCreatorEmail, path, projectId, guest = false, onRunningChange, onQueuedChange, onInitialActivity, onSectionOpened }: { collaborationRevision?: number; artifactAuthors?: Record<string, string>; viewerEmail?: string; projectOwnerEmail?: string | null; draftCreatorEmail?: string; path: string; projectId: string; guest?: boolean; onRunningChange: (running: boolean, activeRunIds: string[]) => void; onQueuedChange: (queued: boolean) => void; onInitialActivity: (status: 'active' | 'queued' | null) => void; onSectionOpened: () => void }) {
   const ai = useAI();
   const initialPaperListing = useRef<InitialPaperListing | null>(takeInitialPaperListing(path, projectId));
-  const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
+  const [expanded, setExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') === '1' || window.localStorage.getItem(`sigma.papersPane:${path}`) !== 'false');
   const [paperMenu, setPaperMenu] = useState<{ paperId: string; kind: 'download' | 'actions' } | null>(null);
   const [includeOptionsOpen, setIncludeOptionsOpen] = useState(false);
   const includePopupRef = useRef<HTMLDivElement>(null);
@@ -3146,7 +3146,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [guestScorePreview, setGuestScorePreview] = useState(false);
   const [guestExplainPreview, setGuestExplainPreview] = useState(false);
   const [confirmNewPaper, setConfirmNewPaper] = useState(false);
-  const [draftPaperExpanded, setDraftPaperExpanded] = useState(true);
+  const [draftPaperExpanded, setDraftPaperExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1');
   const [expandedOtherPaperRunIds, setExpandedOtherPaperRunIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     const opened = (event: Event) => {
@@ -3234,8 +3234,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [, setScoreConfig] = useState<{ available: boolean; binding: string; message: string } | null>(null);
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
-  // A dismissal hides only the expanded preview's duplicate notice.
-  // The saved publication status and the outer warning remain unchanged.
+  // Dismiss both visible review notices without changing the paper's
+  // persisted publication status or its archived review diagnostics.
   const [dismissedPaperReviewIds, setDismissedPaperReviewIds] = useState<Set<string>>(() => new Set());
   const [copiedPaperId, setCopiedPaperId] = useState('');
   const [formattedPaper, setFormattedPaper] = useState<{ id: string; markdown: string; settingsKey: string } | null>(null);
@@ -3277,7 +3277,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const generationErrorRunId = useRef<string | null>(null);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(() => initialPaperListing.current === null);
-  const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [expandedPaperId, setExpandedPaperIdState] = useState('');
+  // Keep the selected card in a synchronous ref: a Home-star deep link may
+  // expand it while the first background metadata/preflight refresh is in flight.
+  // An older refresh must never clear a newer paper selection or preview.
+  const expandedPaperIdRef = useRef('');
+  function setExpandedPaperId(id: string) {
+    expandedPaperIdRef.current = id;
+    setExpandedPaperIdState(id);
+  }
   const [paperStepRestart, setPaperStepRestart] = useState<{
     paper: PaperSummary; stage: SavedPaperRestartStage;
     options: { source_pdf_sha256: string; snapshot_sha256: string; include_diagrams: boolean } | null;
@@ -3600,14 +3608,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // its card is expanded, a deep link opens it, or an explicit operation
       // requests a particular saved paper. This avoids large paper payloads
       // during ordinary project navigation.
-      const nextId = keepId ?? (expandedPaperId || undefined);
+      const nextId = keepId ?? (expandedPaperIdRef.current || undefined);
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const record = await response.json();
         if (obsolete()) return;
         if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
-        setSelected(record as PaperRecord);
-      } else setSelected(null);
+        // A deep link or manual disclosure can change the selection during
+        // this fetch; never paint the older request over the newly opened card.
+        if (expandedPaperIdRef.current === nextId ||
+            (!expandedPaperIdRef.current && keepId === nextId))
+          setSelected(record as PaperRecord);
+      } else if (!expandedPaperIdRef.current) {
+        // In particular, do not clear the Home-star preview merely because the
+        // first refresh started before the deep link expanded that paper.
+        setSelected(null);
+      }
       if (!obsolete()) setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
     } catch (cause) { if (!obsolete()) setError(errorMessage(cause)); }
     finally {
@@ -3690,9 +3706,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const timer = window.setInterval(() => void poll(), 2000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [guest, collaborationRevision, path, paperProgress?.status, selectedRunId, newPaperRequested]);
-  // Notification deep links expand the exact saved paper (or the paused
-  // draft) after initial hydration. Do not repeat this scroll on polling.
+  // Notification links and Home star jumps select the exact saved paper
+  // after listing hydration. Star jumps additionally isolate that paper and
+  // defer scrolling until its full expanded contents have rendered.
   const paperDeepLinkHandled = useRef(false);
+  const [focusedPaperScrollId, setFocusedPaperScrollId] = useState('');
   useEffect(() => {
     if (loading || paperDeepLinkHandled.current) return;
     const params = new URLSearchParams(window.location.search);
@@ -3701,6 +3719,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     if (!requested && !requestedRun) return;
     if (requestedRun && !paperRuns.some(run => run.run_id === requestedRun)
       && selectedRunIdRef.current !== requestedRun) return;
+    const focusPaper = params.get('focus_paper') === '1' && !!requested && requested !== 'draft';
+    // The star may land before the paper listing has hydrated; do not consume
+    // the deep link or scroll to a fallback heading until its card exists.
+    if (focusPaper && !papers.some(paper => paper.paper_id === requested)) return;
     paperDeepLinkHandled.current = true;
     onSectionOpened();
     setExpanded(true);
@@ -3710,9 +3732,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       else setExpandedOtherPaperRunIds(current => new Set(current).add(requestedRun));
     } else if (requested === 'draft') setDraftPaperExpanded(true);
     else if (requested && papers.some(paper => paper.paper_id === requested)) {
+      if (focusPaper) {
+        setDraftPaperExpanded(false);
+        setExpandedOtherPaperRunIds(new Set());
+        setFocusedPaperScrollId(requested);
+      }
       setExpandedPaperId(requested);
       void openPaper(requested);
     }
+    if (focusPaper) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const element = requestedRun
         ? document.querySelector<HTMLElement>(`[data-paper-run="${CSS.escape(requestedRun)}"]`)
@@ -3724,6 +3752,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       (element ?? document.getElementById('papers-heading'))?.scrollIntoView({ block: 'center' });
     }));
   }, [loading, papers, paperRuns, path, onSectionOpened]);
+  useEffect(() => {
+    if (!focusedPaperScrollId || !expanded || loading
+      || expandedPaperId !== focusedPaperScrollId
+      || selected?.paper_id !== focusedPaperScrollId) return;
+    let nextFrame = 0;
+    const frame = requestAnimationFrame(() => {
+      nextFrame = requestAnimationFrame(() => {
+        const card = Array.from(document.querySelectorAll<HTMLElement>('.papers-pane [data-paper-id]'))
+          .find(item => item.dataset.paperId === focusedPaperScrollId);
+        if (!card || !card.getClientRects().length) return;
+        card.scrollIntoView({ block: 'start', behavior: 'auto' });
+        setFocusedPaperScrollId('');
+      });
+    });
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(nextFrame); };
+  }, [focusedPaperScrollId, expanded, loading, expandedPaperId, selected?.paper_id]);
   async function fetchUnfinishedPaperSteps(runId: string | null, signal?: AbortSignal, allowActive = false): Promise<UnfinishedPaperRestartOptions> {
     const query = new URLSearchParams({ path });
     if (runId) query.set('run_id', runId);
@@ -4068,7 +4112,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
       const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
-      setSelected(record as PaperRecord); setError('');
+      if (expandedPaperIdRef.current === id) {
+        setSelected(record as PaperRecord);
+        setError('');
+      }
     } catch (cause) { setError(errorMessage(cause)); }
   }
   async function readPaperResponse(response: Response, action: string): Promise<any> {
@@ -4581,10 +4628,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperPlayIntent(preflight.resume_available && !restartBeforePlay ? 'resuming' : 'starting');
       if (preflight.checkpoint_exists && !preflight.resume_available) {
         setCheckpointMismatch(preflight);
-        throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
-      }
-      if (preflight.resume_uses_saved_model) {
-        setPhase('Resuming work; the current Model/Thinking selection applies to the next AI call.');
+        throw new Error('Unfinished paper work belongs to different project evidence or paper type. Review the message below before starting over.');
       }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
       if (recoverSection !== null &&
@@ -5159,7 +5203,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   else void proposePaperStepRestart(paper, publishedPaperTarget(step), anchor);
                 } : undefined}/>
             {paperRemovalErrors[paper.paper_id] && <p role="alert" className="ai-paper-warning">{paperUserMessage(paperRemovalErrors[paper.paper_id])}</p>}
-            {paper.generation.publication_status === 'needs_review' && <p className="ai-paper-warning" role="status">{paperReviewLabel(paper.generation)}</p>}
+            {paper.generation.publication_status === 'needs_review' && !dismissedPaperReviewIds.has(paper.paper_id) && <div className="ai-paper-warning paper-saved-review-notice" role="status">
+              <span>{paperReviewLabel(paper.generation)}</span>
+              <DialogDismissButton label={`Dismiss Paper ${paper.paper_version} review notice`} onClick={() => setDismissedPaperReviewIds(current => new Set(current).add(paper.paper_id))}/>
+            </div>}
           </div>
           {copyError && <p className="error" role="alert">{copyError}</p>}
         </div>
@@ -7040,6 +7087,10 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   }, [initialGroupSettings, initial.path]);
   const [shared, setShared] = useState<SharedProjectInfo | null>(initialGroupSettings);
   const [collaborators, setCollaborators] = useState<string[]>(() => initialGroupSettings?.collaborators ?? []);
+  // Remote collaboration refreshes must not silently replace a locally staged
+  // addition/removal while its debounced save is waiting for admission.
+  const collaboratorDraftPending = useRef(false);
+  const settingsSaveEpoch = useRef(0);
   const [adding, setAdding] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [retryingEmails, setRetryingEmails] = useState(false);
@@ -7062,6 +7113,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     if (initialGroupSettings && (collaborationRevision === undefined
       || collaborationRevision === initialGroupSettings.revision)) return;
     const controller = new AbortController();
+    const saveEpoch = settingsSaveEpoch.current;
     const json = async (url: string) => {
       const response = await fetch(url, { signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
       const data = await response.json();
@@ -7078,9 +7130,11 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     }, 8000);
     void json(`/api/projects/collaboration?${new URLSearchParams({ path: initial.path, include_authors: 'false' })}`)
       .then((saved: SharedProjectInfo) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || saveEpoch !== settingsSaveEpoch.current) return;
         setShared(saved);
-        setCollaborators(saved.collaborators);
+        // Keep locally edited collaborators until their save succeeds or
+        // reports a real revision conflict. Polls must not discard the draft.
+        if (!collaboratorDraftPending.current) setCollaborators(saved.collaborators);
         setLoading(false);
       }).catch(cause => {
         if (!controller.signal.aborted) { setError(errorMessage(cause)); setLoading(false); }
@@ -7099,6 +7153,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
     if (email === shared?.owner || collaborators.includes(email)) {
       setError('This account is already a collaborator.'); return;
     }
+    collaboratorDraftPending.current = true;
     setCollaborators(previous => [...previous, email].sort());
     setNewEmail(''); setAdding(false); setError('');
   }
@@ -7113,6 +7168,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
   }
   async function save(): Promise<boolean> {
     if (busy || loading || !changed || !shared) return false;
+    settingsSaveEpoch.current += 1;
     setBusy(true); setError('');
     try {
       const previous = settingsOf(baseline);
@@ -7135,8 +7191,11 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
           headers: { 'X-Sigma-Error-Handled': 'true' }, cache: 'no-store',
         });
         if (!response.ok) throw new Error('Project updated, but collaboration status could not be refreshed.');
-        setShared(await response.json() as SharedProjectInfo);
+        const savedShared = await response.json() as SharedProjectInfo;
+        setShared(savedShared);
+        setCollaborators(savedShared.collaborators);
       }
+      collaboratorDraftPending.current = false;
       setBaseline(next);
       onSaved(next);
       return true;
@@ -7210,6 +7269,7 @@ function ProjectClassificationDialog({ initial, collaborationRevision, onSaved, 
                   // Commit the removal to React state before Close reads the
                   // draft; otherwise a stale closure can dismiss the modal
                   // without persisting the ACL revocation.
+                  collaboratorDraftPending.current = true;
                   flushSync(() => setCollaborators(previous => previous.filter(value => value !== email)));
                 }}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg>
@@ -8970,13 +9030,13 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const [editorVersion, setEditorVersion] = useState(0);
   const [focusStrategy, setFocusStrategy] = useState('');
   const citationRevealHandled = useRef(false);
-  const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
+  const [strategiesExpanded, setStrategiesExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1' && window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
   const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
   const [textEditSignals, setTextEditSignals] = useState<Record<string, number>>({});
   const [combinedTextDrafts, setCombinedTextDrafts] = useState<Record<string, string>>({});
   const requestTextEdit = (key: string) => setTextEditSignals(current => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
   const updateCombinedTextDraft = (key: string, draft: string) => setCombinedTextDrafts(current => ({ ...current, [key]: draft }));
-  const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
+  const [projectExpanded, setProjectExpanded] = useState(() => new URLSearchParams(window.location.search).get('focus_paper') !== '1' && window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [exclusiveSections, setExclusiveSections] = useState(false);
   const sectionOpen = useCallback((section: 'project' | 'strategies' | 'sessions' | 'papers') => {
     if (exclusiveSections) window.dispatchEvent(new CustomEvent('sigma-project-section-opened', { detail: section }));
@@ -9748,13 +9808,22 @@ function App() {
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
   useEffect(() => {
-    const pop = () => { setOpenedView(null); setLocation(window.location.pathname + window.location.search); };
+    const pop = () => {
+      // Returning to Home must reflect a paper just published or rescored;
+      // idle Home polling still throttles its expensive library-wide scan.
+      if (window.location.pathname === '/') recentPaperMetadataFetchedAt.delete(cacheScope);
+      setOpenedView(null);
+      setLocation(window.location.pathname + window.location.search);
+    };
     window.addEventListener('popstate', pop);
     return () => window.removeEventListener('popstate', pop);
-  }, []);
+  }, [cacheScope]);
   const navigate = useCallback((url: string) => {
+    if (window.location.pathname === '/project' &&
+        new URL(url, window.location.origin).pathname === '/')
+      recentPaperMetadataFetchedAt.delete(cacheScope);
     window.history.pushState(null, '', url); setLocation(url); window.scrollTo(0, 0);
-  }, []);
+  }, [cacheScope]);
   const closeProject = useCallback(() => {
     setOpenedView(null);
     const path = new URLSearchParams(window.location.search).get('path');
@@ -9785,7 +9854,7 @@ function App() {
       rememberProject(view); setOpenedFromCache(!!fromCache); setOpenedView(view);
       setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path);
       navigate(projectUrl(view.path)
-        + (openSettings ? '&settings=collaborators' : revealPaperId ? `&reveal_paper=${encodeURIComponent(revealPaperId)}` : ''));
+        + (openSettings ? '&settings=collaborators' : revealPaperId ? `&reveal_paper=${encodeURIComponent(revealPaperId)}&focus_paper=1` : ''));
     }} onNavigateActivity={(entry, run) => {
       // Use the run ID already displayed on Home; no activity fetch blocks navigation.
       const target = new URL(projectUrl(entry.path), window.location.origin);
