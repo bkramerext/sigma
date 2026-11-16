@@ -22,7 +22,7 @@ def _tcp(port: int, target: str | None = None) -> str:
                 return "listening"
             conn.sendall(
                 ("GET " + target + " HTTP/1.0\r\n"
-                 "Host: localhost\r\nConnection: close\r\n\r\n").encode("ascii")
+                 "Host: 127.0.0.1\r\nConnection: close\r\n\r\n").encode("ascii")
             )
             first = conn.recv(96).split(b"\r\n", 1)[0].split()
             if len(first) >= 2 and first[0] in (b"HTTP/1.0", b"HTTP/1.1"):
@@ -76,7 +76,12 @@ def report(mode: str) -> list[str]:
     if mode not in {"browser", "worker"}:
         raise ValueError("Invalid diagnostic mode")
     counts = _processes()
-    lines = ["component=" + mode]
+    lines = [
+        "component=" + mode,
+        "local_model_gateway_enabled=" + (
+            "yes" if os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1" else "no"
+        ),
+    ]
     if mode == "browser":
         lines.extend(
             [
