@@ -8310,7 +8310,9 @@ async def _call_provider(
                     if isinstance(code, str) and re.fullmatch(r"[a-zA-Z0-9_]{1,32}", code)
                     else "unknown"
                 )
-                _sponsor_inference_diagnostic(record, f"http_{response.status_code}_{suffix}".lower())
+                _sponsor_inference_diagnostic(
+                    record, f"http_{response.status_code}_{suffix}".lower()
+                )
                 if log_context:
                     session_log.append(
                         record["project_path"],
@@ -8323,7 +8325,8 @@ async def _call_provider(
                             "http_status": response.status_code,
                             "provider_error_code": (
                                 code
-                                if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code)
+                                if isinstance(code, str)
+                                and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code)
                                 else None
                             ),
                             "provider_request_id": (
@@ -15669,7 +15672,9 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 async for chunk in response.aiter_bytes():
                     wire.extend(chunk)
                     if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
-                        raise ProjectError("Reference compiler response exceeded the 8 MB safety bound")
+                        raise ProjectError(
+                            "Reference compiler response exceeded the 8 MB safety bound"
+                        )
                 provider_http_status = response.status_code
                 if response.status_code == 429:
                     # Respect numeric or HTTP-date Retry-After. An unparseable
