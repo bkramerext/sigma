@@ -31,7 +31,7 @@ from sigma.projects import ProjectError
 if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
     raise RuntimeError("Worker model transport is not enabled outside the POC")
 
-MAX_RPC_BYTES = 256_000
+MAX_RPC_BYTES = 1_000_000
 
 app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
 
@@ -44,6 +44,7 @@ class ModelRequest(BaseModel):
     request_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     expected_binding: str = Field(pattern=r"^[0-9a-f]{64}$")
     payload: dict[str, Any]
+    timeout_seconds: int = Field(default=60, ge=1, le=3600)
 
     @model_validator(mode="after")
     def bounded(self) -> ModelRequest:
@@ -175,7 +176,7 @@ async def response(request: Request) -> dict[str, Any]:
         raise HTTPException(422, "Invalid Personal ChatGPT request.") from exc
 
     try:
-        async with asyncio.timeout(60):
+        async with asyncio.timeout(body.timeout_seconds):
             account, token = await _verified_account()
             model = body.payload["model"]
             if (
@@ -185,7 +186,11 @@ async def response(request: Request) -> dict[str, Any]:
             ):
                 raise HTTPException(409, "The selected ChatGPT account or model changed.")
             async with (
-                httpx.AsyncClient(timeout=55, trust_env=False, follow_redirects=False) as client,
+                httpx.AsyncClient(
+                    timeout=max(1, body.timeout_seconds - 5),
+                    trust_env=False,
+                    follow_redirects=False,
+                ) as client,
                 client.stream(
                     "POST",
                     "https://api.openai.com/v1/responses",
@@ -195,7 +200,13 @@ async def response(request: Request) -> dict[str, Any]:
             ):
                 if upstream.status_code != 200:
                     raise HTTPException(502, f"ChatGPT rejected this request (HTTP {upstream.status_code}).")
-                result = await plan_stream.completed(upstream)
+                result = await plan_stream.completed(
+                    upstream,
+                    max_stream_bytes=16_000_000,
+                    max_event_chars=4_000_000,
+                    max_events=100_000,
+                    max_text_bytes=1_000_000,
+                )
             if result.get("status") != "completed" or result.get("model") != model:
                 raise HTTPException(502, "ChatGPT did not complete the requested model response.")
             return {
