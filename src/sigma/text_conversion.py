@@ -449,7 +449,10 @@ async def _convert_text(
                     ):
                         if binding["mode"] == "chatgpt" and response.status_code == 200:
                             content_type = (
-                                response.headers.get("content-type", "").split(";")[0].strip().lower()
+                                response.headers.get("content-type", "")
+                                .split(";")[0]
+                                .strip()
+                                .lower()
                             )
                             if content_type == "text/event-stream":
                                 # The shared plan adapter checks final SSE sequence and response identity.
