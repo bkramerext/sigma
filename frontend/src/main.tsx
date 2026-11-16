@@ -3277,7 +3277,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const generationErrorRunId = useRef<string | null>(null);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(() => initialPaperListing.current === null);
-  const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [expandedPaperId, setExpandedPaperIdState] = useState('');
+  // Keep the selected card in a synchronous ref: a Home-star deep link may
+  // expand it while the first background metadata/preflight refresh is in flight.
+  // An older refresh must never clear a newer paper selection or preview.
+  const expandedPaperIdRef = useRef('');
+  function setExpandedPaperId(id: string) {
+    expandedPaperIdRef.current = id;
+    setExpandedPaperIdState(id);
+  }
   const [paperStepRestart, setPaperStepRestart] = useState<{
     paper: PaperSummary; stage: SavedPaperRestartStage;
     options: { source_pdf_sha256: string; snapshot_sha256: string; include_diagrams: boolean } | null;
@@ -3600,14 +3608,22 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // its card is expanded, a deep link opens it, or an explicit operation
       // requests a particular saved paper. This avoids large paper payloads
       // during ordinary project navigation.
-      const nextId = keepId ?? (expandedPaperId || undefined);
+      const nextId = keepId ?? (expandedPaperIdRef.current || undefined);
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const record = await response.json();
         if (obsolete()) return;
         if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
-        setSelected(record as PaperRecord);
-      } else setSelected(null);
+        // A deep link or manual disclosure can change the selection during
+        // this fetch; never paint the older request over the newly opened card.
+        if (expandedPaperIdRef.current === nextId ||
+            (!expandedPaperIdRef.current && keepId === nextId))
+          setSelected(record as PaperRecord);
+      } else if (!expandedPaperIdRef.current) {
+        // In particular, do not clear the Home-star preview merely because the
+        // first refresh started before the deep link expanded that paper.
+        setSelected(null);
+      }
       if (!obsolete()) setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
     } catch (cause) { if (!obsolete()) setError(errorMessage(cause)); }
     finally {
@@ -4096,7 +4112,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     try {
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
       const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
-      setSelected(record as PaperRecord); setError('');
+      if (expandedPaperIdRef.current === id) {
+        setSelected(record as PaperRecord);
+        setError('');
+      }
     } catch (cause) { setError(errorMessage(cause)); }
   }
   async function readPaperResponse(response: Response, action: string): Promise<any> {
@@ -9776,13 +9795,22 @@ function App() {
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
   useEffect(() => {
-    const pop = () => { setOpenedView(null); setLocation(window.location.pathname + window.location.search); };
+    const pop = () => {
+      // Returning to Home must reflect a paper just published or rescored;
+      // idle Home polling still throttles its expensive library-wide scan.
+      if (window.location.pathname === '/') recentPaperMetadataFetchedAt.delete(cacheScope);
+      setOpenedView(null);
+      setLocation(window.location.pathname + window.location.search);
+    };
     window.addEventListener('popstate', pop);
     return () => window.removeEventListener('popstate', pop);
-  }, []);
+  }, [cacheScope]);
   const navigate = useCallback((url: string) => {
+    if (window.location.pathname === '/project' &&
+        new URL(url, window.location.origin).pathname === '/')
+      recentPaperMetadataFetchedAt.delete(cacheScope);
     window.history.pushState(null, '', url); setLocation(url); window.scrollTo(0, 0);
-  }, []);
+  }, [cacheScope]);
   const closeProject = useCallback(() => {
     setOpenedView(null);
     const path = new URLSearchParams(window.location.search).get('path');

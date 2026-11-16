@@ -846,3 +846,38 @@
   top: 6px !important;
   right: 8px !important;
 }
+
+/* Paper warning toasts are compact, not page-width banners. Preserve the
+   established upper-left dismiss control, with its own clear header space. */
+.workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error,
+.workspace-page .papers-pane .paper-inline-feedback,
+.workspace-page .papers-pane .paper-score-error-card,
+.workspace-page .papers-pane .paper-preview-review-notice {
+  position: relative;
+  box-sizing: border-box;
+  inline-size: 33.333vw;
+  max-inline-size: 100%;
+  max-block-size: min(44dvh, 360px);
+  overflow-y: auto;
+  padding: 44px 14px 12px;
+  overflow-wrap: anywhere;
+}
+.workspace-page .papers-pane :is(
+  .paper-contextual-error,
+  .paper-inline-feedback,
+  .paper-score-error-card,
+  .paper-preview-review-notice
+) .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  position: absolute;
+  top: 8px !important;
+  left: 8px !important;
+  right: auto !important;
+}
+@media (max-width: 720px) {
+  .workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error,
+  .workspace-page .papers-pane .paper-inline-feedback,
+  .workspace-page .papers-pane .paper-score-error-card,
+  .workspace-page .papers-pane .paper-preview-review-notice {
+    inline-size: min(100%, 420px);
+  }
+}
