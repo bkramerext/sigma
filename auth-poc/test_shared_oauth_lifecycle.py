@@ -57,6 +57,18 @@ async def verify() -> None:
                 response = await client.post("/v1/browser/start", headers=headers(B))
                 assert response.status_code == 409
                 assert cancellation_scopes == []
+
+                # Cross-user account deletion regression: a B-scoped HMAC
+                # must NEVER authorize the legacy browser-global /disconnect
+                # route while A is signing in.
+                response = await client.post("/disconnect", headers=headers(B))
+                assert response.status_code == 403
+                # Similarly, local OAuth pages must reject a rebinding Host.
+                response = await client.get("/status", headers={"Host": "evil.example"})
+                assert response.status_code == 403
+                response = await client.get("/status", headers={"Host": "127.0.0.1:8001"})
+                assert response.status_code == 200
+                assert cancellation_scopes == []
                 response = await client.post("/v1/browser/stop", headers=headers(A))
                 assert response.status_code == 200
                 assert cancellation_scopes == [A]
