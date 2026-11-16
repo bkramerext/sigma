@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import signal
 import socket
 import socketserver
@@ -67,10 +66,30 @@ def _stop() -> None:
             browser.wait(timeout=2)
         except subprocess.TimeoutExpired:
             pass
-    if BROWSER_HOME.exists():
-        if BROWSER_HOME.is_symlink():
+    if BROWSER_HOME.exists() or BROWSER_HOME.is_symlink():
+        if BROWSER_HOME.is_symlink() or BROWSER_HOME.stat().st_uid != BROWSER_UID:
             raise RuntimeError("Untrusted browser home")
-        shutil.rmtree(BROWSER_HOME)
+        # The supervisor deliberately lacks CAP_DAC_OVERRIDE/FOWNER. Delete
+        # the isolated 0700 browser profile as its own unprivileged UID.
+        cleanup = subprocess.run(
+            [
+                "/usr/bin/setpriv",
+                "--reuid=11001",
+                "--regid=11001",
+                "--clear-groups",
+                "/usr/bin/rm",
+                "-rf",
+                "--",
+                str(BROWSER_HOME),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=5,
+        )
+        if cleanup.returncode != 0:
+            raise RuntimeError("Temporary browser cleanup failed")
 
 
 def _start() -> bool:
