@@ -10,6 +10,7 @@ import sys
 from typing import Any
 
 EXPECTED = {"127.0.0.1:18081", "127.0.0.1:18082"}
+EXPECTED_HOST = "sigma-research.duckdns.org"
 
 
 class InvalidDirectRouting(ValueError):
@@ -37,9 +38,27 @@ def validate(config: Any) -> None:
             for value in node:
                 visit(value)
 
-    visit(config.get("apps", {}).get("http", {}))
-    if dialed != EXPECTED:
-        raise InvalidDirectRouting("Host Caddy is not routing exclusively to SIGMA loopback ports")
+    # Caddy may host other domains. Only routes with an explicit SIGMA host
+    # matcher count, and matching endpoints hidden under another hostname
+    # cannot trick the deployment guard into removing the working edge.
+    try:
+        servers = config["apps"]["http"]["servers"]
+        if not isinstance(servers, dict):
+            raise InvalidDirectRouting("No host Caddy HTTP servers")
+        matched = 0
+        for server in servers.values():
+            for route in server.get("routes", []):
+                if any(
+                    EXPECTED_HOST in matcher.get("host", [])
+                    for matcher in route.get("match", [])
+                    if isinstance(matcher, dict)
+                ):
+                    matched += 1
+                    visit(route)
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise InvalidDirectRouting("Invalid host Caddy HTTP routing") from exc
+    if not matched or dialed != EXPECTED:
+        raise InvalidDirectRouting("SIGMA host is not routed exclusively to direct loopback ports")
 
 
 def main() -> None:
