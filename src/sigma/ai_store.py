@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from sigma.projects import ROOT, ProjectError
+from sigma.personal_vault import Vault, VaultError
 from sigma.ui_instance import private_directory
 
 _DIRECTORY_OVERRIDE: ContextVar[Path | None] = ContextVar("sigma_ai_store_directory", default=None)
@@ -107,12 +108,10 @@ def use_directory(path: Path):
         _DIRECTORY_OVERRIDE.reset(token)
 
 
-def _shared_vault(path: Path):
+def _shared_vault(path: Path) -> tuple[Vault, str] | None:
     """Opt-in encrypted storage, used exclusively inside shared Personal POC."""
     if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") != "1":
         return None
-    from sigma.personal_vault import Vault
-
     workspaces = Path(os.environ.get("SIGMA_PERSONAL_SHARED_WORKSPACES", ""))
     records = Path(os.environ.get("SIGMA_PERSONAL_SHARED_RECORDS", ""))
     key = Path(os.environ.get("SIGMA_PERSONAL_SHARED_KEY_FILE", ""))
@@ -143,10 +142,7 @@ def read(path: Path) -> dict[str, Any]:
         vault, workspace_id = sealed
         try:
             return vault.read(workspace_id) or _blank_credentials()
-        except Exception as exc:
-            from sigma.personal_vault import VaultError
-            if not isinstance(exc, VaultError):
-                raise
+        except VaultError as exc:
             raise ProjectError("Encrypted Personal credentials are unavailable.") from exc
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -177,10 +173,7 @@ def write(path: Path, value: dict[str, Any]) -> None:
         vault, workspace_id = sealed
         try:
             vault.write(workspace_id, value)
-        except Exception as exc:
-            from sigma.personal_vault import VaultError
-            if not isinstance(exc, VaultError):
-                raise
+        except VaultError as exc:
             raise ProjectError("Cannot persist encrypted Personal credentials.") from exc
         return
     encoded = json.dumps(value).encode("utf-8")
