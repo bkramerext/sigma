@@ -30,9 +30,7 @@ async def format_paper_preview(path: str, paper_id: str, expected_project_id: st
     if len(text.encode("utf-8")) > 24000:
         raise ProjectError("Paper preview is too long for one Markdown conversion.")
     auth = await auth_context()
-    config = await configuration(
-        view=view, context=auth
-    )
+    config = await configuration(view=view, context=auth)
     if not config["available"]:
         raise ProjectError(config["message"])
     result, _ = await papers._provider_structured(

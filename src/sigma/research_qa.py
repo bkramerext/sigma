@@ -997,7 +997,8 @@ def store_markdown_answer(
         existing = record.get("markdown_answer")
         existing_provenance = record.get("markdown_provenance")
         if (
-            isinstance(existing, str) and existing.strip()
+            isinstance(existing, str)
+            and existing.strip()
             and isinstance(existing_provenance, dict)
             and existing_provenance.get("model") == provenance.get("model")
             and existing_provenance.get("reasoning_effort") == provenance.get("reasoning_effort")
