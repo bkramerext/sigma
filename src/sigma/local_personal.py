@@ -1,8 +1,8 @@
-"""Local --prod supervisor for SIGMA's isolated Personal browser experiment.
+"""Local --prod launcher for SIGMA's one shared Personal ChatGPT container.
 
-Only the developer's local SIGMA launcher starts this broker. It enables real local authorization only in the explicitly local --prod
-workflow, never publishes a browser port, and never applies
-the local Docker UID overlay on hosted infrastructure.
+The localhost-only Personal ports belong to a single shared Docker service.
+Transient Chromium runs under a separate UID, not in a per-user container.
+The hosted OAuth permission and deployment decisions remain separate.
 """
 
 from __future__ import annotations
