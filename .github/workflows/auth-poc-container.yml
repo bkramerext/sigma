@@ -128,11 +128,10 @@ jobs:
         run: |
           set -euo pipefail
           cid=$(docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml ps -q personal)
-          docker kill --signal=TERM "$cid"
-          # A normal Docker stop must exit with status 0, not hang until
-          # the Docker daemon has to kill an unresponsive PID 1.
-          exit_code=$(timeout 55s docker wait "$cid")
-          test "$exit_code" = 0
+          docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml stop --timeout 45 personal
+          # SIGTERM should exit normally rather than exhausting the grace
+          # period and being killed by Docker (exit code 137).
+          test "$(docker inspect "$cid" --format '{{.State.ExitCode}}')" = 0
           docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml up -d --no-build --wait
           docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml exec -T personal \
             /usr/bin/setpriv --reuid=10001 --regid=10001 --clear-groups \
