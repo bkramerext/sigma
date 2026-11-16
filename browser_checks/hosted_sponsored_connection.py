@@ -586,9 +586,13 @@ def exercise(origin: str) -> None:
                     const g = google.getBoundingClientRect();
                     const c = chatgpt.getBoundingClientRect();
                     const s = status.getBoundingClientRect();
+                    const googleDot = google.querySelector('.connection-dot')?.getBoundingClientRect();
+                    const chatgptDot = chatgpt.querySelector('.connection-dot')?.getBoundingClientRect();
                     return {
                         google_left: g.left, google_right: g.right,
                         chatgpt_left: c.left, chatgpt_right: c.right,
+                        google_dot_left: googleDot?.left,
+                        chatgpt_dot_left: chatgptDot?.left,
                         label_right_inset: c.right - s.right,
                     };
                 }"""
@@ -596,6 +600,9 @@ def exercise(origin: str) -> None:
             assert geometry, "Google / ChatGPT header pills not found"
             assert abs(geometry["google_left"] - geometry["chatgpt_left"]) < 1, geometry
             assert abs(geometry["google_right"] - geometry["chatgpt_right"]) < 1, geometry
+            assert geometry["google_dot_left"] is not None, geometry
+            assert geometry["chatgpt_dot_left"] is not None, geometry
+            assert abs(geometry["google_dot_left"] - geometry["chatgpt_dot_left"]) < 1, geometry
             assert geometry["label_right_inset"] >= 10, geometry
 
         # Hosted presentation follows effective runtime routing; the admin's
