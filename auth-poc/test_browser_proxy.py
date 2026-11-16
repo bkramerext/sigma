@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, Request, WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from sigma import api, cloud_auth, personal_browser_proxy as proxy
 
@@ -191,6 +192,14 @@ async def main() -> None:
                     assert sent and sent[0]["type"] == "websocket.close"
                     assert sent[0]["code"] == 1008
 
+                # Closing an iframe disconnects the client before SIGMA
+                # sends its final close frame. Starlette raises 1006 in that
+                # situation; do not let it produce an ASGI application error.
+                dead_ws = AsyncMock()
+                dead_ws.close.side_effect = WebSocketDisconnect(code=1006)
+                await proxy._close_websocket(dead_ws)
+                await proxy._close_websocket(dead_ws, code=1008)
+                assert dead_ws.close.await_count == 2
                 ws_path = "/api/ai/personal-browser/window/" + window_id + "/ws"
                 await denied_ws(ws_path, "invalid", "https://sigma.example.test")
                 await denied_ws(ws_path, "b" * 32, "https://sigma.example.test")
