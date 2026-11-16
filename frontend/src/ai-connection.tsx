@@ -904,9 +904,12 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
           onClick={closeDisconnectPopup}>Cancel</button>
       </div>
     </div>, document.body)}
-  <PersonalBrowserDialog state={personalDialogState} error={personalDialogError}
-    onClose={() => void closePersonalBrowserDialog()}
-    onRetry={() => void startContainerPersonalBrowser()}/>
+  {createPortal(
+    <PersonalBrowserDialog state={personalDialogState} error={personalDialogError}
+      onClose={() => void closePersonalBrowserDialog()}
+      onRetry={() => void startContainerPersonalBrowser()}/>,
+    document.body,
+  )}
   <SponsorProvisioningDialog open={sponsorProvisioningHelpOpen} message={sponsorProvisioningGuidance}
     onClose={() => setSponsorProvisioningHelpOpen(false)}/>
   <HostedPersonalChatGPTNotice open={personalHostedNoticeOpen} onClose={() => {
