@@ -29,6 +29,7 @@ app.include_router(synthetic_signin.router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
 _ATTEMPT_ID: str | None = None
 _SIGNIN_START_LOCK = asyncio.Lock()
+_SIGNIN_FAILED = False
 
 
 def real_signin_enabled() -> bool:
@@ -59,11 +60,13 @@ async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
     Never display an intermediary button or open a popup. Preserve saved
     sessions without starting a second OAuth attempt.
     """
-    global _ATTEMPT_ID
+    global _ATTEMPT_ID, _SIGNIN_FAILED
     require_real_signin()
+    _SIGNIN_FAILED = False
     try:
         saved = await chatgpt_auth.session()
     except (ProjectError, OSError, ValueError, KeyError, TypeError) as exc:
+        _SIGNIN_FAILED = True
         raise HTTPException(503, "Could not check the saved ChatGPT account.") from exc
     if saved.get("status") == "connected" and (saved.get("account") or {}).get("plan_authorized") is True:
         return HTMLResponse(
@@ -72,6 +75,7 @@ async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
             headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
         )
     if saved.get("status") == "unavailable":
+        _SIGNIN_FAILED = True
         raise HTTPException(503, "Saved ChatGPT credentials could not be verified.")
 
     async with _SIGNIN_START_LOCK:
@@ -106,6 +110,7 @@ async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
                 except ProjectError:
                     pass
                 _ATTEMPT_ID = None
+            _SIGNIN_FAILED = True
             raise HTTPException(503, "Could not start ChatGPT sign-in. Please retry.") from exc
     return RedirectResponse(
         url, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
@@ -205,6 +210,8 @@ def _saved_preview_is_authorized() -> bool:
 @app.get("/preview-state")
 async def preview_state() -> dict[str, str]:
     require_real_signin()
+    if _SIGNIN_FAILED:
+        return {"phase": "failed"}
     attempt = (await status())["attempt"]
     if attempt is not None:
         return {"phase": attempt}
