@@ -59,9 +59,11 @@ class GceHostToolingTests(unittest.TestCase):
             {"comment": "127.0.0.1:18081 127.0.0.1:18082"},
             [],
         ):
-            with self.subTest(config=invalid):
-                with self.assertRaises(check_host_direct_caddy.InvalidDirectRouting):
-                    check_host_direct_caddy.validate(invalid)
+            with (
+                self.subTest(config=invalid),
+                self.assertRaises(check_host_direct_caddy.InvalidDirectRouting),
+            ):
+                check_host_direct_caddy.validate(invalid)
 
     def test_host_readiness_derives_rootless_socket_without_production_environment(self) -> None:
         preflight = gce_preflight.Preflight(host_readiness=True)
