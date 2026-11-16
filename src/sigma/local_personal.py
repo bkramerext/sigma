@@ -40,9 +40,11 @@ class LocalPersonalUnavailable(RuntimeError):
 
 def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
     # Suppress arbitrary process output and report only a fixed operation name.
-    stage = args[0] + (" " + args[1] if len(args) > 1 and args[1] in {
-        "compose", "info", "image", "tag", "ps"
-    } else "")
+    stage = args[0] + (
+        " " + args[1]
+        if len(args) > 1 and args[1] in {"compose", "info", "image", "tag", "ps"}
+        else ""
+    )
     try:
         result = subprocess.run(
             args,
