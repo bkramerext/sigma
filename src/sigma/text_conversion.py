@@ -17,7 +17,7 @@ from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
 from sigma.proposals import configuration
 from sigma.text_views import Format, _format, digest, inspect_text, store_conversion
 
-# Formatting always uses the reviewed inexpensive model, irrespective of research settings.
+# Formatting follows the user-scoped Model/Thinking preferences.
 # Keep cancellation and the existing provider-completion safeguards.
 FORMAT_MODEL = "gpt-6-luna"
 FORMAT_EFFORT = "medium"
@@ -53,6 +53,9 @@ INSTRUCTIONS = (
     "their surrounding sentence uses them as variables or sequence terms. "
     "Keep ordinary slash-separated words in prose, without math delimiters or LaTeX fractions. "
     "Use mathematical notation only where the slash expresses a fraction or quotient in context. "
+    "Preserve numbered and bulleted list structure, exact numeric labels including zero, "
+    "and nested list indentation. Never add diacritics or stray Unicode combining marks "
+    "to digits. Do not turn bullet points into paragraphs. "
     "Preserve existing valid Markdown, explicit math delimiters, multiline equations, escaped "
     "delimiters, unmatched delimiter text, inline code, fenced code, links and table structure. "
     "For Markdown use normal Markdown prose; use $...$ or $$...$$ only when an expression "
@@ -359,8 +362,6 @@ async def _convert_text(
             config = await configuration(
                 view=view,
                 context=binding,
-                frozen_model=FORMAT_MODEL,
-                frozen_effort=FORMAT_EFFORT,
             )
             if not config["available"]:
                 raise ProjectError(config["message"])
