@@ -3234,8 +3234,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [, setScoreConfig] = useState<{ available: boolean; binding: string; message: string } | null>(null);
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
-  // A dismissal hides only the expanded preview's duplicate notice.
-  // The saved publication status and the outer warning remain unchanged.
+  // Dismiss both visible review notices without changing the paper's
+  // persisted publication status or its archived review diagnostics.
   const [dismissedPaperReviewIds, setDismissedPaperReviewIds] = useState<Set<string>>(() => new Set());
   const [copiedPaperId, setCopiedPaperId] = useState('');
   const [formattedPaper, setFormattedPaper] = useState<{ id: string; markdown: string; settingsKey: string } | null>(null);
@@ -4581,10 +4581,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperPlayIntent(preflight.resume_available && !restartBeforePlay ? 'resuming' : 'starting');
       if (preflight.checkpoint_exists && !preflight.resume_available) {
         setCheckpointMismatch(preflight);
-        throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
-      }
-      if (preflight.resume_uses_saved_model) {
-        setPhase('Resuming work; the current Model/Thinking selection applies to the next AI call.');
+        throw new Error('Unfinished paper work belongs to different project evidence or paper type. Review the message below before starting over.');
       }
       const pendingRecovery: number[] = preflight.recovery_sections ?? [];
       if (recoverSection !== null &&
@@ -5159,7 +5156,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   else void proposePaperStepRestart(paper, publishedPaperTarget(step), anchor);
                 } : undefined}/>
             {paperRemovalErrors[paper.paper_id] && <p role="alert" className="ai-paper-warning">{paperUserMessage(paperRemovalErrors[paper.paper_id])}</p>}
-            {paper.generation.publication_status === 'needs_review' && <p className="ai-paper-warning" role="status">{paperReviewLabel(paper.generation)}</p>}
+            {paper.generation.publication_status === 'needs_review' && !dismissedPaperReviewIds.has(paper.paper_id) && <div className="ai-paper-warning paper-saved-review-notice" role="status">
+              <span>{paperReviewLabel(paper.generation)}</span>
+              <DialogDismissButton label={`Dismiss Paper ${paper.paper_version} review notice`} onClick={() => setDismissedPaperReviewIds(current => new Set(current).add(paper.paper_id))}/>
+            </div>}
           </div>
           {copyError && <p className="error" role="alert">{copyError}</p>}
         </div>

@@ -11673,8 +11673,13 @@ async def _portfolio_role_call(
             f"{str(exc).strip() or 'preflight timed out'}"[:500]
         ) from exc
     tools = await asyncio.to_thread(execution_capabilities)
-    # Reserve funded attempts only after a global provider slot is available.
+    # A user may change Model/Thinking while this request is waiting for the
+    # provider gate. Resolve again after admission, before any paid reservation.
     async with _portfolio_global_gate(session_id):
+        config = await asyncio.wait_for(
+            configuration(view=view, context=credential),
+            timeout=PREFLIGHT_TIMEOUT,
+        )
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
@@ -15291,6 +15296,18 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             _save(path, record)
             return True
         try:
+            # Optional reference compilation is also a new model request,
+            # not an obligation to reuse the session's original selection.
+            from sigma import global_research_settings
+
+            current_selection = global_research_settings.load_config()
+            _apply_live_model_selection(
+                record,
+                {
+                    "model": current_selection["ai_model"],
+                    "reasoning_effort": current_selection["reasoning_effort"],
+                },
+            )
             payload = research_reference_compiler.build_request(record)
             _assert_safe_role_request(payload)
         except (ProjectError, ValueError, TypeError, KeyError) as exc:
