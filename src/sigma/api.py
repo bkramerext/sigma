@@ -3213,7 +3213,9 @@ async def _personal_browser_action(request: Request, action: str) -> JSONRespons
 
 
 async def _personal_browser_action_scoped(
-    request: Request, action: str, principal: cloud_auth.Principal,
+    request: Request,
+    action: str,
+    principal: cloud_auth.Principal,
 ) -> JSONResponse:
     personal_diagnostics.emit("api", "browser_route_start", operation=action)
     if action == "start":
@@ -3227,7 +3229,9 @@ async def _personal_browser_action_scoped(
                 phase = Path(marker).read_text(encoding="ascii").strip()
             except OSError as exc:
                 personal_diagnostics.emit(
-                    "api", "preparation_marker_missing", failure=type(exc).__name__,
+                    "api",
+                    "preparation_marker_missing",
+                    failure=type(exc).__name__,
                 )
                 raise HTTPException(503, "Personal browser preparation is unavailable.") from exc
             personal_diagnostics.emit("api", "preparation_marker", phase=phase)
@@ -3246,13 +3250,15 @@ async def _personal_browser_action_scoped(
     try:
         snapshot = await personal_browser.session(principal, action)
     except personal_browser.PersonalBrowserUnavailable as exc:
-        personal_diagnostics.emit("api", "browser_route_failed", operation=action,
-                                  failure=type(exc).__name__)
+        personal_diagnostics.emit(
+            "api", "browser_route_failed", operation=action, failure=type(exc).__name__
+        )
         # The broker exports only predefined stage/reason identifiers, never
         # Docker stderr or credential material. Preserve the actionable code.
         raise HTTPException(503, str(exc)) from exc
-    personal_diagnostics.emit("api", "browser_route_ok", operation=action,
-                              browser_status=snapshot["browser_status"])
+    personal_diagnostics.emit(
+        "api", "browser_route_ok", operation=action, browser_status=snapshot["browser_status"]
+    )
     return JSONResponse(snapshot, headers={"Cache-Control": "no-store"})
 
 

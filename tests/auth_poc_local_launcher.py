@@ -128,13 +128,14 @@ class SharedBrokerTests(unittest.TestCase):
             with patch.object(personal_diagnostics.Path, "home", return_value=home):
                 log = personal_diagnostics.create_capture(state)
                 self.assertEqual(stat.S_IMODE(log.stat().st_mode), 0o600)
-                with patch.dict(
-                    os.environ, {"SIGMA_PERSONAL_DIAGNOSTICS_FILE": str(log)}
-                ):
+                with patch.dict(os.environ, {"SIGMA_PERSONAL_DIAGNOSTICS_FILE": str(log)}):
                     with personal_diagnostics.attempt_scope("a" * 12):
                         personal_diagnostics.emit(
-                            "broker", "compose_failed", failure="permission_denied",
-                            secret="Bearer my-private-token", docker_stderr="/Users/me/.ssh",
+                            "broker",
+                            "compose_failed",
+                            failure="permission_denied",
+                            secret="Bearer my-private-token",
+                            docker_stderr="/Users/me/.ssh",
                         )
                     report = personal_diagnostics.report()
                     self.assertIn("attempt=" + "a" * 12, report)
@@ -147,15 +148,15 @@ class SharedBrokerTests(unittest.TestCase):
     def test_broker_403_exposes_status_instead_of_generic_unavailable(self) -> None:
         from sigma import personal_browser
 
-        transport = httpx.MockTransport(
-            lambda _: httpx.Response(403, json={"error": "Forbidden"})
-        )
+        transport = httpx.MockTransport(lambda _: httpx.Response(403, json={"error": "Forbidden"}))
         with (
             patch.object(personal_browser, "_principal", return_value=object()),
             patch.object(personal_browser, "_socket", return_value="/tmp/not-used"),
             patch.object(
-                personal_browser, "_workspace_id",
-                new_callable=AsyncMock, return_value="a" * 32,
+                personal_browser,
+                "_workspace_id",
+                new_callable=AsyncMock,
+                return_value="a" * 32,
             ),
             patch.object(personal_browser.httpx, "AsyncHTTPTransport", return_value=transport),
             self.assertRaises(personal_browser.PersonalBrowserUnavailable) as raised,

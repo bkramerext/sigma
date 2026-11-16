@@ -13,11 +13,11 @@ import os
 import re
 import secrets
 import stat
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 _ATTEMPT: ContextVar[str] = ContextVar("sigma_personal_diagnostic_attempt", default="-")
 _SAFE = re.compile(r"[a-zA-Z0-9_.:-]{1,64}\Z")
@@ -114,8 +114,11 @@ def create_capture(root: Path) -> Path:
     ):
         raise OSError("Unsafe Personal diagnostic directory")
     filename = (
-        "personal-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        + "-" + secrets.token_hex(4) + ".log"
+        "personal-"
+        + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        + "-"
+        + secrets.token_hex(4)
+        + ".log"
     )
     target = folder / filename
     descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -152,6 +155,8 @@ def report() -> str:
     safe = [line for line in lines if line.startswith(_PREFIX + " ") and len(line) < 1024]
     return (
         "SIGMA local Personal ChatGPT diagnostics (no credentials)\n"
-        + "log=" + path.name + "\n"
+        + "log="
+        + path.name
+        + "\n"
         + "\n".join(safe[-500:])
     )

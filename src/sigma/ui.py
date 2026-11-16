@@ -198,10 +198,14 @@ def run_ui(
                 }
                 if prod and personal_runtime is None:
                     # Never accidentally fall back to host-local ChatGPT OAuth
-                    # after --prod's isolated Docker startup fails. Keep the
-                    # Personal UI available to explain the missing prerequisite.
+                    # after --prod's isolated Docker startup fails. Preserve
+                    # the redacted diagnostics endpoint even for early failure.
                     child_env.update(
                         {
+                            "SIGMA_PERSONAL_SHARED_MODE": "1",
+                            "SIGMA_PERSONAL_DIAGNOSTICS_FILE": os.environ.get(
+                                "SIGMA_PERSONAL_DIAGNOSTICS_FILE", ""
+                            ),
                             "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
                             "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
                             "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": "/nonexistent/sigma-personal-broker.sock",

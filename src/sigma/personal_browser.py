@@ -40,7 +40,10 @@ def enabled() -> bool:
 def _socket() -> str:
     configured = os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET", "")
     personal_diagnostics.emit(
-        "api", "socket_check", enabled=int(enabled()), configured=int(bool(configured)),
+        "api",
+        "socket_check",
+        enabled=int(enabled()),
+        configured=int(bool(configured)),
     )
     if not enabled() or not configured:
         personal_diagnostics.emit("api", "socket_failed", reason="integration_disabled")
@@ -52,9 +55,12 @@ def _socket() -> str:
     try:
         info = path.lstat()
     except OSError as exc:
-        personal_diagnostics.emit("api", "socket_failed", reason="socket_missing",
-                                  failure=type(exc).__name__)
-        raise PersonalBrowserUnavailable("Personal broker socket is missing; see diagnostics.") from exc
+        personal_diagnostics.emit(
+            "api", "socket_failed", reason="socket_missing", failure=type(exc).__name__
+        )
+        raise PersonalBrowserUnavailable(
+            "Personal broker socket is missing; see diagnostics."
+        ) from exc
     if (
         not stat.S_ISSOCK(info.st_mode)
         or path.is_symlink()
@@ -62,12 +68,16 @@ def _socket() -> str:
         or info.st_mode & 0o077
     ):
         personal_diagnostics.emit(
-            "api", "socket_failed", reason="socket_unsafe",
+            "api",
+            "socket_failed",
+            reason="socket_unsafe",
             is_socket=int(stat.S_ISSOCK(info.st_mode)),
             owner_ok=int(info.st_uid in {0, os.geteuid()}),
             permissions_ok=int(not (info.st_mode & 0o077)),
         )
-        raise PersonalBrowserUnavailable("Personal broker socket validation failed; see diagnostics.")
+        raise PersonalBrowserUnavailable(
+            "Personal broker socket validation failed; see diagnostics."
+        )
     personal_diagnostics.emit("api", "socket_ok")
     return configured
 
@@ -107,10 +117,7 @@ async def session(
     workspace_id = await _workspace_id(trusted)
     transport = httpx.AsyncHTTPTransport(uds=socket_path)
     diagnostic_id = personal_diagnostics.current_attempt()
-    headers = (
-        {"X-Sigma-Personal-Attempt": diagnostic_id}
-        if diagnostic_id != "-" else {}
-    )
+    headers = {"X-Sigma-Personal-Attempt": diagnostic_id} if diagnostic_id != "-" else {}
     try:
         async with httpx.AsyncClient(
             transport=transport,
@@ -123,14 +130,21 @@ async def session(
         ) as client:
             if action == "status":
                 response = await client.get(
-                    "/v1/status", params={"workspace_id": workspace_id}, headers=headers,
+                    "/v1/status",
+                    params={"workspace_id": workspace_id},
+                    headers=headers,
                 )
             else:
                 response = await client.post(
-                    "/v1/" + action, json={"workspace_id": workspace_id}, headers=headers,
+                    "/v1/" + action,
+                    json={"workspace_id": workspace_id},
+                    headers=headers,
                 )
             personal_diagnostics.emit(
-                "api", "broker_http_response", operation=action, http_status=response.status_code,
+                "api",
+                "broker_http_response",
+                operation=action,
+                http_status=response.status_code,
                 elapsed_ms=int((time.monotonic() - began) * 1000),
             )
             if response.status_code == 503:
@@ -168,7 +182,9 @@ async def session(
                     )
             if response.status_code != 200:
                 personal_diagnostics.emit(
-                    "api", "broker_http_failed", operation=action,
+                    "api",
+                    "broker_http_failed",
+                    operation=action,
                     http_status=response.status_code,
                 )
                 raise PersonalBrowserUnavailable(
@@ -178,7 +194,10 @@ async def session(
             payload = response.json()
     except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
         personal_diagnostics.emit(
-            "api", "broker_transport_failed", operation=action, failure=type(exc).__name__,
+            "api",
+            "broker_transport_failed",
+            operation=action,
+            failure=type(exc).__name__,
             elapsed_ms=int((time.monotonic() - began) * 1000),
         )
         raise PersonalBrowserUnavailable(
@@ -193,8 +212,11 @@ async def session(
         personal_diagnostics.emit("api", "broker_invalid_payload", operation=action)
         raise PersonalBrowserUnavailable("Invalid personal browser response.")
     personal_diagnostics.emit(
-        "api", "browser_operation_ok", operation=action,
-        browser_status=payload["status"], elapsed_ms=int((time.monotonic() - began) * 1000),
+        "api",
+        "browser_operation_ok",
+        operation=action,
+        browser_status=payload["status"],
+        elapsed_ms=int((time.monotonic() - began) * 1000),
     )
     # Deliberately no model connection or account label is returned. The
     # authenticated HTTPS browser stream and credential validation are separate

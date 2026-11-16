@@ -96,22 +96,30 @@ def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
     except (OSError, subprocess.TimeoutExpired) as exc:
         failure = "timeout" if isinstance(exc, subprocess.TimeoutExpired) else type(exc).__name__
         personal_diagnostics.emit(
-            "preparation", "command_exception", operation=stage.replace(" ", "_"),
-            failure=failure, elapsed_ms=int((time.monotonic() - begun) * 1000),
+            "preparation",
+            "command_exception",
+            operation=stage.replace(" ", "_"),
+            failure=failure,
+            elapsed_ms=int((time.monotonic() - begun) * 1000),
         )
         raise LocalPersonalUnavailable("Local Personal container preparation failed.") from exc
     if result.returncode:
         # Docker output can include credentials/host paths; keep errors generic.
         personal_diagnostics.emit(
-            "preparation", "command_failed", operation=stage.replace(" ", "_"),
-            exit_code=result.returncode, failure=_docker_failure_class(result.stderr or ""),
+            "preparation",
+            "command_failed",
+            operation=stage.replace(" ", "_"),
+            exit_code=result.returncode,
+            failure=_docker_failure_class(result.stderr or ""),
             elapsed_ms=int((time.monotonic() - begun) * 1000),
         )
         raise LocalPersonalUnavailable(
             "Local Personal container preparation failed. Check Docker Desktop."
         )
     personal_diagnostics.emit(
-        "preparation", "command_ok", operation=stage.replace(" ", "_"),
+        "preparation",
+        "command_ok",
+        operation=stage.replace(" ", "_"),
         elapsed_ms=int((time.monotonic() - begun) * 1000),
     )
     return result.stdout.strip()
@@ -245,7 +253,10 @@ def _prepare(env: dict[str, str]) -> int:
     except (OSError, RuntimeError, ValueError, KeyError) as exc:
         _preparation_state(marker, "failed")
         personal_diagnostics.emit(
-            "preparation", "failed", phase=phase, failure=type(exc).__name__,
+            "preparation",
+            "failed",
+            phase=phase,
+            failure=type(exc).__name__,
         )
         return 1
 
@@ -368,7 +379,9 @@ class LocalPersonalRuntime:
             return
         if phase == "preparing":
             personal_diagnostics.emit(
-                "launcher", "preparation_exited", exit_code=self.preparation.returncode,
+                "launcher",
+                "preparation_exited",
+                exit_code=self.preparation.returncode,
             )
             _preparation_state(marker, "failed")
 
