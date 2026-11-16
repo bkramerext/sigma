@@ -55,6 +55,34 @@ async def main_async(root: Path):
     path.mkdir()
     (path / "project.json").write_bytes(source_before)
     project_before = (path / "project.json").read_bytes()
+    # Regression: the Current Understanding Markdown button fetches this endpoint.
+    # Changing the user's Model/Thinking must change the returned fingerprint;
+    # otherwise the UI will (incorrectly) treat the old formatted blocks as fresh.
+    from sigma.api import proposal_config
+
+    selected_preview = {"model": "gpt-6-luna", "effort": "medium"}
+
+    async def preview_configuration(*args, **kwargs):
+        assert args == (str(path),)
+        assert not kwargs, "Markdown config must not freeze Model/Thinking"
+        return {
+            "available": True,
+            "model": selected_preview["model"],
+            "reasoning_effort": selected_preview["effort"],
+            "binding": "fixture-account",
+        }
+
+    with (
+        patch("sigma.api.cloud_auth.current_principal", return_value=None),
+        patch("sigma.api.configuration", side_effect=preview_configuration),
+    ):
+        before = await proposal_config(str(path), purpose="markdown")
+        assert (before["model"], before["reasoning_effort"]) == ("gpt-6-luna", "medium")
+        selected_preview.update(model="gpt-6", effort="high")
+        after = await proposal_config(str(path), purpose="markdown")
+        assert (after["model"], after["reasoning_effort"]) == ("gpt-6", "high")
+    print("PASS Markdown configuration uses live Model/Thinking for Current Understanding")
+
     conclusion_path = root / "conclusion-session.sigma"
     initialize_project(conclusion_path, "Conclusion conversion", "Review a saved result.")
     conclusion_source = (
