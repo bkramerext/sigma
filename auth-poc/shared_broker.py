@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-_WORKSPACE = re.compile(r"[0-9a-f]{32}\\Z")
+_WORKSPACE = re.compile(r"[0-9a-f]{32}\Z")
 _PORT = re.compile(r"127\.0\.0\.1:(\d+)\Z")
 _LOCK = threading.RLock()
 _ACTIVE: str | None = None
