@@ -218,26 +218,25 @@ def _prepare_volumes() -> None:
             or stat.S_IMODE(info.st_mode) != 0o700
         ):
             raise SystemExit("Shared Personal storage permissions are invalid")
-    key = key_home / "master"
-    try:
-        fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    except FileExistsError:
-        fd = -1
-    if fd >= 0:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(os.urandom(32))
-            handle.flush()
-            os.fsync(handle.fileno())
-    if fd >= 0:
-        os.chown(key, WORKER_UID, WORKER_UID)
-    info = key.lstat()
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != WORKER_UID
-        or stat.S_IMODE(info.st_mode) != 0o600
-        or info.st_size != 32
-    ):
-        raise SystemExit("Shared Personal encryption key is unsafe")
+    # Key generation occurs in an isolated worker-UID subprocess. The root
+    # supervisor intentionally cannot traverse the mode-0700 key directory.
+    initialized = subprocess.run(
+        [
+            "/usr/bin/setpriv",
+            "--reuid=10001",
+            "--regid=10001",
+            "--clear-groups",
+            "/opt/venv/bin/python",
+            "/opt/sigma/auth-poc/shared_initialize.py",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        timeout=10,
+    )
+    if initialized.returncode != 0:
+        raise SystemExit("Shared Personal encryption initialization failed")
 
 
 def main() -> None:
