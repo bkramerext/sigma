@@ -853,11 +853,13 @@
   right: 8px !important;
 }
 
-/* Paper warning toasts are compact, not page-width banners. Preserve the
-   established upper-left dismiss control, with its own clear header space. */
+/* Match saved-paper warnings as well as expanded and contextual paper
+   notices; these are separate DOM elements. Reserve the top row for the
+   upper-left dismiss X rather than putting it beside the warning text. */
 .workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error,
 .workspace-page .papers-pane .paper-inline-feedback,
 .workspace-page .papers-pane .paper-score-error-card,
+.workspace-page .papers-pane .paper-saved-review-notice,
 .workspace-page .papers-pane .paper-preview-review-notice {
   position: relative;
   box-sizing: border-box;
@@ -872,6 +874,7 @@
   .paper-contextual-error,
   .paper-inline-feedback,
   .paper-score-error-card,
+  .paper-saved-review-notice,
   .paper-preview-review-notice
 ) .sigma-dialog-dismiss.sigma-dialog-dismiss {
   position: absolute;
@@ -883,6 +886,7 @@
   .workspace-page .papers-pane .session-notice-exit-inner > .paper-contextual-error,
   .workspace-page .papers-pane .paper-inline-feedback,
   .workspace-page .papers-pane .paper-score-error-card,
+  .workspace-page .papers-pane .paper-saved-review-notice,
   .workspace-page .papers-pane .paper-preview-review-notice {
     inline-size: min(100%, 420px);
   }
