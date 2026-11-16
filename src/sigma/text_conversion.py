@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from sigma import cloud_research, cloud_workspaces, model_dispatch
+from sigma import cloud_research, cloud_workspaces, global_research_settings, model_dispatch
 from sigma.model_catalog import validate_pair
 from sigma.openai_connection import auth_context, cloud_credential
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
@@ -264,6 +264,11 @@ async def _convert_text(
                     "markdown": {"body": record["markdown_answer"], "current": True}
                     if isinstance(record["markdown_answer"], str)
                     and record["markdown_answer"].strip()
+                    and isinstance(record.get("markdown_provenance"), dict)
+                    and record["markdown_provenance"].get("model")
+                    == global_research_settings.load_config()["ai_model"]
+                    and record["markdown_provenance"].get("reasoning_effort")
+                    == global_research_settings.load_config()["reasoning_effort"]
                     else None,
                 }
             elif scope == "current-understanding":
