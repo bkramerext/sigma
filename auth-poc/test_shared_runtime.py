@@ -100,8 +100,38 @@ def assert_no_browser_processes() -> None:
     raise AssertionError("Transient GUI processes remained after browser shutdown")
 
 
+def _memory_bytes(kind: str) -> int | None:
+    """Read this container's cgroup usage/peak, not the runner host's RSS."""
+    locations = {
+        "current": (
+            "/sys/fs/cgroup/memory.current",
+            "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+        ),
+        "peak": (
+            "/sys/fs/cgroup/memory.peak",
+            "/sys/fs/cgroup/memory/memory.max_usage_in_bytes",
+        ),
+    }[kind]
+    for candidate in locations:
+        try:
+            return int(Path(candidate).read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def memory_report(stage: str) -> None:
+    """Emit real idle/active/peak memory for the low-memory acceptance review."""
+    current = _memory_bytes("current")
+    peak = _memory_bytes("peak")
+    current_mib = f"{current / (1024 * 1024):.1f}" if current is not None else "unknown"
+    peak_mib = f"{peak / (1024 * 1024):.1f}" if peak is not None else "unknown"
+    print(f"MEMORY {stage}: current={current_mib}MiB peak={peak_mib}MiB", flush=True)
+
+
 def main() -> None:
     assert os.geteuid() == 10001, "Vault test must not run as root"
+    memory_report("idle_before_login")
     asyncio.run(storage_check())
     assert call(A, "GET", "/v1/account", key_override="0"*64)[0] == 403
     assert call(A, "GET", "/v1/account")[0] == 200
@@ -117,10 +147,12 @@ def main() -> None:
         assert call(B, "POST", "/v1/browser/password")[0] == 403
         assert call(B, "GET", "/v1/preview-state")[1] == {"phase": "unavailable"}
         assert call(A, "POST", "/v1/browser/password")[1]["status"] == "ready"
+        memory_report("user_a_chromium_active")
     finally:
         assert call(A, "POST", "/v1/browser/stop")[1]["status"] == "stopped"
     assert call(A, "GET", "/v1/browser/status")[1]["status"] == "stopped"
     assert_no_browser_processes()
+    memory_report("after_user_a_browser_closed")
     assert call(A, "GET", "/v1/account")[0] == 200
     assert not Path("/tmp/sigma-browser").exists(), "Closed browser retained its profile"
     # A closed login must not poison the next user's Chrome/X11 startup,
@@ -131,10 +163,12 @@ def main() -> None:
         assert call(A, "POST", "/v1/browser/start")[0] == 409
         assert call(A, "POST", "/v1/browser/password")[0] == 403
         assert call(B, "POST", "/v1/browser/password")[1]["status"] == "ready"
+        memory_report("user_b_chromium_active")
     finally:
         assert call(B, "POST", "/v1/browser/stop")[1]["status"] == "stopped"
     assert_no_browser_processes()
     assert not Path("/tmp/sigma-browser").exists()
+    memory_report("idle_after_both_logins")
     print("PASS shared worker, two encrypted users, sequential disposable browsers, no idle GUI")
 
 

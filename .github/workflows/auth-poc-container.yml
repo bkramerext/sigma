@@ -14,7 +14,7 @@ on:
       - 'src/sigma/personal_browser.py'
       - 'src/sigma/personal_inference.py'
       - 'src/sigma/model_dispatch.py'
-      - '.github/workflows/shared-personal.yml'
+      - '.github/workflows/auth-poc-container.yml'
   workflow_dispatch:
 
 permissions:
@@ -130,6 +130,9 @@ jobs:
           docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml exec -T personal \
             /usr/bin/setpriv --reuid=10001 --regid=10001 --clear-groups \
             /opt/venv/bin/python /opt/sigma/auth-poc/test_shared_oauth_lifecycle.py
+          docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml exec -T personal \
+            /usr/bin/setpriv --reuid=10001 --regid=10001 --clear-groups \
+            /opt/venv/bin/python /opt/sigma/auth-poc/test_shared_inference.py
           container=$(docker compose -p sigma-shared-ci -f deploy/personal-shared.compose.yaml ps -q personal)
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' "$container"
       - name: Verify encrypted user credentials survive shared worker restart
