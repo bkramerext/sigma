@@ -125,6 +125,13 @@ async def main() -> None:
                 assert "EF56GH78" not in html_a.body.decode()
                 assert "EF56GH78" in html_b.body.decode()
                 assert html_a.headers["cache-control"] == "no-store"
+                # Viewer must display only the remote Chromium contents.
+                # Connection labels, progress messages, and instructions are
+                # outside the authenticated iframe, not above or below it.
+                assert "<header>" not in html_a.body.decode()
+                assert "Click Continue with ChatGPT" not in html_a.body.decode()
+                assert "id='screen'" in html_a.body.decode()
+                assert "id='connection-status' role='alert' hidden" in html_a.body.decode()
                 for bad in ("../../private", "app/../../private", "http://another-host"):
                     try:
                         await proxy.asset(request(A), bad)
