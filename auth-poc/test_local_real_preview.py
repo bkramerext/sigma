@@ -54,8 +54,9 @@ async def main() -> None:
                     server.chatgpt_auth,
                     "begin",
                     new_callable=AsyncMock,
-                    return_value={"id": attempt_id},
+                    side_effect=[{"id": attempt_id}, {"id": "fresh-attempt-id"}],
                 ) as begin,
+                patch.object(server.chatgpt_auth, "cancel") as cancel,
                 patch.object(
                     server.chatgpt_auth,
                     "authorization_url",
@@ -71,11 +72,14 @@ async def main() -> None:
                 assert chooser.status_code in (302, 303, 307, 308)
                 assert chooser.headers["location"] == target
                 assert "no-store" in chooser.headers["cache-control"]
-                # Reloading while the chooser is already open must not launch
-                # competing OAuth flows or consume another local callback port.
+                # A returned browser may have already consumed the prior
+                # one-shot authorization handoff. Reload/reconnect cancels the
+                # abandoned attempt and issues a new, single-use URL.
                 repeated = await client.get("/")
                 assert repeated.headers["location"] == target
-                begin.assert_awaited_once()
+                assert begin.await_count == 2
+                cancel.assert_called_once_with(attempt_id)
+                assert server._ATTEMPT_ID == "fresh-attempt-id"
 
             server._ATTEMPT_ID = None
             with (
