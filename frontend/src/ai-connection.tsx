@@ -778,7 +778,9 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       setPersonalDialogState('closed');
       closeDisconnectPopup();
       window.dispatchEvent(new Event('sigma-cloud-auth-refresh'));
-      await ai.refresh('manual');
+      // The committed disconnect must not turn into a false failure because a
+      // subsequent provider-status refresh happened to be unavailable.
+      await ai.refresh('manual').catch(() => undefined);
       // Also discard Chromium's ephemeral web login so reconnecting exercises
       // a cold chooser; a Docker stop failure cannot undo local disconnect.
       await stopContainerPersonalBrowser().catch(() => {
