@@ -38,7 +38,7 @@ def _browser_ready() -> bool:
     try:
         with socket.create_connection(("127.0.0.1", 6080), timeout=1) as s:
             s.sendall(b"GET /vnc.html HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
-            return s.recv(128).startswith(b"HTTP/1.0 200") or False
+            return s.recv(128).startswith((b"HTTP/1.1 200", b"HTTP/1.0 200"))
     except OSError:
         return False
 
