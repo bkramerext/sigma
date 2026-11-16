@@ -318,10 +318,6 @@ const ProjectDescriptionEditor = forwardRef<ProjectDescriptionEditorHandle, Proj
   });
   const [draft, setDraft] = useState(original);
   const [error, setError] = useState('');
-  const [formattedProblem, setFormattedProblem] = useState<string | null>(null);
-  const [showFormattedProblem, setShowFormattedProblem] = useState(false);
-  const [formattingProblem, setFormattingProblem] = useState(false);
-  const [problemCopied, setProblemCopied] = useState(false);
   const [expandedFields, setExpandedFields] = useState<Record<string, boolean>>(() => {
     const entries = ['problem', 'desired_outcomes', 'paper_requirements', 'supplied_evidence'];
     return Object.fromEntries(entries.map(key => {
@@ -363,34 +359,6 @@ const ProjectDescriptionEditor = forwardRef<ProjectDescriptionEditorHandle, Proj
       return { ...previous, [key]: next };
     });
   };
-  useEffect(() => { setFormattedProblem(null); setShowFormattedProblem(false); }, [view.path, view.project.problem]);
-  async function toggleProblemMarkdown() {
-    if (formattingProblem) return;
-    if (showFormattedProblem) { setShowFormattedProblem(false); return; }
-    if (formattedProblem !== null) { setShowFormattedProblem(true); return; }
-    if (guest) { setError('Member access is required for AI Markdown formatting.'); return; }
-    setFormattingProblem(true); setError('');
-    try {
-      const [sourceResponse, configResponse] = await Promise.all([
-        fetch(`/api/projects/text?${new URLSearchParams({ path: view.path, scope: 'project' })}`, { cache: 'no-store' }),
-        fetch(`/api/projects/proposals/config?${new URLSearchParams({ path: view.path, purpose: 'markdown' })}`),
-      ]);
-      const [source, config] = await Promise.all([sourceResponse.json(), configResponse.json()]);
-      if (!sourceResponse.ok || !configResponse.ok || !config.available) throw new Error(config.message ?? source.error ?? config.error ?? 'Markdown formatting is unavailable.');
-      const response = await fetch('/api/projects/text/convert', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: view.path, scope: 'project', target: 'markdown', expected_digest: source.source_digest, expected_binding: config.binding }) });
-      const converted = await response.json();
-      if (!response.ok || typeof converted.markdown?.body !== 'string') throw new Error(converted.error ?? 'Markdown conversion failed.');
-      setFormattedProblem(converted.markdown.body); setShowFormattedProblem(true);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setFormattingProblem(false); }
-  }
-  async function copyProblem() {
-    try {
-      await navigator.clipboard.writeText(showFormattedProblem && formattedProblem !== null ? formattedProblem : view.project.problem);
-      setProblemCopied(true); window.setTimeout(() => setProblemCopied(false), 1600);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not copy Research Problem.'); }
-  }
   const titleInput = useRef<HTMLInputElement>(null);
   const dirty = draft.title !== view.project.title
     || draft.problem !== view.project.problem
@@ -445,7 +413,7 @@ const ProjectDescriptionEditor = forwardRef<ProjectDescriptionEditorHandle, Proj
         onChange={event => setDraft(old => ({ ...old, [field.key]: event.target.value }))}
       /> : <div className="sigma-description-rendered">
         {(view.project[field.key] ?? '').trim()
-          ? <RenderedMarkdown body={field.key === 'problem' && showFormattedProblem && formattedProblem !== null ? formattedProblem : view.project[field.key]}/>
+          ? <RenderedMarkdown body={view.project[field.key]}/>
           : <p className="settings-hint">Not specified.</p>}
       </div>}
       </div>
@@ -468,20 +436,8 @@ const ProjectDescriptionEditor = forwardRef<ProjectDescriptionEditorHandle, Proj
     </form> : <>
       <div className="project-pane-title-line">
         <h3 className="current-project">{view.project.title}</h3>
-        <span id="project-markdown-slot" className="project-markdown-slot text-view-format-control">
-          <button type="button" className={`sigma-render-toggle workspace-icon-button${showFormattedProblem ? ' sigma-render-active' : ''}${formattingProblem ? ' sigma-render-pending' : ''}`}
-            aria-label={showFormattedProblem ? 'Show original Research Problem text' : 'Render Research Problem as Markdown'}
-            aria-pressed={showFormattedProblem || formattingProblem} data-tooltip={showFormattedProblem ? 'Show plain text' : formattingProblem ? 'Formatting with AI…' : 'Convert to markdown'}
-            disabled={formattingProblem || busy} onClick={() => void toggleProblemMarkdown()}>
-            {formattingProblem ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}
-          </button>
-          {formattingProblem && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
-        </span>
-        <span id="project-markdown-slot-copy" className="project-copy-slot">
-          <button type="button" className="workspace-icon-button" aria-label="Copy Research Problem" data-tooltip={problemCopied ? 'Copied' : 'Copy Research Problem'} onClick={() => void copyProblem()}>
-            {problemCopied ? <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}
-          </button>
-        </span>
+        <span id="project-markdown-slot" className="project-markdown-slot"/>
+        <span id="project-markdown-slot-copy" className="project-copy-slot"/>
       </div>
       {fields}
     </>}

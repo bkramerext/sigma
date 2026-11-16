@@ -3196,6 +3196,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const scoringRef = useRef(false);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
   const [copiedPaperId, setCopiedPaperId] = useState('');
+  const [formattedPaper, setFormattedPaper] = useState<{ id: string; markdown: string } | null>(null);
+  const [renderedPaperId, setRenderedPaperId] = useState('');
+  const [formattingPaperId, setFormattingPaperId] = useState('');
+  const [paperFormatError, setPaperFormatError] = useState('');
   const [copiedExplanationId, setCopiedExplanationId] = useState('');
   const [copyError, setCopyError] = useState('');
   const [binding, setBinding] = useState('');
@@ -4167,9 +4171,37 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setPaperRemovalErrors(current => ({ ...current, [id]: errorMessage(cause) }));
     }
   }
+  async function togglePaperMarkdown(paperId: string) {
+    if (formattingPaperId) return;
+    if (renderedPaperId === paperId) { setRenderedPaperId(''); return; }
+    if (formattedPaper?.id === paperId) { setRenderedPaperId(paperId); return; }
+    setFormattingPaperId(paperId); setPaperFormatError('');
+    try {
+      const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { cache: 'no-store' });
+      const settings = await settingsResponse.json();
+      if (!settingsResponse.ok || !settings.available || !settings.binding)
+        throw new Error(settings.message ?? 'Connect ChatGPT to format this paper.');
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(paperId)}/markdown-preview`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: settings.binding }),
+      });
+      const result = await response.json();
+      if (!response.ok || typeof result.markdown !== 'string' || !result.markdown.trim())
+        throw new Error(result.error ?? 'Paper Markdown formatting failed.');
+      setFormattedPaper({ id: paperId, markdown: result.markdown });
+      setRenderedPaperId(paperId);
+    } catch (cause) { setPaperFormatError(errorMessage(cause)); }
+    finally { setFormattingPaperId(''); }
+  }
   async function copyPaper(id: string) {
     setCopyError('');
     try {
+      if (renderedPaperId === id && formattedPaper?.id === id) {
+        await navigator.clipboard.writeText(formattedPaper.markdown);
+        setCopiedPaperId(id);
+        window.setTimeout(() => setCopiedPaperId(current => current === id ? '' : current), 1600);
+        return;
+      }
       const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}/txt?${new URLSearchParams({ path })}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Paper text could not be loaded.');
       await navigator.clipboard.writeText(await response.text());
@@ -5098,7 +5130,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           {expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
           ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""} questionHeadingAction={<CopyToClipboardButton name="explaination" copied={copiedExplanationId === paper.paper_id} onCopy={() => void copyExplanation(paper.paper_id, selected.eli5?.markdown ?? '')}/>}/></Suspense></div>
-          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>
+          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><span className="text-view-format-control"><button type="button" className={`sigma-render-toggle workspace-icon-button${renderedPaperId === paper.paper_id ? " sigma-render-active" : ""}${formattingPaperId === paper.paper_id ? " sigma-render-pending" : ""}`} aria-label={renderedPaperId === paper.paper_id ? "Show plain paper" : "Render paper as Markdown"} aria-pressed={renderedPaperId === paper.paper_id || formattingPaperId === paper.paper_id} data-tooltip={renderedPaperId === paper.paper_id ? "Show plain text" : formattingPaperId === paper.paper_id ? "Formatting with AI…" : "Convert to Markdown"} disabled={!!formattingPaperId} onClick={() => void togglePaperMarkdown(paper.paper_id)}>{formattingPaperId === paper.paper_id ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>{formattingPaperId === paper.paper_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>{paperFormatError && <p className="error" role="alert">{paperFormatError}</p>}{renderedPaperId === paper.paper_id && formattedPaper?.id === paper.paper_id ? <div className="outcome-markdown paper-preview-markdown"><Suspense fallback={<p>Preparing paper preview…</p>}><RenderedMarkdown body={formattedPaper.markdown}/></Suspense></div> : <>
         {selected.generation.publication_status === 'needs_review' && <p role="status" className="ai-paper-warning"><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</p>}
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
         <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
@@ -5136,6 +5168,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
         {!selected.pdf_available && <p role="status">The paper record exists, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
+        </>}
         </>}
       </article>}      {selected?.paper_id === paper.paper_id && (selected.generation.sigma_issues?.length ?? 0) > 0 && <details className="outcome-subsection paper-diagnostics-disclosure">
         <summary><svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg><span>Diagnostics ({selected.generation.sigma_issues?.length ?? 0})</span></summary>

@@ -87,6 +87,11 @@
 .workspace-page .papers-pane .paper-action-popover button:disabled { opacity: .55; cursor: default; }
 .workspace-page .papers-pane .saved-paper-meta { margin-top: 2px; }
 /* Match the natural inline middle-dot spacing of active papers. */
+.workspace-page .papers-pane .ai-paper-preview-title-copy { display: inline-flex; align-items: center; gap: 10px; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy .text-view-format-control { display: inline-flex; align-items: center; gap: 6px; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy .markdown-logo { width: 26px; height: 22px; }
+.workspace-page .papers-pane .ai-paper-preview-title-copy .text-view-format-status { font: 12px/1.3 Inter, sans-serif; color: #c5d3df; }
+.workspace-page .papers-pane .paper-preview-markdown { margin-top: 12px; }
 .workspace-page .papers-pane .saved-paper-meta .text-view-link { color: var(--sigma-copper-foreground); }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link { display: inline; width: auto; min-height: 0; padding: 0; margin-left: 7px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--sigma-copper-foreground); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .papers-pane .saved-paper-meta .paper-see-scoring-link:hover:not(:disabled) { color: var(--sigma-copper-foreground); background: transparent; }
