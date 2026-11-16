@@ -170,11 +170,26 @@
   gap: 7px;
   align-items: center;
 }
-/* Align the Google status dot with ChatGPT's within the fixed-width pills.
-   Preserve the existing pill geometry, gaps, widths and right alignment. */
-:is(.home-page, .workspace-page) .identity-pill-stack > .project-google-signin {
+/* Both account pills fill one intrinsic-width grid column. Their outer
+   edges, padding and dot coordinates align regardless of label length. */
+:is(.home-page, .workspace-page) .identity-pill-stack {
+  justify-items: stretch;
+}
+:is(.home-page, .workspace-page) .identity-pill-stack > .project-google-signin,
+:is(.home-page, .workspace-page) .identity-pill-stack > .api-connection {
+  box-sizing: border-box;
+  width: 100%;
+  justify-self: stretch;
+}
+:is(.home-page, .workspace-page) .identity-pill-stack > .project-google-signin,
+:is(.home-page, .workspace-page) .identity-pill-stack > .api-connection > summary {
   justify-content: flex-start;
+  margin-left: 0;
   text-align: left;
+}
+:is(.home-page, .workspace-page) .identity-pill-stack > .api-connection > summary {
+  width: 100%;
+  max-width: 100%;
 }
 @keyframes connection-dot-pulse {
   0%, 100% { opacity: .78; box-shadow: 0 0 0 0 #75b18c00; }
