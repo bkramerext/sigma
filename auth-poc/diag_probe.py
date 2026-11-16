@@ -122,10 +122,9 @@ def browser_healthy() -> bool:
         status["x11_socket"] == "present"
         and status["vnc_tcp_5900"] == "listening"
         and status["websocket_http_6080"] == "http_200"
+        # Python-based websockify commonly appears as "python3" in /proc
+        # rather than "websockify". Its HTTP listener is authoritative.
         and int(status["chromium_processes"]) > 0
-        and int(status["xvfb_processes"]) > 0
-        and int(status["x11vnc_processes"]) > 0
-        and int(status["websockify_processes"]) > 0
     )
 
 

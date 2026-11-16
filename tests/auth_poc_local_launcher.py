@@ -448,7 +448,7 @@ class ProdLifecycleTests(unittest.TestCase):
             "chromium_processes=5",
             "xvfb_processes=1",
             "x11vnc_processes=1",
-            "websockify_processes=1",
+            "websockify_processes=0",
         ]
         with patch.object(diagnostic, "report", return_value=ready):
             self.assertTrue(diagnostic.browser_healthy())
