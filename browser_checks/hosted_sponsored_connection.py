@@ -974,7 +974,7 @@ def exercise(origin: str) -> None:
         expect(hosted_summary.get_by_role("status")).to_have_text("ChatGPT Sponsored")
         expect(hosted_summary).to_have_class(re.compile("has-sponsored-allowance"))
         expect(hosted_summary).to_have_attribute(
-            "title", "SIGMA covers eligible ChatGPT model calls."
+            "data-tooltip", "SIGMA covers eligible ChatGPT model calls."
         )
         expect(page.get_by_role("button", name="Reload me!")).to_have_count(0)
         hosted_summary.click()
