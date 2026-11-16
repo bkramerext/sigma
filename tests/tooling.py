@@ -257,7 +257,12 @@ def check_start_cli() -> None:
             else:
                 raise AssertionError("start did not exit")
         launch.assert_called_once_with(
-            navigate=False, signin=False, mock_auth=mock_auth, sponsored=True, prod=False
+            navigate=False,
+            signin=False,
+            mock_auth=mock_auth,
+            sponsored=True,
+            prod=False,
+            brainstorm=False,
         )
     # --prod is forwarded to the local UI launcher, not a production backend.
     with (
@@ -271,7 +276,7 @@ def check_start_cli() -> None:
         else:
             raise AssertionError("start --prod did not exit")
     launch.assert_called_once_with(
-        navigate=False, signin=False, mock_auth=False, sponsored=False, prod=True
+        navigate=False, signin=False, mock_auth=False, sponsored=False, prod=True, brainstorm=False
     )
     for flags, prod in (
         (["--brainstorm"], False),
@@ -290,11 +295,11 @@ def check_start_cli() -> None:
                 raise AssertionError("start --brainstorm did not exit")
         launch.assert_called_once_with(
             navigate=True,
-            navigate_path="/brainstorm",
             signin=False,
             mock_auth=False,
             sponsored=False,
             prod=prod,
+            brainstorm=True,
         )
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):

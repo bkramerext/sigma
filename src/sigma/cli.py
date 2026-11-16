@@ -337,7 +337,7 @@ def main() -> None:
     ui_command.add_argument(
         "--brainstorm",
         action="store_true",
-        help="Open Brainstorm in a browser tab (implies --navigate)",
+        help="Enable Brainstorm on Home (implies --navigate)",
     )
     add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
     for command_parser in commands.choices.values():
@@ -432,7 +432,7 @@ def main() -> None:
                 mock_auth=args.mock_auth,
                 sponsored=args.sponsored,
                 prod=args.prod,
-                **({"navigate_path": "/brainstorm"} if args.brainstorm else {}),
+                brainstorm=args.brainstorm,
             )
         )
     if args.command == "shutdown":

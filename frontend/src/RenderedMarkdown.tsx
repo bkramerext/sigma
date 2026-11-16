@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { escapeUnmatchedInlineDollars } from './markdown-dollars';
 import 'katex/dist/katex.min.css';
 
 type MarkdownNode = {
@@ -236,48 +237,14 @@ export function markdownWithMathDelimiters(body: string): string {
       return line;
     }
     if (inFence) return line;
-    const escapeUnmatched = (segment: string) => {
-      const positions: number[] = [];
-      for (let index = 0; index < segment.length; index++) {
-        if (segment[index] !== '$') continue;
-        let slashes = 0;
-        for (let prior = index - 1; prior >= 0 && segment[prior] === '\\'; prior--) slashes++;
-        if (slashes % 2) continue;
-        if (segment[index + 1] === '$') { index++; continue; }
-        if (segment[index - 1] === '$') continue;
-        positions.push(index);
-      }
-      const unmatched = new Set<number>();
-      // Currency markers are literal individually, before pairing math markers.
-      // This permits "$5 then $x+1$" and "$x+1$ costs $100" without allowing a
-      // price to consume the opening/closing delimiter of a neighboring formula.
-      const isCurrency = (position: number) => {
-        if (segment[position + 1] === '$' || !/^\d/u.test(segment[position + 1] ?? '')) return false;
-        const amount = segment.slice(position + 1).match(/^\d+(?:,\d{3})*(?:\.\d{1,2})?/u)?.[0];
-        if (!amount) return false;
-        const afterAmount = segment[position + 1 + amount.length] ?? '';
-        return !/[\d\w./\\^]/u.test(afterAmount);
-      };
-      const mathPositions = positions.filter(position => {
-        if (!isCurrency(position)) return true;
-        unmatched.add(position);
-        return false;
-      });
-      for (let index = 0; index < mathPositions.length; index += 2) {
-        const open = mathPositions[index];
-        const close = mathPositions[index + 1];
-        if (close === undefined) unmatched.add(open);
-      }
-      return [...segment].map((character, index) => unmatched.has(index) ? `\\${character}` : character).join('');
-    };
     const codeSpan = /(`+)[^`\n]*?\1/gu;
     let result = '';
     let cursor = 0;
     while ((match = codeSpan.exec(line))) {
-      result += escapeUnmatched(line.slice(cursor, match.index)) + match[0];
+      result += escapeUnmatchedInlineDollars(line.slice(cursor, match.index)) + match[0];
       cursor = match.index + match[0].length;
     }
-    return result + escapeUnmatched(line.slice(cursor));
+    return result + escapeUnmatchedInlineDollars(line.slice(cursor));
   }).join('\n');
 }
 

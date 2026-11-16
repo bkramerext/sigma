@@ -108,6 +108,7 @@ def run_ui(
     mock_auth: bool = False,
     sponsored: bool = False,
     prod: bool = False,
+    brainstorm: bool = False,
     navigate_path: str = "/",
 ) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
@@ -230,6 +231,7 @@ def run_ui(
                 child_env["SIGMA_LOCAL_AUTO_ADMIN"] = (
                     "true" if signin or legacy_local_admin else "false"
                 )
+                child_env["VITE_SIGMA_BRAINSTORM_ENABLED"] = "1" if brainstorm else "0"
                 child_env["SIGMA_MOCK_AUTH"] = "1" if mock_auth else "0"
                 child_env["SIGMA_LOCAL_SPONSORED_TEST_MODE"] = "1" if sponsored else "0"
                 # --prod now exercises the real local container path, never

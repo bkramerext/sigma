@@ -158,8 +158,8 @@ with sync_playwright() as playwright:
     assert fail_model_config[0] == 0, "Transient model configuration failure was not exercised"
     expect(dialog.get_by_text("Could not load model settings", exact=False)).to_have_count(0)
     dialog.get_by_role("button", name="Ask", exact=True).click()
-    expect(dialog.get_by_role("button", name="Answering")).to_be_disabled()
-    expect(dialog.get_by_role("button", name="Answering")).to_contain_text("⌛ Answering…")
+    expect(dialog.locator(".sigma-inert-progress")).to_contain_text("⌛ Answering…")
+    expect(dialog.get_by_role("button", name="Answering")).to_have_count(0)
     dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_count(0)
     expect(dialog.get_by_role("button", name="Ask", exact=True)).to_be_enabled()
@@ -232,7 +232,7 @@ with sync_playwright() as playwright:
     )
     assert failed_state_after_archive_error["started"] == failed_state_before_retry["started"]
     ask_button.click()
-    expect(dialog.get_by_role("button", name="Answering")).to_be_disabled()
+    expect(dialog.locator(".sigma-inert-progress")).to_contain_text("⌛ Answering…")
     expect(dialog.locator(".saved-paper-card").first).to_contain_text(
         failed_question, timeout=30000
     )
@@ -270,7 +270,7 @@ with sync_playwright() as playwright:
     title_line.screenshot(path=str(OUT / "research-qa-title-normal.png"))
     markdown_icon = title_line.get_by_role("button", name="Render answer as Markdown")
     expect(markdown_icon).to_be_visible()
-    expect(markdown_icon).to_have_attribute("data-tooltip", "Convert to Markdown")
+    expect(markdown_icon).to_have_attribute("data-tooltip", "Convert to markdown")
     markdown_box = markdown_icon.bounding_box()
     assert markdown_box and markdown_icon.locator("svg.markdown-logo").count() == 1
     normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")

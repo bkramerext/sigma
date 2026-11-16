@@ -984,14 +984,6 @@ async def generate_proposal(
             "Project identity changed. Reopen it before generating; nothing was sent."
         )
     credential = await auth_context()
-    if expected_binding is not None and expected_binding != credential["identity"]:
-        raise ProjectError(
-            "AI account/billing mode changed. Review the current connection before generating; no request was sent."
-        )
-    if expected_mode is not None and expected_mode != credential["mode"]:
-        raise ProjectError(
-            "AI account/billing mode changed. Review the current connection before generating; no request was sent."
-        )
     config = await configuration(view=view, context=credential)
     if not config["available"]:
         raise ProjectError(config["message"])
@@ -1071,10 +1063,21 @@ async def generate_proposal(
             payload["stream"] = True
             payload["input"] = [{"role": "user", "content": context}]
         current = await auth_context()
-        if current["identity"] != credential["identity"] or current["mode"] != credential["mode"]:
-            raise ProjectError(
-                "AI account/billing mode changed. Retry explicitly with the selected account; no request was sent."
-            )
+        if (current["identity"], current["mode"]) != (credential["identity"], credential["mode"]):
+            credential = current
+            config = await configuration(view=view, context=credential)
+            if not config["available"]:
+                raise ProjectError(config["message"])
+            payload["model"] = config["model"]
+            payload["reasoning"] = {"effort": config["reasoning_effort"]}
+            if credential["mode"] == "chatgpt":
+                payload.pop("max_output_tokens", None)
+                payload["stream"] = True
+                payload["input"] = [{"role": "user", "content": context}]
+            else:
+                payload["max_output_tokens"] = 8000
+                payload.pop("stream", None)
+                payload["input"] = context
         if infer_strategy:
             if request_id is None or inference_owner is None:
                 raise ProjectError(
@@ -1150,14 +1153,6 @@ async def generate_proposal(
                         )
                     raw = json.loads(data)
         cloud_research.settle_provider_attempt(cloud_attempt, raw)
-        current_credential = await auth_context()
-        if (
-            current_credential["identity"] != credential["identity"]
-            or current_credential["mode"] != credential["mode"]
-        ):
-            raise ProjectError(
-                "AI account or billing mode changed during generation. The draft was discarded; retry explicitly."
-            )
         current_view = inspect_project(path)
         if current_view.project.id != project_id:
             raise ProjectError(

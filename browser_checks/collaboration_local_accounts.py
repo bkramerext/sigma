@@ -1177,7 +1177,9 @@ def exercise(ui: str, workspaces: Path) -> None:
         owner_dialog = owner.get_by_role("dialog", name="Project Settings")
         owner_dialog.get_by_role("button", name=f"Remove {COLLABORATOR}").click()
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
-        expect(owner_dialog).not_to_be_visible()
+        # Closing awaits the asynchronous revision-fenced save; only then
+        # can we assert that the former member has lost server-side access.
+        expect(owner_dialog).not_to_be_visible(timeout=20000)
 
         # Revocation must be enforced by the server, not just by a hidden icon.
         revoked = member_context.request.get(ui + "/api/projects/inspect", params={"path": path})
@@ -1204,6 +1206,7 @@ def exercise(ui: str, workspaces: Path) -> None:
         invite.fill(COLLABORATOR)
         invite.press("Tab")
         owner_dialog.get_by_role("button", name="Close Project Settings").click()
+        expect(owner_dialog).not_to_be_visible(timeout=20000)
         member.goto(ui)
         member.get_by_role("tab", name="My Work").click()
         expand_saved_group(member)
