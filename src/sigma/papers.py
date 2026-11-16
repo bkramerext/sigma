@@ -4730,19 +4730,29 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
         if row["status"] == "discarded":
             continue
         if row["status"] == "complete" and row.get("artifact_id"):
-            # An attributed published paper has a durable ledger receipt.
-            # It does not need checkpoint, preflight or PDF inspection on
-            # every project-page listing. Fetch those only for unfinished runs.
+            # Read only the tiny, run-scoped progress receipt, never the PDF.
+            # Otherwise the fast path erases a failed automatic Score step and
+            # incorrectly renders 'Scored' for a PDF which has no score.
             published_id = row["artifact_id"]
+            with paper_run_scope(row["run_id"]):
+                saved_progress = _read_progress_status(path)
+            finished_progress = {
+                "status": "complete",
+                "stage": "complete",
+                "paper_id": published_id,
+            }
+            if (
+                saved_progress is not None
+                and saved_progress.get("paper_id") == published_id
+                and saved_progress.get("status") == "complete"
+                and "scoring did not finish" in str(saved_progress.get("detail", ""))
+            ):
+                finished_progress["detail"] = saved_progress["detail"]
             result.append(
                 {
                     **row,
                     "status": "complete",
-                    "progress": {
-                        "status": "complete",
-                        "stage": "complete",
-                        "paper_id": published_id,
-                    },
+                    "progress": finished_progress,
                     "preflight_needed": False,
                     "paper_id": published_id,
                     "can_control": False,
