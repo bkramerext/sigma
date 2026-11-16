@@ -30,9 +30,20 @@ project is imported into this implementation.
 * A successful account authorization or closed sign-in dialog stops the
   browser process group and removes its temporary profile, without disrupting
   the shared model worker, active research or papers. Abandoned viewers expire.
+* The broker revokes **existing** VNC/WebSocket relay connections when a
+  browser ends or changes owner; revoking only the listening socket would
+  allow an earlier user to view a later user's browser.
+* Abandoned OAuth/PKCE attempts are canceled in the original user's encrypted
+  storage context. They cannot consume all pending authorization slots.
+* Docker SIGTERM triggers graceful worker shutdown rather than waiting for
+  SIGKILL. The worker has a bounded grace period; interrupted model operations
+  still rely on SIGMA's persisted Stop/Resume semantics.
 * `auth-poc/test_shared_runtime.py` exercises two encrypted workspaces,
-  invalid HMACs, cross-user browser denial, browser shutdown and continued
-  account queries without an idle GUI. Docker CI reports memory statistics.
+  invalid HMACs, sequential real Chromium launches, cross-user browser denial,
+  browser shutdown and continued account queries without an idle GUI.
+  `auth-poc/test_shared_oauth_lifecycle.py` verifies the workspace context of
+  cancellations using the real ASGI router. Docker CI also verifies encrypted
+  records after graceful worker restart and reports container memory.
 
 At-rest encryption does **not** protect all accounts from a compromise of the
 live shared decrypting worker. The POC accepts this explicit tradeoff in return
@@ -69,7 +80,8 @@ publishes the backend or frontend on any non-loopback interface.
    install it as the host Caddyfile. Reload Caddy. Verify an authenticated
    browser session, API, SSE/streaming, WebSocket and maintenance mode.
 4. Restart `sigma.service`. Its startup refuses to scale edge to zero unless
-   the installed Caddyfile contains both loopback upstreams. Verify the two
+   the **adapted active host Caddy routes for the SIGMA hostname** contain both
+   reviewed loopback upstreams and no others. Verify the two
    core application containers are healthy, edge has zero instances, and
    production is serving through host Caddy.
 5. Record `docker stats` and VM memory before and after; inspect browser
@@ -79,7 +91,10 @@ Rollback: while the direct application ports are still alive, restore and
 reload the saved original host Caddyfile **first**, then remove
 `SIGMA_HOST_DIRECT=true` and restart SIGMA to bring Docker edge back.
 Never leave the direct Caddyfile pointing at an old release without direct
-published loopback ports.
+published loopback ports. The deployment tool refuses an upgrade/rollback
+while `SIGMA_HOST_DIRECT=true` if either involved release lacks the direct
+Compose overlay; disable direct mode and restore the original Caddy route
+**before** downgrading to the old edge-only release.
 
 ## Acceptance gates
 
