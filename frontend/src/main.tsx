@@ -5654,7 +5654,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
             if (!response.ok) throw new Error('Could not check Markdown cache.');
             if (fresh.markdown?.current) {
               setData(fresh);
-              chooseView(selected === 'rendered' ? 'plain' : 'rendered');
+              chooseView('rendered');
               setError('');
             } else await convert('markdown');
           } catch (cause) { setError(errorMessage(cause)); }
