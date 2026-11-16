@@ -1,22 +1,24 @@
-"""Ephemeral paper-preview Markdown formatting using the standard Cheap/Medium model.
+"""Read-only Markdown conversion for the saved paper preview.
 
-This is a read-only view conversion; it never mutates the saved PDF, paper
-record, canonical TeX, provenance, or provider-call checkpoint.
+Uses the same Cheap/Medium model and formatting instructions as text views.
+Does not change the paper, PDF, TeX, or checkpoint accounting.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
 from sigma import papers
-from sigma.model_catalog import validate_pair
 from sigma.openai_connection import auth_context
 from sigma.projects import ProjectError, inspect_project
 from sigma.proposals import configuration
-from sigma.text_conversion import FORMAT_MODEL, FORMAT_EFFORT, INSTRUCTIONS
+from sigma.text_conversion import FORMAT_EFFORT, FORMAT_MODEL, INSTRUCTIONS
+
 
 class PaperPreviewMarkdown(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: str
+
 
 async def format_paper_preview(path: str, paper_id: str, expected_project_id: str) -> str:
     view = inspect_project(path)
@@ -33,8 +35,11 @@ async def format_paper_preview(path: str, paper_id: str, expected_project_id: st
         raise ProjectError(config["message"])
     result, _ = await papers._provider_structured(
         {"source_format": "plain", "target_format": "markdown", "text": text},
-        auth, config,
-        instructions=INSTRUCTIONS + " Convert the entire saved paper text into readable Markdown, including all headings and paragraphs. Preserve all content and mathematics, without summarizing.",
+        auth,
+        config,
+        instructions=INSTRUCTIONS
+        + " Convert the entire saved paper text into readable Markdown, including all "
+        "headings and paragraphs. Preserve all content and mathematics, without summarizing.",
         schema_name="sigma_paper_preview_markdown",
         response_model=PaperPreviewMarkdown,
         max_input_bytes=32000,
@@ -44,5 +49,7 @@ async def format_paper_preview(path: str, paper_id: str, expected_project_id: st
     )
     markdown = result.body
     if not markdown.strip() or len(markdown) < max(1, len(text.strip()) // 5):
-        raise ProjectError("Paper formatting appears incomplete; the original preview is unchanged.")
+        raise ProjectError(
+            "Paper formatting appears incomplete; the original preview is unchanged."
+        )
     return markdown
