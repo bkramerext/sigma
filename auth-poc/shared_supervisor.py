@@ -49,20 +49,27 @@ def _stop() -> None:
     global _BROWSER
     browser = _BROWSER
     _BROWSER = None
-    if browser is not None and browser.poll() is None:
+    if browser is not None:
+        # Terminate helpers even when the Chromium leader has exited.
         try:
             os.killpg(browser.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
             browser.wait(timeout=4)
-        except (OSError, subprocess.TimeoutExpired):
-            try:
-                os.killpg(browser.pid, signal.SIGKILL)
-            except OSError:
-                pass
-            try:
-                browser.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                pass
-    if BROWSER_HOME.exists() and not BROWSER_HOME.is_symlink():
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            os.killpg(browser.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            browser.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+    if BROWSER_HOME.exists():
+        if BROWSER_HOME.is_symlink():
+            raise RuntimeError("Untrusted browser home")
         shutil.rmtree(BROWSER_HOME)
 
 
