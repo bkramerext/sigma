@@ -11,7 +11,7 @@ import time
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -97,7 +97,7 @@ async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index() -> HTMLResponse | RedirectResponse:
+async def index() -> Response:
     if real_signin_enabled():
         return await _direct_local_signin()
     html = """<!doctype html><html lang="en"><head><meta charset="utf-8">
