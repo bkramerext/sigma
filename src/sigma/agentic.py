@@ -13,7 +13,7 @@ from uuid import uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import cloud_research, cloud_workspaces, personal_inference, research_sessions
+from sigma import cloud_research, cloud_workspaces, research_sessions
 from sigma.agentic_evidence import now as evidence_now
 from sigma.agentic_evidence import save as save_evidence
 from sigma.openai_connection import auth_context, cloud_credential
