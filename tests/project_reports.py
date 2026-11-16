@@ -473,6 +473,7 @@ def test_computation_provenance_precedes_authored_claims() -> None:
 def main() -> None:
     test_cold_cache_collision_retries_once_without_provider_calls()
     test_tectonic_failure_hides_raw_output_but_records_backend_diagnostics()
+    test_pdf_compiler_architecture_failure_is_classified_without_source_leak()
     test_computation_provenance_precedes_authored_claims()
     test_verification_presentation()
     test_unequal_metric_groups()
@@ -659,10 +660,6 @@ def main() -> None:
     print("PASS report API formats and unchanged Project Audit export")
 
 
-if __name__ == "__main__":
-    main()
-
-
 def test_pdf_compiler_architecture_failure_is_classified_without_source_leak() -> None:
     """An incompatible binary is a compiler problem, not a bad manuscript."""
     import errno
@@ -685,3 +682,7 @@ def test_pdf_compiler_architecture_failure_is_classified_without_source_leak() -
         else:
             raise AssertionError("An unexecutable Tectonic binary must fail with a safe error")
     assert diagnostics == ["Tectonic could not start; verify the backend compiler architecture."]
+
+
+if __name__ == "__main__":
+    main()
