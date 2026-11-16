@@ -1,4 +1,4 @@
-"""User-owned model connection adapter for explicitly local authenticated workspaces."""
+"""User-owned model connection adapter for authenticated SIGMA workspaces."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ UNAVAILABLE_GUIDANCE = "Personal ChatGPT authentication is unavailable in hosted
 
 
 async def auth_context(subject_hash: str | None) -> AuthContext:
-    """Load the current local user's own credentials; never use these on hosted services."""
+    """Resolve a strictly user-bound worker, not any host or sponsor credential."""
     from sigma import chatgpt_auth, cloud_auth
 
     if subject_hash is None:
@@ -20,8 +20,8 @@ async def auth_context(subject_hash: str | None) -> AuthContext:
         )
     from sigma import personal_browser, personal_inference
 
-    # The opt-in local container POC uses precisely the hosted worker protocol.
-    # Never silently consult this Mac's legacy OAuth credentials in that mode.
+    # Both local and hosted shared workers use the same user-bound protocol.
+    # Never consult the operator's legacy OAuth credentials in either mode.
     if personal_browser.enabled() or not cloud_auth.config().local:
         if personal_browser.enabled():
             try:
