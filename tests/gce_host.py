@@ -20,7 +20,41 @@ import gce_preflight  # pyright: ignore[reportMissingImports]
 import prepare_state_disk  # pyright: ignore[reportMissingImports]
 
 
+import check_host_direct_caddy  # pyright: ignore[reportMissingImports]
+
+
 class GceHostToolingTests(unittest.TestCase):
+    def test_adapted_caddy_routes_reject_comments_and_extra_upstreams(self) -> None:
+        def proxy(dial: str) -> dict:
+            return {"handler": "reverse_proxy", "upstreams": [{"dial": dial}]}
+
+        def document(*dials: str) -> dict:
+            return {
+                "apps": {
+                    "http": {
+                        "servers": {
+                            "srv0": {
+                                "routes": [{"handle": [proxy(dial) for dial in dials]}]
+                            }
+                        }
+                    }
+                }
+            }
+
+        expected = ("127.0.0.1:18081", "127.0.0.1:18082")
+        check_host_direct_caddy.validate(document(*expected))
+        for invalid in (
+            document("127.0.0.1:18080"),
+            document("0.0.0.0:18081", "127.0.0.1:18082"),
+            document("127.0.0.1:18081"),
+            document(*expected, "127.0.0.1:18080"),
+            {"comment": "127.0.0.1:18081 127.0.0.1:18082"},
+            [],
+        ):
+            with self.subTest(config=invalid):
+                with self.assertRaises(check_host_direct_caddy.InvalidDirectRouting):
+                    check_host_direct_caddy.validate(invalid)
+
     def test_host_readiness_derives_rootless_socket_without_production_environment(self) -> None:
         preflight = gce_preflight.Preflight(host_readiness=True)
         with patch("gce_preflight._sandbox_uid", return_value=1001):
