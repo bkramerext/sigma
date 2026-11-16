@@ -831,3 +831,11 @@
   top: 5px !important;
   right: 5px !important;
 }
+
+/* Dismiss only the expanded paper's duplicate review notice; the status above
+   the preview remains visible as the authoritative publication warning. */
+.workspace-page .papers-pane .paper-preview-review-notice { position: relative; padding-right: 44px; }
+.workspace-page .papers-pane .paper-preview-review-notice .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  top: 6px !important;
+  right: 8px !important;
+}
