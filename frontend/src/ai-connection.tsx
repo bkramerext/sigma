@@ -326,6 +326,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
   const openingContainerBrowser = useRef(false);
+  const pendingPersonalStop = useRef<Promise<void> | null>(null);
   const browserLaunchSequence = useRef(0);
   const dialogActive = useRef(false);
   const activatingPersonal = useRef(false);
@@ -678,6 +679,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     // a previously authorized ChatGPT account can be reused.
     setPersonalDialogState('closed');
     try {
+      // A new cold connection must never race the preceding Docker stop.
+      if (pendingPersonalStop.current) await pendingPersonalStop.current.catch(() => undefined);
       while (sequence === browserLaunchSequence.current && dialogActive.current) {
         const response = await fetch(windowAuthUrl('/api/ai/personal-browser/start'), {
           method: 'POST', credentials: 'same-origin',
@@ -783,9 +786,15 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       await ai.refresh('manual').catch(() => undefined);
       // Also discard Chromium's ephemeral web login so reconnecting exercises
       // a cold chooser; a Docker stop failure cannot undo local disconnect.
-      await stopContainerPersonalBrowser().catch(() => {
-        reportRequestFailure('ChatGPT was disconnected, but its private browser could not be stopped.');
-      });
+      const stop = stopContainerPersonalBrowser();
+      pendingPersonalStop.current = stop;
+      try {
+        await stop.catch(() => {
+          reportRequestFailure('ChatGPT was disconnected, but its private browser could not be stopped.');
+        });
+      } finally {
+        if (pendingPersonalStop.current === stop) pendingPersonalStop.current = null;
+      }
     } catch (cause) {
       setDisconnectError(cause instanceof Error ? cause.message
         : 'Could not disconnect Personal ChatGPT. Try again.');
