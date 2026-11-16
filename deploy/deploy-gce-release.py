@@ -336,6 +336,13 @@ class Deployment:
         except OSError as exc:
             raise DeployFailure("cannot read reviewed auth-lab deployment setting") from exc
 
+    def host_direct_enabled(self) -> bool:
+        """Hosted direct-routing activation is explicitly reviewed and optional."""
+        try:
+            return b"SIGMA_HOST_DIRECT=true" in self.env_file.read_bytes().splitlines()
+        except OSError as exc:
+            raise DeployFailure("cannot read host-direct deployment setting") from exc
+
     def verify_health(self, sha: str) -> None:
         compose = [
             "docker",
@@ -349,7 +356,11 @@ class Deployment:
             "-f",
             str(self.repository / "deploy/compose.gce.yaml"),
         ]
-        services = ["backend", "frontend", "edge"]
+        services = ["backend", "frontend"]
+        if self.host_direct_enabled():
+            compose.extend(["-f", str(self.repository / "deploy/compose.direct.gce.yaml")])
+        else:
+            services.append("edge")
         if self.auth_lab_enabled():
             compose.extend(
                 [
