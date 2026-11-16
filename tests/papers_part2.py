@@ -4855,8 +4855,11 @@ def test_paper_live_model_selection_changes_future_calls_only() -> None:
         "gpt-6-luna",
         "low",
     )
-    assert papers._resume_provider_choice(checkpoint, "different-identity", "gpt-6-luna", "low") == (
-        "gpt-6-luna", "low",
+    assert papers._resume_provider_choice(
+        checkpoint, "different-identity", "gpt-6-luna", "low"
+    ) == (
+        "gpt-6-luna",
+        "low",
     )
 
 
