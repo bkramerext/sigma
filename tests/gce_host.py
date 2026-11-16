@@ -16,11 +16,9 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY = ROOT / "deploy"
 sys.path.insert(0, str(DEPLOY))
+import check_host_direct_caddy  # pyright: ignore[reportMissingImports]
 import gce_preflight  # pyright: ignore[reportMissingImports]
 import prepare_state_disk  # pyright: ignore[reportMissingImports]
-
-
-import check_host_direct_caddy  # pyright: ignore[reportMissingImports]
 
 
 class GceHostToolingTests(unittest.TestCase):
