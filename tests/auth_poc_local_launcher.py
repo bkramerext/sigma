@@ -583,10 +583,6 @@ class ProdLifecycleTests(unittest.TestCase):
         self.assertNotIn("frame-ancestors *", proxy)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class PersonalModelDispatchAuditTests(unittest.TestCase):
     """All SIGMA generation paths honor the same Personal worker boundary."""
 
@@ -747,3 +743,7 @@ class PersonalModelDispatchAuditTests(unittest.TestCase):
                 self.assertEqual(rpc.await_count, 3)
 
         asyncio.run(exercise())
+
+
+if __name__ == "__main__":
+    unittest.main()
