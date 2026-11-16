@@ -747,6 +747,7 @@
 /* Creator/model attribution shares the date, elapsed-time, and score size. */
 .workspace-page .papers-pane .saved-paper-meta .artifact-attribution {
   font-size: inherit;
+  opacity: 1;
 }
 
 .workspace-page .papers-pane .saved-paper-meta .paper-inline-score {
