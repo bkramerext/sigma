@@ -379,3 +379,40 @@ SIGMA remains experimental: research conclusions, citations, generated papers, a
 
 **Source cutoff for these notes:** merged `main` SHA `91ca6f391ffafd77aba9e7570b81b390b3f0c6fb` (through PR #845; changes since the deployed v0.4.1 SHA `03781befac94ef1235fd5630e2f061abcd4fd9c8`). **Final release SHA:** `0201c706d0ad63d3909016c9c4cc35e6f9ecb074` (PR #848; its tree matches the green checked release PR head). The guarded deployment completed on November 13, 2026. Production health, public HTTPS, hosted Google sign-in readiness, guest browsing, and saved-data integrity passed. Sponsored inference still requires the operator to complete the designated sponsor ChatGPT OAuth; production remains on `api_key`, whose OpenAI project hard spending limit blocks research. No provider billing limit was changed and no paid inference ran. See [Deployment History](DEPLOYMENT_HISTORY.md) for backup and verification details. A supplementary deployment of UI fixes from PRs #850 and #851 followed on November 14, 2026 at merged SHA `2cc08b5eae6acd661d485878f4ce84ca962786f8`, still version 0.4.2. It updated Google account-switch navigation, About legal actions, and Home invitation retry; see the separate second-deployment entry in [Deployment History](DEPLOYMENT_HISTORY.md).
 
+---
+
+## Version 0.4.3 — Brainstorm and Personal ChatGPT Foundations
+*Release candidate · November 16, 2026 · Production acceptance pending*
+
+**A new two-agent Brainstorm workspace, more dependable connection handling, and the foundation for a private Personal ChatGPT browser connection.** This update also improves account-switching, startup recovery, and clarity around sponsored provider limits.
+
+### Brainstorm: explore ideas with two AI agents
+
+- **Two-agent conversation.** Brainstorm alternates AI #1 and AI #2 around your prompts, with Human, Repeated, Send, Stop, and Clear controls. The Repeated prompt is applied to future agent turns without adding redundant transcript entries.
+- **More useful presentation.** Side-by-side agent panels adapt to smaller screens. Replies can display Markdown and mathematical notation, while the underlying text remains inspectable.
+- **Deliberate access.** Locally, `./sigma start --brainstorm` opens Home with the Brainstorm entry enabled; an ordinary start does not show it. Authorized hosted users can navigate to `/brainstorm`, but it is not promoted on hosted Home by default. Guest and unauthenticated requests remain restricted.
+- **Request validation repaired.** Brainstorm no longer rejects an otherwise valid sponsored-model request merely because an optional response-format field is absent.
+
+### Personal ChatGPT: isolated local connection
+
+- **A single local launch path.** `./sigma start --prod` integrates the Personal ChatGPT sign-in preview into SIGMA's regular connection dialog. No separate companion application, manual Docker launch, or VNC password is needed for this local experience.
+- **Private browser and worker.** An isolated Chromium container presents OpenAI's account chooser; a separate credential worker keeps tokens outside the SIGMA browser page. A completed browser login alone never changes the provider: the worker must verify the authorized account first.
+- **Consistent connection controls.** The standard SIGMA dialog supports preparation, retry, cancellation, and connection status. Normal local SIGMA keeps its system-browser authorization flow; `--prod` uses the isolated browser.
+- **Provider isolation throughout the application.** The Personal worker transport is integrated with research agents, reference preparation, paper-writing stages, proofreading, Research Q&A, text formatting, proposals, and Brainstorm. Personal requests must not silently fall back to Sponsored credentials or its spending ledger. Long paper requests have bounded timeouts.
+- **Better startup and recovery diagnostics.** Local Docker readiness, browser health, background image preparation, cleanup after abnormal exits, and reconnect paths have additional safeguards and tests.
+
+### Sign-in, sponsored access, and interface fixes
+
+- **Clearer sponsored connection status.** The Sponsored ChatGPT pill retains its compact label during status checks and shows the administrator's SIGMA allowance as *Unlimited* without implying unlimited provider funding. OpenAI API project hard limits are identified as such and are not retried as transient errors.
+- **Safer account changes.** Google account switching returns to the appropriate workspace rather than carrying an inaccessible project URL into the next account.
+- **More consistent text actions.** About-dialog legal links and Home invitation retry use SIGMA's standard understated text-button styling.
+- **More reliable local startup.** Launcher recovery recognizes newer command-line options and can safely clean up an orphaned local frontend process without killing unrelated applications.
+- **Administrator migration tooling.** A guarded, dry-run-first utility supports an explicitly authorized change of the built-in Google administrator while preserving independent accounts and saved data. It is **not** an automatic account migration.
+
+### Release scope and known limitations
+
+The isolated Personal ChatGPT connection described here is **a local `--prod` implementation, not an accepted hosted production feature**. Its Docker foundation and synthetic isolation tests are merged, but the GCE broker service, backend socket overlay, hosted sign-in eligibility, real provider operation, and end-user acceptance require separate work. The existing Sponsored production path must remain functional and isolated. Hosted real Personal authentication and inference should not be presented as available until independently verified and accepted. See [production issue #854](https://github.com/bkramerext/sigma/issues/854).
+
+SIGMA remains experimental. Research findings, generated citations and papers, and editorial scores require independent review.
+
+**Maintainer boundary:** These notes describe changes merged to `main` after the v0.4.2 release merge `0201c706d0ad63d3909016c9c4cc35e6f9ecb074`, through `b326c7de5723d7d3f9052bf960b93ea36a790550` (PR #872, including PR #877). This is a **release-notes draft**, not a version bump, release tag, production deployment, or hosted feature acceptance. Follow-up PR #879 was merged only into the feature branch at this cutoff and is not included in the `main` release scope.
