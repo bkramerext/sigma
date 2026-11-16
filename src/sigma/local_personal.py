@@ -26,12 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE = re.compile(r"[0-9a-f]{32}\Z")
 RELEASE = re.compile(r"[0-9a-f]{40}\Z")
 CHECKOUT = re.compile(r"[0-9a-f]{32}\Z")
-COMPOSE_FILES = (
-    "deploy/auth-poc.compose.yaml",
-    "deploy/auth-poc.gce.yaml",
-    "deploy/auth-poc.user.gce.yaml",
-    "deploy/auth-poc.user.local.yaml",
-)
+COMPOSE_FILES = ("deploy/personal-shared.compose.yaml",)
+
+
 
 
 class LocalPersonalUnavailable(RuntimeError):
@@ -134,7 +131,7 @@ def _private_directory(path: Path, mode: int) -> None:
 
 
 def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, str]:
-    """Choose the platform before building and validate existing release tags."""
+    """Build one native-architecture image; no legacy user-worker pair."""
     release = _command(["git", "rev-parse", "--verify", "HEAD"], env=env, timeout=10)
     if not RELEASE.fullmatch(release):
         raise LocalPersonalUnavailable("Unable to identify a pinned SIGMA release.")
@@ -142,128 +139,55 @@ def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, st
         ["docker", "info", "--format", "{{.Architecture}}"], env=env, timeout=20
     )
     platform = {
-        "arm64": "linux/arm64",
-        "aarch64": "linux/arm64",
-        "amd64": "linux/amd64",
-        "x86_64": "linux/amd64",
+        "arm64": "linux/arm64", "aarch64": "linux/arm64",
+        "amd64": "linux/amd64", "x86_64": "linux/amd64",
     }.get(architecture)
     if platform is None:
         raise LocalPersonalUnavailable("Docker Desktop architecture is unsupported.")
     env["SIGMA_RELEASE"] = release
+    env["SIGMA_SHARED_PLATFORM"] = platform
     env["SIGMA_AUTH_POC_BROWSER_PLATFORM"] = platform
-    print(
-        f"SIGMA Personal preparation: host_browser_platform={platform}, "
-        "worker_platform=linux/amd64",
-        flush=True,
-    )
+    print(f"SIGMA Personal preparation: shared_platform={platform}", flush=True)
     if build and not _images_compatible(env):
-        print("Preparing isolated Personal ChatGPT images for this Mac…", flush=True)
+        # No live RPC secret is available to Docker image-build operations.
+        build_env = {**env, "SIGMA_AUTH_POC_RPC_SEED": "0" * 64}
         _command(
-            ["docker", "compose", "-f", "deploy/auth-poc.compose.yaml", "build"],
-            env=env,
-            timeout=900,
+            ["docker", "compose", "-f", COMPOSE_FILES[0], "build", "personal"],
+            env=build_env, timeout=900,
         )
-        for name in ("sigma-auth-poc", "sigma-auth-browser-poc"):
-            _command(
-                ["docker", "tag", name + ":local", name + ":" + release],
-                env=env,
-                timeout=20,
-            )
-        print("SIGMA Personal preparation: rebuilt both pinned images", flush=True)
         if not _images_compatible(env):
-            raise LocalPersonalUnavailable(
-                "The Personal browser images were built for the wrong architecture."
-            )
+            raise LocalPersonalUnavailable("Shared Personal image architecture mismatch.")
     return release, platform
 
 
 def _images_compatible(env: dict[str, str]) -> bool:
-    """Reject cached images with the right SHA but the wrong architecture."""
-    for name, desired in (
-        ("sigma-auth-poc", "linux/amd64"),
-        ("sigma-auth-browser-poc", env["SIGMA_AUTH_POC_BROWSER_PLATFORM"]),
-    ):
-        try:
-            actual = _command(
-                [
-                    "docker",
-                    "image",
-                    "inspect",
-                    "--format",
-                    "{{.Os}}/{{.Architecture}}",
-                    name + ":" + env["SIGMA_RELEASE"],
-                ],
-                env=env,
-                timeout=10,
-            )
-        except LocalPersonalUnavailable:
-            return False
-        if actual != desired:
-            print(f"SIGMA Personal preparation: image {name} architecture mismatch", flush=True)
-            return False
-    print("SIGMA Personal preparation: pinned image architectures verified", flush=True)
-    return True
-
+    try:
+        actual = _command(
+            ["docker", "image", "inspect", "--format", "{{.Os}}/{{.Architecture}}",
+             "sigma-shared-personal:" + env["SIGMA_RELEASE"]],
+            env=env, timeout=10,
+        )
+        return actual == env["SIGMA_SHARED_PLATFORM"]
+    except LocalPersonalUnavailable:
+        return False
 
 def _checkout_id() -> str:
     # Stable across SIGMA restarts, and does not expose the checkout path.
     return hashlib.sha256(str(ROOT.resolve()).encode()).hexdigest()[:32]
 
 
-def _owned_workspaces(env: dict[str, str]) -> set[str]:
-    """Recover only Docker projects labeled for this checkout and local UID."""
+def _down_shared(env: dict[str, str]) -> None:
+    """Stop exactly this checkout's shared service; retain its two volumes."""
     checkout = env.get("SIGMA_AUTH_POC_CHECKOUT_ID", "")
     if not CHECKOUT.fullmatch(checkout):
         raise LocalPersonalUnavailable("Private checkout identity is invalid.")
-    result = _command(
-        [
-            "docker",
-            "ps",
-            "-a",
-            "--filter",
-            "label=io.sigma.personal.checkout=" + checkout,
-            "--filter",
-            "label=io.sigma.personal.owner=" + str(os.geteuid()),
-            "--format",
-            '{{.Label "com.docker.compose.project"}}',
-        ],
-        env=env,
-        timeout=20,
-    )
-    workspaces: set[str] = set()
-    for name in result.splitlines():
-        if name.startswith("sigma-personal-"):
-            workspace = name.removeprefix("sigma-personal-")
-            if WORKSPACE.fullmatch(workspace):
-                workspaces.add(workspace)
-    return workspaces
-
-
-def _down_workspace(env: dict[str, str], workspace: str) -> None:
-    if not WORKSPACE.fullmatch(workspace):
-        raise LocalPersonalUnavailable("Unsafe Personal Docker project identifier.")
-    compose_env = {
-        **env,
-        "SIGMA_STATE_DISK_MOUNT": str(Path(env["SIGMA_AUTH_BROKER_STATE_ROOT"]) / workspace),
-        "SIGMA_AUTH_POC_WORKSPACE_ID": workspace,
-        "SIGMA_AUTH_POC_GATEWAY_DIR": str(Path(env["SIGMA_AUTH_BROKER_GATEWAY_ROOT"]) / workspace),
-        "SIGMA_AUTH_POC_LOCAL_UID": str(os.geteuid()),
-        "SIGMA_AUTH_POC_LOCAL_GID": str(os.getegid()),
-    }
+    # Compose interpolates this even for down; never use the real secret here.
+    safe_env = {**env, "SIGMA_AUTH_POC_RPC_SEED": "0" * 64}
     _command(
-        [
-            "docker",
-            "compose",
-            "--project-name",
-            "sigma-personal-" + workspace,
-            *(part for filename in COMPOSE_FILES for part in ("-f", filename)),
-            "down",
-            "--remove-orphans",
-        ],
-        env=compose_env,
-        timeout=45,
+        ["docker", "compose", "--project-name", "sigma-shared-" + checkout,
+         "-f", COMPOSE_FILES[0], "down", "--remove-orphans"],
+        env=safe_env, timeout=45,
     )
-
 
 def _preparation_state(path: Path, state: str) -> None:
     if state not in {"preparing", "ready", "failed"}:
@@ -275,29 +199,20 @@ def _preparation_state(path: Path, state: str) -> None:
 
 
 def _prepare(env: dict[str, str]) -> int:
-    """Reconcile crashed launchers and build missing images off the UI path."""
+    """Replace the experimental Docker topology with one shared POC service."""
     marker = Path(env["SIGMA_LOCAL_PERSONAL_PREPARATION_FILE"])
     phase = "docker_reconciliation"
-    print("SIGMA Personal preparation: reconciling previous Docker sessions", flush=True)
     try:
-        workspaces = _owned_workspaces(env)
-        print(
-            f"SIGMA Personal preparation: owned_projects={len(workspaces)}",
-            flush=True,
-        )
-        for workspace in sorted(workspaces):
-            _down_workspace(env, workspace)
-        phase = "image_architecture_and_build"
+        _down_shared(env)
+        phase = "native_image_build"
         _release_images(env)
-        phase = "write_readiness"
         _preparation_state(marker, "ready")
-        print("SIGMA Personal preparation: ready", flush=True)
+        print("SIGMA Personal preparation: shared container ready", flush=True)
         return 0
     except (OSError, RuntimeError, ValueError, KeyError):
         _preparation_state(marker, "failed")
         print(f"SIGMA Personal preparation: failed_at={phase}", file=sys.stderr, flush=True)
         return 1
-
 
 @dataclass
 class LocalPersonalRuntime:
@@ -313,9 +228,8 @@ class LocalPersonalRuntime:
     def start(cls) -> LocalPersonalRuntime:
         env = _docker_environment()
         release, platform = _release_images(env, build=False)
-        # Use the established real local preview state. SIGMA --prod must
-        # preserve the account already authorized through the old launcher.
-        state_root = Path.home() / ".sigma" / "personal-signin-preview-state"
+        # Fresh shared POC. No migration or reuse of experimental per-user stores.
+        state_root = Path.home() / ".sigma" / "personal-shared-poc"
         _private_directory(state_root, 0o700)
         runtime = _local_runtime_directory()
         broker: subprocess.Popen[bytes] | None = None
@@ -329,11 +243,13 @@ class LocalPersonalRuntime:
                 {
                     "SIGMA_RELEASE": release,
                     "SIGMA_AUTH_BROKER_LOCAL_POC": "1",
-                    "SIGMA_AUTH_BROKER_STATE_ROOT": str(state_root),
                     "SIGMA_AUTH_BROKER_GATEWAY_ROOT": str(runtime / "gateways"),
                     "SIGMA_AUTH_BROKER_SOCKET": str(runtime / "broker" / "broker.sock"),
                     "SIGMA_AUTH_BROKER_CLIENT_UID": str(os.geteuid()),
                     "SIGMA_AUTH_POC_BROWSER_PLATFORM": platform,
+                    "SIGMA_SHARED_PLATFORM": platform,
+                    "SIGMA_PERSONAL_SHARED_MODE": "1",
+                    "SIGMA_AUTH_POC_LOCAL_UID": str(os.geteuid()),
                     "SIGMA_AUTH_POC_CHECKOUT_ID": _checkout_id(),
                     "SIGMA_LOCAL_PERSONAL_PREPARATION_FILE": str(marker),
                     "SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "1",
@@ -349,7 +265,7 @@ class LocalPersonalRuntime:
             # The RPC seed is intentionally short lived: rederived per launch.
             print("SIGMA Personal launch: starting protected host broker", flush=True)
             broker = subprocess.Popen(
-                [sys.executable, str(ROOT / "auth-poc" / "host_broker.py")],
+                [sys.executable, str(ROOT / "auth-poc" / "shared_broker.py")],
                 cwd=ROOT,
                 env=env,
                 stdin=subprocess.DEVNULL,
@@ -411,8 +327,8 @@ class LocalPersonalRuntime:
             _preparation_state(marker, "failed")
 
     def close(self, progress: Callable[[], None] | None = None) -> None:
-        """Stop verified SIGMA Docker projects, without deleting OAuth state."""
-        failures: list[str] = []
+        """Stop one shared container while retaining encrypted credential volumes."""
+        failure: LocalPersonalUnavailable | None = None
         try:
             if self.preparation.poll() is None:
                 try:
@@ -424,27 +340,12 @@ class LocalPersonalRuntime:
                 except subprocess.TimeoutExpired:
                     os.killpg(self.preparation.pid, signal.SIGKILL)
                     self.preparation.wait()
-            gateway_root = self.runtime / "gateways"
-            workspaces: set[str] = set()
-            if gateway_root.is_dir():
-                workspaces = {
-                    gateway.name
-                    for gateway in gateway_root.iterdir()
-                    if WORKSPACE.fullmatch(gateway.name)
-                    and gateway.is_dir()
-                    and not gateway.is_symlink()
-                }
             try:
-                workspaces |= _owned_workspaces(self.env)
-            except LocalPersonalUnavailable:
-                failures.append("Could not discover all Personal Docker containers.")
-            for workspace in sorted(workspaces):
-                try:
-                    _down_workspace(self.env, workspace)
-                except LocalPersonalUnavailable:
-                    failures.append("Could not stop a Personal Docker container.")
+                _down_shared(self.env)
                 if progress is not None:
                     progress()
+            except LocalPersonalUnavailable as exc:
+                failure = exc
         finally:
             if self.broker.poll() is None:
                 self.broker.terminate()
@@ -454,8 +355,9 @@ class LocalPersonalRuntime:
                     self.broker.kill()
                     self.broker.wait()
             shutil.rmtree(self.runtime, ignore_errors=True)
-        if failures:
-            raise LocalPersonalUnavailable(" ".join(failures))
+        if failure is not None:
+            raise LocalPersonalUnavailable("Could not stop the shared Personal container.") from failure
+
 
 
 if __name__ == "__main__":
