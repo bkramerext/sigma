@@ -75,6 +75,26 @@ _SAFE_MILESTONES = {
 }
 
 
+def _diagnostic_failure_class(message: str) -> str:
+    """Fixed failure classifications, never raw Docker logs or OAuth content."""
+    content = message.lower()
+    rules = (
+        ("docker_desktop_file_sharing", ("mounts denied", "file sharing is not enabled")),
+        ("port_conflict", ("port is already allocated", "address already in use")),
+        ("docker_daemon_unavailable", ("cannot connect to the docker daemon", "is the docker daemon running")),
+        ("image_platform_mismatch", ("no matching manifest", "exec format error", "requested image's platform")),
+        ("insufficient_memory", ("out of memory", "oomkilled", "resource exhausted")),
+        ("disk_full", ("no space left on device",)),
+        ("chromium_sandbox", ("no usable sandbox", "failed to move to new namespace", "sandbox host", "seccomp violation")),
+        ("display_unavailable", ("missing x server", "failed to connect to the x server", "xvfb did not initialize")),
+        ("permission_denied", ("permission denied", "operation not permitted", "access is denied")),
+    )
+    for category, fragments in rules:
+        if any(fragment in content for fragment in fragments):
+            return category
+    return "unclassified"
+
+
 def _safe_milestones(raw_output: str) -> list[str]:
     """Only literal, release-owned milestones; never dump Docker logs."""
     return [line for line in raw_output.splitlines() if line in _SAFE_MILESTONES]
@@ -398,8 +418,12 @@ def _container_diagnostics(workspace_id: str, cause: str, *, force: bool = False
                 timeout=8,
                 check=False,
             )
-            for message in _safe_milestones(logs.stdout + "\n" + logs.stderr):
+            output = logs.stdout + "\n" + logs.stderr
+            for message in _safe_milestones(output):
                 print("  " + message, flush=True)
+            category = _diagnostic_failure_class(output)
+            if category != "unclassified":
+                print(f"  {service}.failure_class={category}", flush=True)
             if state[:1] != ["running"]:
                 continue
             result = subprocess.run(
@@ -430,7 +454,7 @@ def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
             cwd=ROOT,
             env=compose_env(workspace_id),
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             text=True,
             timeout=timeout,
             check=False,
@@ -443,7 +467,8 @@ def _compose(workspace_id: str, *args: str, timeout: int = 75) -> str:
         # Docker stderr can include private host paths. Print only the fixed
         # operation name and status, not subprocess output or arguments.
         print(
-            f"Personal Docker {args[0]} failed (exit {result.returncode}).",
+            f"Personal Docker {args[0]} failed (exit {result.returncode}; "
+            f"failure_class={_diagnostic_failure_class(result.stderr or '')}).",
             flush=True,
         )
         _schedule_diagnostics(workspace_id, "compose_" + args[0] + "_failed", force=True)

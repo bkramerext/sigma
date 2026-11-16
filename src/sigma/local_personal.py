@@ -38,6 +38,24 @@ class LocalPersonalUnavailable(RuntimeError):
     """The optional local Docker Personal browser cannot be started safely."""
 
 
+def _docker_failure_class(message: str) -> str:
+    """Fixed output from Docker errors, never private stderr or mount paths."""
+    normalized = message.lower()
+    categories = (
+        ("docker_desktop_file_sharing", ("mounts denied", "file sharing is not enabled")),
+        ("port_conflict", ("port is already allocated", "address already in use")),
+        ("docker_daemon_unavailable", ("cannot connect to the docker daemon", "is the docker daemon running")),
+        ("image_platform_mismatch", ("no matching manifest", "exec format error", "requested image's platform")),
+        ("insufficient_memory", ("out of memory", "oomkilled", "resource exhausted")),
+        ("disk_full", ("no space left on device",)),
+        ("permission_denied", ("permission denied", "operation not permitted", "access is denied")),
+    )
+    for category, patterns in categories:
+        if any(pattern in normalized for pattern in patterns):
+            return category
+    return "unclassified"
+
+
 def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
     # Suppress arbitrary process output and report only a fixed operation name.
     stage = args[0] + (
@@ -60,7 +78,11 @@ def _command(args: list[str], *, env: dict[str, str], timeout: int = 90) -> str:
         raise LocalPersonalUnavailable("Local Personal container preparation failed.") from exc
     if result.returncode:
         # Docker output can include credentials/host paths; keep errors generic.
-        print(f"SIGMA Personal preparation: {stage} exit={result.returncode}", flush=True)
+        print(
+            f"SIGMA Personal preparation: {stage} exit={result.returncode} "
+            f"failure_class={_docker_failure_class(result.stderr or '')}",
+            flush=True,
+        )
         raise LocalPersonalUnavailable(
             "Local Personal container preparation failed. Check Docker Desktop."
         )

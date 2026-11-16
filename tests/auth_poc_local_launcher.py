@@ -413,6 +413,24 @@ class ProdLifecycleTests(unittest.TestCase):
             self.assertTrue(created[0].started)
             self.assertEqual(created[0].args, ("a" * 32, "readiness_unavailable"))
 
+    def test_docker_error_diagnostics_are_sanitized_and_actionable(self) -> None:
+        self.assertEqual(
+            broker._diagnostic_failure_class("Bind failed: port is already allocated"),
+            "port_conflict",
+        )
+        self.assertEqual(
+            broker._diagnostic_failure_class("Failed to move to new namespace: Operation not permitted"),
+            "chromium_sandbox",
+        )
+        self.assertEqual(
+            broker._diagnostic_failure_class("OAuth token SECRET auth.openai.com?code=SECRET"),
+            "unclassified",
+        )
+        self.assertEqual(
+            self.module._docker_failure_class("no matching manifest for linux/arm64"),
+            "image_platform_mismatch",
+        )
+
     def test_only_same_origin_can_embed_private_view(self) -> None:
         proxy = (ROOT / "src/sigma/personal_browser_proxy.py").read_text(encoding="utf-8")
         self.assertIn("frame-ancestors 'self'", proxy)
