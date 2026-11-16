@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("shared_vault", ROOT / "auth-poc/shared_vault.py")
+spec = importlib.util.spec_from_file_location("shared_vault", ROOT / "src/sigma/personal_vault.py")
 assert spec and spec.loader
 vault_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vault_module)
