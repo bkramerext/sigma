@@ -139,8 +139,10 @@ def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, st
         ["docker", "info", "--format", "{{.Architecture}}"], env=env, timeout=20
     )
     platform = {
-        "arm64": "linux/arm64", "aarch64": "linux/arm64",
-        "amd64": "linux/amd64", "x86_64": "linux/amd64",
+        "arm64": "linux/arm64",
+        "aarch64": "linux/arm64",
+        "amd64": "linux/amd64",
+        "x86_64": "linux/amd64",
     }.get(architecture)
     if platform is None:
         raise LocalPersonalUnavailable("Docker Desktop architecture is unsupported.")
@@ -153,7 +155,8 @@ def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, st
         build_env = {**env, "SIGMA_AUTH_POC_RPC_SEED": "0" * 64}
         _command(
             ["docker", "compose", "-f", COMPOSE_FILES[0], "build", "personal"],
-            env=build_env, timeout=900,
+            env=build_env,
+            timeout=900,
         )
         if not _images_compatible(env):
             raise LocalPersonalUnavailable("Shared Personal image architecture mismatch.")
@@ -163,13 +166,21 @@ def _release_images(env: dict[str, str], *, build: bool = True) -> tuple[str, st
 def _images_compatible(env: dict[str, str]) -> bool:
     try:
         actual = _command(
-            ["docker", "image", "inspect", "--format", "{{.Os}}/{{.Architecture}}",
-             "sigma-shared-personal:" + env["SIGMA_RELEASE"]],
-            env=env, timeout=10,
+            [
+                "docker",
+                "image",
+                "inspect",
+                "--format",
+                "{{.Os}}/{{.Architecture}}",
+                "sigma-shared-personal:" + env["SIGMA_RELEASE"],
+            ],
+            env=env,
+            timeout=10,
         )
         return actual == env["SIGMA_SHARED_PLATFORM"]
     except LocalPersonalUnavailable:
         return False
+
 
 def _checkout_id() -> str:
     # Stable across SIGMA restarts, and does not expose the checkout path.
@@ -184,10 +195,20 @@ def _down_shared(env: dict[str, str]) -> None:
     # Compose interpolates this even for down; never use the real secret here.
     safe_env = {**env, "SIGMA_AUTH_POC_RPC_SEED": "0" * 64}
     _command(
-        ["docker", "compose", "--project-name", "sigma-shared-" + checkout,
-         "-f", COMPOSE_FILES[0], "down", "--remove-orphans"],
-        env=safe_env, timeout=45,
+        [
+            "docker",
+            "compose",
+            "--project-name",
+            "sigma-shared-" + checkout,
+            "-f",
+            COMPOSE_FILES[0],
+            "down",
+            "--remove-orphans",
+        ],
+        env=safe_env,
+        timeout=45,
     )
+
 
 def _preparation_state(path: Path, state: str) -> None:
     if state not in {"preparing", "ready", "failed"}:
@@ -213,6 +234,7 @@ def _prepare(env: dict[str, str]) -> int:
         _preparation_state(marker, "failed")
         print(f"SIGMA Personal preparation: failed_at={phase}", file=sys.stderr, flush=True)
         return 1
+
 
 @dataclass
 class LocalPersonalRuntime:
@@ -356,8 +378,9 @@ class LocalPersonalRuntime:
                     self.broker.wait()
             shutil.rmtree(self.runtime, ignore_errors=True)
         if failure is not None:
-            raise LocalPersonalUnavailable("Could not stop the shared Personal container.") from failure
-
+            raise LocalPersonalUnavailable(
+                "Could not stop the shared Personal container."
+            ) from failure
 
 
 if __name__ == "__main__":
