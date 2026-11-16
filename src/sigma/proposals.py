@@ -1066,12 +1066,10 @@ async def generate_proposal(
                 }
             },
         }
-        headers = {"Authorization": "Bearer " + credential["token"]}
         if credential["mode"] == "chatgpt":
             payload.pop("max_output_tokens")
             payload["stream"] = True
             payload["input"] = [{"role": "user", "content": context}]
-            headers["Accept"] = "text/event-stream"
         current = await auth_context()
         if current["identity"] != credential["identity"] or current["mode"] != credential["mode"]:
             raise ProjectError(
@@ -1085,56 +1083,70 @@ async def generate_proposal(
             # Mark before quota reservation or opening the transport; retries
             # after this point must never dispatch the provider request again.
             mark_inference_dispatched(path, request_id, inference_owner)
-        if cloud_workspaces.enabled():
-            if not cloud_credential(credential):
-                raise ProjectError("Sponsored cloud inference is not configured.")
-            cloud_attempt = cloud_research.start_provider_attempt(
-                project_id, path, config["model"], payload, 8000
-            )
-        # asyncio.timeout bounds the whole operation, including slow streaming peers.
-        if cloud_attempt is not None:
-            # A transport timeout can happen after the provider accepted bytes
-            # but before an HTTP response context is entered.
-            cloud_attempt.dispatched = True
-        async with (
-            asyncio.timeout(TIMEOUT_SECONDS),
-            httpx.AsyncClient(
-                timeout=TIMEOUT_SECONDS, follow_redirects=False, trust_env=False
-            ) as client,
-            client.stream(
-                "POST",
-                provider_endpoint("responses"),
-                headers=headers,
-                json=payload,
-            ) as response,
-        ):
-            if credential["mode"] == "chatgpt" and response.status_code == 200:
-                raw = await completed(
-                    response,
-                    hashlib.sha256((credential["mode"] + credential["token"]).encode()).hexdigest(),
+        from sigma import model_dispatch
+
+        personal_raw = await model_dispatch.private_response_if_selected(
+            credential,
+            payload,
+            timeout_seconds=TIMEOUT_SECONDS,
+            request_id=request_id.replace("-", "") if request_id else None,
+        )
+        if personal_raw is not None:
+            raw = personal_raw
+        else:
+            headers = {"Authorization": "Bearer " + credential["token"]}
+            if credential["mode"] == "chatgpt":
+                headers["Accept"] = "text/event-stream"
+            if cloud_workspaces.enabled():
+                if not cloud_credential(credential):
+                    raise ProjectError("Sponsored cloud inference is not configured.")
+                cloud_attempt = cloud_research.start_provider_attempt(
+                    project_id, path, config["model"], payload, 8000
                 )
-            else:
-                data = bytearray()
-                async for chunk in response.aiter_bytes():
-                    data.extend(chunk)
-                    if len(data) > MAX_RESPONSE:
-                        raise ProjectError(
-                            "Provider response exceeded the limit; no strategy was saved."
-                        )
-                if response.status_code != 200:
-                    try:
-                        detail = json.loads(data)
-                    except ValueError:
-                        detail = {}
-                    failure(
-                        response.status_code,
-                        detail,
-                        credential["mode"],
-                        hashlib.sha256(
-                            (credential["mode"] + credential["token"]).encode()
-                        ).hexdigest(),
+            # asyncio.timeout bounds the whole operation, including slow streaming peers.
+            if cloud_attempt is not None:
+                # A transport timeout can happen after the provider accepted bytes
+                # but before an HTTP response context is entered.
+                cloud_attempt.dispatched = True
+            async with (
+                asyncio.timeout(TIMEOUT_SECONDS),
+                httpx.AsyncClient(
+                    timeout=TIMEOUT_SECONDS, follow_redirects=False, trust_env=False
+                ) as client,
+                client.stream(
+                    "POST",
+                    provider_endpoint("responses"),
+                    headers=headers,
+                    json=payload,
+                ) as response,
+            ):
+                if credential["mode"] == "chatgpt" and response.status_code == 200:
+                    raw = await completed(
+                        response,
+                        hashlib.sha256((credential["mode"] + credential["token"]).encode()).hexdigest(),
                     )
-                raw = json.loads(data)
+                else:
+                    data = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        data.extend(chunk)
+                        if len(data) > MAX_RESPONSE:
+                            raise ProjectError(
+                                "Provider response exceeded the limit; no strategy was saved."
+                            )
+                    if response.status_code != 200:
+                        try:
+                            detail = json.loads(data)
+                        except ValueError:
+                            detail = {}
+                        failure(
+                            response.status_code,
+                            detail,
+                            credential["mode"],
+                            hashlib.sha256(
+                                (credential["mode"] + credential["token"]).encode()
+                            ).hexdigest(),
+                        )
+                    raw = json.loads(data)
         cloud_research.settle_provider_attempt(cloud_attempt, raw)
         current_credential = await auth_context()
         if (
