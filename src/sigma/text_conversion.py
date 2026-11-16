@@ -406,16 +406,15 @@ async def _convert_text(
                     }
                 },
             }
-            headers = {"Authorization": "Bearer " + binding["token"]}
+            worker_binding = binding.get("worker_binding") if binding.get("transport") == "personal_worker" else None
             if binding["mode"] == "chatgpt":
                 del payload["max_output_tokens"]
                 payload["stream"] = True
                 payload["input"] = [{"role": "user", "content": context}]
-                headers["Accept"] = "text/event-stream"
             guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
             attempt = None
             try:
-                if cloud_workspaces.enabled():
+                if cloud_workspaces.enabled() and worker_binding is None:
                     if not cloud_credential(binding):
                         raise ProjectError("Sponsored cloud inference is not configured.")
                     attempt = cloud_research.start_provider_attempt(
@@ -425,74 +424,90 @@ async def _convert_text(
                         payload,
                         8000,
                     )
-                if attempt is not None:
-                    attempt.dispatched = True
-                async with (
-                    asyncio.timeout(CALL_SECONDS),
-                    httpx.AsyncClient(
-                        timeout=CALL_SECONDS, follow_redirects=False, trust_env=False
-                    ) as client,
-                    client.stream(
-                        "POST",
-                        "https://api.openai.com/v1/responses",
-                        headers=headers,
-                        json=payload,
-                    ) as response,
-                ):
-                    if binding["mode"] == "chatgpt" and response.status_code == 200:
-                        content_type = (
-                            response.headers.get("content-type", "").split(";")[0].strip().lower()
+                if worker_binding is not None:
+                    # In --prod, only the isolated worker holds personal tokens.
+                    # This isn't a sponsored call and must not enter its billing ledger.
+                    from sigma import personal_inference
+                    from uuid import uuid4
+
+                    async with asyncio.timeout(CALL_SECONDS):
+                        raw = await personal_inference.respond(
+                            payload,
+                            expected_binding=worker_binding,
+                            request_id=uuid4().hex,
                         )
-                        if content_type == "text/event-stream":
-                            # The shared plan adapter checks final SSE sequence and response identity.
-                            raw = await completed(response, guard)
+                else:
+                    headers = {"Authorization": "Bearer " + binding["token"]}
+                    if binding["mode"] == "chatgpt":
+                        headers["Accept"] = "text/event-stream"
+                    if attempt is not None:
+                        attempt.dispatched = True
+                    async with (
+                        asyncio.timeout(CALL_SECONDS),
+                        httpx.AsyncClient(
+                            timeout=CALL_SECONDS, follow_redirects=False, trust_env=False
+                        ) as client,
+                        client.stream(
+                            "POST",
+                            "https://api.openai.com/v1/responses",
+                            headers=headers,
+                            json=payload,
+                        ) as response,
+                    ):
+                        if binding["mode"] == "chatgpt" and response.status_code == 200:
+                            content_type = (
+                                response.headers.get("content-type", "").split(";")[0].strip().lower()
+                            )
+                            if content_type == "text/event-stream":
+                                # The shared plan adapter checks final SSE sequence and response identity.
+                                raw = await completed(response, guard)
+                            else:
+                                # Some plan bridges omit Content-Type on an SSE body,
+                                # while others return JSON despite stream=true. Read
+                                # once, bounded, then dispatch by media type/framing.
+                                data = bytearray()
+                                async for chunk in response.aiter_bytes():
+                                    data.extend(chunk)
+                                    if len(data) > MAX_CONVERSION_RESPONSE_BYTES:
+                                        raise ProjectError("Conversion response exceeded the limit")
+                                if not content_type and _looks_like_sse(bytes(data)):
+                                    buffered = httpx.Response(
+                                        response.status_code,
+                                        headers=response.headers,
+                                        content=bytes(data),
+                                    )
+                                    raw = await completed(buffered, guard)
+                                elif content_type in {"", "application/json"}:
+                                    try:
+                                        raw = json.loads(data)
+                                    except (ValueError, UnicodeDecodeError) as exc:
+                                        raise ValueError("chatgpt_response:invalid_json") from exc
+                                    if not isinstance(raw, dict):
+                                        raise ValueError("chatgpt_response:expected_object")
+                                    if raw.get("status") != "completed":
+                                        error = raw.get("error")
+                                        is_provider_error = (
+                                            isinstance(error, (dict, str))
+                                            or isinstance(raw.get("detail"), str)
+                                            or raw.get("type") == "error"
+                                        )
+                                        if is_provider_error:
+                                            failure(200, raw, binding["mode"], guard)
+                                        raise ValueError("chatgpt_response:unknown_envelope")
+                                else:
+                                    raise ValueError("chatgpt_response:unexpected_content_type")
                         else:
-                            # Some plan bridges omit Content-Type on an SSE body,
-                            # while others return JSON despite stream=true. Read
-                            # once, bounded, then dispatch by media type/framing.
                             data = bytearray()
                             async for chunk in response.aiter_bytes():
                                 data.extend(chunk)
                                 if len(data) > MAX_CONVERSION_RESPONSE_BYTES:
                                     raise ProjectError("Conversion response exceeded the limit")
-                            if not content_type and _looks_like_sse(bytes(data)):
-                                buffered = httpx.Response(
-                                    response.status_code,
-                                    headers=response.headers,
-                                    content=bytes(data),
-                                )
-                                raw = await completed(buffered, guard)
-                            elif content_type in {"", "application/json"}:
-                                try:
-                                    raw = json.loads(data)
-                                except (ValueError, UnicodeDecodeError) as exc:
-                                    raise ValueError("chatgpt_response:invalid_json") from exc
-                                if not isinstance(raw, dict):
-                                    raise ValueError("chatgpt_response:expected_object")
-                                if raw.get("status") != "completed":
-                                    error = raw.get("error")
-                                    is_provider_error = (
-                                        isinstance(error, (dict, str))
-                                        or isinstance(raw.get("detail"), str)
-                                        or raw.get("type") == "error"
-                                    )
-                                    if is_provider_error:
-                                        failure(200, raw, binding["mode"], guard)
-                                    raise ValueError("chatgpt_response:unknown_envelope")
-                            else:
-                                raise ValueError("chatgpt_response:unexpected_content_type")
-                    else:
-                        data = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            data.extend(chunk)
-                            if len(data) > MAX_CONVERSION_RESPONSE_BYTES:
-                                raise ProjectError("Conversion response exceeded the limit")
-                        try:
-                            raw = json.loads(data)
-                        except ValueError:
-                            raw = {}
-                        if response.status_code != 200:
-                            failure(response.status_code, raw, binding["mode"], guard)
+                            try:
+                                raw = json.loads(data)
+                            except ValueError:
+                                raw = {}
+                            if response.status_code != 200:
+                                failure(response.status_code, raw, binding["mode"], guard)
                 cloud_research.settle_provider_attempt(attempt, raw)
                 if (
                     not isinstance(raw, dict)
