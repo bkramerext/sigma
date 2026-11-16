@@ -2681,9 +2681,7 @@ class CloudAuthTests(CloudAuthFixture):
             self.client.cookies.update(login.cookies)
             status = self.client.get("/api/cloud-auth/status")
             self.assertEqual(status.status_code, 200, status.text)
-            self.assertEqual(
-                status.json()["account"]["model_access"]["mode"], "sponsored"
-            )
+            self.assertEqual(status.json()["account"]["model_access"]["mode"], "sponsored")
 
             # Reproduce persisted state from an interrupted Personal
             # disconnect/cancel: explicit choice, but no valid OAuth grant.
@@ -2695,9 +2693,7 @@ class CloudAuthTests(CloudAuthFixture):
                 )
             repaired = self.client.get("/api/cloud-auth/status")
             self.assertEqual(repaired.status_code, 200, repaired.text)
-            self.assertEqual(
-                repaired.json()["account"]["model_access"]["mode"], "sponsored"
-            )
+            self.assertEqual(repaired.json()["account"]["model_access"]["mode"], "sponsored")
             with cloud_auth._db(cloud_auth.config()) as db:
                 persisted = db.execute(
                     "SELECT model_access_selected FROM user_state WHERE subject=?",
@@ -2710,14 +2706,12 @@ class CloudAuthTests(CloudAuthFixture):
             self.seed_personal_plan_authorization("local-prod-sponsored-default")
             cloud_auth.set_model_access("local-prod-sponsored-default", "personal")
             self.assertEqual(
-                self.client.get("/api/cloud-auth/status")
-                .json()["account"]["model_access"]["mode"],
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
                 "personal",
             )
             cloud_auth.clear_personal_authorization("local-prod-sponsored-default")
             self.assertEqual(
-                self.client.get("/api/cloud-auth/status")
-                .json()["account"]["model_access"]["mode"],
+                self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
                 "sponsored",
             )
 
