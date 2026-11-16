@@ -9,6 +9,8 @@ import hmac
 import http.client
 import json
 import os
+import subprocess
+import time
 from pathlib import Path
 
 from sigma import ai_store
@@ -60,6 +62,25 @@ async def storage_check() -> None:
     assert not (root / B / "credentials.json").exists()
 
 
+def assert_no_browser_processes() -> None:
+    """No idle Chromium, X11, VNC or websocket process may survive a login."""
+    for attempt in range(30):
+        result = subprocess.run(
+            ["ps", "-eo", "stat=,comm="],
+            capture_output=True, text=True, check=True, timeout=3,
+        )
+        active = [
+            line.strip() for line in result.stdout.splitlines()
+            if line.strip() and not line.strip().split()[0].startswith("Z")
+            and any(name in line.split()[-1].lower()
+                    for name in ("chromium", "xvfb", "x11vnc", "websockify"))
+        ]
+        if not active:
+            return
+        time.sleep(0.2)
+    raise AssertionError("Transient GUI processes remained after browser shutdown")
+
+
 def main() -> None:
     assert os.geteuid() == 10001, "Vault test must not run as root"
     asyncio.run(storage_check())
@@ -67,16 +88,20 @@ def main() -> None:
     assert call(A, "GET", "/v1/account")[0] == 200
     assert call(B, "GET", "/v1/account")[0] == 200
     assert call(A, "GET", "/v1/browser/status")[1]["status"] == "stopped"
+    assert_no_browser_processes()
     assert call(B, "GET", "/v1/browser/status")[1]["status"] == "stopped"
     try:
         status, result = call(A, "POST", "/v1/browser/start")
         assert status == 200 and result["status"] == "ready", (status, result)
         assert call(B, "POST", "/v1/browser/start")[0] == 409
         assert call(B, "GET", "/v1/browser/status")[1]["status"] == "stopped"
+        assert call(B, "POST", "/v1/browser/password")[0] == 403
+        assert call(B, "GET", "/v1/preview-state")[1] == {"phase": "unavailable"}
         assert call(A, "POST", "/v1/browser/password")[1]["status"] == "ready"
     finally:
         assert call(A, "POST", "/v1/browser/stop")[1]["status"] == "stopped"
     assert call(A, "GET", "/v1/browser/status")[1]["status"] == "stopped"
+    assert_no_browser_processes()
     assert call(A, "GET", "/v1/account")[0] == 200
     print("PASS one shared worker, two encrypted users, one disposable browser, no idle GUI")
 
