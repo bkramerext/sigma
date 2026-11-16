@@ -8255,20 +8255,16 @@ async def _call_provider(
     )
     _sponsor_inference_diagnostic(record, "request_attempted")
 
-    if credential.get("transport") == "personal_worker":
-        # Local --prod keeps ChatGPT bearer credentials only in the isolated
-        # worker. The verified, user-bound RPC is the sole dispatch path.
-        # Use this same route for research roles and reference compilation;
-        # no empty Bearer header may be sent from the SIGMA coordinator.
-        from sigma import personal_inference
+    from sigma import model_dispatch
 
-        async with asyncio.timeout(timeout_seconds):
-            raw = await personal_inference.respond(
-                payload,
-                expected_binding=credential["worker_binding"],
-                request_id=request_id.replace("-", ""),
-            )
-        body = _serialized_role_request(raw)
+    personal_raw = await model_dispatch.private_response_if_selected(
+        credential,
+        payload,
+        timeout_seconds=timeout_seconds,
+        request_id=request_id.replace("-", ""),
+    )
+    if personal_raw is not None:
+        body = _serialized_role_request(personal_raw)
         _sponsor_inference_diagnostic(record, "personal_worker_completed")
     else:
         headers = {
@@ -15632,21 +15628,17 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         timeout_seconds = min(120.0, _call_timeout_seconds(record))
         if timeout_seconds <= 0:
             raise TimeoutError("Reference compilation reached its session time ceiling.")
-        if credential.get("transport") == "personal_worker":
-            # Reference compilation is a separate, durable provider attempt.
-            # Route it through the same verified private worker as research
-            # turns; the SIGMA coordinator never has the OAuth bearer token.
-            from sigma import personal_inference
+        from sigma import model_dispatch
 
-            async with (
-                _portfolio_global_gate(session_id),
-                asyncio.timeout(timeout_seconds),
-            ):
-                raw = await personal_inference.respond(
-                    payload,
-                    expected_binding=credential["worker_binding"],
-                    request_id=attempt_id.replace("-", ""),
-                )
+        async with _portfolio_global_gate(session_id):
+            personal_raw = await model_dispatch.private_response_if_selected(
+                credential,
+                payload,
+                timeout_seconds=timeout_seconds,
+                request_id=attempt_id.replace("-", ""),
+            )
+        if personal_raw is not None:
+            raw = personal_raw
             provider_http_status = 200
         else:
             headers = {
