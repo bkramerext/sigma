@@ -75,22 +75,38 @@ async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
         raise HTTPException(503, "Saved ChatGPT credentials could not be verified.")
 
     async with _SIGNIN_START_LOCK:
-        if _ATTEMPT_ID is not None:
+        # Opening the isolated browser's start page is a new sign-in, not a
+        # replay of its previous OAuth handoff. authorization_url() consumes
+        # the URL exactly once. A canceled/recreated Chromium can revisit /
+        # while the worker and its in-memory _ATTEMPT_ID survive Docker stop.
+        # Reusing that ID raises ProjectError ("already opened") and used to
+        # leak a 500 Internal Server Error into the iframe.
+        previous_id = _ATTEMPT_ID
+        _ATTEMPT_ID = None
+        if previous_id:
             try:
-                if chatgpt_auth.attempt_status(_ATTEMPT_ID)["status"] != "connecting":
-                    _ATTEMPT_ID = None
+                chatgpt_auth.cancel(previous_id)
             except ProjectError:
-                _ATTEMPT_ID = None
-        if _ATTEMPT_ID is None:
-            try:
-                attempt = await chatgpt_auth.begin()
-            except ProjectError as exc:
-                raise HTTPException(503, "Could not begin ChatGPT authorization.") from exc
+                # The prior attempt may have completed or expired. It cannot
+                # authorize the new browser; never replay a consumed handoff.
+                pass
+        try:
+            attempt = await chatgpt_auth.begin()
             _ATTEMPT_ID = attempt["id"]
-        url = chatgpt_auth.authorization_url(_ATTEMPT_ID)
-        parsed = urlsplit(url)
-        if parsed.scheme != "https" or parsed.hostname != "auth.openai.com":
-            raise HTTPException(503, "Unexpected authorization endpoint")
+            url = chatgpt_auth.authorization_url(_ATTEMPT_ID)
+            parsed = urlsplit(url)
+            if parsed.scheme != "https" or parsed.hostname != "auth.openai.com":
+                raise ProjectError("Unexpected authorization endpoint")
+        except ProjectError as exc:
+            # No raw OAuth exception or internal server error in the iframe.
+            # Also release a partially started attempt before the next retry.
+            if _ATTEMPT_ID is not None:
+                try:
+                    chatgpt_auth.cancel(_ATTEMPT_ID)
+                except ProjectError:
+                    pass
+                _ATTEMPT_ID = None
+            raise HTTPException(503, "Could not start ChatGPT sign-in. Please retry.") from exc
     return RedirectResponse(
         url, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
     )
