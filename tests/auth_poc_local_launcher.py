@@ -334,6 +334,66 @@ class SharedBrokerTests(unittest.TestCase):
             fake.connection = SimpleNamespace(getpeereid=lambda: (1001, 1002))
             self.assertTrue(broker.Handler._authorized(fake))
 
+    def test_darwin_peer_credentials_from_libsystem_enforce_matching_uid(self) -> None:
+        """Python/macOS can omit socket.getpeereid; libc remains mandatory."""
+        import ctypes
+
+        broker = self.broker
+        observed_fds = []
+
+        def getpeereid(fd, uid_pointer, gid_pointer):
+            observed_fds.append(fd)
+            ctypes.cast(uid_pointer, ctypes.POINTER(ctypes.c_uint))[0] = 1001
+            ctypes.cast(gid_pointer, ctypes.POINTER(ctypes.c_uint))[0] = 20
+            return 0
+
+        connection = SimpleNamespace(fileno=lambda: 77)
+        handler = SimpleNamespace(connection=connection)
+        with (
+            patch.object(broker.sys, "platform", "darwin"),
+            patch.object(broker, "socket", SimpleNamespace()),
+            patch.object(
+                broker.ctypes,
+                "CDLL",
+                return_value=SimpleNamespace(getpeereid=getpeereid),
+            ),
+            patch.dict(os.environ, {"SIGMA_AUTH_BROKER_CLIENT_UID": "1001"}),
+        ):
+            self.assertTrue(broker.Handler._authorized(handler))
+            self.assertEqual(observed_fds, [77])
+            with patch.dict(os.environ, {"SIGMA_AUTH_BROKER_CLIENT_UID": "1002"}):
+                self.assertFalse(broker.Handler._authorized(handler))
+
+    def test_darwin_getpeereid_failure_denies_peer(self) -> None:
+        broker = self.broker
+
+        def reject_peer(_fd, _uid_pointer, _gid_pointer):
+            return -1
+
+        fake = SimpleNamespace(connection=SimpleNamespace(fileno=lambda: 77))
+        with (
+            patch.object(broker.sys, "platform", "darwin"),
+            patch.object(broker, "socket", SimpleNamespace()),
+            patch.object(
+                broker.ctypes,
+                "CDLL",
+                return_value=SimpleNamespace(getpeereid=reject_peer),
+            ),
+            patch.dict(os.environ, {"SIGMA_AUTH_BROKER_CLIENT_UID": "1001"}),
+        ):
+            self.assertFalse(broker.Handler._authorized(fake))
+        with (
+            patch.object(broker.sys, "platform", "darwin"),
+            patch.object(broker, "socket", SimpleNamespace()),
+            patch.object(
+                broker.ctypes,
+                "CDLL",
+                return_value=SimpleNamespace(),
+            ),
+            patch.dict(os.environ, {"SIGMA_AUTH_BROKER_CLIENT_UID": "1001"}),
+        ):
+            self.assertFalse(broker.Handler._authorized(fake))
+
     def test_workspace_only_owns_private_relay_directory(self) -> None:
         broker = self.broker
         with tempfile.TemporaryDirectory() as tmp:

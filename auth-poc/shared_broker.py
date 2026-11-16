@@ -6,6 +6,7 @@ It only owns local Unix relays and a fixed shared Compose service.
 """
 from __future__ import annotations
 
+import ctypes
 import hmac
 import json
 import os
@@ -16,6 +17,7 @@ import socketserver
 import stat
 import struct
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler
@@ -402,22 +404,46 @@ class Handler(BaseHTTPRequestHandler):
                 _pid, peer_uid, _gid = struct.unpack(
                     "3i", self.connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
                 )
-                authorized = peer_uid == uid
-                personal_diagnostics.emit("broker", "peer_auth",
-                                          mechanism="so_peercred", permitted=int(authorized))
-                return authorized
-            if hasattr(self.connection, "getpeereid"):
+                mechanism = "so_peercred"
+            elif hasattr(self.connection, "getpeereid"):
                 peer_uid, _peer_gid = self.connection.getpeereid()
-                authorized = peer_uid == uid
-                personal_diagnostics.emit("broker", "peer_auth",
-                                          mechanism="getpeereid", permitted=int(authorized))
-                return authorized
-        except (OSError, struct.error) as exc:
-            personal_diagnostics.emit("broker", "peer_auth_error", failure=type(exc).__name__)
+                mechanism = "getpeereid_socket"
+            elif sys.platform == "darwin":
+                # Python's macOS socket object often lacks getpeereid(), and
+                # Darwin doesn't expose Linux SO_PEERCRED. The OS itself does
+                # supply getpeereid(2) through libSystem. Never substitute
+                # socket-file permissions or a caller-supplied UID here.
+                libc = ctypes.CDLL(None, use_errno=True)
+                getpeereid = libc.getpeereid
+                getpeereid.argtypes = [
+                    ctypes.c_int,
+                    ctypes.POINTER(ctypes.c_uint),
+                    ctypes.POINTER(ctypes.c_uint),
+                ]
+                getpeereid.restype = ctypes.c_int
+                peer_uid_value = ctypes.c_uint()
+                peer_gid_value = ctypes.c_uint()
+                if getpeereid(
+                    self.connection.fileno(),
+                    ctypes.byref(peer_uid_value),
+                    ctypes.byref(peer_gid_value),
+                ) != 0:
+                    raise OSError(ctypes.get_errno(), "getpeereid failed")
+                peer_uid = peer_uid_value.value
+                mechanism = "getpeereid_libsystem"
+            else:
+                personal_diagnostics.emit("broker", "peer_auth_unsupported")
+                return False
+            authorized = peer_uid == uid
+            personal_diagnostics.emit(
+                "broker", "peer_auth", mechanism=mechanism, permitted=int(authorized)
+            )
+            return authorized
+        except (OSError, struct.error, AttributeError, TypeError) as exc:
+            personal_diagnostics.emit(
+                "broker", "peer_auth_error", failure=type(exc).__name__
+            )
             return False
-        # Never silently disable peer authentication on an unknown OS.
-        personal_diagnostics.emit("broker", "peer_auth_unsupported")
-        return False
 
     def _dispatch(self, operation: str) -> None:
         attempt_id = personal_diagnostics.attempt(self.headers.get("X-Sigma-Personal-Attempt"))
@@ -501,9 +527,16 @@ def main() -> None:
     with Server(str(path), Handler) as service:
         os.chmod(path, 0o600)
         personal_diagnostics.emit(
-            "broker", "socket_listening", mechanism=(
-                "so_peercred" if hasattr(socket, "SO_PEERCRED")
-                else "getpeereid" if hasattr(socket.socket, "getpeereid") else "none"
+            "broker",
+            "socket_listening",
+            mechanism=(
+                "so_peercred"
+                if hasattr(socket, "SO_PEERCRED")
+                else "getpeereid_socket"
+                if hasattr(socket.socket, "getpeereid")
+                else "getpeereid_libsystem"
+                if sys.platform == "darwin"
+                else "none"
             ),
         )
         try:
