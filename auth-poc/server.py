@@ -1,7 +1,8 @@
-"""Single-user laboratory OAuth worker. Never exposes the token store to Chromium.
+"""Local OAuth browser routes, reused by the shared low-memory POC worker.
 
-The browser runs in a separate container with a shared NETWORK namespace.
-This service is intentionally not a hosted multi-user authorization broker.
+Only the authenticated worker may read account records. The transient browser
+uses a separate UID in the shared container and a loopback-only callback.
+Hosted Personal ChatGPT remains separately gated and unapproved.
 """
 from __future__ import annotations
 
