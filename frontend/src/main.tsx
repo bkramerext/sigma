@@ -1174,15 +1174,35 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
       setConversionError(friendlyProviderError(errorMessage(cause)));
     }
   }
-  function toggleAllMarkdown() {
+  async function toggleAllMarkdown() {
     const all: OutcomeMarkdownSection[] = ['conclusion', 'reasoning', 'citations', 'assessments'];
-    if (all.every(section => activeSections.has(section))) {
+    const active = all.every(section => activeSections.has(section));
+    if (active && !guest) {
+      try {
+        const response = await fetch(
+          `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
+          { cache: 'no-store' },
+        );
+        const settings = await response.json();
+        if (response.ok && settings.available) {
+          const key = `${settings.model}:${settings.reasoning_effort}`;
+          const stale = blocks.some(block => block.source.trim().length >= 40
+            && block.source.length <= 20000 && (convertedBlocksRef.current[block.field]?.source !== block.source
+            || convertedBlocksRef.current[block.field]?.settingsKey !== key));
+          if (stale) { void enqueueConversions(all); return; }
+        }
+      } catch (cause) {
+        setConversionError(friendlyProviderError(errorMessage(cause)));
+        return;
+      }
+    }
+    if (active) {
       setMarkdownSections([]);
       conversionQueue.current = [];
       conversionAbort.current?.abort();
     } else {
       setMarkdownSections(all);
-      if (!guest) enqueueConversions(all);
+      if (!guest) void enqueueConversions(all);
     }
   }
   const markdownSymbol = <MarkdownGlyph/>;
@@ -1190,7 +1210,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
     <button type="button" className="sigma-render-toggle sigma-unified-markdown" aria-label={active ? `Show original ${label} text` : `Format ${label} as Markdown`}
       aria-pressed={active}
       data-tooltip={active ? 'Show plain text' : 'Convert to markdown'}
-      onClick={onClick}>{markdownSymbol}</button>;
+      onClick={() => void onClick()}>{markdownSymbol}</button>;
   const outcomeFormatToggle = markdownButton('all research sections', (['conclusion', 'reasoning', 'citations', 'assessments'] as OutcomeMarkdownSection[]).every(section => activeSections.has(section)), toggleAllMarkdown);
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
@@ -5597,7 +5617,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       const next = await response.json();
       if (!response.ok) throw new Error(next.error ?? 'Conversion failed; source text was kept.');
       setData(next as TextRepresentations); setDraft(next[targetFormat]?.body ?? ''); chooseView(targetFormat === 'markdown' ? 'rendered' : 'plain');
-    } catch (cause) { if (!controller.signal.aborted) { chooseView('plain'); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); } }
+    } catch (cause) { if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); } }
     finally { finishProviderRequest(); if (abort.current === controller) { abort.current = null; setBusy(false); setRendering(false); } }
   }
   async function save(event: FormEvent) {
@@ -5621,9 +5641,21 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       aria-pressed={selected === 'rendered' || rendering} data-tooltip={renderTooltip}
       aria-hidden={combinedEditMode || undefined} style={combinedEditMode ? { visibility: 'hidden' } : undefined}
       disabled={editing || busy || combinedEditMode} onClick={() => {
-        if (selected === 'rendered') { chooseView('plain'); setError(''); }
-        else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
-        else { void convert(plainRecovery ? 'plain' : 'markdown'); }
+        void (async () => {
+          if (!data) return;
+          if (plainRecovery) { await convert('plain'); return; }
+          try {
+            const query = new URLSearchParams({ path, scope, ...(strategyId ? { strategy_id: strategyId } : {}) });
+            const response = await fetch(`/api/projects/text?${query}`, { cache: 'no-store' });
+            const fresh = await response.json() as TextRepresentations;
+            if (!response.ok) throw new Error('Could not check Markdown cache.');
+            setData(fresh);
+            if (fresh.markdown?.current) {
+              chooseView(selected === 'rendered' ? 'plain' : 'rendered');
+              setError('');
+            } else await convert('markdown');
+          } catch (cause) { setError(errorMessage(cause)); }
+        })();
       }}><MarkdownGlyph/></button>;
   const markdownControl = <span className="text-view-format-control sigma-unified-markdown-progress">
     {markdownToggle}
@@ -6493,10 +6525,6 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
   }
   async function toggleAnswerMarkdown(record: ResearchQARecord) {
     if (formattingAnswerId || busy) return;
-    if (renderedAnswerIds.has(record.qa_id)) {
-      setRenderedAnswerIds(current => { const next = new Set(current); next.delete(record.qa_id); return next; });
-      return;
-    }
     if (guest) { setGuestAnswerMarkdownPreview(true); return; }
     const controller = new AbortController();
     formattingRequest.current = controller;
@@ -6510,7 +6538,12 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
       if (record.markdown_answer
         && record.markdown_provenance?.model === markdownSettings.model
         && record.markdown_provenance?.reasoning_effort === markdownSettings.reasoning_effort) {
-        setRenderedAnswerIds(current => new Set(current).add(record.qa_id));
+        setRenderedAnswerIds(current => {
+          const next = new Set(current);
+          if (next.has(record.qa_id)) next.delete(record.qa_id);
+          else next.add(record.qa_id);
+          return next;
+        });
         return;
       }
       const response = await fetch('/api/projects/text/convert', {
