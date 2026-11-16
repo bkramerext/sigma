@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest import TestCase
+from unittest import TestCase, main
 
 from sigma.paper_preview_markdown import _body_without_front_matter
 from sigma.projects import ProjectError
@@ -25,3 +25,7 @@ class PaperPreviewMarkdownTests(TestCase):
                 "Maximum Regions",
                 "Full abstract",
             )
+
+
+if __name__ == "__main__":
+    main()
