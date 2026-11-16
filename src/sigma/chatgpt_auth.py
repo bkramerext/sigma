@@ -736,7 +736,13 @@ async def disconnect() -> dict:
     # Credential removal is committed even if the remote provider is offline.
     # Never retry indefinitely or keep the credential transaction locked while
     # asking OpenAI to revoke an already-removed renewable session.
-    if isinstance(refresh_token, str) and refresh_token and isinstance(client_id, str) and client_id:
+    if (
+        isinstance(refresh_token, str)
+        and refresh_token
+        and isinstance(client_id, str)
+        and client_id
+    ):
+
         async def revoke() -> bool:
             endpoints = await discovery()
             for delay in (0, 0.2):
