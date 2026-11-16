@@ -1431,7 +1431,7 @@ function CurrentUnderstandingView({ state, path, projectId, nextOrdinal, onInfer
     try {
       const settingsResponse = await fetch(
         `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
-        { signal: controller.signal },
+        { signal: controller.signal, cache: 'no-store' },
       );
       const settings = await settingsResponse.json();
       if (!settingsResponse.ok || !settings.available) throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
@@ -6516,7 +6516,7 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     const finishProviderRequest = beginProviderRequest('text-conversion');
     try {
       const expectedDigest = await sha256Text(record.answer);
-      const markdownResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { signal: controller.signal });
+      const markdownResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`, { signal: controller.signal, cache: 'no-store' });
       const markdownSettings = await markdownResponse.json();
       if (!markdownResponse.ok || !markdownSettings.available) throw new Error(markdownSettings.message ?? 'Markdown formatting is unavailable.');
       if (record.markdown_answer
