@@ -56,9 +56,12 @@ compose() {
 # has the reviewed HTTPS routes to both private application loopback ports.
 if grep -qx 'SIGMA_HOST_DIRECT=true' "$env_file"; then
   if [ ! -f /etc/caddy/Caddyfile ] || [ -L /etc/caddy/Caddyfile ] ||
-     ! grep -Fq '127.0.0.1:18081' /etc/caddy/Caddyfile ||
-     ! grep -Fq '127.0.0.1:18082' /etc/caddy/Caddyfile; then
-    echo "Direct host Caddy routing is not installed; refusing to stop edge." >&2
+     [ "$(stat -c '%u' /etc/caddy/Caddyfile)" != 0 ] ||
+     ! systemctl is-active --quiet caddy ||
+     ! caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 ||
+     ! caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null |
+       python3 "$(dirname "$0")/check_host_direct_caddy.py"; then
+    echo "Verified direct host Caddy routing is unavailable; refusing to stop edge." >&2
     exit 1
   fi
   compose up -d --no-build --scale edge=0
