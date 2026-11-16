@@ -4914,7 +4914,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
                 detail = receipt.get("detail")
                 if not detail:
                     detail = (
-                        "The backend restarted while this paper was queued. No AI call was "
+                        "The previous paper queue worker is no longer active. No AI call was "
                         "started for this queued request. Use Continue or Generate to queue it "
                         "again; any earlier paper checkpoint remains intact."
                         if receipt["status"] == "queued"
@@ -4991,7 +4991,7 @@ def progress_status(path: str) -> dict[str, Any] | None:
         **(
             {
                 "detail": (
-                    "The backend restarted during paper generation. Work is intact; "
+                    "The previous paper worker is no longer active. Work is intact; "
                     "use Resume to recover from the latest checkpoint. An in-flight provider "
                     "call might have been billed and will not be blindly repeated."
                 )
@@ -11970,71 +11970,142 @@ async def _generate_impl(
                         draft.diagrams
                         and _diagram_compile_failure_is_identified(pass_diagnostics, compile_error)
                     )
-                    if diagnosed_diagram_error:
-                        removed_diagram_count = len(draft.diagrams)
-                        tex = _remove_diagram_figures(tex, removed_diagram_count)
-                        draft = draft.model_copy(update={"diagrams": []})
-                        warnings.append(
-                            "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
-                        )
-                        diagram_fallback = {
-                            "applied": True,
-                            "removed_diagram_count": removed_diagram_count,
-                            "reason": next(
-                                (
-                                    line[:500]
-                                    for line in [
-                                        *pass_diagnostics,
-                                        *str(compile_error).splitlines(),
-                                    ]
-                                    if _diagram_compile_failure_is_identified(
-                                        [line], RuntimeError(line)
-                                    )
+                    recovered_authored_tex = False
+                    if pass_number == 1 and not diagnosed_diagram_error:
+                        # The mechanical AI proofreader may produce syntactically
+                        # invalid but semantically unchanged TeX. Before throwing
+                        # away authored content or visuals, retry the unmodified
+                        # validated draft without making any new provider calls.
+                        authored_tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+                        authored_tex, _ = _restore_escaped_math_in_tex(authored_tex)
+                        authored_tex, _ = _visible_invalid_tex_controls(authored_tex)
+                        if authored_tex != tex:
+                            authored_diagnostics: list[str] = []
+                            try:
+                                authored_pdf = await asyncio.to_thread(
+                                    _compile_pdf,
+                                    authored_tex,
+                                    max_source_bytes=50_000_000,
+                                    timeout_seconds=300,
+                                    max_pdf_bytes=80_000_000,
+                                    diagnostics=authored_diagnostics,
+                                )
+                            except RuntimeError:
+                                # Preserve the first failure and let the
+                                # existing diagnosed-visual fallback run.
+                                pass
+                            else:
+                                recovered_authored_tex = True
+                                tex, pdf = authored_tex, authored_pdf
+                                pass_diagnostics = authored_diagnostics
+                                proofread_source_sha256 = hashlib.sha256(tex.encode()).hexdigest()
+                                reason = (
+                                    "The AI proofreader's corrected TeX did not compile; "
+                                    "the validated authored TeX was compiled instead."
+                                )
+                                warning = (
+                                    "Needs review: Proofreading edits were not used because "
+                                    "the original validated TeX compiled successfully."
+                                )
+                                warnings.append(warning)
+                                _record_paper_generation_issue(work, warning)
+                                # Copy instead of mutating the original
+                                # proofreading checkpoint's paid-call history.
+                                proofreading = {
+                                    **proofreading,
+                                    "status": "fallback",
+                                    "fallback_reason": reason,
+                                    "corrections": [],
+                                    "final_sha256": proofread_source_sha256,
+                                    "diagnostics": list(
+                                        dict.fromkeys([*proofreading.get("diagnostics", []), reason])
+                                    )[:100],
+                                }
+                                record["generation"]["proofreading"].update(
+                                    {
+                                        "status": "fallback",
+                                        "verification_status": "incomplete",
+                                        "review_reason": reason,
+                                        "fallback_reason": reason,
+                                        "accepted_correction_count": 0,
+                                        "correction_categories": [],
+                                    }
+                                )
+                                record["generation"]["publication_status"] = "needs_review"
+                                work["proofread_ready"] = {
+                                    "input_sha256": raw_tex_sha256,
+                                    "tex": tex,
+                                    "result": dict(proofreading),
+                                    "warnings": list(warnings),
+                                    "invalid_control_codes": list(invalid_control_codes),
+                                }
+                                _save_work(path, work)
+                    if not recovered_authored_tex:
+                        if diagnosed_diagram_error:
+                            removed_diagram_count = len(draft.diagrams)
+                            tex = _remove_diagram_figures(tex, removed_diagram_count)
+                            draft = draft.model_copy(update={"diagrams": []})
+                            warnings.append(
+                                "Tectonic reported a TikZ/PGF error in an explanatory diagram; the paper uses the text-only PDF fallback, which preserves the graph relationships."
+                            )
+                            diagram_fallback = {
+                                "applied": True,
+                                "removed_diagram_count": removed_diagram_count,
+                                "reason": next(
+                                    (
+                                        line[:500]
+                                        for line in [
+                                            *pass_diagnostics,
+                                            *str(compile_error).splitlines(),
+                                        ]
+                                        if _diagram_compile_failure_is_identified(
+                                            [line], RuntimeError(line)
+                                        )
+                                    ),
+                                    "Tectonic identified a TikZ/PGF compilation error.",
                                 ),
-                                "Tectonic identified a TikZ/PGF compilation error.",
-                            ),
-                        }
-                    elif any(section.tables for section in draft.sections):
-                        # Optional tables can break TeX even when the prose and
-                        # evidence are sound. Rerender the exact saved draft
-                        # without visuals; never repeat a paid authoring call.
-                        draft = _without_optional_visuals(draft)
-                        warning = (
-                            "Needs review: Optional paper tables or diagrams prevented "
-                            "PDF compilation; the text-only rendering preserved the "
-                            "authored analysis."
-                        )
-                        warnings.append(warning)
-                        _record_paper_generation_issue(work, warning)
-                        tex = _tex(draft, warnings, snapshot_hash, **tex_options)
-                        tex, restored = _restore_escaped_math_in_tex(tex)
-                        work["static_math_restorations"] = (
-                            int(work.get("static_math_restorations", 0)) + restored
-                        )
-                        record["generation"]["publication_status"] = "needs_review"
-                        record["generation"]["proofreading"]["verification_status"] = "incomplete"
-                        record["generation"]["proofreading"]["review_reason"] = (
-                            "The PDF used an unproofread text-only fallback rendering."
-                        )
-                    else:
-                        raise ProjectError(
-                            "PDF compilation failed. The paper draft is preserved; "
-                            "use Resume to retry without rewriting it."
-                        ) from compile_error
-                    pass_diagnostics = []
-                    try:
-                        pdf = await asyncio.to_thread(
-                            _compile_pdf,
-                            tex,
-                            max_source_bytes=50_000_000,
-                            timeout_seconds=300,
-                            max_pdf_bytes=80_000_000,
-                            diagnostics=pass_diagnostics,
-                        )
-                    except RuntimeError as fallback_error:
-                        raise ProjectError(
-                            "The safe visual fallback could not compile; the authored TeX remains available."
-                        ) from fallback_error
+                            }
+                        elif any(section.tables for section in draft.sections):
+                            # Optional tables can break TeX even when the prose and
+                            # evidence are sound. Rerender the exact saved draft
+                            # without visuals; never repeat a paid authoring call.
+                            draft = _without_optional_visuals(draft)
+                            warning = (
+                                "Needs review: Optional paper tables or diagrams prevented "
+                                "PDF compilation; the text-only rendering preserved the "
+                                "authored analysis."
+                            )
+                            warnings.append(warning)
+                            _record_paper_generation_issue(work, warning)
+                            tex = _tex(draft, warnings, snapshot_hash, **tex_options)
+                            tex, restored = _restore_escaped_math_in_tex(tex)
+                            work["static_math_restorations"] = (
+                                int(work.get("static_math_restorations", 0)) + restored
+                            )
+                            record["generation"]["publication_status"] = "needs_review"
+                            record["generation"]["proofreading"]["verification_status"] = "incomplete"
+                            record["generation"]["proofreading"]["review_reason"] = (
+                                "The PDF used an unproofread text-only fallback rendering."
+                            )
+                        else:
+                            raise ProjectError(
+                                "PDF compilation failed. The paper draft is preserved; "
+                                "use Resume to retry without rewriting it."
+                            ) from compile_error
+                        pass_diagnostics = []
+                        try:
+                            pdf = await asyncio.to_thread(
+                                _compile_pdf,
+                                tex,
+                                max_source_bytes=50_000_000,
+                                timeout_seconds=300,
+                                max_pdf_bytes=80_000_000,
+                                diagnostics=pass_diagnostics,
+                            )
+                        except RuntimeError as fallback_error:
+                            raise ProjectError(
+                                "The safe visual fallback could not compile; the authored TeX remains available."
+                            ) from fallback_error
                 compile_diagnostics = list(pass_diagnostics)
                 await report(
                     "pdf_check",

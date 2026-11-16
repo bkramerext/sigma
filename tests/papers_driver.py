@@ -87,6 +87,7 @@ def main_part1() -> None:
     test_paper_sse_bounds_generated_text_not_redundant_transport()
     test_long_tex_compiler_source_bound_is_configurable()
     test_one_shot_draft_is_reused_after_pdf_compilation_failure()
+    test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring()
     test_proofreading_option_changes_keep_per_render_and_cumulative_call_counts()
     test_snapshot_ignores_elapsed_projection_but_tracks_saved_evidence()
     test_api_paper_stream_reports_progress_and_completion()

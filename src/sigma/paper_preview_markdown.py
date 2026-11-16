@@ -17,6 +17,21 @@ from sigma.proposals import configuration
 from sigma.text_conversion import INSTRUCTIONS
 
 
+def _body_without_front_matter(source: str, title: str, abstract: str) -> str:
+    """The saved title and abstract render verbatim outside AI Markdown.
+
+    Excluding them from model conversion prevents a flaky formatter from
+    silently omitting or rewriting either piece of paper front matter.
+    """
+    prefix = f"{title}\\n\\nAbstract\\n{abstract}\\n".replace("\\n", "\n")
+    if not source.startswith(prefix):
+        raise ProjectError("Saved paper front matter is inconsistent with the paper text.")
+    body = source[len(prefix):].lstrip("\n")
+    if not body.strip():
+        raise ProjectError("Saved paper body is empty.")
+    return body
+
+
 class PaperPreviewMarkdown(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: str
@@ -26,7 +41,11 @@ async def format_paper_preview(path: str, paper_id: str, expected_project_id: st
     view = inspect_project(path)
     if view.project.id != expected_project_id:
         raise ProjectError("Project identity changed; reopen and retry.")
-    text = papers.paper_text(path, paper_id)
+    record = papers.get_paper(path, paper_id, include_tex=False)
+    draft = record["draft"]
+    text = _body_without_front_matter(
+        papers.paper_text(path, paper_id), draft["title"], draft["abstract"]
+    )
     if len(text.encode("utf-8")) > 24000:
         raise ProjectError("Paper preview is too long for one Markdown conversion.")
     auth = await auth_context()
@@ -38,8 +57,9 @@ async def format_paper_preview(path: str, paper_id: str, expected_project_id: st
         auth,
         config,
         instructions=INSTRUCTIONS
-        + " Convert the entire saved paper text into readable Markdown, including all "
-        "headings and paragraphs. Preserve all content and mathematics, without summarizing.",
+        + " Convert only the provided paper body into readable Markdown, including all "
+        "headings and paragraphs. The UI renders the exact saved title and abstract "
+        "separately. Preserve all supplied content and mathematics without summarizing.",
         schema_name="sigma_paper_preview_markdown",
         response_model=PaperPreviewMarkdown,
         max_input_bytes=32000,
