@@ -7630,65 +7630,76 @@ async def _provider(
             }
         },
     }
-    headers = {"Authorization": "Bearer " + binding["token"]}
     if binding["mode"] == "chatgpt":
         payload.pop("max_output_tokens")
         payload["stream"] = True
         payload["input"] = [{"role": "user", "content": payload["input"]}]
-        headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
     attempt = None
     try:
-        if cloud_workspaces.enabled():
-            if not cloud_credential(binding) or not project_id or not project_path_value:
-                raise ProjectError("Sponsored cloud inference is not configured.")
-            attempt = cloud_research.start_provider_attempt(
-                project_id,
-                project_path_value,
-                config["model"],
-                payload,
-                12000,
-            )
-        if attempt is not None:
-            attempt.dispatched = True
-        async with (
-            asyncio.timeout(CALL_SECONDS),
-            httpx.AsyncClient(
-                timeout=CALL_SECONDS, trust_env=False, follow_redirects=False
-            ) as client,
-            client.stream(
-                "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload
-            ) as response,
-        ):
-            if response.status_code == 200 and binding["mode"] == "chatgpt":
-                raw = await completed(
-                    response,
-                    guard,
-                    # SSE traffic can include arbitrary reasoning/progress frames.
-                    # Bound each frame, total events and actual generated text,
-                    # not cumulative wire bytes duplicated by event envelopes.
-                    max_stream_bytes=None,
-                    max_event_chars=4_000_000,
-                    max_events=100_000,
-                    max_text_bytes=MAX_RESPONSE_BYTES,
-                    on_output_delta=_paper_output_observer.get(),
-                    incomplete_message=(
-                        "Paper stream ended before a valid response.completed. "
-                        "Completed work is preserved; transient errors may be retried up to three attempts."
-                    ),
+        from sigma import model_dispatch
+
+        personal_raw = await model_dispatch.private_response_if_selected(
+            binding,
+            payload,
+            timeout_seconds=CALL_SECONDS,
+        )
+        if personal_raw is not None:
+            raw = personal_raw
+        else:
+            headers = {"Authorization": "Bearer " + binding["token"]}
+            if binding["mode"] == "chatgpt":
+                headers["Accept"] = "text/event-stream"
+            if cloud_workspaces.enabled():
+                if not cloud_credential(binding) or not project_id or not project_path_value:
+                    raise ProjectError("Sponsored cloud inference is not configured.")
+                attempt = cloud_research.start_provider_attempt(
+                    project_id,
+                    project_path_value,
+                    config["model"],
+                    payload,
+                    12000,
                 )
-            else:
-                body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    body.extend(chunk)
-                    if len(body) > MAX_RESPONSE_BYTES:
-                        raise ProjectError("Paper response exceeded the 1 MB limit")
-                try:
-                    raw = json.loads(body)
-                except ValueError:
-                    raw = {}
-                if response.status_code != 200:
-                    failure(response.status_code, raw, binding["mode"], guard)
+            if attempt is not None:
+                attempt.dispatched = True
+            async with (
+                asyncio.timeout(CALL_SECONDS),
+                httpx.AsyncClient(
+                    timeout=CALL_SECONDS, trust_env=False, follow_redirects=False
+                ) as client,
+                client.stream(
+                    "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload
+                ) as response,
+            ):
+                if response.status_code == 200 and binding["mode"] == "chatgpt":
+                    raw = await completed(
+                        response,
+                        guard,
+                        # SSE traffic can include arbitrary reasoning/progress frames.
+                        # Bound each frame, total events and actual generated text,
+                        # not cumulative wire bytes duplicated by event envelopes.
+                        max_stream_bytes=None,
+                        max_event_chars=4_000_000,
+                        max_events=100_000,
+                        max_text_bytes=MAX_RESPONSE_BYTES,
+                        on_output_delta=_paper_output_observer.get(),
+                        incomplete_message=(
+                            "Paper stream ended before a valid response.completed. "
+                            "Completed work is preserved; transient errors may be retried up to three attempts."
+                        ),
+                    )
+                else:
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        body.extend(chunk)
+                        if len(body) > MAX_RESPONSE_BYTES:
+                            raise ProjectError("Paper response exceeded the 1 MB limit")
+                    try:
+                        raw = json.loads(body)
+                    except ValueError:
+                        raw = {}
+                    if response.status_code != 200:
+                        failure(response.status_code, raw, binding["mode"], guard)
         cloud_research.settle_provider_attempt(attempt, raw)
         if (
             not isinstance(raw, dict)
