@@ -14,7 +14,7 @@ services:
     read_only: true
     user: "0:0"
     cap_drop: [ALL]
-    cap_add: [SETUID, SETGID, SYS_CHROOT]
+    cap_add: [CHOWN, SETUID, SETGID, SYS_CHROOT]
     security_opt:
       - no-new-privileges:true
       - seccomp:../auth-poc/chromium-seccomp.json
