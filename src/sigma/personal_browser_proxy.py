@@ -20,6 +20,7 @@ import secrets
 import httpx
 from fastapi import HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, Response
+from starlette.websockets import WebSocketDisconnect
 
 from sigma import cloud_auth, personal_browser
 
@@ -232,6 +233,19 @@ async def _connect_worker(socket_path: str) -> tuple[asyncio.StreamReader, async
         raise
 
 
+async def _close_websocket(websocket: WebSocket, *, code: int = 1000) -> None:
+    """Best-effort close after a peer disappears.
+
+    Starlette wraps Uvicorn's ClientDisconnected in WebSocketDisconnect(1006)
+    when sending a close frame to an already-gone iframe. This is normal when
+    the user closes the SIGMA dialog and must not leak an ASGI traceback.
+    """
+    try:
+        await websocket.close(code=code)
+    except (WebSocketDisconnect, RuntimeError, OSError):
+        pass
+
+
 async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
     """Explicit Google-session gate: HTTP auth middleware does not gate WS routes."""
     cfg = cloud_auth.config()
@@ -242,7 +256,7 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
         or not cfg.origin
         or websocket.headers.get("origin") != cfg.origin
     ):
-        await websocket.close(code=1008)
+        await _close_websocket(websocket, code=1008)
         return
     # WebSocket has the same cookie/header/query accessors as Request. The
     # scoped session must match the initiating SIGMA browser window.
@@ -253,7 +267,7 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
         or principal.role not in {"admin", "member"}
         or principal.subject.startswith("mock:")
     ):
-        await websocket.close(code=1008)
+        await _close_websocket(websocket, code=1008)
         return
     writer: asyncio.StreamWriter | None = None
     try:
@@ -353,6 +367,7 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
         HTTPException,
         PermissionError,
         personal_browser.PersonalBrowserUnavailable,
+        WebSocketDisconnect,
     ):
         pass
     finally:
@@ -362,7 +377,4 @@ async def websocket_bridge(websocket: WebSocket, window_id: str) -> None:
                 await writer.wait_closed()
             except OSError:
                 pass
-        try:
-            await websocket.close()
-        except (RuntimeError, OSError):
-            pass
+        await _close_websocket(websocket)
