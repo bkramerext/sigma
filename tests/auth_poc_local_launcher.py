@@ -155,6 +155,11 @@ class ProdLifecycleTests(unittest.TestCase):
         boot = (ROOT / "auth-poc/boot.sh").read_text(encoding="utf-8")
         self.assertIn("--app=http://127.0.0.1:8001/", boot)
         self.assertNotIn("set -- http://127.0.0.1:8001/", boot)
+        # Host macOS Caps Lock is already applied to the keysyms sent by noVNC.
+        # The isolated X server must not apply a second independent lock state;
+        # reset any held Shift/Caps Lock on X11 VNC startup as well.
+        self.assertIn("x11vnc -display :99", boot)
+        self.assertIn("-skip_lockkeys -clear_all", boot)
 
     def test_prod_runtime_prepares_private_broker_and_preserves_state(self) -> None:
         mod = self.module
