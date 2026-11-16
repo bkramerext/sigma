@@ -184,7 +184,9 @@ async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
             trust_env=False,
             timeout=3,
         ) as client:
-            response = await client.get("/v1/test-account", headers=await _shared_rpc_headers(principal))
+            response = await client.get(
+                "/v1/test-account", headers=await _shared_rpc_headers(principal)
+            )
             return response.status_code == 200 and response.json() == {"verified": True}
     except (PersonalBrowserUnavailable, httpx.HTTPError, OSError, ValueError):
         return False
@@ -210,7 +212,9 @@ async def sign_in_preview_phase(principal: cloud_auth.Principal | None) -> str:
             trust_env=False,
             timeout=3,
         ) as client:
-            response = await client.get("/v1/preview-state", headers=await _shared_rpc_headers(principal))
+            response = await client.get(
+                "/v1/preview-state", headers=await _shared_rpc_headers(principal)
+            )
             response.raise_for_status()
             phase = response.json()["phase"]
             if phase in (
