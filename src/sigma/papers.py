@@ -7917,9 +7917,13 @@ async def _provider_structured(
                         max_events=100_000,
                         max_text_bytes=MAX_RESPONSE_BYTES,
                         on_output_delta=on_output_delta,
-                        on_text_delta=observe_section_text if whitespace_guard is not None else None,
+                        on_text_delta=observe_section_text
+                        if whitespace_guard is not None
+                        else None,
                         on_event_observed=(
-                            observed_stream_event if schema_name == "sigma_long_paper_section" else None
+                            observed_stream_event
+                            if schema_name == "sigma_long_paper_section"
+                            else None
                         ),
                         incomplete_message=(
                             "Paper stream ended before a valid response.completed. "
@@ -7931,7 +7935,9 @@ async def _provider_structured(
                     async for chunk in response.aiter_bytes():
                         body.extend(chunk)
                         if len(body) > MAX_RESPONSE_BYTES:
-                            raise ProjectError("Long-paper stage exceeded the 1 MB API response limit")
+                            raise ProjectError(
+                                "Long-paper stage exceeded the 1 MB API response limit"
+                            )
                     try:
                         raw = json.loads(body)
                     except ValueError:
