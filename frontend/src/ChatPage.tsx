@@ -465,7 +465,7 @@ export default function ChatPage() {
     </form>
     <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">
       <button type="submit" form="brainstorm-human-form" className="chat-send" disabled={!canSend}>Send</button>
-      {failedTurn && !running && <button type="button" className="chat-retry" disabled={!conversationId} onClick={retryConversation}>Retry {labels[failedTurn]}</button>}
+      {failedTurn && !running && <button type="button" className="chat-retry" aria-label={`Retry ${labels[failedTurn]}`} data-tooltip={`Retry the interrupted ${labels[failedTurn]} turn`} disabled={!conversationId} onClick={retryConversation}>Retry</button>}
       <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
       <button type="button" className="chat-clear" disabled={running || !messages.length} onClick={clearConversation}>Clear</button>
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
