@@ -244,6 +244,11 @@ def check_streamed_multisegment_completion() -> None:
 
     raw = asyncio.run(completed(cast(Any, FakeStream())))
     assert chat._response_text(raw, "gpt-6.1-sol") == "".join(text)
+    # An otherwise completed response may contain intermediate deltas that
+    # differ from the final authoritative text. Do not discard the full reply.
+    events[1]["delta"] = "Partial progress only."
+    raw = asyncio.run(completed(cast(Any, FakeStream())))
+    assert chat._response_text(raw, "gpt-6.1-sol") == "".join(text)
     print("PASS multi-part completed output matches joined stream text")
 
 
@@ -516,8 +521,17 @@ def check_transcripts() -> None:
             assert restored["transcript_path"] == session["transcript_path"]
             assert restored["research_objective"] == ""
             assert restored["next_speaker"] == "ai_1"
-            assert restored["messages"][0] == {"speaker": "human", "text": messages[0][1]}
-            assert restored["messages"][2] == {"speaker": "ai_2", "text": messages[2][1]}
+            assert restored["messages"][0]["speaker"] == "human"
+            assert restored["messages"][0]["text"] == messages[0][1]
+            assert restored["messages"][2]["speaker"] == "ai_2"
+            assert restored["messages"][2]["text"] == messages[2][1]
+            assert all(
+                re.fullmatch(
+                    r"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[^\\n]+",
+                    message["timestamp"],
+                )
+                for message in restored["messages"]
+            )
             assert restored["messages"][-1]["text"] == long_entry
             assert not restored["supervisor_enabled"]
             with TestClient(app) as client:

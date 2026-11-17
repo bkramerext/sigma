@@ -19,6 +19,8 @@ active_fixture_binding = "fixture-account"
 session_calls = 0
 transcript_messages: list[dict] = []
 fail_next_turn = False
+fail_decode_attempts = 0
+fail_next_supervisor = False
 selected_settings = {
     "limits": {},
     "ai_model": "gpt-6.1-sol",
@@ -34,6 +36,7 @@ with sync_playwright() as playwright:
 
     def respond(route):
         global config_calls, session_calls, fail_next_turn
+        global fail_decode_attempts, fail_next_supervisor
         url = route.request.url
         if url.endswith("/api/chat/transcripts/20261112_101010.md"):
             route.fulfill(
@@ -48,9 +51,34 @@ with sync_playwright() as playwright:
                         "next_speaker": "ai_2",
                         "supervisor_enabled": False,
                         "messages": [
-                            {"speaker": "objective", "text": "Continue exploring theta kernels."},
-                            {"speaker": "human", "text": "Find a new approach."},
-                            {"speaker": "ai_1", "text": "Consider the theta transformation."},
+                            {
+                                "speaker": "objective",
+                                "text": "Continue exploring theta kernels.",
+                                "timestamp": "2026-11-12T10:10:10Z",
+                            },
+                            {
+                                "speaker": "supervisor",
+                                "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight.",
+                                "timestamp": "2026-11-12T10:10:11Z",
+                            },
+                            {
+                                "speaker": "human",
+                                "text": "Find a new approach.",
+                                "timestamp": "2026-11-12T10:10:12Z",
+                            },
+                            *[
+                                {
+                                    "speaker": "ai_2" if index % 2 else "ai_1",
+                                    "text": f"Archived AI turn {index}",
+                                    "timestamp": f"2026-11-12T10:{10 + index // 60:02d}:{index % 60:02d}Z",
+                                }
+                                for index in range(502)
+                            ],
+                            {
+                                "speaker": "ai_1",
+                                "text": "Consider the theta transformation.",
+                                "timestamp": "2026-11-12T20:30:00Z",
+                            },
                         ],
                     }
                 ),
@@ -166,6 +194,14 @@ with sync_playwright() as playwright:
             return
         if url.endswith("/api/chat/supervisor"):
             supervisor_calls.append(route.request.post_data_json)
+            if fail_next_supervisor:
+                fail_next_supervisor = False
+                route.fulfill(
+                    status=503,
+                    content_type="application/json",
+                    body='{"detail":"Assessment provider unavailable"}',
+                )
+                return
             route.fulfill(
                 status=200,
                 content_type="application/json",
@@ -192,6 +228,14 @@ with sync_playwright() as playwright:
         if url.endswith("/api/chat/turn"):
             body = route.request.post_data_json
             turns.append(body)
+            if fail_decode_attempts > 0:
+                fail_decode_attempts -= 1
+                route.fulfill(
+                    status=503,
+                    content_type="application/json",
+                    body='{"detail":"The sponsored account connection check could not reach OpenAI."}',
+                )
+                return
             if fail_next_turn:
                 fail_next_turn = False
                 route.fulfill(
@@ -483,6 +527,7 @@ with sync_playwright() as playwright:
     expect(second.locator(".chat-markdown strong")).to_have_text("formatted")
 
     before_repeated_edit = len(turns)
+    fail_next_supervisor = True
     page.get_by_label("Enable Supervisor").check()
     expect(page.get_by_label("Enable Supervisor")).to_be_checked()
     deadline = time.monotonic() + 5
@@ -539,6 +584,15 @@ with sync_playwright() as playwright:
         for turn in turns[before_intervention:]
         for item in turn["messages"]
     )
+    # The first Supervisor call is deliberately failed above; allow the next
+    # completed AI pair to finish and persist a successful assessment before
+    # freezing the conversation for transcript/disclosure assertions.
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline and not any(
+        item["speaker"] == "supervisor" and "Research progress:" in item["text"]
+        for item in transcript_messages
+    ):
+        page.wait_for_timeout(50)
     page.get_by_role("button", name="Stop exchange", exact=True).click()
     expect(page.get_by_role("button", name="Clear", exact=True)).to_be_enabled()
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
@@ -546,6 +600,23 @@ with sync_playwright() as playwright:
     assert history.locator("li").count() >= 4
     # AI transcript entries are collapsed by default; expand one before
     # inspecting its formatted content.
+    # Within a group the entries advance AI #1, AI #2, Supervisor; groups
+    # themselves are newest first. All restored records retain timestamps.
+    groups = history.locator(":scope > li.chat-transcript-group")
+    assert groups.count() >= 2
+    for group_index in range(groups.count()):
+        entries = groups.nth(group_index).locator(
+            ".chat-transcript-group-entries > .chat-history-entry"
+        )
+        observed = [entries.nth(i).get_attribute("class") for i in range(entries.count())]
+        speakers = [value.removeprefix("chat-history-entry chat-history-") for value in observed]
+        if len(speakers) > 1:
+            assert speakers in (
+                ["ai_1", "ai_2"],
+                ["ai_1", "ai_2", "supervisor"],
+                ["ai_2", "supervisor"],
+            ), speakers
+    expect(history.locator(".chat-entry-timestamp").first).to_be_visible()
     ai_2_entry = history.locator(".chat-history-ai_2").first
     ai_2_disclosure = ai_2_entry.locator("button.chat-disclosure-button")
     expect(ai_2_disclosure).to_have_attribute("aria-expanded", "false")
@@ -600,6 +671,26 @@ with sync_playwright() as playwright:
     )
     assert session_calls == 4
     assert supervisor_calls, "Supervisor should assess at least one completed AI pair"
+    # An assessment failure must become a durable Supervisor record rather
+    # than silently disappearing. It must not stop AI #1 / AI #2 either.
+    assert any(
+        item["speaker"] == "supervisor"
+        and "Supervisor assessment unavailable: Assessment provider unavailable" in item["text"]
+        for item in transcript_messages
+    ), "Failed Supervisor assessments must be recorded in the transcript"
+    assert any(
+        item["speaker"] == "supervisor" and "Research progress:" in item["text"]
+        for item in transcript_messages
+    ), "A later successful Supervisor assessment must still be recorded"
+    assert all(
+        not any(
+            message["speaker"] == "supervisor"
+            and message["text"].startswith("Supervisor assessment unavailable:")
+            for message in request["messages"]
+        )
+        for request in turns
+    ), "Supervisor failure diagnostics must not contaminate AI research context"
+
     assert any(item["speaker"] == "supervisor" for item in transcript_messages)
     assert any(item["speaker"] == "objective" for item in transcript_messages)
 
@@ -655,6 +746,23 @@ with sync_playwright() as playwright:
     assert turns[skipped_at]["speaker"] == "ai_2"
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
+    # A preflight 503 is safe to retry automatically: inference was never
+    # dispatched. The next valid turn is appended once, without duplicating
+    # the Human prompt or spending allowance on ambiguous responses.
+    before_recovery = len(turns)
+    fail_decode_attempts = 2
+    human.fill("Continue research despite a temporary sponsored connection-check failure.")
+    page.get_by_role("button", name="Send", exact=True).click()
+    deadline = time.monotonic() + 7
+    while time.monotonic() < deadline and len(turns) < before_recovery + 3:
+        page.wait_for_timeout(50)
+    assert len(turns) >= before_recovery + 3
+    recovered = turns[before_recovery : before_recovery + 3]
+    assert [turn["speaker"] for turn in recovered] == ["ai_1"] * 3
+    assert all(turn["messages"] == recovered[0]["messages"] for turn in recovered)
+    expect(page.get_by_role("button", name="Retry AI #1", exact=True)).to_have_count(0)
+    page.get_by_role("button", name="Stop exchange", exact=True).click()
+
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120005.md")
     assert session_calls == 5
@@ -665,6 +773,25 @@ with sync_playwright() as playwright:
     page.locator("#chat-saved-transcript").select_option("20261112_101010.md")
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261112_101010.md")
     expect(repeated).to_have_value("Continue exploring theta kernels.")
+    # An archived Supervisor entry predating the old 500-message display
+    # window must be restored and remain visible after live turns append.
+    restored_history = page.get_by_role("list", name="Conversation history")
+    expect(restored_history.locator(":scope > li.chat-transcript-group")).to_have_count(20)
+    hidden_footer = page.locator(".chat-history-pagination")
+    expect(hidden_footer).to_contain_text("complete record remains in the transcript file")
+    expect(restored_history.locator(".chat-history-supervisor")).to_have_count(0)
+    # Show older groups incrementally; pagination is presentation-only.
+    for _ in range(30):
+        if restored_history.locator(".chat-history-supervisor").count():
+            break
+        hidden_footer.get_by_role("button", name="Show").click()
+    old_supervisor = restored_history.locator(".chat-history-supervisor").first
+    expect(old_supervisor).to_contain_text("Early supervisor insight.")
+    expect(old_supervisor.locator("button.chat-disclosure-button")).to_have_attribute(
+        "aria-expanded", "true"
+    )
+    expect(old_supervisor.locator("time")).to_have_attribute("datetime", "2026-11-12T10:10:11Z")
+
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline and len(turns) <= turns_before_resume:
         page.wait_for_timeout(50)
@@ -672,6 +799,8 @@ with sync_playwright() as playwright:
     resumed = turns[turns_before_resume]
     assert resumed["conversation_id"] == "4b1657d0-d9a4-467d-bc8b-29d48111e124"
     assert resumed["speaker"] == "ai_2"
+    expect(old_supervisor).to_contain_text("Early supervisor insight.")
+
     assert "expected_binding" not in resumed
     assert resumed["research_objective"] == "Continue exploring theta kernels."
     assert any(

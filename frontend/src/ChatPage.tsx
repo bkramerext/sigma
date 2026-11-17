@@ -6,7 +6,7 @@ const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 type Speaker = 'human' | 'ai_1' | 'ai_2' | 'objective' | 'supervisor';
 type TranscriptSpeaker = Speaker | 'supervisor_setting';
 type Target = 'ai_1' | 'ai_2' | 'both';
-type ChatMessage = { speaker: TranscriptSpeaker; text: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
+type ChatMessage = { speaker: TranscriptSpeaker; text: string; timestamp?: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
 type SupervisorAssessment = {
   score: number;
   rubric: Record<'alignment' | 'originality' | 'advancement' | 'evidence' | 'momentum', number>;
@@ -39,7 +39,39 @@ type ChatConfig = {
 };
 
 const labels: Record<TranscriptSpeaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor', supervisor_setting: 'Supervisor setting' };
-const MAX_LOCAL_MESSAGES = 500;
+// Keep the complete transcript in memory; pagination only affects rendering.
+const TRANSCRIPT_GROUPS_PER_PAGE = 20;
+
+// Only errors returned *before* the server starts model inference are safe to
+// retry automatically. A malformed/truncated generated response may already
+// have consumed sponsored allowance.
+class BrainstormPreflightUnavailable extends Error {}
+type IndexedEntry = { message: ChatMessage; index: number };
+type TranscriptGroup = { entries: IndexedEntry[] };
+
+function groupTranscriptEntries(messages: ChatMessage[]): TranscriptGroup[] {
+  const groups: TranscriptGroup[] = [];
+  for (const [index, message] of messages.entries()) {
+    if (message.speaker === 'supervisor_setting') continue;
+    const last = groups[groups.length - 1];
+    const lastSpeaker = last?.entries[last.entries.length - 1].message.speaker;
+    if ((message.speaker === 'ai_2' && lastSpeaker === 'ai_1')
+      || (message.speaker === 'supervisor' && lastSpeaker === 'ai_2')) {
+      last.entries.push({ message, index });
+    } else {
+      groups.push({ entries: [{ message, index }] });
+    }
+  }
+  return groups.reverse();
+}
+
+function entryTimestamp(timestamp?: string): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : new Intl.DateTimeFormat(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
+  }).format(date);
+}
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
 function CopyReplyButton({ name, text }: { name: string; text: string }) {
@@ -74,6 +106,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Only manual changes override the initial disclosure state for each entry.
   const [expandedEntries, setExpandedEntries] = useState<Record<number, boolean>>({});
+  const [visibleGroupCount, setVisibleGroupCount] = useState(TRANSCRIPT_GROUPS_PER_PAGE);
   const [draft, setDraft] = useState('');
   const [researchObjective, setResearchObjective] = useState('');
   const researchObjectiveRef = useRef('');
@@ -153,7 +186,9 @@ export default function ChatPage() {
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/chat/config', { cache: 'no-store', signal });
+      const response = await fetch('/api/chat/config', {
+        cache: 'no-store', signal, headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
       const value = await response.json() as ChatConfig;
       if (!response.ok) throw new Error((value as unknown as { error?: string }).error ?? 'Brainstorm settings are unavailable.');
       setConfig(previous => {
@@ -250,26 +285,24 @@ export default function ChatPage() {
   }, [running, speaker]);
 
   const addMessage = useCallback((message: ChatMessage) => {
-    const overflow = Math.max(0, messagesRef.current.length + 1 - MAX_LOCAL_MESSAGES);
-    const next = [...messagesRef.current, message].slice(-MAX_LOCAL_MESSAGES);
+    // Keep all history visible, including early Supervisor assessments.
+    // Inference requests are separately bounded by settings.max_messages.
+    const next = [...messagesRef.current, { ...message, timestamp: message.timestamp ?? new Date().toISOString() }];
     messagesRef.current = next;
-    if (overflow) setExpandedEntries(previous => Object.fromEntries(
-      Object.entries(previous).filter(([index]) => Number(index) >= overflow)
-        .map(([index, expanded]) => [Number(index) - overflow, expanded]),
-    ));
     setMessages(next);
   }, []);
 
   async function requestTurn(who: 'ai_1' | 'ai_2', history: ChatMessage[], controller: AbortController, settings: ChatConfig, sessionId = conversationId): Promise<string> {
     const response = await fetch('/api/chat/turn', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
       cache: 'no-store',
       signal: controller.signal,
       body: JSON.stringify({
         conversation_id: sessionId,
                 speaker: who,
-        messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
+        messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting'
+          && !(item.speaker === 'supervisor' && item.text.startsWith('Supervisor assessment unavailable:'))).slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
@@ -277,7 +310,14 @@ export default function ChatPage() {
     });
     if (!response.ok) {
       const detail = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
-      throw new Error(detail?.error ?? detail?.detail ?? `AI request failed (${response.status}).`);
+      const message = detail?.error ?? detail?.detail ?? `AI request failed (${response.status}).`;
+      // This endpoint returns 503 before dispatching any model request. Don't
+      // automatically retry rate/quota exhaustion or authorization failures.
+      if (response.status === 503 &&
+          !/limit|quota|allowance|exhaust|reauth|authorization|permission|not connected/i.test(message)) {
+        throw new BrainstormPreflightUnavailable(message);
+      }
+      throw new Error(message);
     }
     if (!response.headers.get('content-type')?.includes('text/event-stream') || !response.body) {
       throw new Error('The Brainstorm server returned an invalid response.');
@@ -309,9 +349,10 @@ export default function ChatPage() {
     abort.current = controller;
     const response = await fetch('/api/chat/supervisor', {
       method: 'POST', cache: 'no-store', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
       body: JSON.stringify({
-        conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting')
+        conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting'
+          && !(item.speaker === 'supervisor' && item.text.startsWith('Supervisor assessment unavailable:')))
           .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model, reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
@@ -347,8 +388,10 @@ export default function ChatPage() {
       breakthrough: breakthroughLatched.current,
       ...(assessment.action !== 'continue' && recipient && guidance ? { recipient, guidance } : {}),
     };
-    addMessage(entry);
+    // The transcript is authoritative: do not display an assessment as
+    // recorded until its durable append has completed.
     await appendTranscriptMessage(sessionId, entry);
+    addMessage(entry);
     setProgressScore(score);
   }
 
@@ -376,7 +419,25 @@ export default function ChatPage() {
         // that write instead of making another potentially billable request.
         if (!pendingReplyRef.current) {
           const settings = await currentTurnSettings();
-          const result = await requestTurn(who, messagesRef.current, controller, settings, sessionId);
+          let result = '';
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              result = await requestTurn(who, messagesRef.current, controller, settings, sessionId);
+              break;
+            } catch (cause) {
+              const detail = errorText(cause);
+              const safeToRetry = cause instanceof BrainstormPreflightUnavailable;
+              if (!safeToRetry || attempt === 2 || !runningRef.current || id !== runId.current || controller.signal.aborted) {
+                throw new Error(safeToRetry && attempt === 2
+                  ? `The connection check was unavailable after 3 automatic attempts. Saved research is intact. (${detail})`
+                  : detail);
+              }
+              // Retry only a rejected preflight. A successful 200/SSE stream
+              // may have incurred a provider charge even if decoding failed.
+              await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+              if (!runningRef.current || id !== runId.current || controller.signal.aborted) return;
+            }
+          }
           if (!runningRef.current || id !== runId.current) return;
           const reply: ChatMessage = { speaker: who, text: result };
           pendingReplyRef.current = reply;
@@ -391,9 +452,24 @@ export default function ChatPage() {
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
         if (who === 'ai_2' && supervisorEnabledRef.current && !skipNextSupervisorAssessmentRef.current) {
           try { await assessPair(id, sessionId); }
-          catch {
-            if (runningRef.current && id === runId.current) {
-              setNotice('Supervisor assessment unavailable; AIs are continuing.');
+          catch (cause) {
+            if (runningRef.current && id === runId.current && supervisorEnabledRef.current) {
+              const detail = errorText(cause);
+              // Supervisor failures belong in the permanent record too. Never
+              // silently omit an assessment or interrupt the two researchers.
+              const failure: ChatMessage = {
+                speaker: 'supervisor',
+                text: `Supervisor assessment unavailable: ${detail}`,
+              };
+              // A failed write of a completed assessment must be handled by
+              // the same durable transcript queue, not hidden by a toast.
+              try {
+                await appendTranscriptMessage(sessionId, failure);
+                addMessage(failure);
+                setNotice('Supervisor assessment failed and was recorded; the AIs are continuing.');
+              } catch (writeCause) {
+                setError(`Supervisor assessment could not be recorded: ${errorText(writeCause)}`);
+              }
             }
           }
         }
@@ -439,10 +515,11 @@ export default function ChatPage() {
       pendingHumanRef.current = null;
       skipNextSupervisorAssessmentRef.current = false;
       transcriptWrites.current = Promise.resolve();
-      const restored = saved.messages.slice(-MAX_LOCAL_MESSAGES);
+      const restored = saved.messages;
       messagesRef.current = restored;
       setMessages(restored);
       setExpandedEntries({});
+      setVisibleGroupCount(TRANSCRIPT_GROUPS_PER_PAGE);
       setConversationId(saved.conversation_id);
       setTranscriptPath(saved.transcript_path);
       recordedObjectiveRef.current = saved.research_objective;
@@ -576,6 +653,7 @@ export default function ChatPage() {
     messagesRef.current = [];
     setMessages([]);
     setExpandedEntries({});
+    setVisibleGroupCount(TRANSCRIPT_GROUPS_PER_PAGE);
     setConversationId('');
     setTranscriptPath('');
     setSelectedTranscript('');
@@ -613,6 +691,9 @@ export default function ChatPage() {
     // until the user explicitly resets them again.
     setExpandedEntries({});
   };
+  const transcriptGroups = groupTranscriptEntries(messages);
+  const shownGroups = transcriptGroups.slice(0, visibleGroupCount);
+  const hiddenGroups = transcriptGroups.length - shownGroups.length;
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
@@ -694,27 +775,42 @@ export default function ChatPage() {
         </button>
       </h2>
       <ol id="chat-transcript-history" className="chat-history" aria-label="Conversation history">
-        {messages.map((message, index) => {
-          const expanded = isEntryExpanded(message, index);
-          return <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-            <div className="chat-reply-heading">
-              <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
-                aria-controls={`chat-transcript-entry-${index}`}
-                onClick={() => setExpandedEntries(previous => ({ ...previous, [index]: !expanded }))}>
-                <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
-                <strong>{labels[message.speaker]}</strong>
-              </button>
-              <CopyReplyButton name={labels[message.speaker]} text={message.text}/>
-            </div>
-            <div id={`chat-transcript-entry-${index}`} hidden={!expanded}>
-              {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
-                Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
-              </p>}
-              {expanded && <MarkdownReply body={message.text}/>}
-            </div>
-          </li>;
-        })}
+        {shownGroups.map(group => <li key={group.entries[0].index} className="chat-transcript-group">
+          <ol className="chat-transcript-group-entries">
+            {group.entries.map(({ message, index }) => {
+              const expanded = isEntryExpanded(message, index);
+              return <li key={index} className={`chat-history-entry chat-history-${message.speaker}`}>
+                <div className="chat-reply-heading">
+                  <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
+                    aria-controls={`chat-transcript-entry-${index}`}
+                    onClick={() => setExpandedEntries(previous => ({ ...previous, [index]: !expanded }))}>
+                    <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
+                    <strong>{labels[message.speaker]}</strong>
+                  </button>
+                  <CopyReplyButton name={labels[message.speaker]} text={message.text}/>
+                  {message.timestamp && <time className="chat-entry-timestamp" dateTime={message.timestamp}>
+                    {entryTimestamp(message.timestamp)}
+                  </time>}
+                </div>
+                <div id={`chat-transcript-entry-${index}`} hidden={!expanded}>
+                  {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
+                    Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
+                  </p>}
+                  {expanded && <MarkdownReply body={message.text}/>}
+                </div>
+              </li>;
+            })}
+          </ol>
+        </li>)}
       </ol>
+      {hiddenGroups > 0 && <div className="chat-history-pagination" role="status">
+        <p>Showing the latest {shownGroups.length} of {transcriptGroups.length} exchanges.
+          {hiddenGroups} earlier {hiddenGroups === 1 ? 'exchange is' : 'exchanges are'} hidden from this view,
+          but the complete record remains in the transcript file.</p>
+        <button type="button" onClick={() => setVisibleGroupCount(previous => previous + TRANSCRIPT_GROUPS_PER_PAGE)}>
+          Show {Math.min(hiddenGroups, TRANSCRIPT_GROUPS_PER_PAGE)} earlier
+        </button>
+      </div>}
     </section>}
   </main>
   </>;

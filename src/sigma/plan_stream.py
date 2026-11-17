@@ -578,10 +578,11 @@ async def completed(
             for content in item.get("content", [])
             if isinstance(content, dict) and content.get("type") == "output_text"
         ]
-        if texts and "".join(texts) != deltas:
-            raise ValueError(
-                f"plan_stream:delta_text_mismatch(len_texts={len(texts)},len_delta={len(deltas)})"
-            )
+        # The completed response is authoritative. Some provider transports
+        # deliver partial/suppressed text deltas even when the terminal message
+        # contains the full, valid output. Never reject that completed output
+        # solely because its intermediate progress deltas differ.
+        # When no terminal text exists, reconstruct from the streamed deltas.
         if not texts:
             terminal = {
                 **terminal,

@@ -462,3 +462,45 @@
 @media (max-width: 700px) {
   .brainstorm-workspace .chat-skip { padding-inline: 12px; }
 }
+
+/* Chronological exchanges read top-to-bottom within each group, with
+   the most recent group first. Pagination affects presentation only. */
+.brainstorm-workspace .chat-history {
+  gap: 17px;
+}
+.brainstorm-workspace .chat-history > .chat-transcript-group {
+  list-style: none; margin: 0; padding: 0; background: transparent;
+  border: 0; border-radius: 0;
+}
+.brainstorm-workspace .chat-transcript-group-entries {
+  display: grid; gap: 3px; list-style: none; padding: 0; margin: 0;
+}
+.brainstorm-workspace .chat-history .chat-transcript-group-entries > li {
+  margin: 0;
+}
+.brainstorm-workspace .chat-entry-timestamp {
+  margin-left: auto; flex-shrink: 0; font-size: .73rem;
+  font-weight: 400; color: #a69d92; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.brainstorm-workspace .chat-history-pagination {
+  margin: 13px 0 0; font-size: .83rem; color: #a69d92;
+}
+.brainstorm-workspace .chat-history-pagination p {
+  margin: 0 0 8px;
+}
+.brainstorm-workspace .chat-history-pagination button {
+  border: 1px solid #817363; border-radius: 6px;
+  padding: 6px 11px; color: #e6d2bd; background: #28231e;
+  cursor: pointer; font: inherit;
+}
+.brainstorm-workspace .chat-history-pagination button:hover {
+  background: #383026;
+}
+.brainstorm-workspace .chat-history-pagination button:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px;
+}
+@media (max-width: 550px) {
+  .brainstorm-workspace .chat-history .chat-reply-heading { flex-wrap: wrap; }
+  .brainstorm-workspace .chat-entry-timestamp { width: 100%; margin-left: 0; }
+}
