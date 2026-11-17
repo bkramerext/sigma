@@ -3023,9 +3023,7 @@ def test_first_investigator_connection_failure_has_explicit_recovery_plan() -> N
     assert plan["required_calls"] == 6
     assert plan["branches"][0]["role"] == "investigator"
     assert plan["branches"][0]["cycle"] == 1
-    assert plan["branches"][0]["recovery_context"]["prior_attempt_ids"] == [
-        "disconnected-call"
-    ]
+    assert plan["branches"][0]["recovery_context"]["prior_attempt_ids"] == ["disconnected-call"]
     assert plan["branches"][0]["recovery_context"]["new_request"] is True
     assert attempt["status"] == "failed" and attempt["attempt_status"] == "unknown"
 
