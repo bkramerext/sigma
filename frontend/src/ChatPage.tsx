@@ -430,7 +430,7 @@ export default function ChatPage() {
       supervisorEnabledRef.current = saved.has_supervisor;
       setSupervisorEnabled(saved.has_supervisor);
       const latestSupervisor = [...restored].reverse().find(item => item.speaker === 'supervisor');
-      const score = latestSupervisor?.text.match(/Research progress:\\s*(\\d+(?:\\.\\d+)?)\\s*\\/\\s*10\\.0/);
+      const score = latestSupervisor?.text.match(/Research progress:\s*(\d+(?:\.\d+)?)\s*\/\s*10\.0/);
       const restoredScore = score ? Number(score[1]) : null;
       setProgressScore(restoredScore);
       breakthroughLatched.current = !!latestSupervisor?.text.includes('Breakthrough candidate remains under validation.')
