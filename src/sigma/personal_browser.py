@@ -30,10 +30,12 @@ class PersonalBrowserUnavailable(RuntimeError):
 
 
 def enabled() -> bool:
+    cfg = cloud_auth.config()
     return (
         os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
         and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
-        and cloud_auth.config().enabled
+        and cfg.enabled
+        and (cfg.local or cloud_auth.hosted_personal_enabled())
     )
 
 
@@ -321,12 +323,7 @@ def sign_in_preview_enabled() -> bool:
         and os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
         and os.environ.get("SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN") == "1"
     )
-    hosted_shared = (
-        not cfg.local
-        and os.environ.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
-        and os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1"
-        and os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "") != ""
-    )
+    hosted_shared = cloud_auth.hosted_personal_enabled()
     return enabled() and (local_preview or hosted_shared)
 
 

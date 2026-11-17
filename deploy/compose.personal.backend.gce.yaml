@@ -1,0 +1,21 @@
+# Hosted Personal ChatGPT is an explicit deployment opt-in. Never mount
+# the Docker daemon into the app backend or publish the private browser.
+services:
+  backend:
+    environment:
+      SIGMA_PERSONAL_HOSTED_ENABLED: "1"
+      SIGMA_PERSONAL_BROWSER_LAB_ENABLED: "1"
+      SIGMA_PERSONAL_SHARED_MODE: "1"
+      SIGMA_AUTH_POC_REAL_SIGNIN: "0"
+      SIGMA_AUTH_POC_RPC_SEED: "${SIGMA_AUTH_POC_RPC_SEED:?protected personal worker HMAC required}"
+      SIGMA_PERSONAL_BROWSER_BROKER_SOCKET: /run/sigma-personal-broker/broker.sock
+      SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT: /run/sigma-personal-gateways
+    volumes:
+      - type: bind
+        source: /run/sigma-personal-broker
+        target: /run/sigma-personal-broker
+        read_only: true
+      - type: bind
+        source: /run/sigma-personal-gateways
+        target: /run/sigma-personal-gateways
+        read_only: true

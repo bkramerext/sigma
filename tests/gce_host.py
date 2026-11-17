@@ -292,6 +292,45 @@ class GceHostToolingTests(unittest.TestCase):
             preflight.check_compose()
         self.assertEqual(preflight.results[-1].status, "FAIL")
 
+    def test_hosted_personal_requires_complete_production_configuration(self) -> None:
+        values = {
+            "SIGMA_RELEASE": "a" * 40,
+            "SIGMA_DOMAIN": "sigma.example.test",
+            "SIGMA_TLS_EMAIL": "ops@example.test",
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.test",
+            "GOOGLE_OIDC_CLIENT_ID": "example.apps.googleusercontent.com",
+            "SIGMA_GOOGLE_OIDC_CLIENT_SECRET_FILE": "/run/sigma-secrets/google",
+            "SIGMA_CLOUD_OPENAI_API_KEY_FILE": "/run/sigma-secrets/openai",
+            "SIGMA_INVITATION_SMTP_USERNAME": "sender@example.test",
+            "SIGMA_INVITATION_SMTP_PASSWORD_FILE": "/run/sigma-secrets/smtp",
+            "SIGMA_SANDBOX_DOCKER_SOCKET": "/run/user/1002/docker.sock",
+            "SIGMA_SANDBOX_DOCKER_GID": "1002",
+            "SIGMA_STATE_DISK_MOUNT": "/srv/sigma-state",
+            "SIGMA_CLOUD_INFERENCE_PROVIDER": "api_key",
+            "SIGMA_PERSONAL_HOSTED_ENABLED": "true",
+            "SIGMA_AUTH_POC_CHECKOUT_ID": "b" * 32,
+            "SIGMA_AUTH_POC_RPC_SEED": "c" * 64,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "deploy.env"
+
+            def parse(settings):
+                path.write_text(
+                    "".join(f"{key}={value}\n" for key, value in settings.items())
+                )
+                return gce_preflight._parse_env(path)
+
+            result, detail = parse(values)
+            self.assertIsNotNone(result, detail)
+            result, detail = parse({**values, "SIGMA_AUTH_POC_RPC_SEED": "invalid"})
+            self.assertIsNone(result)
+            self.assertIn("HMAC", detail)
+            result, detail = parse({**values, "SIGMA_AUTH_POC_LAB_ENABLED": "true"})
+            self.assertIsNone(result)
+            self.assertIn("mutually exclusive", detail)
+            result, detail = parse({**values, "SIGMA_PERSONAL_HOSTED_ENABLED": "false"})
+            self.assertIsNotNone(result, detail)
+
     def test_installer_guard_accepts_ubuntu_os_release_spellings(self) -> None:
         guard = DEPLOY / "gce_host_guard.sh"
         for identity in ('ID=ubuntu\nVERSION_ID="24.04"\n', 'ID="ubuntu"\nVERSION_ID=24.04\n'):

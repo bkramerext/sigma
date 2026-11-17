@@ -176,6 +176,54 @@ class ReleaseImageTests(unittest.TestCase):
                 runner=inspect,
             )
 
+    def test_shared_personal_worker_has_independent_image_and_attestation(self) -> None:
+        (self.repository / "auth-poc").mkdir()
+        (self.repository / "auth-poc/shared.Dockerfile").write_text(
+            "FROM scratch\nCOPY marker /marker\n"
+        )
+        self.git("add", ".")
+        self.git("commit", "-qm", "add hosted Personal worker")
+        requested = self.git("rev-parse", "HEAD")
+        commands: list[list[str]] = []
+
+        def build_runner(argv: list[str]) -> str:
+            commands.append(argv)
+            return ""
+
+        release_image.build(
+            self.repository, requested, runner=build_runner, personal_shared=True
+        )
+        self.assertEqual(len(commands), 3)
+        self.assertIn(f"sigma-shared-personal:{requested}", commands[-1])
+        self.assertIn("auth-poc/shared.Dockerfile", commands[-1][-2])
+
+        def inspect(argv: list[str]) -> str:
+            if argv[1] == "image":
+                return json.dumps({
+                    "Id": "sha256:" + "a" * 64,
+                    "RepoDigests": [],
+                    "Config": {"Labels": {release_image.LABEL: requested}},
+                })
+            return json.dumps({
+                "Image": "sha256:" + "a" * 64,
+                "State": {"Status": "running"},
+                "Config": {"Labels": {release_image.LABEL: requested}},
+            })
+
+        images = release_image.verify(requested, runner=inspect, personal_shared=True)
+        self.assertEqual(set(images), {"backend", "frontend", "shared-personal"})
+        containers = {
+            "backend": "backend-id",
+            "frontend": "frontend-id",
+            "shared-personal": "personal-id",
+        }
+        receipt = release_image.record(
+            requested, Path(self.temp.name) / "hosted-receipt",
+            containers, runner=inspect,
+        )
+        self.assertEqual(set(json.loads(receipt.read_text())["images"]), set(containers))
+
+
 
 if __name__ == "__main__":
     unittest.main()

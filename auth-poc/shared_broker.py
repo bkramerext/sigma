@@ -36,6 +36,18 @@ MAX_REQUEST = 512
 MAX_IDLE_GATEWAYS = 32  # Limit idle Unix sockets/threads on the low-memory POC.
 
 
+def _client_uid() -> int:
+    """The browser client is the unprivileged SIGMA backend, not the Docker broker."""
+    raw = os.environ.get("SIGMA_AUTH_BROKER_CLIENT_UID", str(os.geteuid()))
+    if not raw.isdecimal() or not 1 <= int(raw) <= 65535:
+        raise RuntimeError("Private browser client identity is unavailable")
+    return int(raw)
+
+
+def _hosted() -> bool:
+    return os.environ.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "true"
+
+
 class SharedDockerUnavailable(RuntimeError):
     """Safe diagnostic only: no Docker stderr, host paths, or credentials."""
 
@@ -78,9 +90,12 @@ def _compose(*args: str) -> str:
     began = time.monotonic()
     personal_diagnostics.emit("broker", "compose_start", operation=stage)
     try:
+        compose_files = ["-f", "deploy/personal-shared.compose.yaml"]
+        if _hosted():
+            compose_files += ["-f", "deploy/personal-shared.gce.yaml"]
         result = subprocess.run(
             ["docker", "compose", "--project-name", "sigma-shared-" + checkout,
-             "-f", "deploy/personal-shared.compose.yaml", *args],
+             *compose_files, *args],
             cwd=ROOT, env=env, capture_output=True, text=True,
             check=False, timeout=150 if "up" in args else 20,
         )
@@ -230,9 +245,11 @@ def _gateway_dir(workspace: str) -> Path:
         raise RuntimeError("Invalid private relay root")
     dest = root / _valid(workspace)
     dest.mkdir(mode=0o700, exist_ok=True)
+    if _hosted() and os.geteuid() == 0:
+        os.chown(dest, _client_uid(), _client_uid())
     info = dest.lstat()
     if (
-        not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
+        not stat.S_ISDIR(info.st_mode) or info.st_uid != _client_uid()
         or stat.S_IMODE(info.st_mode) != 0o700
     ):
         raise RuntimeError("Private relay permissions are invalid")
@@ -258,6 +275,8 @@ def _relay(workspace: str, name: str, port: int) -> None:
         raise RuntimeError("Untrusted private relay pathname")
     server = RelayServer(str(path), RelayHandler)
     server.configure(workspace=workspace, name=name, port=port)
+    if _hosted() and os.geteuid() == 0:
+        os.chown(path, _client_uid(), _client_uid())
     os.chmod(path, 0o600)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -274,7 +293,7 @@ def _unrelay(workspace: str, name: str) -> None:
     server.shutdown()
     server.server_close()
     thread.join(timeout=2)
-    if path.is_socket() and path.lstat().st_uid == os.geteuid():
+    if path.is_socket() and path.lstat().st_uid == _client_uid():
         path.unlink()
 
 
@@ -398,7 +417,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _authorized(self) -> bool:
-        uid = int(os.environ.get("SIGMA_AUTH_BROKER_CLIENT_UID", "10001"))
+        uid = _client_uid()
         try:
             if hasattr(socket, "SO_PEERCRED"):
                 _pid, peer_uid, _gid = struct.unpack(
@@ -525,6 +544,8 @@ def main() -> None:
     if path.parent.stat().st_uid != os.geteuid():
         raise RuntimeError("Private broker owner mismatch")
     with Server(str(path), Handler) as service:
+        if _hosted() and os.geteuid() == 0:
+            os.chown(path, _client_uid(), _client_uid())
         os.chmod(path, 0o600)
         personal_diagnostics.emit(
             "broker",

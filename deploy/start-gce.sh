@@ -33,7 +33,7 @@ if [ "$release_count" -ne 1 ]; then
   echo "SIGMA_RELEASE must be set exactly once; refusing to start." >&2
   exit 1
 fi
-# The optional auth lab is synthetic, internal-only and disabled by default.
+# Preserve the existing synthetic lab gate; it cannot share Personal state.
 auth_lab=0
 if grep -qx 'SIGMA_AUTH_POC_LAB_ENABLED=true' "$env_file"; then
   auth_lab=1
@@ -45,13 +45,54 @@ if grep -qx 'SIGMA_AUTH_POC_LAB_ENABLED=true' "$env_file"; then
   mkdir -p "$auth_dir"
   chown 10001:10001 "$auth_dir"
   chmod 0700 "$auth_dir"
-  python3 /opt/sigma/current/deploy/release_image.py verify "$release" --auth-poc
-else
-  python3 /opt/sigma/current/deploy/release_image.py verify "$release"
 fi
+personal=0
+if grep -qx 'SIGMA_PERSONAL_HOSTED_ENABLED=true' "$env_file"; then
+  personal=1
+  if [ "$auth_lab" -eq 1 ]; then
+    echo "Synthetic auth lab and hosted Personal cannot run together." >&2
+    exit 1
+  fi
+  # Persistent encrypted records and vault keys must never be initialized on
+  # an ephemeral image layer. Do not follow symlinks or adopt foreign records.
+  for name in personal-shared personal-shared-key; do
+    directory="$disk/auth/$name"
+    if [ -e "$directory" ] || [ -L "$directory" ]; then
+      if [ -L "$directory" ] || [ ! -d "$directory" ] ||
+         [ "$(stat -c '%u:%g:%a' "$directory")" != "10001:10001:700" ]; then
+        echo "Unsafe hosted Personal credential directory." >&2
+        exit 1
+      fi
+    else
+      install -d -o 10001 -g 10001 -m 0700 "$directory"
+    fi
+  done
+  # Bind mounting an empty persistent directory hides the secure directories
+  # initialized in the image. The worker requires both to exist as 10001:0700.
+  for name in records workspaces; do
+    directory="$disk/auth/personal-shared/$name"
+    if [ -e "$directory" ] || [ -L "$directory" ]; then
+      if [ -L "$directory" ] || [ ! -d "$directory" ] ||
+         [ "$(stat -c '%u:%g:%a' "$directory")" != "10001:10001:700" ]; then
+        echo "Unsafe hosted Personal workspace directory." >&2
+        exit 1
+      fi
+    else
+      install -d -o 10001 -g 10001 -m 0700 "$directory"
+    fi
+  done
+fi
+set --
+if [ "$auth_lab" -eq 1 ]; then set -- "$@" --auth-poc; fi
+if [ "$personal" -eq 1 ]; then set -- "$@" --personal-shared; fi
+python3 /opt/sigma/current/deploy/release_image.py verify "$release" "$@"
 compose() {
   "$(dirname "$0")/compose-gce.sh" "$@"
 }
+if [ "$personal" -eq 1 ]; then
+  "$(dirname "$0")/compose-personal-gce.sh" up -d --no-build --wait
+  systemctl start sigma-personal-broker.service
+fi
 # Only turn off the fallback Docker edge once the host Caddy service
 # has the reviewed HTTPS routes to both private application loopback ports.
 if grep -qx 'SIGMA_HOST_DIRECT=true' "$env_file"; then
@@ -68,14 +109,14 @@ if grep -qx 'SIGMA_HOST_DIRECT=true' "$env_file"; then
 else
   compose up -d --no-build
 fi
+set -- --backend-container "$(compose ps -q backend)" \
+  --frontend-container "$(compose ps -q frontend)"
 if [ "$auth_lab" -eq 1 ]; then
-  python3 /opt/sigma/current/deploy/release_image.py record "$release" \
-    --backend-container "$(compose ps -q backend)" \
-    --frontend-container "$(compose ps -q frontend)" \
-    --auth-poc-container "$(compose ps -q auth-poc)" \
+  set -- "$@" --auth-poc-container "$(compose ps -q auth-poc)" \
     --auth-browser-poc-container "$(compose ps -q browser)"
-else
-  python3 /opt/sigma/current/deploy/release_image.py record "$release" \
-    --backend-container "$(compose ps -q backend)" \
-    --frontend-container "$(compose ps -q frontend)"
 fi
+if [ "$personal" -eq 1 ]; then
+  set -- "$@" --shared-personal-container \
+    "$("$(dirname "$0")/compose-personal-gce.sh" ps -q personal)"
+fi
+python3 /opt/sigma/current/deploy/release_image.py record "$release" "$@"

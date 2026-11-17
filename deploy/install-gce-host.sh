@@ -102,6 +102,8 @@ sed "s/__SANDBOX_UID__/${sandbox_uid}/g" "$(dirname "$0")/systemd/sigma-sandbox.
   > /etc/systemd/system/sigma-sandbox.service
 install -o root -g root -m 0644 "$(dirname "$0")/systemd/sigma.service" \
   /etc/systemd/system/sigma.service
+install -o root -g root -m 0644 "$(dirname "$0")/systemd/sigma-personal-broker.service" \
+  /etc/systemd/system/sigma-personal-broker.service
 
 systemctl daemon-reload
 systemctl enable --now docker.service
