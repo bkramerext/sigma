@@ -3855,10 +3855,12 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             if score_case and score_calls == 1:
                 raise asyncio.CancelledError()
             record = papers.get_paper(path_value, paper_id, include_tex=False)
-            judgment = paper_scores.PaperJudgment.model_validate({
-                category: {"earned": 80, "explanation": "Fixture scoring."}
-                for category in paper_scores.WEIGHTS
-            })
+            judgment = paper_scores.PaperJudgment.model_validate(
+                {
+                    category: {"earned": 80, "explanation": "Fixture scoring."}
+                    for category in paper_scores.WEIGHTS
+                }
+            )
             return paper_scores._save_score(
                 path_value, paper_id, paper_scores._make_score(judgment, record["pdf_sha256"])
             )
@@ -3961,7 +3963,9 @@ def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "scoring-handoff.sigma"
         view = initialize_project(
-            path, "Scoring handoff", "One completed paper score is enough.",
+            path,
+            "Scoring handoff",
+            "One completed paper score is enough.",
             research_mode="mathematical",
         )
         credential = {"identity": "fixture:scoring", "mode": "api_key", "token": "fixture"}
@@ -3998,10 +4002,12 @@ def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
             nonlocal score_calls
             score_calls += 1
             record = papers.get_paper(path_value, paper_id, include_tex=False)
-            judgment = paper_scores.PaperJudgment.model_validate({
-                category: {"earned": 80, "explanation": "Fixture evaluation is sufficient."}
-                for category in paper_scores.WEIGHTS
-            })
+            judgment = paper_scores.PaperJudgment.model_validate(
+                {
+                    category: {"earned": 80, "explanation": "Fixture evaluation is sufficient."}
+                    for category in paper_scores.WEIGHTS
+                }
+            )
             score = paper_scores._make_score(judgment, record["pdf_sha256"])
             assert paper_scores.cached_score(record) is None
             return paper_scores._save_score(path_value, paper_id, score)
@@ -4039,11 +4045,14 @@ def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
         assert stages.index("scoring") < stages.index("finishing") < stages.index("complete")
         # Loading the completed paper through the scoring endpoint must not
         # perform another paid evaluation when force is false.
-        assert asyncio.run(
-            paper_scores.score_paper(
-                str(path), paper_id, credential["identity"], view.project.id
+        assert (
+            asyncio.run(
+                paper_scores.score_paper(
+                    str(path), paper_id, credential["identity"], view.project.id
+                )
             )
-        ) == durable
+            == durable
+        )
         assert papers._load_work(str(path)) is None
 
 
