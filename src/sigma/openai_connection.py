@@ -583,14 +583,15 @@ async def connection(
                             result_status = result.result.get("status")
                             now = time.monotonic()
                             # The read-only model catalog is not an inference
-                            # request. An intermittent catalog timeout/429 is
+                            # request. An intermittent catalog timeout is
                             # not proof that this already-verified sponsor
-                            # cannot generate a response. Reuse its recent
+                            # cannot generate a response. Explicit 429/limits
+                            # must never be masked by a prior success. Reuse its recent
                             # verified catalog briefly; the inference endpoint
                             # remains authoritative and may still reject it.
                             cached_sponsor = (
                                 sponsor
-                                and result_status in {"unavailable", "invalid_response", "limited"}
+                                and result_status in {"unavailable", "invalid_response"}
                                 and (target.result or {}).get("status") == "connected"
                                 and bool(target.known)
                                 and now - target.last_verified_at <= SPONSOR_CATALOG_GRACE_SECONDS
