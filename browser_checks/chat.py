@@ -18,6 +18,11 @@ config_calls = 0
 session_calls = 0
 transcript_messages: list[dict] = []
 fail_next_turn = False
+selected_settings = {
+    "limits": {}, "ai_model": "gpt-6.1-sol", "reasoning_effort": "low",
+    "show_advanced_outcome_details": False,
+}
+supervisor_calls: list[dict] = []
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
@@ -80,6 +85,34 @@ with sync_playwright() as playwright:
                 ),
             )
             return
+        if "/api/ai/connection" in url:
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                "mode": "chatgpt", "status": "connected", "label": "ChatGPT", "guidance": "Ready.",
+                "checked_at": None, "ttl_seconds": 300, "accounts": [],
+            }))
+            return
+        if url.endswith("/api/user-preferences/research-settings"):
+            if route.request.method == "PUT":
+                selected_settings.update(route.request.post_data_json)
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(selected_settings))
+            return
+        if url.endswith("/api/ai/models"):
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                "models": [
+                    {"id": "gpt-6-luna", "label": "Luna · Economy ($)", "relative_cost": "$", "efforts": ["low", "medium", "high", "xhigh"]},
+                    {"id": "gpt-6.1-sol", "label": "Sol · Balanced ($)", "relative_cost": "$", "efforts": ["low", "medium", "high", "xhigh"]},
+                ],
+            }))
+            return
+        if url.endswith("/api/chat/supervisor"):
+            supervisor_calls.append(route.request.post_data_json)
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({
+                "score": 3.4,
+                "rubric": {"alignment": 0.9, "originality": 0.6, "advancement": 0.7, "evidence": 0.8, "momentum": 0.4},
+                "assessment": "The pair is exploring constructively.",
+                "action": "continue", "recipient": None, "guidance": "", "breakthrough_candidate": False,
+            }))
+            return
         if url.endswith("/api/chat/turn"):
             body = route.request.post_data_json
             turns.append(body)
@@ -88,7 +121,7 @@ with sync_playwright() as playwright:
                 route.fulfill(
                     status=200,
                     content_type="text/event-stream",
-                    body='data: {"type":"started"}\\n\\ndata: {"type":"error","error":"Provider unavailable"}\\n\\n',
+                    body='data: {"type":"started"}\n\ndata: {"type":"error","error":"Provider unavailable"}\n\n',
                 )
                 return
             route.fulfill(
@@ -124,12 +157,12 @@ with sync_playwright() as playwright:
     direct.route("**/api/**", respond)
     direct.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
     expect(direct).to_have_url(ORIGIN + "/brainstorm")
-    expect(direct.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(direct.locator(".brainstorm-header-copy h1")).to_have_text("Brainstorm")
     direct.locator(".project-art-header .project-header-art").click()
     expect(direct).to_have_url(ORIGIN + "/")
     expect(direct.get_by_role("button", name="Brainstorm", exact=True)).to_be_visible()
     direct.get_by_role("button", name="Brainstorm", exact=True).click()
-    expect(direct.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(direct.locator(".brainstorm-header-copy h1")).to_have_text("Brainstorm")
     direct.close()
 
     # The CLI flag remains a convenient way to start with the Home pill.
@@ -137,7 +170,7 @@ with sync_playwright() as playwright:
     expect(page).to_have_url(ORIGIN + "/")
     page.get_by_role("button", name="Brainstorm", exact=True).click()
     expect(page).to_have_url(ORIGIN + "/brainstorm")
-    expect(page.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(page.locator(".brainstorm-header-copy h1")).to_have_text("Brainstorm")
     expect(page.locator(".project-art-header .project-header-art")).to_be_visible()
     assert page.locator(".chat-home-link").count() == 0
     page.locator(".project-art-header .project-header-art").click()
@@ -151,9 +184,9 @@ with sync_playwright() as playwright:
     expect(human).to_be_visible()
     expect(first).to_be_visible()
     expect(second).to_be_visible()
-    expect(page.locator(".chat-header-model-controls .global-model-pill")).to_be_visible()
-    assert page.locator(".chat-page-header .chat-model-controls").count() == 0
-    assert page.locator(".chat-site-header .chat-header-model-controls button").count() == 1
+    expect(page.locator(".brainstorm-header-model-column .global-model-pill")).to_be_visible()
+    assert page.locator(".chat-site-header .brainstorm-header-model-column button").count() == 1
+    assert page.locator(".chat-site-header .project-google-signin").count() >= 1
     assert first.locator("textarea").count() == 0
     assert second.locator("textarea").count() == 0
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
@@ -162,9 +195,9 @@ with sync_playwright() as playwright:
     metadata = page.locator(".chat-privacy-note")
     expect(metadata).to_contain_text("Transcript file:")
     assert "Messages are appended" not in metadata.inner_text()
-    title_bounds = page.locator(".chat-page-header").bounding_box()
+    title_bounds = page.locator(".chat-site-header .brainstorm-header-copy").bounding_box()
     metadata_bounds = metadata.bounding_box()
-    repeated = page.get_by_label("Repeated:", exact=True)
+    repeated = page.get_by_label("Research Objective:", exact=True)
     repeated_bounds = repeated.bounding_box()
     human_bounds = human.bounding_box()
     toolbar_bounds = toolbar.bounding_box()
@@ -185,8 +218,7 @@ with sync_playwright() as playwright:
         )
     )
     assert (
-        title_bounds["y"]
-        < metadata_bounds["y"]
+        title_bounds["y"] < metadata_bounds["y"]
         < repeated_bounds["y"]
         < human_bounds["y"]
         < toolbar_bounds["y"]
@@ -218,7 +250,7 @@ with sync_playwright() as playwright:
     human.fill("")
     repeated.fill("A")
     narrow_bounds = repeated.bounding_box()
-    repeated.fill("Always challenge the assumptions.")
+    repeated.fill("Find a new mathematical breakthrough.")
     filled_bounds = repeated.bounding_box()
     assert narrow_bounds is not None and filled_bounds is not None
     assert abs(narrow_bounds["width"] - filled_bounds["width"]) < 1
@@ -227,7 +259,7 @@ with sync_playwright() as playwright:
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120002.md")
     expect(transcript_filename).to_contain_text(".md")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_visible()
-    model_pill = page.locator(".chat-header-model-controls .global-model-pill")
+    model_pill = page.locator(".brainstorm-header-model-column .global-model-pill")
     expect(model_pill).to_contain_text("GPT-6.1-Sol")
     expect(model_pill).to_contain_text("Thinking · Low")
     model_pill.click(position={"x": 12, "y": 8})
@@ -240,24 +272,10 @@ with sync_playwright() as playwright:
     connection_bounds = connection.locator("summary").bounding_box()
     model_bounds = model_pill.bounding_box()
     assert connection_bounds and model_bounds
-    assert (
-        abs(
-            (connection_bounds["x"] + connection_bounds["width"])
-            - (model_bounds["x"] + model_bounds["width"])
-        )
-        < 3
-    ), (connection_bounds, model_bounds)
-    assert connection_bounds["y"] + connection_bounds["height"] < model_bounds["y"]
-    assert abs(model_bounds["y"] - (connection_bounds["y"] + connection_bounds["height"]) - 12) < 6
-    header_bounds = page.locator(".chat-site-header").bounding_box()
-    assert header_bounds is not None
-    right_inset = page.viewport_size["width"] - (model_bounds["x"] + model_bounds["width"])
-    top_inset = connection_bounds["y"] - header_bounds["y"]
-    bottom_inset = (
-        header_bounds["y"] + header_bounds["height"] - model_bounds["y"] - model_bounds["height"]
-    )
-    assert abs(right_inset - top_inset) < 6
-    assert abs(bottom_inset - top_inset) < 14
+    assert connection_bounds["x"] + connection_bounds["width"] < model_bounds["x"] + 5
+    title_right = title_bounds["x"] + title_bounds["width"]
+    pill_left = min(connection_bounds["x"], model_bounds["x"])
+    assert title_right <= pill_left + 5, (title_bounds, connection_bounds, model_bounds)
 
     human.fill("Start the two-agent exchange.")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_enabled()
@@ -266,7 +284,7 @@ with sync_playwright() as playwright:
     while time.monotonic() < deadline and not turns:
         page.wait_for_timeout(50)
     assert turns, "The first AI turn was not requested."
-    assert turns[0]["repeated_text"] == "Always challenge the assumptions."
+    assert turns[0]["research_objective"] == "Find a new mathematical breakthrough."
     assert turns[0]["model"] == "gpt-6-luna"
     assert turns[0]["reasoning_effort"] == "medium"
     expect(first.locator(".chat-markdown strong")).to_have_text("formatted")
@@ -274,16 +292,17 @@ with sync_playwright() as playwright:
     expect(second.locator(".chat-markdown strong")).to_have_text("formatted")
 
     before_repeated_edit = len(turns)
+    page.get_by_label("Enable Supervisor").check()
     human_messages_before = sum(message["speaker"] == "human" for message in transcript_messages)
-    repeated.fill("New instruction applies without a Human message.")
+    repeated.fill("New objective applies without a Human message.")
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline and not any(
-        turn["repeated_text"] == "New instruction applies without a Human message."
+        turn["research_objective"] == "New objective applies without a Human message."
         for turn in turns[before_repeated_edit:]
     ):
         page.wait_for_timeout(100)
     assert any(
-        turn["repeated_text"] == "New instruction applies without a Human message."
+        turn["research_objective"] == "New objective applies without a Human message."
         for turn in turns[before_repeated_edit:]
     )
     assert (
@@ -302,9 +321,9 @@ with sync_playwright() as playwright:
         for item in turn["messages"]
     ):
         page.wait_for_timeout(100)
-    assert turns[0]["repeated_text"] == "Always challenge the assumptions."
+    assert turns[0]["research_objective"] == "Find a new mathematical breakthrough."
     assert all(
-        turn["repeated_text"] == "New instruction applies without a Human message."
+        turn["research_objective"] == "New objective applies without a Human message."
         for turn in turns[before_intervention:]
     )
     assert len(turns) >= 2
@@ -339,6 +358,9 @@ with sync_playwright() as playwright:
         for message in transcript_messages
     )
     assert session_calls == 2
+    assert supervisor_calls, "Supervisor should assess at least one completed AI pair"
+    assert any(item["speaker"] == "supervisor" for item in transcript_messages)
+    assert any(item["speaker"] == "objective" for item in transcript_messages)
 
     # A failed AI turn must expose Retry and resume the same speaker, without
     # appending a second Human prompt or restarting at AI #1 arbitrarily.
