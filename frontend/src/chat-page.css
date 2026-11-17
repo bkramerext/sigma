@@ -4,18 +4,41 @@
   box-sizing: border-box; flex: 0 0 auto; width: calc(100% - 48px);
   min-width: 0; max-width: none; margin: 0 auto 40px; padding: 0; color: #f0e6d7;
 }
-.brainstorm-workspace .chat-page-header {
-  display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px 32px;
-  margin: 12px 0 8px; padding-bottom: 12px; border-bottom: 1px solid #46515b;
+/* Use the empty space in the artwork header; keep the account controls
+   in their original far-right column, without a second title row below. */
+.workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+  align-items: center;
 }
-.brainstorm-workspace .chat-title-group { flex: 0 0 auto; min-width: 0; }
-.brainstorm-workspace .chat-eyebrow {
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: clamp(16px, calc(min(29vw, 470px) - min(29vw, 330px)), 140px);
+  padding: 0 0 8px;
+}
+.brainstorm-workspace .brainstorm-header-copy .chat-eyebrow {
   margin: 0 0 3px; color: #c99a66; font-size: .78rem;
   letter-spacing: .1em; text-transform: uppercase;
 }
-.brainstorm-workspace .chat-page-header h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); }
-.brainstorm-workspace .chat-description {
-  flex: 1 1 350px; margin: 0 0 5px; color: #c4b9aa; font-size: .92rem;
+.brainstorm-workspace .brainstorm-header-copy h1 {
+  margin: 0; color: #f0e6d7;
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  line-height: 1.15;
+}
+.brainstorm-workspace .brainstorm-header-copy .chat-description {
+  margin: 8px 0 0; color: #c4b9aa; font-size: .92rem;
+  line-height: 1.4;
+}
+@media (max-width: 1100px) {
+  .brainstorm-workspace .brainstorm-header-copy .chat-description { display: none; }
+}
+@media (max-width: 700px) {
+  .brainstorm-workspace .brainstorm-header-copy h1 { font-size: 1.4rem; }
+  .brainstorm-workspace .brainstorm-header-copy .chat-eyebrow { font-size: .67rem; }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    margin-left: 8px; padding-bottom: 0;
+  }
 }
 .brainstorm-workspace .chat-privacy-note {
   margin: 0 0 18px; color: #c4b9aa; font-size: .85rem; overflow-wrap: anywhere;
@@ -187,7 +210,6 @@
 }
 @media (max-width: 700px) {
   .brainstorm-workspace .chat-page { width: calc(100% - 28px); }
-  .brainstorm-workspace .chat-page-header h1 { font-size: 1.55rem; }
   .brainstorm-workspace .chat-controls { gap: 8px; }
   .brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear) { padding-inline: 12px; }
 }
