@@ -197,10 +197,10 @@ async def respond(
         raise ProjectError("Sponsored chat is not configured for this account.")
 
     transcript = _transcript(messages, speaker)
-    if speaker == "supervisor":
-        if not research_objective.strip():
-            raise ProjectError("Supervisor requires the research objective.")
-        transcript = f"Research objective: {research_objective.strip()}\n\n{transcript}"
+    if research_objective.strip():
+        transcript = f"Research Objective:\n{research_objective.strip()}\n\n{transcript}"
+    elif speaker == "supervisor":
+        raise ProjectError("Supervisor requires the research objective.")
     payload: dict[str, Any] = {
         "model": model,
         "store": False,
