@@ -186,7 +186,9 @@ export default function ChatPage() {
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/chat/config', { cache: 'no-store', signal });
+      const response = await fetch('/api/chat/config', {
+        cache: 'no-store', signal, headers: { 'X-Sigma-Error-Handled': 'true' },
+      });
       const value = await response.json() as ChatConfig;
       if (!response.ok) throw new Error((value as unknown as { error?: string }).error ?? 'Brainstorm settings are unavailable.');
       setConfig(previous => {
@@ -347,7 +349,7 @@ export default function ChatPage() {
     abort.current = controller;
     const response = await fetch('/api/chat/supervisor', {
       method: 'POST', cache: 'no-store', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
       body: JSON.stringify({
         conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting'
           && !(item.speaker === 'supervisor' && item.text.startsWith('Supervisor assessment unavailable:')))
