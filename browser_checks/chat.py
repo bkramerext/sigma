@@ -253,45 +253,13 @@ with sync_playwright() as playwright:
             header_box,
         )
     )
-    print(
-        "BRAINSTORM_GRID_CHILDREN",
-        header.evaluate(
-            """(el) => {
-                const describe = (node) => ({
-                    tag: node.tagName,
-                    cls: node.className && typeof node.className === 'string' ? node.className : '',
-                    text: node.textContent?.trim().slice(0, 40),
-                    rect: {y: node.getBoundingClientRect().y, height: node.getBoundingClientRect().height},
-                    grid: {row: getComputedStyle(node).gridRowStart, column: getComputedStyle(node).gridColumnStart},
-                });
-                const controls = el.querySelector('.header-controls');
-                return {
-                    header: Array.from(el.children).map(describe),
-                    brand: Array.from(el.querySelector('.brand-block').children).map(describe),
-                    controls: Array.from(controls.children).map(describe),
-                    controlStyles: {rows: getComputedStyle(controls).gridTemplateRows,
-                                    areas: getComputedStyle(controls).gridTemplateAreas},
-                };
-            }"""
-        ),
-        flush=True,
-    )
-    print(
-        "BRAINSTORM_HEADER_GEOMETRY",
-        {
-            "header": header_box,
-            "artwork": artwork_box,
-            "heading": heading_box,
-            "controls": header.locator(".header-controls").bounding_box(),
-            "account_stack": account_stack_box,
-            "model": model_box,
-            "google": google_box,
-            "chatgpt": chatgpt_box,
-            "grid": header.evaluate(
-                "(el) => ({height: getComputedStyle(el).height, rows: getComputedStyle(el).gridTemplateRows})"
-            ),
-        },
-        flush=True,
+    model_column_box = header.locator(".brainstorm-header-model-column").bounding_box()
+    assert model_column_box
+    # Home reserves a second row under Model/Thinking. Brainstorm must not,
+    # or its invisible padding inflates the header and drops the pills.
+    assert model_column_box["height"] <= account_stack_box["height"] + 3, (
+        model_column_box,
+        account_stack_box,
     )
     # Rendering, not just column positions: the oversized artwork made the
     # entire header 365px tall and cropped the wordmark in the user smoke test.
