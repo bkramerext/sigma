@@ -247,6 +247,9 @@ def check_api() -> None:
                 "text": long_text,
             },
         )
+        repeated_record = client.post("/api/chat/message", json={
+            "conversation_id": body["conversation_id"], "speaker": "repeated", "text": "Check sources.",
+        })
         long_turn = client.post(
             "/api/chat/turn",
             json={
@@ -269,6 +272,7 @@ def check_api() -> None:
     assert opened.status_code == 200 and opened.json()["transcript_name"] == "fixture.md"
     assert recorded.status_code == 204
     assert long_record.status_code == 204
+    assert repeated_record.status_code == 204
     assert long_turn.status_code == 200, long_turn.text
     assert len(long_text) > 8000 and len(long_repeated) > 8000
     append_message.assert_any_call(body["conversation_id"], "human", "Hello.")
@@ -343,10 +347,15 @@ def check_transcripts() -> None:
             ]
             for speaker, text in messages:
                 chat_transcripts.append_message(session["conversation_id"], speaker, text)
+            chat_transcripts.append_message(session["conversation_id"], "repeated", "Challenge the assumptions.")
+            chat_transcripts.append_message(session["conversation_id"], "repeated", "(cleared)")
             long_entry = "Detailed workbench evidence. " * 320
             assert len(long_entry) > 8000
             chat_transcripts.append_message(session["conversation_id"], "human", long_entry)
             content = path.read_text(encoding="utf-8")
+            assert "## Repeated instruction ·" in content
+            assert "Challenge the assumptions." in content
+            assert "(cleared)" in content
             assert long_entry in content
             assert f"Session ID: {session['conversation_id']}" in content
             assert content.index("## Human ·") < content.index("## AI #1 ·")
