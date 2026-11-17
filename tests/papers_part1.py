@@ -3847,12 +3847,21 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
                     raise asyncio.CancelledError()
             return b"%PDF-fixture"
 
-        async def score(*_args, **_kwargs):
+        async def score(path_value, paper_id, *_args, **_kwargs):
+            from sigma import paper_scores
+
             nonlocal score_calls
             score_calls += 1
             if score_case and score_calls == 1:
                 raise asyncio.CancelledError()
-            return {"total": 75}
+            record = papers.get_paper(path_value, paper_id, include_tex=False)
+            judgment = paper_scores.PaperJudgment.model_validate({
+                category: {"earned": 80, "explanation": "Fixture scoring."}
+                for category in paper_scores.WEIGHTS
+            })
+            return paper_scores._save_score(
+                path_value, paper_id, paper_scores._make_score(judgment, record["pdf_sha256"])
+            )
 
         async def collect(event: papers.PaperProgressEvent) -> None:
             resumed_events.append(event)
