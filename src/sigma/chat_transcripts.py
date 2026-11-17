@@ -8,6 +8,7 @@ import re
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 from sigma.projects import ProjectError
@@ -21,6 +22,7 @@ SPEAKER_LABELS = {
     "ai_2": "AI #2",
     "objective": "Research Objective",
     "supervisor": "Supervisor",
+    "supervisor_setting": "Supervisor setting",
 }
 TRANSCRIPT_FILENAME = re.compile(r"^\d{8}_\d{6}(?:_\d+)?\.md$")
 
@@ -106,6 +108,8 @@ def append_message(conversation_id: str, speaker: str, text: str) -> None:
         raise ProjectError("Invalid chat transcript message.")
     if not isinstance(text, str) or not text.strip():
         raise ProjectError("A chat message must contain nonempty text.")
+    if speaker == "supervisor_setting" and text not in {"enabled", "disabled"}:
+        raise ProjectError("Invalid Supervisor setting.")
 
     directory = _directory()
     matches = []
@@ -142,3 +146,123 @@ def append_message(conversation_id: str, speaker: str, text: str) -> None:
             os.fsync(stream.fileno())
     except OSError as exc:
         raise ProjectError("The private chat transcript could not be updated.") from exc
+
+
+# Only SIGMA-owned files in the private transcript directory may be resumed.
+_RECORD = re.compile(
+    r"^## (Human|AI #1|AI #2|Research Objective|Supervisor|Supervisor setting) · "
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\n]*$",
+    re.MULTILINE,
+)
+_LABEL_SPEAKERS = {label: speaker for speaker, label in SPEAKER_LABELS.items()}
+_SESSION_ID = re.compile(
+    r"^Session ID: ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+    re.MULTILINE,
+)
+
+
+def _read_private_file(name: str) -> str:
+    if not TRANSCRIPT_FILENAME.fullmatch(name):
+        raise ProjectError("Invalid chat transcript filename.")
+    path = _directory() / name
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = _check_file(stream.fileno())
+            if info.st_size > MAX_TRANSCRIPT_BYTES:
+                raise ProjectError("Chat transcript exceeds the supported size.")
+            fcntl.flock(stream.fileno(), fcntl.LOCK_SH)
+            data = stream.read(MAX_TRANSCRIPT_BYTES + 1)
+            if len(data) > MAX_TRANSCRIPT_BYTES:
+                raise ProjectError("Chat transcript exceeds the supported size.")
+            return data.decode("utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ProjectError("The private chat transcript could not be read safely.") from exc
+
+
+def list_transcripts() -> list[dict[str, str]]:
+    """List resumable private transcripts without exposing arbitrary paths."""
+    result = []
+    for candidate in _directory().iterdir():
+        if not TRANSCRIPT_FILENAME.fullmatch(candidate.name):
+            continue
+        try:
+            content = _read_private_file(candidate.name)
+            match = _SESSION_ID.search(content[:1024])
+            if match and str(UUID(match.group(1))) == match.group(1):
+                result.append({"name": candidate.name})
+        except (ProjectError, ValueError):
+            continue
+    return sorted(result, key=lambda item: item["name"], reverse=True)
+
+
+def load_transcript(name: str) -> dict[str, Any]:
+    """Restore a private session and its chronological message history."""
+    content = _read_private_file(name)
+    header = _SESSION_ID.search(content[:1024])
+    if not header:
+        raise ProjectError("The chat transcript is missing its session ID.")
+    conversation_id = header.group(1)
+    try:
+        if str(UUID(conversation_id)) != conversation_id:
+            raise ValueError("Noncanonical session ID")
+    except ValueError as exc:
+        raise ProjectError("The chat transcript has an invalid session ID.") from exc
+
+    entries = list(_RECORD.finditer(content))
+    messages = []
+    for index, match in enumerate(entries):
+        start = match.end() + 1
+        end = entries[index + 1].start() if index + 1 < len(entries) else len(content)
+        body = content[start:end]
+        body = body.removeprefix("\n")
+        body = body.removesuffix("\n\n")
+        if not body.strip():
+            raise ProjectError("The chat transcript contains an empty entry.")
+        message: dict[str, Any] = {"speaker": _LABEL_SPEAKERS[match.group(1)], "text": body}
+        # Older transcript records stored the complete human-readable supervisor
+        # assessment but not its structured routing metadata. Recover only its
+        # final, explicitly addressed process guidance for the resumed AIs.
+        if message["speaker"] == "supervisor":
+            addressed = re.search(
+                r"(?:^|\n)To (AI #1 and AI #2|AI #1|AI #2): (.+)\Z",
+                body,
+                re.DOTALL,
+            )
+            if addressed:
+                message["recipient"] = {
+                    "AI #1": "ai_1",
+                    "AI #2": "ai_2",
+                    "AI #1 and AI #2": "both",
+                }[addressed.group(1)]
+                message["guidance"] = addressed.group(2).strip()
+        messages.append(message)
+
+    objective = ""
+    supervisor_enabled: bool | None = None
+    for message in messages:
+        if message["speaker"] == "supervisor_setting":
+            if message["text"] not in {"enabled", "disabled"}:
+                raise ProjectError("The chat transcript contains an invalid Supervisor setting.")
+            supervisor_enabled = message["text"] == "enabled"
+    messages = [message for message in messages if message["speaker"] != "supervisor_setting"]
+    for message in messages:
+        if message["speaker"] == "objective":
+            objective = "" if message["text"] == "(cleared)" else message["text"]
+    last_ai = next(
+        (m["speaker"] for m in reversed(messages) if m["speaker"] in {"ai_1", "ai_2"}), None
+    )
+    next_speaker = "ai_2" if last_ai == "ai_1" else "ai_1"
+    return {
+        "conversation_id": conversation_id,
+        "transcript_name": name,
+        "transcript_path": str((_directory() / name).resolve()),
+        "messages": messages,
+        "research_objective": objective,
+        "next_speaker": next_speaker,
+        "supervisor_enabled": (
+            supervisor_enabled
+            if supervisor_enabled is not None
+            else any(m["speaker"] == "supervisor" for m in messages)
+        ),
+    }

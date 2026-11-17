@@ -48,7 +48,6 @@ class CloudAuthTests(CloudAuthFixture):
         conversation_id = str(uuid4())
         turn_body = {
             "conversation_id": conversation_id,
-            "expected_binding": "fixture-sponsored",
             "speaker": "ai_1",
             "messages": [{"speaker": "human", "text": "Find a new approach."}],
             "model": "gpt-6.1-sol",
@@ -84,7 +83,7 @@ class CloudAuthTests(CloudAuthFixture):
         call = respond.await_args
         assert call is not None
         self.assertEqual(call.kwargs["speaker"], "ai_1")
-        self.assertEqual(call.kwargs["expected_binding"], "fixture-sponsored")
+        self.assertNotIn("expected_binding", call.kwargs)
 
     def test_hosted_brainstorm_uninvited_user_cannot_use_inference_or_transcripts(self):
         self.client.base_url = "https://127.0.0.1"

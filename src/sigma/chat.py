@@ -130,29 +130,48 @@ def _transcript(messages: list[dict[str, Any]], recipient: Speaker | None = None
 
 
 def _response_text(raw: Any, model: str) -> str:
+    """Read a completed Responses result without assuming optional output arrays.
+
+    Several provider adapters return completed text as output_text rather than
+    fully populated output[*].content. Accept that documented alternative, but
+    never infer success from an incomplete response, a refusal, or deltas alone.
+    """
     if not isinstance(raw, dict) or raw.get("status") != "completed":
         raise ProjectError("The AI did not complete its turn.")
     if raw.get("model") != model:
         raise ProjectError("The AI returned an unexpected model; no message was added.")
-    output = raw.get("output")
+    output = raw.get("output", [])
+    if output is None:
+        output = []
     if not isinstance(output, list):
-        raise ProjectError("The AI returned an invalid response; no message was added.")
-    content = [
-        part
-        for item in output
-        if isinstance(item, dict) and item.get("type") == "message"
-        for part in item.get("content", [])
-        if isinstance(part, dict)
-    ]
-    if any(part.get("type") == "refusal" for part in content):
-        raise ProjectError("The AI declined this turn.")
-    result = "\n".join(
-        part["text"]
-        for part in content
-        if part.get("type") == "output_text" and isinstance(part.get("text"), str)
-    ).strip()
-    if not result or len(result) > MAX_RESPONSE_BYTES:
-        raise ProjectError("The AI returned an empty or oversized message.")
+        raise ProjectError(
+            "The AI returned an unexpected output structure. The turn was preserved for Retry."
+        )
+    texts: list[str] = []
+    for item in output:
+        if not isinstance(item, dict) or item.get("type") != "message":
+            continue
+        content = item.get("content") or []
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "refusal":
+                raise ProjectError("The AI declined this turn.")
+            if part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                texts.append(part["text"])
+    result = "\n".join(texts).strip()
+    # Responses includes an output_text convenience value in some adapters.
+    # It may be used only when nested text is absent, never to override it.
+    if not result and isinstance(raw.get("output_text"), str):
+        result = raw["output_text"].strip()
+    if not result:
+        raise ProjectError(
+            "The AI completed without usable text. The conversation is intact; Retry this turn."
+        )
+    if len(result.encode("utf-8")) > MAX_RESPONSE_BYTES:
+        raise ProjectError("The AI returned an oversized message.")
     return result
 
 
@@ -161,7 +180,6 @@ async def respond(
     speaker: Speaker,
     messages: list[dict[str, Any]],
     conversation_id: str,
-    expected_binding: str,
     model: str,
     reasoning_effort: str,
     repeated_text: str = "",
@@ -187,8 +205,6 @@ async def respond(
     is_personal = model_dispatch.uses_personal_worker(credential)
     if (not credential["token"] and not is_personal) or credential["status"] != "connected":
         raise ProjectError("Connect ChatGPT or select API-key billing before starting a chat.")
-    if credential["identity"] != expected_binding:
-        raise ProjectError("The selected AI account changed. Review the connection and retry.")
     if model not in CATALOG:
         raise ProjectError("The selected chat model is unavailable.")
     try:
@@ -306,7 +322,19 @@ async def respond(
         inference_failure("unavailable", guard)
         raise ProjectError("The AI request timed out or the connection was interrupted.") from exc
     except (ValueError, TypeError, KeyError) as exc:
-        raise ProjectError("The AI returned an invalid response; no message was added.") from exc
+        # Do not hide deterministic transport/parser errors behind the same
+        # generic message as a recoverable completed-response shape.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Brainstorm provider result could not be decoded (%s: %s)",
+            type(exc).__name__,
+            str(exc)[:160],
+        )
+        raise ProjectError(
+            "The provider response could not be decoded. Your conversation was preserved; "
+            "Retry the turn or select another Model/Thinking setting."
+        ) from exc
     except cloud_research.CloudResearchUnavailable as exc:
         raise ProjectError(str(exc)) from exc
     finally:

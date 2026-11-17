@@ -15,6 +15,7 @@ CHROME = os.environ.get(
 turns: list[dict] = []
 errors: list[str] = []
 config_calls = 0
+active_fixture_binding = "fixture-account"
 session_calls = 0
 transcript_messages: list[dict] = []
 fail_next_turn = False
@@ -34,6 +35,34 @@ with sync_playwright() as playwright:
     def respond(route):
         global config_calls, session_calls, fail_next_turn
         url = route.request.url
+        if url.endswith("/api/chat/transcripts/20261112_101010.md"):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "conversation_id": "4b1657d0-d9a4-467d-bc8b-29d48111e124",
+                        "transcript_name": "20261112_101010.md",
+                        "transcript_path": "/tmp/sigma-state/chat-transcripts/20261112_101010.md",
+                        "research_objective": "Continue exploring theta kernels.",
+                        "next_speaker": "ai_2",
+                        "supervisor_enabled": False,
+                        "messages": [
+                            {"speaker": "objective", "text": "Continue exploring theta kernels."},
+                            {"speaker": "human", "text": "Find a new approach."},
+                            {"speaker": "ai_1", "text": "Consider the theta transformation."},
+                        ],
+                    }
+                ),
+            )
+            return
+        if url.endswith("/api/chat/transcripts"):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='[{"name":"20261112_101010.md"}]',
+            )
+            return
         if url.endswith("/api/chat/session"):
             session_calls += 1
             conversation_id = str(uuid4())
@@ -64,7 +93,7 @@ with sync_playwright() as playwright:
                         "mode": "chatgpt",
                         "status": "connected",
                         "message": "Ready.",
-                        "binding": "fixture-account",
+                        "binding": active_fixture_binding,
                         "model": "gpt-6.1-sol",
                         "models": [
                             {
@@ -455,6 +484,17 @@ with sync_playwright() as playwright:
 
     before_repeated_edit = len(turns)
     page.get_by_label("Enable Supervisor").check()
+    expect(page.get_by_label("Enable Supervisor")).to_be_checked()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "enabled"
+        for item in transcript_messages
+    ):
+        page.wait_for_timeout(50)
+    assert any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "enabled"
+        for item in transcript_messages
+    ), "Enabling Supervisor must be persisted during the active exchange"
     human_messages_before = sum(message["speaker"] == "human" for message in transcript_messages)
     repeated.fill("New objective applies without a Human message.")
     deadline = time.monotonic() + 5
@@ -531,6 +571,20 @@ with sync_playwright() as playwright:
     assert any(item["speaker"] == "supervisor" for item in transcript_messages)
     assert any(item["speaker"] == "objective" for item in transcript_messages)
 
+    # Toggling Supervisor off mid-exchange persists without stopping the AIs.
+    page.get_by_label("Enable Supervisor").uncheck()
+    expect(page.get_by_label("Enable Supervisor")).not_to_be_checked()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "disabled"
+        for item in transcript_messages
+    ):
+        page.wait_for_timeout(50)
+    assert any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "disabled"
+        for item in transcript_messages
+    ), "Disabling Supervisor must be persisted without clearing history"
+
     # A failed AI turn must expose Retry and resume the same speaker, without
     # appending a second Human prompt or restarting at AI #1 arbitrarily.
     fail_next_turn = True
@@ -554,9 +608,49 @@ with sync_playwright() as playwright:
     assert sum(item["speaker"] == "human" for item in transcript_messages) == human_writes
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
+    # If a provider repeatedly returns an unusable response, a user can skip
+    # that AI turn and continue without replaying or fabricating a message.
+    fail_next_turn = True
+    human.fill("Continue after the unparseable provider turn.")
+    page.get_by_role("button", name="Send", exact=True).click()
+    expect(page.get_by_role("button", name="Retry AI #1", exact=True)).to_be_visible()
+    skipped_at = len(turns)
+    page.get_by_role("button", name="Skip turn", exact=True).click()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and len(turns) <= skipped_at:
+        page.wait_for_timeout(50)
+    assert len(turns) > skipped_at, "Skip turn did not resume the exchange"
+    assert turns[skipped_at]["speaker"] == "ai_2"
+    page.get_by_role("button", name="Stop exchange", exact=True).click()
+
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120005.md")
     assert session_calls == 5
+    # Resume reuses the saved ID/history and automatically dispatches AI #2.
+    turns_before_resume = len(turns)
+    # Switching the selected account cannot invalidate a saved conversation.
+    active_fixture_binding = "another-fixture-account"
+    page.locator("#chat-saved-transcript").select_option("20261112_101010.md")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261112_101010.md")
+    expect(repeated).to_have_value("Continue exploring theta kernels.")
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and len(turns) <= turns_before_resume:
+        page.wait_for_timeout(50)
+    assert len(turns) > turns_before_resume, "Selecting a transcript did not auto-continue"
+    resumed = turns[turns_before_resume]
+    assert resumed["conversation_id"] == "4b1657d0-d9a4-467d-bc8b-29d48111e124"
+    assert resumed["speaker"] == "ai_2"
+    assert "expected_binding" not in resumed
+    assert resumed["research_objective"] == "Continue exploring theta kernels."
+    assert any(
+        message["text"] == "Consider the theta transformation." for message in resumed["messages"]
+    )
+    assert not any(message["text"] == "Find a new approach." for message in transcript_messages)
+    assert not any(
+        message["text"] == "Continue exploring theta kernels." for message in transcript_messages
+    )
+    page.get_by_role("button", name="Stop exchange", exact=True).click()
+
     # A new normal page load must not inherit the earlier local opt-in.
     page.goto(ORIGIN + "/", wait_until="networkidle")
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)

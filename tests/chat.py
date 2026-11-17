@@ -6,6 +6,7 @@ import re
 import stat
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -129,7 +130,6 @@ def check_service() -> None:
                 speaker="ai_1",
                 messages=[{"speaker": "human", "text": "Question for the pair."}],
                 conversation_id=str(uuid4()),
-                expected_binding="api_key",
                 model="gpt-6.1-sol",
                 reasoning_effort="low",
                 research_objective="Always challenge the assumptions.",
@@ -167,24 +167,34 @@ def check_service() -> None:
         else:
             raise AssertionError(f"Sponsored ledger accepted request without {required}")
 
-    with patch(
-        "sigma.chat.auth_context", new=AsyncMock(return_value={**credential, "identity": "changed"})
+    # An account switch changes the provider for the NEXT turn; it must
+    # never invalidate the current conversation/session identifier.
+    switched = {**credential, "identity": "different-account", "token": "other-token"}
+    with (
+        patch("sigma.chat.auth_context", new=AsyncMock(return_value=switched)),
+        patch(
+            "sigma.chat.models",
+            new=AsyncMock(
+                return_value={
+                    "connection": {"status": "connected", "guidance": "Ready."},
+                    "models": [{"id": "gpt-6.1-sol", "availability": "available"}],
+                }
+            ),
+        ),
+        patch("sigma.chat.cloud_research.billing_enabled", return_value=False),
+        patch("sigma.chat.httpx.AsyncClient", Client),
     ):
-        try:
-            asyncio.run(
-                chat.respond(
-                    speaker="ai_1",
-                    messages=[{"speaker": "human", "text": "Question."}],
-                    conversation_id=str(uuid4()),
-                    expected_binding="api_key",
-                    model="gpt-6.1-sol",
-                    reasoning_effort="low",
-                )
+        result_after_switch = asyncio.run(
+            chat.respond(
+                speaker="ai_2",
+                messages=[{"speaker": "human", "text": "Question."}],
+                conversation_id=str(uuid4()),
+                model="gpt-6.1-sol",
+                reasoning_effort="low",
             )
-        except ProjectError as exc:
-            assert "account changed" in str(exc)
-        else:
-            raise AssertionError("A credential change must stop chat before provider dispatch")
+        )
+    assert result_after_switch == "A deterministic reply."
+    assert captured["headers"]["Authorization"] == "Bearer other-token"
 
     messages = [{"speaker": "human", "text": "earlier"}] + [
         {"speaker": "ai_1", "text": f"turn {index}"} for index in range(chat.MAX_MESSAGES)
@@ -193,8 +203,81 @@ def check_service() -> None:
     assert "Earlier conversation turns omitted" in transcript
     assert f"turn {chat.MAX_MESSAGES - 1}" in transcript
     print(
-        "PASS selected-credential request, no-store payload, binding recheck and bounded transcript"
+        "PASS live-connection requests, account switching, no-store payload and bounded transcript"
     )
+
+
+def check_streamed_multisegment_completion() -> None:
+    from sigma.plan_stream import completed
+
+    response_id = "resp_bounded_fixture"
+    text = ["First line.", " Second line."]
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": response_id}},
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": "".join(text)},
+        {
+            "type": "response.completed",
+            "sequence_number": 2,
+            "response": {
+                "id": response_id,
+                "model": "gpt-6.1-sol",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": part} for part in text],
+                    }
+                ],
+            },
+        },
+    ]
+
+    class FakeStream:
+        status_code = 200
+
+        def __init__(self):
+            self.headers = {"content-type": "text/event-stream"}
+
+        async def aiter_bytes(self):
+            for event in events:
+                yield ("data: " + json.dumps(event) + "\\n\\n").encode()
+
+    raw = asyncio.run(completed(cast(Any, FakeStream())))
+    assert chat._response_text(raw, "gpt-6.1-sol") == "".join(text)
+    print("PASS multi-part completed output matches joined stream text")
+
+
+def check_response_recovery() -> None:
+    completed = {
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "output": [{"type": "reasoning"}, {"type": "message", "content": None}],
+        "output_text": "Recovered adapter text.",
+    }
+    assert chat._response_text(completed, "gpt-6.1-sol") == "Recovered adapter text."
+    canonical = {
+        **completed,
+        "output": [
+            {"type": "message", "content": [{"type": "output_text", "text": "Canonical text."}]}
+        ],
+    }
+    assert chat._response_text(canonical, "gpt-6.1-sol") == "Canonical text."
+    refused = {
+        **completed,
+        "output": [{"type": "message", "content": [{"type": "refusal", "refusal": "No."}]}],
+    }
+    for bad in (
+        {**completed, "status": "incomplete"},
+        refused,
+        {**completed, "output": [], "output_text": ""},
+    ):
+        try:
+            chat._response_text(bad, "gpt-6.1-sol")
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("Invalid or refused model response accepted")
+    print("PASS Brainstorm completed-response recovery without accepting incomplete/refused text")
 
 
 def check_api() -> None:
@@ -212,7 +295,6 @@ def check_api() -> None:
     }
     body = {
         "conversation_id": str(uuid4()),
-        "expected_binding": "api_key",
         "speaker": "ai_2",
         "messages": [{"speaker": "human", "text": "Hello."}],
         "model": "gpt-6.1-sol",
@@ -263,7 +345,6 @@ def check_api() -> None:
                 "research_objective": long_repeated,
             },
         )
-        mismatch = client.post("/api/chat/turn", json={**body, "expected_binding": "other"})
         invalid = client.post("/api/chat/turn", json={**body, "speaker": "ai_3"})
         invalid_record = client.post(
             "/api/chat/message",
@@ -286,7 +367,6 @@ def check_api() -> None:
     assert response.status_code == 200, response.text
     assert '"type":"started"' in response.text
     assert '"type": "complete", "text": "AI #2 reply."' in response.text
-    assert mismatch.status_code == 409
     assert invalid.status_code == 422
     assert selected.status_code == 200
     assert unsupported.status_code == 422
@@ -297,7 +377,6 @@ def check_slow_turn_heartbeat() -> None:
     """A slow model turn must keep its SSE connection alive and still complete."""
     body = {
         "conversation_id": str(uuid4()),
-        "expected_binding": "api_key",
         "speaker": "ai_1",
         "messages": [{"speaker": "human", "text": "Think carefully."}],
         "model": "gpt-6.1-sol",
@@ -430,6 +509,51 @@ def check_transcripts() -> None:
             assert content.index("## AI #1 ·") < content.index("## AI #2 ·")
             assert all(text in content for _, text in messages)
 
+            options = chat_transcripts.list_transcripts()
+            assert options == [{"name": session["transcript_name"]}]
+            restored = chat_transcripts.load_transcript(session["transcript_name"])
+            assert restored["conversation_id"] == session["conversation_id"]
+            assert restored["transcript_path"] == session["transcript_path"]
+            assert restored["research_objective"] == ""
+            assert restored["next_speaker"] == "ai_1"
+            assert restored["messages"][0] == {"speaker": "human", "text": messages[0][1]}
+            assert restored["messages"][2] == {"speaker": "ai_2", "text": messages[2][1]}
+            assert restored["messages"][-1]["text"] == long_entry
+            assert not restored["supervisor_enabled"]
+            with TestClient(app) as client:
+                listed = client.get("/api/chat/transcripts")
+                selected = client.get("/api/chat/transcripts/" + session["transcript_name"])
+                traversal = client.get("/api/chat/transcripts/not-a-transcript.md")
+            assert listed.status_code == 200
+            assert listed.json() == options
+            assert selected.status_code == 200
+            assert selected.json()["conversation_id"] == session["conversation_id"]
+            assert traversal.status_code in {400, 404, 422}
+
+            chat_transcripts.append_message(
+                session["conversation_id"],
+                "supervisor",
+                "Research progress: 4.5 / 10.0\\n\\nTo AI #2: Clarify the assumption.",
+            )
+            resumed_guidance = chat_transcripts.load_transcript(session["transcript_name"])
+            assert resumed_guidance["supervisor_enabled"]
+            assert resumed_guidance["messages"][-1]["recipient"] == "ai_2"
+            assert resumed_guidance["messages"][-1]["guidance"] == "Clarify the assumption."
+
+            chat_transcripts.append_message(
+                session["conversation_id"], "supervisor_setting", "disabled"
+            )
+            disabled = chat_transcripts.load_transcript(session["transcript_name"])
+            assert disabled["supervisor_enabled"] is False
+            assert all(
+                message["speaker"] != "supervisor_setting" for message in disabled["messages"]
+            )
+            chat_transcripts.append_message(
+                session["conversation_id"], "supervisor_setting", "enabled"
+            )
+            reenabled = chat_transcripts.load_transcript(session["transcript_name"])
+            assert reenabled["supervisor_enabled"] is True
+
             original = path.read_bytes()
             backup = directory / "transcript-backup.md"
             path.rename(backup)
@@ -451,6 +575,8 @@ def check_transcripts() -> None:
 def main() -> None:
     check_configuration()
     check_service()
+    check_response_recovery()
+    check_streamed_multisegment_completion()
     check_api()
     check_slow_turn_heartbeat()
     check_supervisor()

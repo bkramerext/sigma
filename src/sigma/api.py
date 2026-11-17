@@ -3407,7 +3407,12 @@ class ChatMessageRequest(BaseModel):
     guidance: str = ""
 
 
-class ChatTranscriptMessageRequest(ChatMessageRequest):
+class ChatTranscriptMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    speaker: Literal["human", "ai_1", "ai_2", "objective", "supervisor", "supervisor_setting"]
+    text: str = Field(min_length=1)
+    recipient: Literal["ai_1", "ai_2", "both"] | None = None
+    guidance: str = ""
     conversation_id: str = Field(
         pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
     )
@@ -3418,7 +3423,6 @@ class ChatTurnRequest(BaseModel):
     conversation_id: str = Field(
         pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
     )
-    expected_binding: str = Field(min_length=1, max_length=256)
     speaker: Literal["ai_1", "ai_2"]
     messages: list[ChatMessageRequest] = Field(min_length=1, max_length=chat.MAX_MESSAGES)
     model: str = Field(min_length=1, max_length=100)
@@ -3431,12 +3435,25 @@ class ChatSupervisorRequest(BaseModel):
     conversation_id: str = Field(
         pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
     )
-    expected_binding: str = Field(min_length=1, max_length=256)
     messages: list[ChatMessageRequest] = Field(min_length=2, max_length=chat.MAX_MESSAGES)
     model: str = Field(min_length=1, max_length=100)
     reasoning_effort: Literal["low", "medium", "high", "xhigh"]
     research_objective: str = Field(min_length=1, max_length=10000)
     milestone_latched: bool = False
+
+
+@app.get("/api/chat/transcripts")
+def list_chat_transcripts():
+    """List private, resumable Brainstorm transcripts."""
+    return JSONResponse(chat_transcripts.list_transcripts(), headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/chat/transcripts/{name}")
+def load_chat_transcript(name: str):
+    """Restore a saved Brainstorm transcript from the private state directory."""
+    return JSONResponse(
+        chat_transcripts.load_transcript(name), headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.post("/api/chat/session")
@@ -3466,10 +3483,6 @@ async def chat_turn_view(body: ChatTurnRequest):
     config = await chat.configuration()
     if not config["available"]:
         raise HTTPException(503, config["message"] or "Connect an AI account before chatting.")
-    if body.expected_binding != config["binding"]:
-        raise HTTPException(
-            409, "The selected AI account changed. Review the connection and retry."
-        )
     available_model = next(
         (item for item in config.get("models", []) if item.get("id") == body.model), None
     )
@@ -3483,7 +3496,6 @@ async def chat_turn_view(body: ChatTurnRequest):
                 speaker=body.speaker,
                 messages=[item.model_dump() for item in body.messages],
                 conversation_id=str(UUID(body.conversation_id)),
-                expected_binding=body.expected_binding,
                 model=body.model,
                 reasoning_effort=body.reasoning_effort,
                 research_objective=body.research_objective,
@@ -3523,8 +3535,6 @@ async def chat_supervisor_view(body: ChatSupervisorRequest):
     config = await chat.configuration()
     if not config["available"]:
         raise HTTPException(503, config["message"] or "Connect an AI account before chatting.")
-    if body.expected_binding != config["binding"]:
-        raise HTTPException(409, "The selected AI account changed. Review and retry.")
     selected = next(
         (item for item in config.get("models", []) if item.get("id") == body.model), None
     )
@@ -3536,7 +3546,6 @@ async def chat_supervisor_view(body: ChatSupervisorRequest):
         speaker="supervisor",
         messages=[item.model_dump() for item in body.messages],
         conversation_id=str(UUID(body.conversation_id)),
-        expected_binding=body.expected_binding,
         model=body.model,
         reasoning_effort=body.reasoning_effort,
         research_objective=body.research_objective,
