@@ -3772,6 +3772,30 @@ def _validate_obligation_review_basis(context: dict[str, Any], review: dict[str,
         )
 
 
+def _research_schema_validation_reason(exc: ValidationError) -> str:
+    """Describe rejected schema fields without embedding response content.
+
+    ValidationError messages may contain model-generated values, which must
+    not be copied into user notices or low-trust operational diagnostics.
+    Restrict the summary to structural field paths and Pydantic error codes.
+    """
+    problems: list[str] = []
+    for issue in exc.errors(include_input=False, include_url=False)[:4]:
+        location = issue.get("loc", ())
+        field = ".".join(
+            str(part) for part in location
+            if (type(part) is int and 0 <= part <= 9999)
+            or (isinstance(part, str) and re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]{0,63}", part))
+        )[:160] or "response"
+        kind = str(issue.get("type", "invalid"))
+        if not re.fullmatch(r"[a-zA-Z0-9_]{1,60}", kind):
+            kind = "invalid"
+        problems.append(f"{field} ({kind})")
+    if not problems:
+        return "Research provider returned malformed research output"
+    return "Research response failed JSON schema validation: " + "; ".join(problems)
+
+
 def _research_schema(model: type[BaseModel]) -> dict[str, Any]:
     """Normalize every object in the provider wire schema, including $defs.
 
@@ -8434,6 +8458,18 @@ async def _call_provider(
         raise ProjectError("Research provider did not complete its research response")
     if raw.get("status") != "completed":
         raise ProjectError("Research provider did not complete its research response")
+    # A successful provider envelope is a *known* completed dispatch even if
+    # the returned JSON or a local evidence rule is invalid. Audit and usage
+    # must be recorded before parsing or validating any of that content.
+    usage_for_log = _usage(raw)
+    response_id = raw.get("id")
+    context["_provider_response_audit"] = {
+        "status": "provider_response_received",
+        "usage": usage_for_log,
+        "provider_response_id": response_id
+        if isinstance(response_id, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", response_id)
+        else None,
+    }
     if any(
         item.get("type") == "refusal"
         for item in raw.get("output", [])
@@ -8452,7 +8488,7 @@ async def _call_provider(
         and isinstance(content.get("text"), str)
     ]
     if len(texts) != 1:
-        raise ProjectError("Research provider returned malformed output")
+        raise ProjectError(f"Research provider returned {len(texts)} text blocks; exactly one JSON text block is required")
     # ChatGPT controls its own generation ceiling. A fully completed,
     # schema-valid response remains usable even when provider-reported
     # usage exceeds SIGMA's conservative internal reservation estimate.
@@ -8461,10 +8497,9 @@ async def _call_provider(
     try:
         data = json.loads(texts[0])
     except ValueError as exc:
-        raise ProjectError("Research provider returned malformed output") from exc
+        raise ProjectError("Research provider response was not valid JSON") from exc
     if not isinstance(data, dict):
-        raise ProjectError("Research provider returned malformed output")
-    usage_for_log = _usage(raw)
+        raise ProjectError("Research provider JSON must be an object")
     if log_context:
         session_log.append(
             record["project_path"],
@@ -8484,18 +8519,10 @@ async def _call_provider(
                 "provider_response_id": raw.get("id"),
             },
         )
-    response_id = raw.get("id")
-    context["_provider_response_audit"] = {
-        "status": "provider_response_received",
-        "usage": usage_for_log,
-        "provider_response_id": response_id
-        if isinstance(response_id, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", response_id)
-        else None,
-    }
     try:
         validated = schema_model.model_validate(data).model_dump(exclude_unset=True)
     except ValidationError as exc:
-        raise ProjectError("Research provider returned malformed research output") from exc
+        raise ProjectError(_research_schema_validation_reason(exc)) from exc
     if (
         role == "investigator"
         and not record.get("strategy_runs")
