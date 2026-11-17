@@ -340,7 +340,7 @@ async def assess(
     model: str,
     reasoning_effort: str,
 ) -> dict[str, Any]:
-    """Return a domain-neutral review; do not let the supervisor steer subject matter."""
+    """Return a domain-neutral review without steering subject matter."""
     raw = await respond(
         speaker="supervisor",
         messages=messages,
@@ -352,7 +352,8 @@ async def assess(
         reasoning_effort=reasoning_effort,
     )
     try:
-        parsed = json.loads(raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip())
+        cleaned = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = json.loads(cleaned)
         rubric = parsed["rubric"]
         if not isinstance(rubric, dict):
             raise ValueError("rubric")
@@ -369,12 +370,18 @@ async def assess(
         if action not in {"continue", "nudge", "redirect"}:
             raise ValueError("action")
         recipients = parsed["recipients"]
-        if not isinstance(recipients, list) or any(r not in {"ai_1", "ai_2"} for r in recipients):
+        if not isinstance(recipients, list) or any(
+            r not in {"ai_1", "ai_2"} for r in recipients
+        ):
             raise ValueError("recipients")
         recipients = list(dict.fromkeys(recipients))
         guidance = parsed["guidance"]
         assessment = parsed["assessment"]
-        if not isinstance(guidance, str) or not isinstance(assessment, str) or not assessment.strip():
+        if (
+            not isinstance(guidance, str)
+            or not isinstance(assessment, str)
+            or not assessment.strip()
+        ):
             raise ValueError("guidance/assessment")
         if len(guidance) > 1800 or len(assessment) > 1800:
             raise ValueError("length")
@@ -389,7 +396,9 @@ async def assess(
         if candidate and invalidated:
             raise ValueError("contradictory milestone")
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
-        raise ProjectError("The supervisor returned an invalid assessment; the conversation can continue.") from exc
+        raise ProjectError(
+            "The supervisor returned an invalid assessment; the conversation can continue."
+        ) from exc
     latched = (supervisor_latched and not invalidated) or candidate
     score = 10.0 if latched else min(9.9, round(sum(scores.values()), 1))
     recipient_labels = [("AI #1" if r == "ai_1" else "AI #2") for r in recipients]
@@ -416,11 +425,19 @@ async def assess(
             f"**Direction:** {result['guidance']}",
         ]
     if latched:
-        lines.append("**Potential breakthrough detected — 10.0 milestone (validation required).**")
+        lines.append(
+            "**Potential breakthrough detected — 10.0 milestone (validation required).**"
+        )
     elif invalidated:
-        lines.append("**Previous breakthrough candidate invalidated; normal scoring resumed.**")
+        lines.append(
+            "**Previous breakthrough candidate invalidated; normal scoring resumed.**"
+        )
     lines.append(
-        "**Rubric:** " + "; ".join(f"{key}: {value:g}/{RUBRIC_MAXIMA[key]:g}" for key, value in scores.items())
+        "**Rubric:** "
+        + "; ".join(
+            f"{key}: {value:g}/{RUBRIC_MAXIMA[key]:g}"
+            for key, value in scores.items()
+        )
     )
     result["text"] = "\n\n".join(lines)
     return result

@@ -234,7 +234,9 @@ def check_supervisor() -> None:
         "model": "gpt-6.1-sol",
         "reasoning_effort": "medium",
     }
-    with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(base))) as model:
+    with patch(
+        "sigma.chat.respond", new=AsyncMock(return_value=json.dumps(base))
+    ) as model:
         result = asyncio.run(chat.assess(**kwargs))
         model.assert_awaited_once()
     assert result["score"] == 4.5
@@ -242,8 +244,13 @@ def check_supervisor() -> None:
     assert "AI #2" in result["text"]
     assert "Clarify which parts" in result["text"]
 
-    candidate = {**base, "breakthrough_candidate": True, "action": "continue",
-                 "recipients": [], "guidance": ""}
+    candidate = {
+        **base,
+        "breakthrough_candidate": True,
+        "action": "continue",
+        "recipients": [],
+        "guidance": "",
+    }
     with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(candidate))):
         result = asyncio.run(chat.assess(**kwargs))
     assert result["score"] == 10.0 and result["milestone_latched"] is True
@@ -252,7 +259,9 @@ def check_supervisor() -> None:
         result = asyncio.run(chat.assess(**{**kwargs, "supervisor_latched": True}))
     assert result["score"] == 10.0
     invalidated = {**base, "breakthrough_invalidated": True}
-    with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(invalidated))):
+    with patch(
+        "sigma.chat.respond", new=AsyncMock(return_value=json.dumps(invalidated))
+    ):
         result = asyncio.run(chat.assess(**{**kwargs, "supervisor_latched": True}))
     assert result["score"] == 4.5 and not result["milestone_latched"]
     assert "invalidated" in result["text"]
@@ -266,7 +275,6 @@ def check_supervisor() -> None:
         else:
             raise AssertionError("Out-of-bounds score accepted")
     print("PASS supervisor rubric, targeted coaching, milestone latch and invalidation")
-
 
 
 def check_api() -> None:
@@ -339,8 +347,11 @@ def check_api() -> None:
         )
         unsupported = client.post("/api/chat/turn", json={**body, "model": "unreviewed-model"})
         supervisor_result = {
-            "speaker": "supervisor", "text": "**Research progress:** 4.3 / 10.0",
-            "score": 4.3, "recipients": ["ai_2"], "guidance": "Explain the inference.",
+            "speaker": "supervisor",
+            "text": "**Research progress:** 4.3 / 10.0",
+            "score": 4.3,
+            "recipients": ["ai_2"],
+            "guidance": "Explain the inference.",
             "milestone_latched": False,
         }
         with patch("sigma.chat.assess", new=AsyncMock(return_value=supervisor_result)):

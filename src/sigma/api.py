@@ -3506,14 +3506,21 @@ async def supervise_chat_view(body: ChatSupervisorRequest):
     """Assess the dialogue and durably record each review before returning it."""
     config = await chat.configuration()
     if not config["available"]:
-        raise HTTPException(503, config["message"] or "Connect an AI account before chatting.")
+        raise HTTPException(
+            503, config["message"] or "Connect an AI account before chatting."
+        )
     if body.expected_binding != config["binding"]:
-        raise HTTPException(409, "The selected AI account changed. Review the connection and retry.")
+        raise HTTPException(
+            409, "The selected AI account changed. Review the connection and retry."
+        )
     selected = next(
-        (item for item in config.get("models", []) if item.get("id") == body.model), None
+        (item for item in config.get("models", []) if item.get("id") == body.model),
+        None
     )
     if selected is None or body.reasoning_effort not in selected.get("efforts", []):
-        raise HTTPException(422, "Choose a model and Thinking level available to this account.")
+        raise HTTPException(
+            422, "Choose a model and Thinking level available to this account."
+        )
     verdict = await chat.assess(
         messages=[item.model_dump() for item in body.messages],
         research_objective=body.research_objective,
