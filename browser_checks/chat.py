@@ -34,8 +34,31 @@ with sync_playwright() as playwright:
     def respond(route):
         global config_calls, session_calls, fail_next_turn
         url = route.request.url
+        if url.endswith("/api/chat/transcripts/20261112_101010.md"):
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "conversation_id": "4b1657d0-d9a4-467d-bc8b-29d48111e124",
+                    "transcript_name": "20261112_101010.md",
+                    "transcript_path": "/tmp/sigma-state/chat-transcripts/20261112_101010.md",
+                    "research_objective": "Continue exploring theta kernels.",
+                    "next_speaker": "ai_2",
+                    "has_supervisor": False,
+                    "messages": [
+                        {"speaker": "objective", "text": "Continue exploring theta kernels."},
+                        {"speaker": "human", "text": "Find a new approach."},
+                        {"speaker": "ai_1", "text": "Consider the theta transformation."},
+                    ],
+                }),
+            )
+            return
         if url.endswith("/api/chat/transcripts"):
-            route.fulfill(status=200, content_type="application/json", body="[]")
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body='[{"name":"20261112_101010.md"}]',
+            )
             return
         if url.endswith("/api/chat/session"):
             session_calls += 1
@@ -560,6 +583,24 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120005.md")
     assert session_calls == 5
+    # Resume reuses the saved ID/history and automatically dispatches AI #2.
+    saved_writes = len(transcript_messages)
+    turns_before_resume = len(turns)
+    page.locator("#chat-saved-transcript").select_option("20261112_101010.md")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261112_101010.md")
+    expect(repeated).to_have_value("Continue exploring theta kernels.")
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and len(turns) <= turns_before_resume:
+        page.wait_for_timeout(50)
+    assert len(turns) > turns_before_resume, "Selecting a transcript did not auto-continue"
+    resumed = turns[turns_before_resume]
+    assert resumed["conversation_id"] == "4b1657d0-d9a4-467d-bc8b-29d48111e124"
+    assert resumed["speaker"] == "ai_2"
+    assert resumed["research_objective"] == "Continue exploring theta kernels."
+    assert any(message["text"] == "Consider the theta transformation." for message in resumed["messages"])
+    assert len(transcript_messages) == saved_writes, "Historical turns were written again"
+    page.get_by_role("button", name="Stop exchange", exact=True).click()
+
     # A new normal page load must not inherit the earlier local opt-in.
     page.goto(ORIGIN + "/", wait_until="networkidle")
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
