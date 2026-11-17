@@ -244,6 +244,11 @@ def check_streamed_multisegment_completion() -> None:
 
     raw = asyncio.run(completed(cast(Any, FakeStream())))
     assert chat._response_text(raw, "gpt-6.1-sol") == "".join(text)
+    # An otherwise completed response may contain intermediate deltas that
+    # differ from the final authoritative text. Do not discard the full reply.
+    events[1]["delta"] = "Partial progress only."
+    raw = asyncio.run(completed(cast(Any, FakeStream())))
+    assert chat._response_text(raw, "gpt-6.1-sol") == "".join(text)
     print("PASS multi-part completed output matches joined stream text")
 
 
