@@ -3045,7 +3045,7 @@ def test_first_investigator_connection_failure_has_explicit_recovery_plan() -> N
 
 
 def test_transient_resume_credit_is_single_use_and_excludes_unrelated_failures() -> None:
-    record = {
+    record: dict[str, Any] = {
         "steps": [
             {
                 "id": "connection-lost",
