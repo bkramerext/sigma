@@ -206,7 +206,7 @@
 }
 .brainstorm-workspace .chat-history .chat-reply-heading .chat-copy-button { margin: 0; }
 .brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
-.brainstorm-workspace .chat-history-repeated { border-left-color: #a891bf !important; }
+.brainstorm-workspace .chat-history-objective { border-left-color: #a891bf !important; }
 
 /* Brainstorm uses the same Google, ChatGPT, and persisted Model/Thinking
    controls as Home. Keep all three interactive and reserve a real middle
@@ -300,4 +300,27 @@
     width: 100%; grid-template-columns: max-content max-content;
     justify-content: end; gap: var(--identity-pill-gap);
   }
+}
+
+/* Opt-in process supervisor and objective history. */
+.brainstorm-workspace .chat-supervisor-option {
+  display: grid; gap: 6px; margin: 0 0 14px;
+  padding: 12px 15px; border: 1px solid #66513d;
+  border-radius: 8px; background: #141a1c;
+}
+.brainstorm-workspace .chat-supervisor-option label {
+  display: flex; align-items: center; gap: 9px;
+  font-weight: 700; color: #f2c48d;
+}
+.brainstorm-workspace .chat-supervisor-option input { accent-color: #bd8246; }
+.brainstorm-workspace .chat-supervisor-option p {
+  margin: 0; color: #c4b9aa; font-size: .88rem; line-height: 1.45;
+}
+.brainstorm-workspace .chat-progress-status {
+  color: #f2c48d; margin: 0 0 12px;
+}
+.brainstorm-workspace .chat-history li.chat-history-objective { border-left-color: #a891bf; }
+.brainstorm-workspace .chat-history li.chat-history-supervisor { border-left-color: #8cad9f; }
+.brainstorm-workspace .chat-supervisor-meta {
+  margin: 4px 0; color: #a5c7b7; font-size: .83rem;
 }
