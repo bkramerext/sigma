@@ -364,7 +364,7 @@ def _score_in_separate_worker(
                 paper_scores.score_paper(path, paper_id, "test-binding", project_id)
             )
         results.put(("ok", scored["total"]))
-    except BaseException as exc:
+    except Exception as exc:  # noqa: BLE001 - report worker failure to the parent process
         results.put(("error", repr(exc)))
 
 
