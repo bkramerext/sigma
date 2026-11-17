@@ -422,6 +422,5 @@ async def credential_isolation_checks():
     print("PASS sponsor catalog grace does not hide rate limits or authorization failures")
 
 
-
 if __name__ == "__main__":
     main()
