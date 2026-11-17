@@ -52,8 +52,10 @@ with sync_playwright() as playwright:
                             {"speaker": "supervisor", "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight."},
                             {"speaker": "human", "text": "Find a new approach."},
                             *[
-                                {"speaker": "ai_2" if index % 2 else "ai_1",
-                                 "text": f"Archived AI turn {index}"}
+                                {
+                                    "speaker": "ai_2" if index % 2 else "ai_1",
+                                    "text": f"Archived AI turn {index}",
+                                }
                                 for index in range(502)
                             ],
                             {"speaker": "ai_1", "text": "Consider the theta transformation."},
