@@ -1495,6 +1495,23 @@ def test_long_tex_compiler_source_bound_is_configurable() -> None:
             raise AssertionError("The TeX compiler must enforce the configured source bound")
 
 
+def test_paper_compiler_hints_keep_raw_tex_private() -> None:
+    assert (
+        papers._paper_pdf_compiler_hint(
+            [], RuntimeError("PDF export requires Tectonic. Install Tectonic and retry.")
+        )
+        == "Tectonic is not installed or is not on PATH"
+    )
+    assert (
+        papers._paper_pdf_compiler_hint(
+            ["SIGMA compiler category: missing math-mode delimiter near TeX line 88"],
+            RuntimeError("PRIVATE AUTHOR CONTENT"),
+        )
+        == "missing math-mode delimiter near TeX line 88"
+    )
+    assert papers._paper_pdf_compiler_hint([], RuntimeError("PRIVATE AUTHOR CONTENT")) is None
+
+
 def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "one-shot-recovery.sigma"
@@ -1557,9 +1574,10 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
         def fail_compile_visual_and_fallback(_tex, **_kwargs):
             nonlocal compile_calls
             compile_calls += 1
-            if compile_calls in {2, 3}:
-                # Neither original visuals nor the bounded text-only recovery
-                # can compile in this fixture, so resume must remain possible.
+            if compile_calls in {2, 3, 4}:
+                # The proofread source, original authored TeX, and bounded
+                # text-only fallback all fail: this is a genuine compiler
+                # outage, so the checkpoint must remain resumable.
                 raise RuntimeError("fixture compiler unavailable for an unrelated reason")
             return b"%PDF-fixture"
 
@@ -1644,7 +1662,7 @@ def test_one_shot_draft_is_reused_after_pdf_compilation_failure() -> None:
 
         saved = papers.get_paper(str(path), result["paper_id"])
         assert provider_calls == 1
-        assert compile_calls == 5
+        assert compile_calls == 6
         assert saved["generation"]["provider_calls_attempted"] == 3
         assert saved["generation"]["proofreading"]["provider_calls_attempted"] == 2
         assert saved["generation"]["provider_calls_lifetime_total"] == 3
@@ -3829,12 +3847,23 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
                     raise asyncio.CancelledError()
             return b"%PDF-fixture"
 
-        async def score(*_args, **_kwargs):
+        async def score(path_value, paper_id, *_args, **_kwargs):
+            from sigma import paper_scores
+
             nonlocal score_calls
             score_calls += 1
             if score_case and score_calls == 1:
                 raise asyncio.CancelledError()
-            return {"total": 75}
+            record = papers.get_paper(path_value, paper_id, include_tex=False)
+            judgment = paper_scores.PaperJudgment.model_validate(
+                {
+                    category: {"earned": 80, "explanation": "Fixture scoring."}
+                    for category in paper_scores.WEIGHTS
+                }
+            )
+            return paper_scores._save_score(
+                path_value, paper_id, paper_scores._make_score(judgment, record["pdf_sha256"])
+            )
 
         async def collect(event: papers.PaperProgressEvent) -> None:
             resumed_events.append(event)
@@ -3927,6 +3956,113 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             )
 
 
+def _assert_automatic_score_handoff_for_suffix(suffix: str) -> None:
+    """The Score step and saved-paper metadata share one durable evaluation."""
+    from sigma import paper_scores
+
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / ("scoring-handoff" + suffix)
+        view = initialize_project(
+            path,
+            "Scoring handoff",
+            "One completed paper score is enough.",
+            research_mode="mathematical",
+        )
+        credential = {"identity": "fixture:scoring", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "low",
+        }
+        author_calls = 0
+        score_calls = 0
+        stages: list[str] = []
+
+        async def author(package, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            source_id = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            return draft(source_id), config["model"]
+
+        async def proofread(tex, *_args, **_kwargs):
+            return tex, {
+                "status": "complete",
+                "corrections": [],
+                "diagnostics": [],
+                "provider_calls_attempted": 0,
+                "ai_performed": True,
+                "elapsed_seconds": 0,
+            }
+
+        async def collect(event: papers.PaperProgressEvent) -> None:
+            stages.append(event["stage"])
+
+        async def persist_score(path_value, paper_id, *_args, **_kwargs):
+            nonlocal score_calls
+            score_calls += 1
+            record = papers.get_paper(path_value, paper_id, include_tex=False)
+            judgment = paper_scores.PaperJudgment.model_validate(
+                {
+                    category: {"earned": 80, "explanation": "Fixture evaluation is sufficient."}
+                    for category in paper_scores.WEIGHTS
+                }
+            )
+            score = paper_scores._make_score(judgment, record["pdf_sha256"])
+            assert paper_scores.cached_score(record) is None
+            return paper_scores._save_score(path_value, paper_id, score)
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=author),
+            patch.object(papers, "_proofread_tex", new=proofread),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            patch.object(
+                papers.paper_writing_sources,
+                "select",
+                new=lambda *_args, **_kwargs: asyncio.sleep(0, result=([], "unavailable")),
+            ),
+            patch("sigma.paper_scores.score_paper", new=persist_score),
+            mock_pdf_inspection(),
+        ):
+            finished = asyncio.run(
+                papers.generate(
+                    str(path), credential["identity"], view.project.id, progress=collect
+                )
+            )
+
+        paper_id = finished["paper_id"]
+        saved = papers.get_paper(str(path), paper_id, include_tex=False)
+        durable = paper_scores.cached_score(saved)
+        assert durable is not None
+        assert finished["score"] == durable
+        assert papers.list_papers(str(path))[0]["score"] == durable
+        assert score_calls == 1 and author_calls == 1
+        assert stages.count("scoring") == 1
+        assert stages.index("scoring") < stages.index("finishing") < stages.index("complete")
+        # Loading the completed paper through the scoring endpoint must not
+        # perform another paid evaluation when force is false.
+        assert (
+            asyncio.run(
+                paper_scores.score_paper(
+                    str(path), paper_id, credential["identity"], view.project.id
+                )
+            )
+            == durable
+        )
+        assert papers._load_work(str(path)) is None
+
+
+def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
+    # Both native directory projects and legacy JSON bundles are supported.
+    # The reported issue occurred in a .json workspace.
+    for suffix in (".sigma", ".json"):
+        _assert_automatic_score_handoff_for_suffix(suffix)
+
+
 def test_score_interruption_resumes_published_pdf_without_reauthoring() -> None:
     _run_publication_checkpoint_recovery_scenario("score")
 
@@ -3945,8 +4081,8 @@ if __name__ == "__main__":
     run(1)
 
 
-def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring() -> None:
-    """A bad mechanical correction must not force rewriting the whole paper."""
+def _run_pdf_recovery_for_bad_proofreader_tex(corrections: list[str]) -> None:
+    """A changed proofreader TeX is recoverable even with no correction receipt."""
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "mechanical-recovery.sigma"
         view = initialize_project(
@@ -3980,7 +4116,7 @@ def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring
             assert altered != tex
             return altered, {
                 "status": "complete",
-                "corrections": ["escaping"],
+                "corrections": corrections,
                 "diagnostics": [],
                 "provider_calls_attempted": 0,
                 "ai_performed": True,
@@ -4017,3 +4153,113 @@ def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring
         assert record["generation"]["proofreading"]["verification_status"] == "incomplete"
         assert "validated authored TeX" in record["generation"]["proofreading"]["review_reason"]
         assert papers._load_work(str(path)) is None
+
+
+def test_resume_repairs_legacy_del_in_saved_proofreading_without_ai_calls() -> None:
+    """Paper 22 regression: cached XeTeX ^^? must not replay paid work."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "legacy-del-proofread.sigma"
+        view = initialize_project(
+            path, "Legacy DEL TeX", "Preserve a completed draft.", research_mode="mathematical"
+        )
+        credential = {"identity": "fixture:del-recovery", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "low",
+        }
+        author_calls = 0
+        proofread_calls = 0
+        compiled_tex: list[str] = []
+
+        async def author(package, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            source_id = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            return draft(source_id), config["model"]
+
+        async def proofread(tex, *_args, **_kwargs):
+            nonlocal proofread_calls
+            proofread_calls += 1
+            assert tex.count(r"\end{document}") == 1
+            tex = tex.replace(
+                r"\end{document}",
+                "$1,2,\x7f" + r"\ldots,n$" + "\n" + r"\end{document}",
+            )
+            return tex, {
+                "status": "complete",
+                "corrections": [],
+                "diagnostics": [],
+                "provider_calls_attempted": 0,
+                "ai_performed": True,
+                "elapsed_seconds": 0,
+            }
+
+        def compile_safe(tex: str, **_kwargs):
+            compiled_tex.append(tex)
+            assert "\x7f" not in tex, "the saved TeX must be sanitized before compilation"
+            assert "[U+007F]" in tex
+            return b"%PDF-fixture"
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            mock_pdf_inspection(),
+        ):
+            # Emulate a checkpoint created by the prior faulty sanitizer.
+            # The first compiler failure must preserve this exact checkpoint.
+            with (
+                patch.object(papers, "_provider", new=author),
+                patch.object(papers, "_proofread_tex", new=proofread),
+                patch.object(papers, "_visible_invalid_tex_controls", new=lambda tex: (tex, [])),
+                patch.object(
+                    papers,
+                    "_compile_pdf",
+                    side_effect=RuntimeError("TeX rejected invalid character"),
+                ),
+            ):
+                try:
+                    asyncio.run(papers.generate(str(path), credential["identity"], view.project.id))
+                except ProjectError as exc:
+                    assert "PDF compilation failed" in str(exc)
+                else:
+                    raise AssertionError("The original invalid TeX must fail")
+            checkpoint = papers._load_work(str(path))
+            assert checkpoint is not None
+            assert "\x7f" in checkpoint["proofread_ready"]["tex"]
+            assert author_calls == 1 and proofread_calls == 1
+
+            # Resume must fix cached TeX without another AI call or draft rewrite.
+            with (
+                patch.object(
+                    papers, "_provider", side_effect=AssertionError("draft must not be rewritten")
+                ),
+                patch.object(
+                    papers, "_proofread_tex", side_effect=AssertionError("do not re-proofread")
+                ),
+                patch.object(papers, "_compile_pdf", new=compile_safe),
+            ):
+                published = asyncio.run(
+                    papers.generate(str(path), credential["identity"], view.project.id)
+                )
+
+        saved = papers.get_paper(str(path), published["paper_id"])
+        assert author_calls == 1 and proofread_calls == 1
+        assert compiled_tex and all("\x7f" not in tex for tex in compiled_tex)
+        assert "[U+007F]" in saved["tex_source"]
+        assert any("U+007F" in item for item in saved["validation_warnings"])
+        assert saved["generation"]["publication_status"] == "needs_review"
+        assert papers._load_work(str(path)) is None
+
+
+def test_pdf_compilation_recovers_from_bad_proofreader_tex_without_new_authoring() -> None:
+    _run_pdf_recovery_for_bad_proofreader_tex(["escaping"])
+
+
+def test_pdf_compilation_recovers_from_unrecorded_proofreader_tex_change() -> None:
+    # Previously a missing correction receipt skipped the original authored
+    # TeX fallback, stranding a good draft at Generate PDF.
+    _run_pdf_recovery_for_bad_proofreader_tex([])
