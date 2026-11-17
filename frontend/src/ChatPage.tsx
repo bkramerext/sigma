@@ -3,8 +3,18 @@ import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
-type Speaker = 'human' | 'ai_1' | 'ai_2' | 'repeated';
-type ChatMessage = { speaker: Speaker; text: string };
+type Speaker = 'human' | 'ai_1' | 'ai_2' | 'objective' | 'supervisor';
+type Target = 'ai_1' | 'ai_2' | 'both';
+type ChatMessage = { speaker: Speaker; text: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
+type SupervisorAssessment = {
+  score: number;
+  rubric: Record<'alignment' | 'originality' | 'advancement' | 'evidence' | 'momentum', number>;
+  assessment: string;
+  action: 'continue' | 'nudge' | 'redirect';
+  recipient: Target | null;
+  guidance: string;
+  breakthrough_candidate: boolean;
+};
 type ChatConfig = {
   available: boolean;
   mode: string;
@@ -17,7 +27,7 @@ type ChatConfig = {
   max_messages: number;
 };
 
-const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', repeated: 'Repeated instruction' };
+const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor' };
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
@@ -52,9 +62,13 @@ export default function ChatPage() {
   const configRef = useRef<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [repeatedText, setRepeatedText] = useState('');
-  const repeatedTextRef = useRef('');
-  const recordedRepeatedRef = useRef('');
+  const [researchObjective, setResearchObjective] = useState('');
+  const researchObjectiveRef = useRef('');
+  const recordedObjectiveRef = useRef('');
+  const [supervisorEnabled, setSupervisorEnabled] = useState(false);
+  const supervisorEnabledRef = useRef(false);
+  const [progressScore, setProgressScore] = useState<number | null>(null);
+  const breakthroughLatched = useRef(false);
   const [running, setRunning] = useState(false);
   const [turnElapsedSeconds, setTurnElapsedSeconds] = useState(0);
   const [turnTimedOut, setTurnTimedOut] = useState(false);
@@ -128,7 +142,7 @@ export default function ChatPage() {
     }
     if (!signal?.aborted) {
       transcriptWrites.current = Promise.resolve();
-      recordedRepeatedRef.current = '';
+      recordedObjectiveRef.current = '';
       setConversationId(value.conversation_id);
       setTranscriptPath(value.transcript_path);
     }
@@ -152,11 +166,11 @@ export default function ChatPage() {
     return write;
   }
 
-  function recordRepeatedInstruction(id: string) {
-    const value = repeatedTextRef.current.trim();
-    if (!id || value === recordedRepeatedRef.current) return;
-    recordedRepeatedRef.current = value;
-    const message: ChatMessage = { speaker: 'repeated', text: value || '(cleared)' };
+  function recordResearchObjective(id: string) {
+    const value = researchObjectiveRef.current.trim();
+    if (!id || value === recordedObjectiveRef.current) return;
+    recordedObjectiveRef.current = value;
+    const message: ChatMessage = { speaker: 'objective', text: value || '(cleared)' };
     addMessage(message);
     void appendTranscriptMessage(id, message).catch(cause => setError(errorText(cause)));
   }
@@ -206,10 +220,10 @@ export default function ChatPage() {
         conversation_id: conversationId,
         expected_binding: settings.binding,
         speaker: who,
-        messages: history.filter(item => item.speaker !== 'repeated').slice(-settings.max_messages),
+        messages: history.filter(item => item.speaker !== 'objective').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
-        repeated_text: repeatedTextRef.current,
+        research_objective: researchObjectiveRef.current,
       }),
     });
     if (!response.ok) {
@@ -243,7 +257,7 @@ export default function ChatPage() {
     let nextSpeaker: 'ai_1' | 'ai_2' = initialSpeaker;
     try {
       while (runningRef.current && id === runId.current) {
-        recordRepeatedInstruction(conversationId);
+        recordResearchObjective(conversationId);
         // A previous transcript write error must not permanently poison Retry.
         await transcriptWrites.current.catch(() => undefined);
         if (!runningRef.current || id !== runId.current) return;
@@ -304,7 +318,7 @@ export default function ChatPage() {
     const text = draft.trim();
     if (!text || !config?.available || !conversationId) return;
     const message = { speaker: 'human', text } as const;
-    recordRepeatedInstruction(conversationId);
+    recordResearchObjective(conversationId);
     addMessage(message);
     void appendTranscriptMessage(conversationId, message).catch(cause => {
       if (runningRef.current) {
@@ -369,7 +383,11 @@ export default function ChatPage() {
     setConversationId('');
     setTranscriptPath('');
     transcriptWrites.current = Promise.resolve();
-    recordedRepeatedRef.current = '';
+    recordedObjectiveRef.current = '';
+    researchObjectiveRef.current = '';
+    setResearchObjective('');
+    breakthroughLatched.current = false;
+    setProgressScore(null);
     setError('');
     setNotice('');
     setTurnTimedOut(false);
@@ -397,15 +415,27 @@ export default function ChatPage() {
     <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
-    <section className="chat-repeated-prompt" aria-label="Repeated text">
+    <section className="chat-repeated-prompt" aria-label="Research objective">
       <div className="chat-field-heading">
-        <label htmlFor="chat-repeated-text" data-tooltip="Prepended to every AI request; changes apply on the next turn.">Repeated:</label>
+        <label htmlFor="chat-research-objective" data-tooltip="Shared with both AIs and the optional supervisor; changes apply on the next turn.">Research Objective:</label>
+        <CopyReplyButton name="Research Objective" text={researchObjective}/>
       </div>
-      <textarea id="chat-repeated-text" rows={2} value={repeatedText}
-        onBlur={() => recordRepeatedInstruction(conversationId)}
-        onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
-        placeholder="Optional text prepended to every AI turn…"/>
+      <textarea id="chat-research-objective" rows={2} value={researchObjective}
+        onBlur={() => recordResearchObjective(conversationId)}
+        onChange={event => { researchObjectiveRef.current = event.target.value; setResearchObjective(event.target.value); }}
+        placeholder="What finding or research goal should the two AIs pursue?"/>
     </section>
+    <section className="chat-supervisor-option" aria-label="Brainstorm supervisor">
+      <label><input type="checkbox" checked={supervisorEnabled}
+        onChange={event => { supervisorEnabledRef.current = event.target.checked; setSupervisorEnabled(event.target.checked); }}/>
+        Enable Supervisor</label>
+      <p>A third AI reviews progress after each AI pair, recording a brief assessment and offering occasional
+         gentle process-only guidance, without contributing research ideas.</p>
+    </section>
+    {supervisorEnabled && progressScore !== null && <p className="chat-progress-status" aria-live="polite">
+      Research progress: <strong>{progressScore.toFixed(1)} / 10.0</strong>
+      {breakthroughLatched.current ? ' · Potential breakthrough — independent validation needed' : ''}
+    </p>
     <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
       <div className="chat-field-heading">
         <label htmlFor="chat-human-message">Human:</label>
