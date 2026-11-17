@@ -20,6 +20,7 @@ from sigma.projects import ProjectError
 
 TTL = 60
 RETRY_COOLDOWN = 3
+SPONSOR_CATALOG_GRACE_SECONDS = 300
 TIMEOUT = 8
 MAX_BYTES = 1000000
 
@@ -98,6 +99,7 @@ class _CredentialState:
     known: set[str] = field(default_factory=set)
     labels: dict[str, str] = field(default_factory=dict)
     order: list[str] = field(default_factory=list)
+    last_verified_at: float = 0.0
 
 
 _MAX_CREDENTIAL_STATES = 128
@@ -548,11 +550,20 @@ async def connection(
         state = _result("unavailable", None)
     else:
         age = time.monotonic() - credential_state.checked_at
-        if credential_state.result is None or age >= (RETRY_COOLDOWN if refresh else TTL):
+        previous_status = (credential_state.result or {}).get("status")
+        interval = (
+            RETRY_COOLDOWN
+            if refresh or previous_status in {"unavailable", "invalid_response", "limited"}
+            else TTL
+        )
+        if credential_state.result is None or age >= interval:
             if credential_state.pending is None or credential_state.pending.done():
                 expected = credential_state.generation
                 task = asyncio.create_task(_check(key, mode))
                 credential_state.pending = task
+                sponsor = mode == "chatgpt" and str(context.get("identity", "")).startswith(
+                    "cloud_sponsor:"
+                )
 
                 def complete(
                     done: asyncio.Task, *, target=credential_state, generation=expected
@@ -569,16 +580,41 @@ async def connection(
                     try:
                         result = done.result()
                         if isinstance(result, _CatalogResult):
-                            target.result = result.result
-                            target.known, target.labels, target.order = (
-                                result.known,
-                                result.labels,
-                                result.order,
+                            result_status = result.result.get("status")
+                            now = time.monotonic()
+                            # The read-only model catalog is not an inference
+                            # request. An intermittent catalog timeout/429 is
+                            # not proof that this already-verified sponsor
+                            # cannot generate a response. Reuse its recent
+                            # verified catalog briefly; the inference endpoint
+                            # remains authoritative and may still reject it.
+                            cached_sponsor = (
+                                sponsor
+                                and result_status in {"unavailable", "invalid_response", "limited"}
+                                and (target.result or {}).get("status") == "connected"
+                                and bool(target.known)
+                                and now - target.last_verified_at <= SPONSOR_CATALOG_GRACE_SECONDS
                             )
+                            if cached_sponsor:
+                                target.result = {
+                                    **target.result,
+                                    "cached_catalog": True,
+                                    "checked_at": datetime.now(UTC).isoformat(),
+                                }
+                            else:
+                                target.result = result.result
+                                target.known, target.labels, target.order = (
+                                    result.known,
+                                    result.labels,
+                                    result.order,
+                                )
+                                if result_status == "connected":
+                                    target.last_verified_at = now
+                            target.checked_at = now
                         else:
                             target.result = dict(result)
                             target.known, target.labels, target.order = set(), {}, []
-                        target.checked_at = time.monotonic()
+                            target.checked_at = time.monotonic()
                     except (httpx.HTTPError, TimeoutError, ValueError, TypeError):
                         target.result = _result("unavailable", datetime.now(UTC).isoformat())
                         target.checked_at = time.monotonic()
@@ -598,10 +634,23 @@ async def connection(
         guidance = UNAVAILABLE_GUIDANCE
     elif mode == "chatgpt" and str(context.get("identity", "")).startswith("cloud_sponsor:"):
         label = "SIGMA-sponsored ChatGPT · " + str(state["status"]).replace("_", " ")
-        if state["status"] != "connected":
-            guidance = (
-                "SIGMA-sponsored ChatGPT is temporarily unavailable. Please try again later. "
-                "Saved research is unchanged."
+        # A generic unavailable message obscured different failure causes and
+        # made a transient model-catalog check look like an inference outage.
+        sponsor_guidance = {
+            "disconnected": "The designated SIGMA-sponsored account is not connected. Sponsor administration must restore it; saved research is intact.",
+            "reauth_required": "The designated SIGMA-sponsored account needs renewed authorization. Sponsor administration must reconnect it; saved research is intact.",
+            "plan_not_permitted": "The designated SIGMA-sponsored account lacks ChatGPT plan access. Sponsor administration must resolve it; saved research is intact.",
+            "unauthorized": "OpenAI rejected the designated sponsored account authorization. Sponsor administration must renew it; saved research is intact.",
+            "forbidden": "OpenAI denied the designated sponsored account's access. Sponsor administration must investigate it; saved research is intact.",
+            "limited": "OpenAI rate-limited the sponsored account's model catalog. SIGMA will recheck; saved research is intact.",
+            "unavailable": "The sponsored account connection check could not reach OpenAI. SIGMA will retry automatically; saved research is intact.",
+            "invalid_response": "OpenAI returned an unusable sponsored model catalog. SIGMA will recheck; saved research is intact.",
+        }
+        if state.get("cached_catalog"):
+            guidance = "Using a recently verified sponsored model catalog while SIGMA retries its connection check. Inference access is checked by each model request."
+        elif state["status"] != "connected":
+            guidance = sponsor_guidance.get(
+                state["status"], "Sponsored ChatGPT access could not be verified. Saved research is intact."
             )
     return {
         **state,
