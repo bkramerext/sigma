@@ -34,12 +34,15 @@ echo "SIGMA Personal browser: VNC relay launched; starting Chromium"
 # OpenAI authorization only when the account actually needs it.
 # Suppress Chromium's passive passkey and credential autofill suggestions
 # on BOTH the email and automatically focused password pages. These browser-
-# wide flags do not change Google's Continue-with-Google OAuth flow. Keep the
-# managed policy disabling password saving in the disposable profile.
+# wide flags do not change Google's Continue-with-Google OAuth navigation.
+# WebAuthenticationConditionalUI is a Blink runtime feature and must use
+# --disable-blink-features, not Chromium's base::Feature --disable-features.
+# Keep the managed policy disabling password saving in the disposable profile.
 exec /usr/bin/chromium --no-first-run --no-default-browser-check \
   --disable-dev-shm-usage --disable-extensions --password-store=basic \
   --disable-save-password-bubble \
   --enable-features=WebAuthnUsePasskeyFromAnotherDeviceInContextMenu \
-  --disable-features=WebAuthenticationConditionalUI,AutofillReintroduceHybridPasskeyDropdownItem,WebAuthnPasskeyUpgrade,WebAuthnAmbientSignin,PasswordManagerShowSuggestionsOnAutofocus,PasswordManagerShowWebauthnSuggestionsOnAutofocus \
+  --disable-blink-features=WebAuthenticationConditionalUI \
+  --disable-features=AutofillReintroduceHybridPasskeyDropdownItem,WebAuthnPasskeyUpgrade,WebAuthnAmbientSignin,PasswordManagerShowSuggestionsOnAutofocus,PasswordManagerShowWebauthnSuggestionsOnAutofocus \
   --user-data-dir="$BROWSER_PROFILE" --window-size=1280,800 \
   --app=http://127.0.0.1:8001/
