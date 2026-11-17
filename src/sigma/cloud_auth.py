@@ -753,12 +753,9 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             sponsorship_eligible,
             model_access,
         )
-        if (
-            sponsorship_eligible
-            and (
-                (cfg.local and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1")
-                or hosted_personal_enabled()
-            )
+        if sponsorship_eligible and (
+            (cfg.local and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1")
+            or hosted_personal_enabled()
         ):
             # The local --prod worker can outlive a cancelled/failed sign-in.
             # An old Personal selection without a completed, subject-bound

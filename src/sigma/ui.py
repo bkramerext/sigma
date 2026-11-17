@@ -196,6 +196,24 @@ def run_ui(
                     **(personal_runtime.env if personal_runtime is not None else {}),
                     "SIGMA_UI_INSTANCE_ID": instance_id,
                 }
+                if not prod:
+                    # Plain `sigma start` always uses the user's real
+                    # ChatGPT account in a separate browser page. Never
+                    # inherit a previous --prod broker/iframe selection from
+                    # the shell or checkout .env (dotenv uses setdefault).
+                    # Do not change the caller's environment or credentials.
+                    child_env.update(
+                        {
+                            "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "0",
+                            "SIGMA_PERSONAL_BROWSER_ENABLED": "0",
+                            "SIGMA_PERSONAL_SHARED_MODE": "0",
+                            "SIGMA_PERSONAL_HOSTED_ENABLED": "false",
+                            "SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN": "0",
+                            "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": "",
+                            "SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT": "",
+                            "SIGMA_LOCAL_PERSONAL_STARTUP_ERROR": "",
+                        }
+                    )
                 # The frontend must match the server's explicit opt-in state.
                 # Do not inherit a stale Vite flag from the invoking shell.
                 child_env["VITE_SIGMA_PERSONAL_DIAGNOSTICS_ENABLED"] = (
