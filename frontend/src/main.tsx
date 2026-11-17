@@ -11,6 +11,7 @@ import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagno
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
+import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -3545,9 +3546,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         selectPaperRun(currentId);
       }
       const own = runs.find(run => run.run_id === currentId);
-      if (own?.paper_id) {
-        // Completed PDF lives in the published library, not as a second,
-        // failed-looking unfinished card.
+      if (own?.paper_id && (list.papers as PaperSummary[]).some(paper => paper.paper_id === own.paper_id)) {
+        // Retire the generating card only AFTER its saved-paper metadata is
+        // available. Publication precedes automatic Score by many seconds.
         selectPaperRun(null);
         setNewPaperRequested(false);
       }
@@ -4777,8 +4778,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // genuinely new work (the server reserves ownership before dispatch).
   const selectedRun = paperRuns.find(run => run.run_id === selectedRunId);
   const otherPaperRuns = paperRuns.filter(run =>
-    run.run_id !== selectedRunId && run.status !== 'complete' && !run.paper_id &&
-    !hiddenRemovalIds.has(run.run_id)
+    run.run_id !== selectedRunId && !hiddenRemovalIds.has(run.run_id) &&
+    (publicationAwaitingLibrary(run, papers) || (run.status !== 'complete' && !run.paper_id))
   );
   const unfinishedDraftPresent = continuationAvailable || Boolean(checkpointMismatch) ||
     Boolean(restartableCheckpoint) || (paperProgress != null && paperProgress.status !== 'complete');
@@ -4795,6 +4796,18 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const draftDisplayTitle = assignedPaperNumber !== null ? `Paper ${assignedPaperNumber}` : 'New paper';
   const orderedPapers = [...papers].filter(paper => !hiddenRemovalIds.has(paper.paper_id))
     .sort((a, b) => b.paper_version - a.paper_version);
+  // A published PDF is saved BEFORE automatic scoring finishes. The progress
+  // poll can receive its paper_id before the library refresh returns, but the
+  // card must never disappear during this transition.
+  const pendingPublicationIds = unlistedPublicationIds(
+    paperRuns, papers, hiddenRemovalIds,
+  );
+  const pendingPublicationKey = pendingPublicationIds.join('|');
+  const selectedPublicationPending = publicationAwaitingLibrary(selectedRun, papers);
+  const automaticScoringPaperIds = new Set(
+    paperRuns.filter(run => run.paper_id && run.status === 'active' &&
+      ['scoring', 'finishing'].includes(run.progress?.stage ?? '')).map(run => run.paper_id),
+  );
   const paperProgressFailure = paperStepRestartBusy ? ''
     : paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? '' : '';
   // A durable published paper supersedes the failed authoring receipt. Errors
@@ -4817,9 +4830,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     + (paperNoticeCopy?.next?.length ?? 0);
   const paperNoticeSize = paperNoticeLength <= 90 ? 'short' : paperNoticeLength <= 190 ? 'medium' : 'long';
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
-  const showDraftPaper = !guest && !removingLegacyDraft && !selectedRun?.paper_id &&
+  const showDraftPaper = !guest && !removingLegacyDraft &&
+    (!selectedRun?.paper_id || selectedPublicationPending) &&
     !hiddenRemovalIds.has(selectedRunId ?? '') && (
-    newPaperRequested || generating || restartReady || continuationAvailable ||
+    selectedPublicationPending || newPaperRequested || generating || restartReady || continuationAvailable ||
     (paperProgress != null && paperProgress.status !== 'complete') ||
     (selectedRun != null && selectedRun.status !== 'complete')
   );
@@ -4860,6 +4874,38 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     paperProgress?.status, showDraftPaper, canResumeDraft, paperRuns,
     expandedOtherPaperRunIds, unfinishedStepOptions, unfinishedRestartBusy,
   ]);
+  // A paper is durably published before Score completes. Once progress
+  // announces its paper_id, fetch metadata independently of the long-lived
+  // generation SSE and without waiting for the scoring call. Keep its run card
+  // visible until the saved row arrives; retry if the listing races the write.
+  useEffect(() => {
+    if (guest || !pendingPublicationKey) return;
+    const controller = new AbortController();
+    const pendingIds = new Set(pendingPublicationKey.split('|'));
+    let inFlight = false;
+    const reconcile = async () => {
+      if (controller.signal.aborted || inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path, include_runs: 'false' })}`, {
+          cache: 'no-store', signal: controller.signal,
+          headers: { 'X-Sigma-Error-Handled': 'true' },
+        });
+        if (!response.ok || controller.signal.aborted) return;
+        const listing = await response.json();
+        if (controller.signal.aborted || !Array.isArray(listing.papers)) return;
+        if (listing.papers.some((paper: PaperSummary) => pendingIds.has(paper.paper_id))) {
+          setPapers(listing.papers as PaperSummary[]);
+          if (typeof listing.next_paper_number === 'number') setNextPaperNumber(listing.next_paper_number);
+        }
+      } catch { /* Preserve the run card and retry after a transient error. */ }
+      finally { inFlight = false; }
+    };
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), 1500);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [guest, path, pendingPublicationKey]);
+
   // Live collaborator statuses must refresh independently of revision
   // changes. Only lightweight progress sidecars are read, never saved PDFs.
   useEffect(() => {
@@ -5161,7 +5207,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             <div id={`paper-run-steps-${run.run_id}`} hidden={!expandedOtherPaperRunIds.has(run.run_id)}/>
           </div>
         </article>)}
-        {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
+        {orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" data-tooltip-follow-cursor="true" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
@@ -5190,10 +5236,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </div></div>}
                 </span>}
               </>}/>
-            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <>{' · '}<span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}{' · '}{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}{' · '}<button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
+            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <>{' · '}<span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}{' · '}{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}{' · '}<button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id)} disabled={!!scoringId || automaticScoringPaperIds.has(paper.paper_id)} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id) ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
               progress={{
-                status: scoringId === paper.paper_id ? 'active' : paper.score ? 'complete' : 'interrupted',
-                stage: scoringId === paper.paper_id ? 'scoring' : paper.score ? 'complete' : 'score_failed',
+                status: scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id) ? 'active' : paper.score ? 'complete' : 'interrupted',
+                stage: scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id) ? 'scoring' : paper.score ? 'complete' : 'score_failed',
                 current: null, total: null, started_at: paper.created_at,
                 elapsed_seconds: paper.generation.generation_elapsed_seconds ?? 0,
               }}
