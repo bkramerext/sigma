@@ -11122,7 +11122,11 @@ async def _generate_impl(
                     if not expected_binding or not expected_project_id:
                         raise ProjectError("Automatic scoring requires an AI connection")
                     await paper_scores.score_paper(
-                        path, paper_id, initial_auth["identity"], expected_project_id
+                        path,
+                        paper_id,
+                        initial_auth["identity"],
+                        expected_project_id,
+                        origin="automatic",
                     )
                     # A returned judgment is insufficient: success requires a
                     # valid score actually persisted on this paper's PDF hash.
