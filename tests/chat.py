@@ -6,6 +6,7 @@ import re
 import stat
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -232,7 +233,7 @@ def check_streamed_multisegment_completion() -> None:
             for event in events:
                 yield ("data: " + json.dumps(event) + "\\n\\n").encode()
 
-    raw = asyncio.run(completed(FakeStream()))
+    raw = asyncio.run(completed(cast(Any, FakeStream())))
     assert chat._response_text(raw, "gpt-6.1-sol") == "".join(text)
     print("PASS multi-part completed output matches joined stream text")
 
