@@ -6,9 +6,9 @@ import fcntl
 import os
 import re
 import stat
-from typing import Any
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 from sigma.projects import ProjectError
@@ -212,8 +212,7 @@ def load_transcript(name: str) -> dict[str, Any]:
         start = match.end() + 1
         end = entries[index + 1].start() if index + 1 < len(entries) else len(content)
         body = content[start:end]
-        if body.startswith("\n"):
-            body = body[1:]
+        body = body.removeprefix("\n")
         body = body.removesuffix("\n\n")
         if not body.strip():
             raise ProjectError("The chat transcript contains an empty entry.")
@@ -223,8 +222,9 @@ def load_transcript(name: str) -> dict[str, Any]:
     for message in messages:
         if message["speaker"] == "objective":
             objective = "" if message["text"] == "(cleared)" else message["text"]
-    last_ai = next((m["speaker"] for m in reversed(messages)
-                    if m["speaker"] in {"ai_1", "ai_2"}), None)
+    last_ai = next(
+        (m["speaker"] for m in reversed(messages) if m["speaker"] in {"ai_1", "ai_2"}), None
+    )
     next_speaker = "ai_2" if last_ai == "ai_1" else "ai_1"
     return {
         "conversation_id": conversation_id,
