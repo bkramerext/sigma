@@ -17,6 +17,7 @@ errors: list[str] = []
 config_calls = 0
 session_calls = 0
 transcript_messages: list[dict] = []
+fail_next_turn = False
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
@@ -24,7 +25,7 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def respond(route):
-        global config_calls, session_calls
+        global config_calls, session_calls, fail_next_turn
         url = route.request.url
         if url.endswith("/api/chat/session"):
             session_calls += 1
@@ -82,6 +83,14 @@ with sync_playwright() as playwright:
         if url.endswith("/api/chat/turn"):
             body = route.request.post_data_json
             turns.append(body)
+            if fail_next_turn:
+                fail_next_turn = False
+                route.fulfill(
+                    status=200,
+                    content_type="text/event-stream",
+                    body='data: {"type":"started"}\\n\\ndata: {"type":"error","error":"Provider unavailable"}\\n\\n',
+                )
+                return
             route.fulfill(
                 status=200,
                 content_type="text/event-stream",
@@ -319,6 +328,29 @@ with sync_playwright() as playwright:
         for message in transcript_messages
     )
     assert session_calls == 2
+
+    # A failed AI turn must expose Retry and resume the same speaker, without
+    # appending a second Human prompt or restarting at AI #1 arbitrarily.
+    fail_next_turn = True
+    human.fill("Please continue even if the provider fails.")
+    page.get_by_role("button", name="Send", exact=True).click()
+    retry = page.get_by_role("button", name="Retry AI #1", exact=True)
+    expect(retry).to_be_visible(timeout=5000)
+    expect(page.get_by_role("alert")).to_contain_text("Provider unavailable")
+    failed_request = turns[-1]
+    assert failed_request["speaker"] == "ai_1"
+    human_writes = sum(item["speaker"] == "human" for item in transcript_messages)
+    retry.click()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and len(turns) < 2:
+        page.wait_for_timeout(50)
+    expect(retry).to_have_count(0)
+    assert len(turns) >= 2
+    assert turns[-2]["speaker"] == "ai_1" and turns[-1]["speaker"] in ("ai_1", "ai_2")
+    assert any(turn["speaker"] == "ai_1" and turn["messages"] == failed_request["messages"] for turn in turns[-3:])
+    assert sum(item["speaker"] == "human" for item in transcript_messages) == human_writes
+    page.get_by_role("button", name="Stop exchange", exact=True).click()
+
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120003.md")
     assert session_calls == 3
