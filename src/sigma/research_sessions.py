@@ -3782,11 +3782,15 @@ def _research_schema_validation_reason(exc: ValidationError) -> str:
     problems: list[str] = []
     for issue in exc.errors(include_input=False, include_url=False)[:4]:
         location = issue.get("loc", ())
-        field = ".".join(
-            str(part) for part in location
-            if (type(part) is int and 0 <= part <= 9999)
-            or (isinstance(part, str) and re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]{0,63}", part))
-        )[:160] or "response"
+        field = (
+            ".".join(
+                str(part)
+                for part in location
+                if (type(part) is int and 0 <= part <= 9999)
+                or (isinstance(part, str) and re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]{0,63}", part))
+            )[:160]
+            or "response"
+        )
         kind = str(issue.get("type", "invalid"))
         if not re.fullmatch(r"[a-zA-Z0-9_]{1,60}", kind):
             kind = "invalid"
@@ -8488,7 +8492,9 @@ async def _call_provider(
         and isinstance(content.get("text"), str)
     ]
     if len(texts) != 1:
-        raise ProjectError(f"Research provider returned {len(texts)} text blocks; exactly one JSON text block is required")
+        raise ProjectError(
+            f"Research provider returned {len(texts)} text blocks; exactly one JSON text block is required"
+        )
     # ChatGPT controls its own generation ceiling. A fully completed,
     # schema-valid response remains usable even when provider-reported
     # usage exceeds SIGMA's conservative internal reservation estimate.
