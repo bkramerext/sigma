@@ -412,6 +412,16 @@ async def score_paper(
     sha = record["pdf_sha256"]
     key = (str(project_path(path).resolve()), paper_id, sha, RUBRIC_VERSION)
     async with _lock:
+        # A concurrent caller may have read an unscored record above, then
+        # waited for auth/configuration until another scorer finished and
+        # removed its task from _tasks. Re-read while holding the single-flight
+        # lock so that stale readers reuse the saved result instead of
+        # dispatching a second paid request.
+        if not force:
+            latest = papers.get_paper(path, paper_id)
+            current = cached_score(latest)
+            if current is not None:
+                return current
         task = _tasks.get(key)
         if task is None or task.done():
 
