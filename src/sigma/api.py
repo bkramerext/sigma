@@ -3460,8 +3460,8 @@ async def chat_turn_view(body: ChatTurnRequest):
 
     async def events():
         yield 'data: {"type":"started"}\n\n'
-        try:
-            result = await chat.respond(
+        turn = asyncio.create_task(
+            chat.respond(
                 speaker=body.speaker,
                 messages=[item.model_dump() for item in body.messages],
                 conversation_id=str(UUID(body.conversation_id)),
@@ -3470,11 +3470,27 @@ async def chat_turn_view(body: ChatTurnRequest):
                 reasoning_effort=body.reasoning_effort,
                 repeated_text=body.repeated_text,
             )
+        )
+        try:
+            # Keep the SSE connection active through long model reasoning. SSE
+            # comments are ignored by the browser and don't change turn state.
+            while not turn.done():
+                done, _ = await asyncio.wait({turn}, timeout=15)
+                if not done:
+                    yield ": keepalive\n\n"
+            result = await turn
             yield "data: " + json.dumps({"type": "complete", "text": result}) + "\n\n"
         except asyncio.CancelledError:
             raise
         except ProjectError as exc:
             yield "data: " + json.dumps({"type": "error", "error": str(exc)}) + "\n\n"
+        finally:
+            if not turn.done():
+                turn.cancel()
+                try:
+                    await turn
+                except asyncio.CancelledError:
+                    pass
 
     return StreamingResponse(
         events(),
