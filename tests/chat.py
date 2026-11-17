@@ -197,6 +197,36 @@ def check_service() -> None:
     )
 
 
+def check_response_recovery() -> None:
+    completed = {
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "output": [{"type": "reasoning"}, {"type": "message", "content": None}],
+        "output_text": "Recovered adapter text.",
+    }
+    assert chat._response_text(completed, "gpt-6.1-sol") == "Recovered adapter text."
+    assert chat._response_text(
+        {**completed, "output": [{"type": "message", "content": [
+            {"type": "output_text", "text": "Canonical text."},
+        ]}]},
+        "gpt-6.1-sol",
+    ) == "Canonical text."
+    for bad in (
+        {**completed, "status": "incomplete"},
+        {**completed, "output": [{"type": "message", "content": [
+            {"type": "refusal", "refusal": "No."},
+        ]}]},
+        {**completed, "output": [], "output_text": ""},
+    ):
+        try:
+            chat._response_text(bad, "gpt-6.1-sol")
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("Invalid or refused model response accepted")
+    print("PASS Brainstorm completed-response recovery without accepting incomplete/refused text")
+
+
 def check_api() -> None:
     models = [
         {"id": "gpt-6.1-sol", "efforts": ["low", "medium", "high", "xhigh"]},
@@ -496,6 +526,7 @@ def check_transcripts() -> None:
 def main() -> None:
     check_configuration()
     check_service()
+    check_response_recovery()
     check_api()
     check_slow_turn_heartbeat()
     check_supervisor()
