@@ -891,3 +891,25 @@
     inline-size: min(100%, 420px);
   }
 }
+
+/* Bad-paper removal uses the SAME toast width and dismiss layout as the
+   dismissible "Needs review" notice, not an unconstrained inline error. */
+.workspace-page .papers-pane .paper-saved-removal-error {
+  position: relative;
+  box-sizing: border-box;
+  inline-size: 33.333vw;
+  max-inline-size: 100%;
+  max-block-size: min(44dvh, 360px);
+  overflow-y: auto;
+  padding: 12px 48px 12px 14px;
+  overflow-wrap: anywhere;
+}
+.workspace-page .papers-pane .paper-saved-removal-error .sigma-dialog-dismiss.sigma-dialog-dismiss {
+  position: absolute;
+  top: 9px !important;
+  right: 9px !important;
+  left: auto !important;
+}
+@media (max-width: 720px) {
+  .workspace-page .papers-pane .paper-saved-removal-error { inline-size: min(100%, 420px); }
+}

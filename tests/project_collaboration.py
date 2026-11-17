@@ -98,6 +98,111 @@ class CollaborationTests(TestCase):
                 (self.path, self.other.email),
             )
 
+    def test_deleted_published_paper_run_is_tombstoned_without_reusing_number(self) -> None:
+        """Deleting a saved PDF must not resurrect its run as a phantom draft."""
+        published_id = uuid4().hex
+        published_run = uuid4().hex
+        unrelated_run = uuid4().hex
+        with shared._db() as db:
+            for run_id, number, artifact_id in (
+                (published_run, 15, published_id),
+                (unrelated_run, 16, uuid4().hex),
+            ):
+                db.execute(
+                    """INSERT INTO shared_run_reservations
+                       (path, kind, run_id, number, creator_hash, creator_email,
+                        model, thinking, created_at, status, artifact_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        self.path,
+                        "paper",
+                        run_id,
+                        number,
+                        self.workspace.subject_hash,
+                        self.owner.email,
+                        "fixture-model",
+                        "medium",
+                        self.clock[0],
+                        "complete",
+                        artifact_id,
+                    ),
+                )
+        with patch("sigma.projects.project_path", return_value=Path(self.path)):
+            shared.tombstone_deleted_paper_run(self.path, published_id)
+            # Deleting the same id twice never changes a different reservation.
+            shared.tombstone_deleted_paper_run(self.path, published_id)
+        with shared._db() as db:
+            deleted = db.execute(
+                "SELECT number, status, artifact_id FROM shared_run_reservations WHERE run_id=?",
+                (published_run,),
+            ).fetchone()
+            other = db.execute(
+                "SELECT number, status FROM shared_run_reservations WHERE run_id=?",
+                (unrelated_run,),
+            ).fetchone()
+        self.assertEqual(
+            (deleted["number"], deleted["status"], deleted["artifact_id"]),
+            (15, "discarded", published_id),
+        )
+        self.assertEqual((other["number"], other["status"]), (16, "complete"))
+
+    def test_unreadable_paper_recovery_requires_completed_authorized_reservation(self) -> None:
+        """Corruption cannot bypass creator, project owner or active-worker gates."""
+        from sigma import papers
+
+        paper_id, run_id = uuid4().hex, uuid4().hex
+        with shared._db() as db:
+            db.execute(
+                """INSERT INTO shared_run_reservations
+                   (path, kind, run_id, number, creator_hash, creator_email,
+                    model, thinking, created_at, status, artifact_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    self.path,
+                    "paper",
+                    run_id,
+                    19,
+                    self.workspace.subject_hash,
+                    self.owner.email,
+                    "fixture-model",
+                    "medium",
+                    self.clock[0],
+                    "complete",
+                    paper_id,
+                ),
+            )
+        with (
+            patch("sigma.projects.project_path", return_value=Path(self.path)),
+            patch.object(papers, "progress_status", return_value={"status": "complete"}),
+        ):
+            self.assertEqual(shared.require_unreadable_paper_manager(self.path, paper_id), run_id)
+            with (
+                patch.object(papers, "progress_status", return_value={"status": "active"}),
+                self.assertRaisesRegex(ProjectError, "Stop this paper"),
+            ):
+                shared.require_unreadable_paper_manager(self.path, paper_id)
+            with self.assertRaisesRegex(ProjectError, "no completed publication reservation"):
+                shared.require_unreadable_paper_manager(self.path, uuid4().hex)
+            colleague = Workspace(
+                workspace_id="other-workspace",
+                subject_hash="other-hash",
+                path=self.root,
+                email=self.other.email,
+                verified_subject=self.other.subject,
+            )
+            with (
+                patch(
+                    "sigma.project_collaboration.cloud_workspaces.current",
+                    return_value=colleague,
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_auth.current_principal",
+                    return_value=self.other,
+                ),
+                self.assertRaisesRegex(ProjectError, "Only the paper creator"),
+            ):
+                shared.require_unreadable_paper_manager(self.path, paper_id)
+
     def test_collaboration_reads_do_not_wait_for_sqlite_writer(self) -> None:
         """Schema DDL cannot run during ordinary read/poll requests."""
         with shared._db() as db:

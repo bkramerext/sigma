@@ -1079,6 +1079,8 @@
 }
 .workspace-page .session-strategy-live-status li { margin: 2px 0; overflow-wrap: anywhere; }
 .workspace-page .session-strategy-live-status strong { color: var(--text, #e3e8ec); font-weight: 600; }
+/* Shared research guidance uses one muted shade across label and explanation. */
+.workspace-page .session-strategy-live-status .session-standards-guidance strong { color: inherit; }
 
 /* Shared hover/focus state for all workspace icon buttons, including pane actions. */
 .workspace-page .workspace-icon-button,
@@ -1480,4 +1482,13 @@
    inherit the generic document heading typography. */
 .workspace-page .session-outcome .outcome-reasoning-subsection .outcome-markdown h2 {
   font-size: 16px !important;
+}
+
+/* Session lifecycle and standards status use exactly the Round/calls gray.
+   Keep the status dot's accent, but not a second, brighter text shade. */
+.workspace-page .session-summary > .session-status,
+.workspace-page .session-summary > .session-strategy-live-status,
+.workspace-page .session-summary > .session-strategy-live-status strong,
+.workspace-page .session-summary > .session-strategy-live-status .session-standards-guidance strong {
+  color: var(--muted, #a7a7a7);
 }

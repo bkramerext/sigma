@@ -1409,8 +1409,17 @@ def paper_tex_view(paper_id: str, path: str):
 
 @app.delete("/api/projects/papers/{paper_id}")
 def paper_delete_view(paper_id: str, path: str):
-    project_collaboration.require_artifact_manager(path, "paper", paper_id)
-    papers.delete_paper(path, paper_id)
+    try:
+        project_collaboration.require_artifact_manager(path, "paper", paper_id)
+        papers.delete_paper(path, paper_id)
+    except ProjectError as exc:
+        if not papers.is_unreadable_saved_paper_error(exc):
+            raise
+        # Invalid JSON is not an authorization credential. Reverify the
+        # finished run ledger and account before exact artifact cleanup.
+        run_id = project_collaboration.require_unreadable_paper_manager(path, paper_id)
+        papers.delete_unreadable_paper(path, paper_id, run_id)
+    project_collaboration.tombstone_deleted_paper_run(path, paper_id)
     return {"deleted": paper_id}
 
 
