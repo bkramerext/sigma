@@ -17,7 +17,7 @@ test('finishing is not shown as a second Scoring operation', () => {
   const finishing = [{ paper_id: 'paper-22', status: 'active', progress: { stage: 'finishing' } }];
   assert.equal(savedPaperScoreDisplay(null, false, automaticScorePhase(active, 'paper-22')).label, 'Scoring…');
   assert.deepEqual(savedPaperScoreDisplay(null, false, automaticScorePhase(finishing, 'paper-22')), {
-    label: 'Finalizing…', busy: true, status: 'active', stage: 'scoring',
+    label: 'Finalizing…', busy: true, status: 'active', stage: 'finishing',
   });
   assert.equal(savedPaperScoreDisplay(null, false, automaticScorePhase([{
     paper_id: 'paper-22', status: 'active', progress: { stage: 'pdf_check' },
