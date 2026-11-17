@@ -13,7 +13,7 @@ import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagno
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
-import { publicationAwaitingLibrary, publishedRunReadyForHandoff, publishedRunStillFinishing, savedPaperAwaitingGenerationFinish, unlistedPublicationIds } from './paper-publication-handoff';
+import { publicationAwaitingLibrary, publishedRunActivityLabel, publishedRunReadyForHandoff, publishedRunStillFinishing, savedPaperAwaitingGenerationFinish, unlistedPublicationIds } from './paper-publication-handoff';
 import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper, orderPaperRunsDescending } from './paper-completion-transition';
 import { activatePaperScoreStep } from './paper-score-action';
 import { activeScoringPaperIds, automaticScorePhase, completedScoringPaperIds, savedPaperScoreDisplay } from './paper-score-handoff';
@@ -5366,10 +5366,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   model: run.progress?.model || run.model,
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
-                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.paper_id && run.status === 'active'
-                  ? run.progress?.stage === 'scoring' ? 'Scoring'
-                    : run.progress?.stage === 'finishing' || run.progress?.stage === 'score_failed' ? 'Finishing'
-                    : 'Preparing'
+                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.paper_id && run.status === 'active' ? publishedRunActivityLabel(run)
                   : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
