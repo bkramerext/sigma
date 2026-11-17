@@ -337,17 +337,18 @@ with sync_playwright() as playwright:
     retry = page.get_by_role("button", name="Retry AI #1", exact=True)
     expect(retry).to_be_visible(timeout=5000)
     expect(page.get_by_role("alert")).to_contain_text("Provider unavailable")
-    failed_request = turns[-1]
+    failed_index = len(turns) - 1
+    failed_request = turns[failed_index]
     assert failed_request["speaker"] == "ai_1"
     human_writes = sum(item["speaker"] == "human" for item in transcript_messages)
     retry.click()
     deadline = time.monotonic() + 5
-    while time.monotonic() < deadline and len(turns) < 2:
+    while time.monotonic() < deadline and len(turns) <= failed_index + 1:
         page.wait_for_timeout(50)
+    assert len(turns) > failed_index + 1, "Retry did not dispatch the failed turn"
+    assert turns[failed_index + 1]["speaker"] == "ai_1"
+    assert turns[failed_index + 1]["messages"] == failed_request["messages"]
     expect(retry).to_have_count(0)
-    assert len(turns) >= 2
-    assert turns[-2]["speaker"] == "ai_1" and turns[-1]["speaker"] in ("ai_1", "ai_2")
-    assert any(turn["speaker"] == "ai_1" and turn["messages"] == failed_request["messages"] for turn in turns[-3:])
     assert sum(item["speaker"] == "human" for item in transcript_messages) == human_writes
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
