@@ -41,6 +41,11 @@ type ChatConfig = {
 const labels: Record<TranscriptSpeaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor', supervisor_setting: 'Supervisor setting' };
 // Keep the complete transcript in memory; pagination only affects rendering.
 const TRANSCRIPT_GROUPS_PER_PAGE = 20;
+
+// Only errors returned *before* the server starts model inference are safe to
+// retry automatically. A malformed/truncated generated response may already
+// have consumed sponsored allowance.
+class BrainstormPreflightUnavailable extends Error {}
 type IndexedEntry = { message: ChatMessage; index: number };
 type TranscriptGroup = { entries: IndexedEntry[] };
 
@@ -288,7 +293,7 @@ export default function ChatPage() {
   async function requestTurn(who: 'ai_1' | 'ai_2', history: ChatMessage[], controller: AbortController, settings: ChatConfig, sessionId = conversationId): Promise<string> {
     const response = await fetch('/api/chat/turn', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
       cache: 'no-store',
       signal: controller.signal,
       body: JSON.stringify({
@@ -303,7 +308,14 @@ export default function ChatPage() {
     });
     if (!response.ok) {
       const detail = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
-      throw new Error(detail?.error ?? detail?.detail ?? `AI request failed (${response.status}).`);
+      const message = detail?.error ?? detail?.detail ?? `AI request failed (${response.status}).`;
+      // This endpoint returns 503 before dispatching any model request. Don't
+      // automatically retry rate/quota exhaustion or authorization failures.
+      if (response.status === 503 &&
+          !/limit|quota|allowance|exhaust|reauth|authorization|permission|not connected/i.test(message)) {
+        throw new BrainstormPreflightUnavailable(message);
+      }
+      throw new Error(message);
     }
     if (!response.headers.get('content-type')?.includes('text/event-stream') || !response.body) {
       throw new Error('The Brainstorm server returned an invalid response.');
@@ -412,14 +424,14 @@ export default function ChatPage() {
               break;
             } catch (cause) {
               const detail = errorText(cause);
-              const transient = /could not be decoded|timed out|connection was interrupted|ended before the AI completed|invalid response|completed without usable text/i.test(detail);
-              if (!transient || attempt === 2 || !runningRef.current || id !== runId.current || controller.signal.aborted) {
-                throw new Error(transient && attempt === 2
-                  ? `AI reply could not be recovered after 3 automatic attempts. Retry or Skip turn. (${detail})`
+              const safeToRetry = cause instanceof BrainstormPreflightUnavailable;
+              if (!safeToRetry || attempt === 2 || !runningRef.current || id !== runId.current || controller.signal.aborted) {
+                throw new Error(safeToRetry && attempt === 2
+                  ? `The connection check was unavailable after 3 automatic attempts. Saved research is intact. (${detail})`
                   : detail);
               }
-              // Retry the same speaker with unchanged history. A response is
-              // appended only after we receive a complete, usable reply.
+              // Retry only a rejected preflight. A successful 200/SSE stream
+              // may have incurred a provider charge even if decoding failed.
               await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
               if (!runningRef.current || id !== runId.current || controller.signal.aborted) return;
             }
