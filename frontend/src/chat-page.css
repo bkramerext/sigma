@@ -27,10 +27,21 @@
   min-width: 0; margin: 0 0 14px;
 }
 .brainstorm-workspace .chat-field-heading {
-  display: flex; align-items: baseline; justify-content: space-between;
-  min-width: 0; gap: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  gap: 6px;
 }
-.brainstorm-workspace .chat-field-heading label { color: #f2c48d; font-weight: 700; }
+.brainstorm-workspace .chat-field-heading label {
+  color: #f2c48d;
+  font-weight: 700;
+  margin: 0;
+}
+.brainstorm-workspace .chat-field-heading .chat-copy-button {
+  flex: 0 0 26px;
+  margin: 0;
+}
 .brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea {
   box-sizing: border-box; display: block; width: 100%; min-width: 0;
   height: 74px; min-height: 74px; padding: 10px 13px;
@@ -128,9 +139,9 @@
 .brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
 .brainstorm-workspace .chat-history-objective { border-left-color: #a891bf !important; }
 
-/* Brainstorm header: one authoritative layout. The Home/Project artwork
-   remains 330px wide; its decorative background occupies up to 470px.
-   Do not scale the image to the entire decorative column. */
+/* Brainstorm header: match Home's 166px artwork/header geometry.
+   Its decorative background renders through workspace.css. The separate
+   headline and pill columns must not make the image or header taller. */
 @media (min-width: 1201px) {
   .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
     display: grid;
@@ -155,6 +166,15 @@
   .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
     grid-column: 3;
     grid-row: 1;
+  }
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    box-sizing: border-box;
+    height: 166px;
+    min-height: 0;
+    padding-top: 13px;
+    padding-bottom: 13px;
   }
 }
 .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
@@ -188,7 +208,7 @@
 .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
   display: grid;
   grid-template-columns: max-content max-content;
-  grid-template-areas: "identity model-column";
+  grid-template-areas: "model-column identity";
   column-gap: calc(var(--identity-pill-gap) * 1.2);
   align-items: start;
   align-self: start;
