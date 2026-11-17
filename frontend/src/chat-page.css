@@ -368,3 +368,28 @@
   margin: 4px 0; color: #a5c7b7; font-size: .83rem;
 }
 
+
+/* Transcript disclosure controls mirror the Project page's chevron affordance. */
+.brainstorm-workspace .chat-transcript { margin-top: 20px; }
+.brainstorm-workspace .chat-transcript-heading { margin: 0 0 10px; font-size: 1.05rem; }
+.brainstorm-workspace .chat-transcript .chat-history { margin-top: 0; }
+.brainstorm-workspace .chat-disclosure-button {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 2px 4px; margin: -2px -4px; border: 0;
+  background: transparent; color: #f2c48d; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.brainstorm-workspace .chat-disclosure-button:hover { color: #ffe0ae; }
+.brainstorm-workspace .chat-disclosure-button:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px; border-radius: 3px;
+}
+.brainstorm-workspace .chat-disclosure-button .disclosure-chevron {
+  flex: 0 0 12px; width: 12px; height: 12px;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round;
+  transition: transform .15s ease;
+}
+.brainstorm-workspace .chat-disclosure-button .disclosure-chevron.is-expanded { transform: rotate(90deg); }
+.brainstorm-workspace .chat-history .chat-reply-heading { margin-bottom: 0; }
+.brainstorm-workspace .chat-history .chat-reply-heading strong { color: inherit; }
+.brainstorm-workspace .chat-history [hidden] { display: none; }
