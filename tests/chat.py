@@ -451,6 +451,16 @@ def check_transcripts() -> None:
             assert selected.json()["conversation_id"] == session["conversation_id"]
             assert traversal.status_code in {400, 404, 422}
 
+            chat_transcripts.append_message(
+                session["conversation_id"],
+                "supervisor",
+                "Research progress: 4.5 / 10.0\\n\\nTo AI #2: Clarify the assumption.",
+            )
+            resumed_guidance = chat_transcripts.load_transcript(session["transcript_name"])
+            assert resumed_guidance["has_supervisor"]
+            assert resumed_guidance["messages"][-1]["recipient"] == "ai_2"
+            assert resumed_guidance["messages"][-1]["guidance"] == "Clarify the assumption."
+
             original = path.read_bytes()
             backup = directory / "transcript-backup.md"
             path.rename(backup)
