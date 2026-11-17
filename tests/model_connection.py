@@ -382,6 +382,45 @@ async def credential_isolation_checks():
         "PASS per-credential provider checks, failure/catalog isolation and shared sponsor coalescing"
     )
 
+    # A temporary read-only catalog failure must not make a recently verified
+    # sponsor appear offline; a real 429 must never be hidden by stale success.
+    reset()
+    sponsor_statuses = iter(("connected", "unavailable", "limited"))
+
+    async def flaky_sponsor_check(_token, _mode):
+        status = next(sponsor_statuses)
+        if status == "connected":
+            return connection._CatalogResult(
+                {"status": "connected", "checked_at": "s", "ttl_seconds": connection.TTL},
+                {"gpt-6-luna"},
+                {"gpt-6-luna": "Sponsor catalog"},
+                ["gpt-6-luna"],
+            )
+        return connection._CatalogResult(
+            {"status": status, "checked_at": "s", "ttl_seconds": connection.TTL}
+        )
+
+    with patch.object(connection, "_check", side_effect=flaky_sponsor_check):
+        fresh = await connection.models(context=sponsor)
+        assert fresh["connection"]["status"] == "connected"
+        verified_state = next(iter(connection._credential_states.values()))
+        verified_state.checked_at -= connection.TTL + 1
+        transient = await connection.models(context=sponsor)
+        assert transient["connection"]["status"] == "connected"
+        assert transient["connection"]["cached_catalog"] is True
+        assert next(
+            model for model in transient["models"] if model["id"] == "gpt-6-luna"
+        )["availability"] == "available"
+        verified_state.checked_at -= connection.TTL + 1
+        limited = await connection.models(context=sponsor)
+        assert limited["connection"]["status"] == "limited"
+        assert "rate-limited" in limited["connection"]["guidance"]
+        denied = await connection.connection(context={**sponsor, "status": "reauth_required"})
+        assert denied["status"] == "reauth_required"
+        assert "renewed authorization" in denied["guidance"]
+    print("PASS sponsor catalog grace does not hide rate limits or authorization failures")
+
+
 
 if __name__ == "__main__":
     main()
