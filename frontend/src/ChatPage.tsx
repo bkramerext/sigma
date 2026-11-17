@@ -104,6 +104,7 @@ export default function ChatPage() {
   // save that exact response rather than generate and bill for a duplicate.
   const pendingReplyRef = useRef<ChatMessage | null>(null);
   const pendingHumanRef = useRef<ChatMessage | null>(null);
+  const skipNextSupervisorAssessmentRef = useRef(false);
 
   useEffect(() => { configRef.current = config; }, [config]);
 
@@ -371,7 +372,7 @@ export default function ChatPage() {
         turnStartedAtRef.current = null;
         setTurnElapsedSeconds(0);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
-        if (who === 'ai_2' && supervisorEnabledRef.current) {
+        if (who === 'ai_2' && supervisorEnabledRef.current && !skipNextSupervisorAssessmentRef.current) {
           try { await assessPair(id, sessionId); }
           catch {
             if (runningRef.current && id === runId.current) {
@@ -379,6 +380,7 @@ export default function ChatPage() {
             }
           }
         }
+        if (who === 'ai_2') skipNextSupervisorAssessmentRef.current = false;
         setSpeaker(nextSpeaker);
         await new Promise(resolve => window.setTimeout(resolve, 500));
       }
@@ -418,6 +420,7 @@ export default function ChatPage() {
       abort.current?.abort();
       pendingReplyRef.current = null;
       pendingHumanRef.current = null;
+      skipNextSupervisorAssessmentRef.current = false;
       transcriptWrites.current = Promise.resolve();
       const restored = saved.messages.slice(-MAX_LOCAL_MESSAGES);
       messagesRef.current = restored;
@@ -520,6 +523,20 @@ export default function ChatPage() {
     void runConversation(runId.current, who);
   }
 
+  function skipFailedTurn() {
+    if (!failedTurn || runningRef.current || !conversationId) return;
+    const next = failedTurn === 'ai_1' ? 'ai_2' : 'ai_1';
+    skipNextSupervisorAssessmentRef.current = failedTurn === 'ai_1';
+    setFailedTurn(null);
+    setError('');
+    setTurnTimedOut(false);
+    setNotice(`Skipped the failed ${labels[failedTurn]} turn; ${labels[next]} is continuing.`);
+    runId.current += 1;
+    runningRef.current = true;
+    setRunning(true);
+    void runConversation(runId.current, next);
+  }
+
   function stopConversation() {
     if (!runningRef.current) return;
     runId.current += 1;
@@ -531,6 +548,7 @@ export default function ChatPage() {
     setFailedTurn(null);
     pendingReplyRef.current = null;
     pendingHumanRef.current = null;
+    skipNextSupervisorAssessmentRef.current = false;
     setRunning(false);
     setSpeaker(null);
     setNotice('Stopped. A provider request in progress may have completed and used account allowance.');
@@ -556,6 +574,7 @@ export default function ChatPage() {
     setFailedTurn(null);
     pendingReplyRef.current = null;
     pendingHumanRef.current = null;
+    skipNextSupervisorAssessmentRef.current = false;
     try {
       await openTranscript();
       await refreshTranscripts();
@@ -632,6 +651,7 @@ export default function ChatPage() {
     <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">
       <button type="submit" form="brainstorm-human-form" className="chat-send" disabled={!canSend}>Send</button>
       {failedTurn && !running && <button type="button" className="chat-retry" aria-label={`Retry ${labels[failedTurn]}`} data-tooltip={`Retry the interrupted ${labels[failedTurn]} turn`} disabled={!conversationId} onClick={retryConversation}>Retry</button>}
+      {failedTurn && !running && <button type="button" className="chat-skip" data-tooltip={`Skip the failed ${labels[failedTurn]} turn and continue with the other AI`} disabled={!conversationId} onClick={skipFailedTurn}>Skip turn</button>}
       <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
       <button type="button" className="chat-clear" disabled={running || restoringTranscript || !messages.length} onClick={clearConversation}>Clear</button>
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
