@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import DialogDismissButton from './DialogDismissButton';
+import { resumeAuthorizationAnchor, resumeAuthorizationPosition, type ResumeAnchorBounds } from './resume-authorization-position';
 import './resume-authorization.css';
 
 export type ResumeAuthorization = {
@@ -9,27 +10,11 @@ export type ResumeAuthorization = {
   sessionNumber: number;
 };
 
-const EDGE = 12;
-const GAP = 8;
-
-function anchoredPosition(anchor: HTMLElement, panel: HTMLElement): { top: number; left: number } {
-  const rect = anchor.getBoundingClientRect();
-  const width = panel.offsetWidth;
-  const height = panel.offsetHeight;
-  const availableBelow = window.innerHeight - rect.bottom - GAP - EDGE;
-  const availableAbove = rect.top - GAP - EDGE;
-  const openBelow = availableBelow >= height || availableBelow >= availableAbove;
-  const preferredTop = openBelow ? rect.bottom + GAP : rect.top - GAP - height;
-  const top = Math.max(EDGE, Math.min(preferredTop, window.innerHeight - height - EDGE));
-  // Prefer the right side of Play, but keep the entire popup in the viewport.
-  const left = Math.max(EDGE, Math.min(rect.right + GAP, window.innerWidth - width - EDGE));
-  return { top, left };
-}
-
 /** Nonmodal confirmation matches SIGMA's anchored remove confirmations. */
-export default function ResumeAuthorizationDialog({ request, anchor, onAuthorize, onCancel }: {
+export default function ResumeAuthorizationDialog({ request, anchor, anchorSnapshot, onAuthorize, onCancel }: {
   request: ResumeAuthorization | null;
   anchor: HTMLButtonElement | null;
+  anchorSnapshot: ResumeAnchorBounds | null;
   onAuthorize: () => void;
   onCancel: () => void;
 }) {
@@ -40,10 +25,21 @@ export default function ResumeAuthorizationDialog({ request, anchor, onAuthorize
   const [position, setPosition] = useState({ top: 0, left: 0, ready: false });
 
   useLayoutEffect(() => {
-    if (!request || !anchor || !panel.current) return;
+    if (!request || !panel.current) return;
     const update = () => {
       if (!panel.current) return;
-      setPosition({ ...anchoredPosition(anchor, panel.current), ready: true });
+      // Pending Resume replaces the Play control with Stop. A disconnected
+      // button reports a zero rect, so use the original click-time bounds.
+      const bounds = resumeAuthorizationAnchor(anchor, anchorSnapshot);
+      if (!bounds) return;
+      setPosition({
+        ...resumeAuthorizationPosition(
+          bounds,
+          { width: panel.current.offsetWidth, height: panel.current.offsetHeight },
+          { width: window.innerWidth, height: window.innerHeight },
+        ),
+        ready: true,
+      });
     };
     update();
     window.addEventListener('resize', update);
@@ -52,7 +48,7 @@ export default function ResumeAuthorizationDialog({ request, anchor, onAuthorize
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
     };
-  }, [request, anchor]);
+  }, [request, anchor, anchorSnapshot]);
 
   useEffect(() => {
     if (!request) return;

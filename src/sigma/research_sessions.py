@@ -7419,9 +7419,17 @@ async def control_session(
                     )
                     or (
                         record.get("status") in {"paused", "stopped"}
-                        and isinstance(record.get("hard_budget_ledger"), dict)
-                        and record["hard_budget_ledger"].get("blocked_reason")
-                        == "Provider call outcome or usage is unknown"
+                        and (
+                            any(
+                                branch.get("status") == "failed"
+                                for branch in record.get("strategy_runs", [])
+                            )
+                            or (
+                                isinstance(record.get("hard_budget_ledger"), dict)
+                                and record["hard_budget_ledger"].get("blocked_reason")
+                                == "Provider call outcome or usage is unknown"
+                            )
+                        )
                     )
                 )
                 and not _public(record).get("recoverable_clipped_response")
@@ -7474,17 +7482,32 @@ async def control_session(
                     # Large interrupted portfolios can advance in multiple
                     # explicitly approved batches instead of becoming stuck.
                     approved_extension = min(required_extension, 12)
-                    if additional_calls != approved_extension:
+                    # An explicit Resume click also authorizes replacing already
+                    # failed transient requests, up to their uncredited count.
+                    # It does NOT relax the original token or monetary ceilings.
+                    # Nontransient failures and any larger shortfall still
+                    # require the separate additional-attempt confirmation.
+                    implicit_transient_calls = (
+                        required_extension
+                        if (
+                            not explicit_protocol_recovery
+                            and additional_calls == 0
+                            and 0 < required_extension <= 12
+                            and required_extension <= _uncredited_transient_failures(record)
+                        )
+                        else 0
+                    )
+                    if additional_calls != approved_extension and not implicit_transient_calls:
                         raise ProjectError(
                             f"Completing the saved protocol needs {plan['required_calls']} new valid role turns, "
                             f"but only {available_calls} attempts remain. Resume with exactly "
                             f"{approved_extension} explicitly authorized additional attempts; "
                             "additional batches may be required. No counters were changed."
                         )
-                    # The ordinary Resume button never approves an increase
-                    # in the paid-attempt ceiling. A distinct user decision
-                    # authorizes only the exact shortfall.
-                    replacement_calls = additional_calls
+                    # Any extension is strictly for replacements of already
+                    # failed transient provider attempts, or must be separately
+                    # confirmed by the user (including nontransient failures).
+                    replacement_calls = additional_calls or implicit_transient_calls
                     deadline = record.get("deadline_at")
                     if (
                         not explicit_protocol_recovery
@@ -7563,11 +7586,17 @@ async def control_session(
                                 "to": record["call_limit"],
                                 "additional_calls": replacement_calls,
                                 "purpose": (
-                                    "replace definitively rejected provider attempts without changing "
-                                    "the configured successful role-call protocol"
-                                    if automatic_provider_recovery
-                                    else "resume missing protocol roles without replaying failed or uncertain attempts"
+                                    "replace transient provider failures on explicit Resume without changing "
+                                    "the original monetary or token limits"
+                                    if implicit_transient_calls
+                                    else (
+                                        "replace definitively rejected provider attempts without changing "
+                                        "the configured successful role-call protocol"
+                                        if automatic_provider_recovery
+                                        else "resume missing protocol roles without replaying failed or uncertain attempts"
+                                    )
                                 ),
+                                "implicit_transient_replacement": bool(implicit_transient_calls),
                                 "accepted_turns_before_resume": plan["completed_turns"],
                                 "required_turns": plan["required_calls"],
                                 "automatic_provider_limit_replacement": automatic_provider_recovery,
@@ -7580,7 +7609,7 @@ async def control_session(
                             f"{record['call_limit']} for {replacement_calls} missing protocol slots; "
                             "accepted role-call target and original monetary/token limits "
                             "remain unchanged."
-                            if automatic_provider_recovery
+                            if automatic_provider_recovery or implicit_transient_calls
                             else (
                                 f"The attempt ceiling increased from {old_call_limit} to "
                                 f"{record['call_limit']} to complete the configured protocol."
@@ -13555,6 +13584,37 @@ def _provider_limit_recovery_plan(
     return resumable, None
 
 
+def _uncredited_transient_failures(record: dict[str, Any]) -> int:
+    """Count transient provider attempts eligible for replacement on explicit Resume.
+
+    Resume is already a deliberate request to continue the original role protocol.
+    Replacing a failed transient attempt may grow the *attempt* ceiling but never
+    the original monetary, input-token, or output-token limits. Previous manual
+    or automatic attempt extensions consume this allowance conservatively, so
+    repeated Resume clicks cannot reuse the same failed request as fresh credit.
+    """
+    transient_kinds = {
+        "transport_interrupted",
+        "timeout",
+        "provider_temporary",
+        "stream_incomplete",
+    }
+    transient_attempts = sum(
+        isinstance(step, dict)
+        and step.get("role") in {"investigator", "skeptic"}
+        and step.get("status") == "failed"
+        and step.get("failure_kind") in transient_kinds
+        and step.get("attempt_status") in {"unknown", "usage_estimated"}
+        for step in record.get("steps", [])
+    )
+    already_extended = sum(
+        max(0, item.get("additional_calls", 0))
+        for item in record.get("call_limit_adjustments", [])
+        if isinstance(item, dict) and type(item.get("additional_calls", 0)) is int
+    )
+    return max(0, transient_attempts - already_extended)
+
+
 def _protocol_completion_recovery_plan(
     record: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, str | None]:
@@ -13659,15 +13719,22 @@ def _protocol_completion_recovery_plan(
             and step.get("attempt_status") != "not_dispatched"
             and audit_status != "prepared_before_dispatch"
             and strategy_id in strategy_by_id
-            and strategy_by_id[strategy_id].get("cycle") == cycle
+            and type(cycle) is int
+            and cycle in target_cycles
             and (
                 (
                     role == "skeptic"
+                    and strategy_by_id[strategy_id].get("cycle") == cycle
                     and strategy_by_id[strategy_id].get("pending_investigation") is not None
                 )
                 or (
                     role == "investigator"
                     and strategy_by_id[strategy_id].get("pending_investigation") is None
+                    # A failed Investigator for round N leaves branch.cycle at
+                    # N-1 because that round was never accepted. Older saved
+                    # checkpoints sometimes advanced the cursor to N before
+                    # the failure; accept either, never an unrelated round.
+                    and strategy_by_id[strategy_id].get("cycle") in {cycle - 1, cycle}
                 )
             )
             and (strategy_id, role, cycle) not in completed
