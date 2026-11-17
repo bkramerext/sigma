@@ -61,6 +61,8 @@ export default function ChatPage() {
   const repeatedTextRef = useRef('');
   const recordedRepeatedRef = useRef('');
   const [running, setRunning] = useState(false);
+  const [turnElapsedSeconds, setTurnElapsedSeconds] = useState(0);
+  const [turnTimedOut, setTurnTimedOut] = useState(false);
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -73,6 +75,7 @@ export default function ChatPage() {
   const runningRef = useRef(false);
   const runId = useRef(0);
   const abort = useRef<AbortController | null>(null);
+  const turnStartedAtRef = useRef<number | null>(null);
   const transcriptWrites = useRef<Promise<void>>(Promise.resolve());
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
@@ -181,6 +184,18 @@ export default function ChatPage() {
     };
   }, [openTranscript, refreshConfig]);
 
+  useEffect(() => {
+    if (!running || turnStartedAtRef.current === null) return;
+    const update = () => {
+      if (turnStartedAtRef.current !== null) {
+        setTurnElapsedSeconds(Math.floor((Date.now() - turnStartedAtRef.current) / 1000));
+      }
+    };
+    update();
+    const interval = window.setInterval(update, 1000);
+    return () => window.clearInterval(interval);
+  }, [running, speaker]);
+
   const addMessage = useCallback((message: ChatMessage) => {
     const next = [...messagesRef.current, message].slice(-MAX_LOCAL_MESSAGES);
     messagesRef.current = next;
@@ -240,24 +255,33 @@ export default function ChatPage() {
         const who: 'ai_1' | 'ai_2' = nextSpeaker;
         const controller = new AbortController();
         abort.current = controller;
+        turnStartedAtRef.current = Date.now();
+        setTurnElapsedSeconds(0);
+        setTurnTimedOut(false);
         setSpeaker(who);
         const result = await requestTurn(who, messagesRef.current, controller, settings);
         if (!runningRef.current || id !== runId.current) return;
         const reply = { speaker: who, text: result } as const;
         addMessage(reply);
         await appendTranscriptMessage(conversationId, reply);
+        turnStartedAtRef.current = null;
+        setTurnElapsedSeconds(0);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
         setSpeaker(nextSpeaker);
         await new Promise(resolve => window.setTimeout(resolve, 500));
       }
     } catch (cause) {
       if (id === runId.current && runningRef.current) {
-        setError(errorText(cause));
-        setNotice('The exchange stopped. Check the message above before starting again.');
+        const message = errorText(cause);
+        const timedOut = /timed out|timeout/i.test(message);
+        setTurnTimedOut(timedOut);
+        setError(message);
+        setNotice(timedOut ? 'Timed out' : 'The exchange stopped. Check the message above before starting again.');
       }
     } finally {
       if (id === runId.current) {
         abort.current = null;
+        turnStartedAtRef.current = null;
         runningRef.current = false;
         setRunning(false);
         setSpeaker(null);
@@ -285,6 +309,7 @@ export default function ChatPage() {
     setDraft('');
     setError('');
     setNotice('');
+    setTurnTimedOut(false);
     if (runningRef.current) return;
     runId.current += 1;
     runningRef.current = true;
@@ -298,6 +323,8 @@ export default function ChatPage() {
     runningRef.current = false;
     abort.current?.abort();
     abort.current = null;
+    turnStartedAtRef.current = null;
+    setTurnTimedOut(false);
     setRunning(false);
     setSpeaker(null);
     setNotice('Stopped. A provider request in progress may have completed and used account allowance.');
@@ -313,12 +340,18 @@ export default function ChatPage() {
     recordedRepeatedRef.current = '';
     setError('');
     setNotice('');
+    setTurnTimedOut(false);
     try {
       await openTranscript();
     } catch (cause) {
       setError(errorText(cause));
     }
   }
+
+  const timeoutMinutesRemaining = Math.max(1, Math.ceil((600 - turnElapsedSeconds) / 60));
+  const timeoutStatus = running && turnElapsedSeconds >= 300
+    ? (turnElapsedSeconds >= 600 ? 'Timed out' : `Timing out in ${timeoutMinutesRemaining} minute${timeoutMinutesRemaining === 1 ? '' : 's'}`)
+    : turnTimedOut ? 'Timed out' : '';
 
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
   const modelControlHint = !config
@@ -385,6 +418,7 @@ export default function ChatPage() {
       <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
       <button type="button" className="chat-clear" disabled={running || !messages.length} onClick={clearConversation}>Clear</button>
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
+      {timeoutStatus && <span className="chat-timeout-status" role="timer" aria-label="Brainstorm turn time limit">{timeoutStatus}</span>}
     </div>
     <section className="chat-boxes" aria-label="AI responses">
       {(['ai_1', 'ai_2'] as const).map(who => <section key={who}
