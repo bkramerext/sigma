@@ -131,17 +131,16 @@ def memory_report(stage: str) -> None:
 
 def main() -> None:
     assert os.geteuid() == 10001, "Vault test must not run as root"
-    # Check the built production image, not only the source files. A managed
-    # Chromium passkey-disabling policy must never ship in the shared worker.
+    # Verify the built container preserves both suppression settings.
     import json
 
-    assert not Path("/etc/chromium/policies/managed/sigma-no-passkeys.json").exists()
     policy_file = Path("/etc/chromium/policies/managed/sigma-no-password-saving.json")
     assert json.loads(policy_file.read_text(encoding="utf-8")) == {
-        "PasswordManagerEnabled": False
-    }, "Chromium must never offer to save login passwords"
+        "PasswordManagerEnabled": False,
+        "PasswordManagerPasskeysEnabled": False,
+    }, "Chromium must suppress password saving and passkey helper"
     boot = Path("/opt/sigma/auth-poc/boot.sh").read_text(encoding="utf-8")
-    assert "WebAuthenticationConditionalUI" not in boot
+    assert "WebAuthenticationConditionalUI" in boot
     memory_report("idle_before_login")
     asyncio.run(storage_check())
     assert call(A, "GET", "/v1/account", key_override="0"*64)[0] == 403

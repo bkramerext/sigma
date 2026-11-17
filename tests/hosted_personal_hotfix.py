@@ -13,17 +13,16 @@ from sigma import cloud_auth, papers, personal_browser, personal_inference, proj
 
 
 class HostedPersonalHotfixTests(TestCase):
-    def test_disposable_chromium_does_not_disable_real_passkey_signin(self) -> None:
+    def test_disposable_chromium_suppresses_passkey_helper_and_password_saving(self) -> None:
         root = Path(__file__).resolve().parent.parent
         boot = (root / "auth-poc/boot.sh").read_text(encoding="utf-8")
         dockerfile = (root / "auth-poc/shared.Dockerfile").read_text(encoding="utf-8")
-        # The previous attempt to suppress a passkey helper unintentionally
-        # suppressed the actual conditional passkey sign-in experience.
-        self.assertNotIn("WebAuthenticationConditionalUI", boot)
-        self.assertNotIn("WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot)
-        self.assertNotIn("--disable-features=", boot)
-        self.assertNotIn('"PasswordManagerPasskeysEnabled"', dockerfile)
-        self.assertIn("'{\"PasswordManagerEnabled\":false}'", dockerfile)
+        # Preserve the earlier helper suppression and no-password-saving policy.
+        self.assertIn("WebAuthenticationConditionalUI", boot)
+        self.assertIn("WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot)
+        self.assertIn("--disable-features=", boot)
+        self.assertIn('"PasswordManagerPasskeysEnabled":false', dockerfile)
+        self.assertIn('"PasswordManagerEnabled":false', dockerfile)
         self.assertIn("sigma-no-password-saving.json", dockerfile)
         self.assertIn("--disable-save-password-bubble", boot)
         self.assertIn("--user-data-dir=", boot)

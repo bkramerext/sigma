@@ -22,11 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        /var/lib/sigma-shared/workspaces /var/lib/sigma-shared-key \
     && chown -R 10001:10001 /var/lib/sigma-shared /var/lib/sigma-shared-key \
     && chmod 0700 /var/lib/sigma-shared/records /var/lib/sigma-shared/workspaces /var/lib/sigma-shared-key
-# Disable Chromium password storage without restricting WebAuthn/passkeys.
-# Do not disable PasswordManagerPasskeysEnabled or WebAuthenticationConditionalUI:
-# they are needed for legitimate real ChatGPT passkey authentication.
+# Suppress password saving and passkey helper while using real Google OAuth.
 RUN mkdir -p /etc/chromium/policies/managed \
-    && printf '%s' '{"PasswordManagerEnabled":false}' \
+    && printf '%s' '{"PasswordManagerPasskeysEnabled":false,"PasswordManagerEnabled":false}' \
        > /etc/chromium/policies/managed/sigma-no-password-saving.json
 WORKDIR /opt/sigma
 COPY pyproject.toml uv.lock README.md ./
