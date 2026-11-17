@@ -524,7 +524,7 @@ export default function ChatPage() {
   }
 
   function skipFailedTurn() {
-    if (!failedTurn || runningRef.current || !conversationId) return;
+    if (!failedTurn || runningRef.current || !conversationId || pendingReplyRef.current) return;
     const next = failedTurn === 'ai_1' ? 'ai_2' : 'ai_1';
     skipNextSupervisorAssessmentRef.current = failedTurn === 'ai_1';
     setFailedTurn(null);
@@ -651,7 +651,7 @@ export default function ChatPage() {
     <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">
       <button type="submit" form="brainstorm-human-form" className="chat-send" disabled={!canSend}>Send</button>
       {failedTurn && !running && <button type="button" className="chat-retry" aria-label={`Retry ${labels[failedTurn]}`} data-tooltip={`Retry the interrupted ${labels[failedTurn]} turn`} disabled={!conversationId} onClick={retryConversation}>Retry</button>}
-      {failedTurn && !running && <button type="button" className="chat-skip" data-tooltip={`Skip the failed ${labels[failedTurn]} turn and continue with the other AI`} disabled={!conversationId} onClick={skipFailedTurn}>Skip turn</button>}
+      {failedTurn && !running && <button type="button" className="chat-skip" data-tooltip={`Skip the failed ${labels[failedTurn]} turn and continue with the other AI`} disabled={!conversationId || !!pendingReplyRef.current} onClick={skipFailedTurn}>Skip turn</button>}
       <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
       <button type="button" className="chat-clear" disabled={running || restoringTranscript || !messages.length} onClick={clearConversation}>Clear</button>
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
