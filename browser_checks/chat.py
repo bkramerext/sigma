@@ -584,6 +584,15 @@ with sync_playwright() as playwright:
         for turn in turns[before_intervention:]
         for item in turn["messages"]
     )
+    # The first Supervisor call is deliberately failed above; allow the next
+    # completed AI pair to finish and persist a successful assessment before
+    # freezing the conversation for transcript/disclosure assertions.
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline and not any(
+        item["speaker"] == "supervisor" and "Research progress:" in item["text"]
+        for item in transcript_messages
+    ):
+        page.wait_for_timeout(50)
     page.get_by_role("button", name="Stop exchange", exact=True).click()
     expect(page.get_by_role("button", name="Clear", exact=True)).to_be_enabled()
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
