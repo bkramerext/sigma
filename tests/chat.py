@@ -430,6 +430,33 @@ def check_transcripts() -> None:
             assert content.index("## AI #1 ·") < content.index("## AI #2 ·")
             assert all(text in content for _, text in messages)
 
+            options = chat_transcripts.list_transcripts()
+            assert options == [{"name": session["transcript_name"]}]
+            restored = chat_transcripts.load_transcript(session["transcript_name"])
+            assert restored["conversation_id"] == session["conversation_id"]
+            assert restored["transcript_path"] == session["transcript_path"]
+            assert restored["research_objective"] == ""
+            assert restored["next_speaker"] == "ai_1"
+            assert restored["messages"][0] == {
+                "speaker": "human", "text": messages[0][1]
+            }
+            assert restored["messages"][2] == {
+                "speaker": "ai_2", "text": messages[2][1]
+            }
+            assert restored["messages"][-1]["text"] == long_entry
+            assert not restored["has_supervisor"]
+            with TestClient(app) as client:
+                listed = client.get("/api/chat/transcripts")
+                selected = client.get(
+                    "/api/chat/transcripts/" + session["transcript_name"]
+                )
+                traversal = client.get("/api/chat/transcripts/not-a-transcript.md")
+            assert listed.status_code == 200
+            assert listed.json() == options
+            assert selected.status_code == 200
+            assert selected.json()["conversation_id"] == session["conversation_id"]
+            assert traversal.status_code in {400, 404, 422}
+
             original = path.read_bytes()
             backup = directory / "transcript-backup.md"
             path.rename(backup)
