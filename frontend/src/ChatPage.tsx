@@ -491,7 +491,7 @@ export default function ChatPage() {
     {supervisorEnabled && progressScore !== null && <p className="chat-progress-status" aria-live="polite">
       Research progress: <strong>{progressScore.toFixed(1)} / 10.0</strong>
       {breakthroughLatched.current ? ' · Potential breakthrough — independent validation needed' : ''}
-    </p>
+    </p>}
     <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
       <div className="chat-field-heading">
         <label htmlFor="chat-human-message">Human:</label>
