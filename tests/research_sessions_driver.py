@@ -89,8 +89,14 @@ def main(part: int = 1):
     test_e004_e005_e006_e009_e010_e011_saved_protocol_recovery_plans()
     test_protocol_completion_rejects_invalid_or_duplicate_accepted_slots()
     test_terminal_protocol_completion_allows_known_invalid_response_replacement()
+    test_first_investigator_connection_failure_has_explicit_recovery_plan()
     test_protocol_recovery_context_is_a_new_final_provider_input()
     with TemporaryDirectory() as temporary:
+        asyncio.run(
+            test_resume_after_first_investigator_connection_failure(
+                Path(temporary) / "first-investigator-disconnect.sigma"
+            )
+        )
         asyncio.run(
             test_provider_limit_unsafe_fallback_cannot_resume(
                 Path(temporary) / "unsafe-provider-fallback.sigma"

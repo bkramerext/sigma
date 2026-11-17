@@ -2870,6 +2870,18 @@ def test_terminal_protocol_completion_plan_preserves_attempt_history() -> None:
     ]
     unsafe["strategy_runs"][1]["cycle"] = 2
     unsafe["strategy_runs"][1]["pending_investigation"] = None
+    # The Investigator was attempting the next round: this is now a safe
+    # explicit recovery with a *new* request, not replay of the old one.
+    plan, error = research_sessions._protocol_completion_recovery_plan(unsafe)
+    assert error is None and plan is not None
+    assert any(
+        item["strategy_id"] == second
+        and item["role"] == "investigator"
+        and item["cycle"] == 3
+        for item in plan["branches"]
+    )
+    # A claimed unknown dispatch for an unconfigured future round is unsafe.
+    unsafe["steps"][-1]["cycle"] = 4
     plan, error = research_sessions._protocol_completion_recovery_plan(unsafe)
     assert plan is None and error is not None and "will not replay" in error
 
