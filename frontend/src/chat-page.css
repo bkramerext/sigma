@@ -393,3 +393,35 @@
 .brainstorm-workspace .chat-history .chat-reply-heading { margin-bottom: 0; }
 .brainstorm-workspace .chat-history .chat-reply-heading strong { color: inherit; }
 .brainstorm-workspace .chat-history [hidden] { display: none; }
+
+/* Keep all transcript/response content inside the available page width.
+   Grid items default to min-width:auto, which can grow to a long reply's
+   min-content width and push the entire Brainstorm page off-screen. */
+.brainstorm-workspace .chat-boxes,
+.brainstorm-workspace .chat-history { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.brainstorm-workspace .chat-boxes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.brainstorm-workspace .chat-box,
+.brainstorm-workspace .chat-history li,
+.brainstorm-workspace .chat-transcript,
+.brainstorm-workspace .chat-history li > div,
+.brainstorm-workspace .chat-markdown {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.brainstorm-workspace .chat-markdown {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.brainstorm-workspace .chat-markdown :is(p, li, blockquote, a, h1, h2, h3, h4, h5, h6, code) {
+  overflow-wrap: anywhere;
+}
+.brainstorm-workspace .chat-markdown :is(pre, table, .katex-display) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.brainstorm-workspace .chat-markdown pre { white-space: pre; }
+.brainstorm-workspace .chat-markdown :is(img, svg) { max-width: 100%; height: auto; }
+@media (max-width: 900px) {
+  .brainstorm-workspace .chat-boxes { grid-template-columns: minmax(0, 1fr); }
+}
