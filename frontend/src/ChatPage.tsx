@@ -1,7 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
-import { ModelThinkingPillButton } from './GlobalModelPill';
-import { modelDisplayLabel } from './model-display';
 import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
@@ -21,9 +18,6 @@ type ChatConfig = {
 };
 
 const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', repeated: 'Repeated instruction' };
-const thinkingLabels: Record<ChatConfig['reasoning_effort'], string> = {
-  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high',
-};
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
@@ -70,9 +64,6 @@ export default function ChatPage() {
   const [notice, setNotice] = useState('');
   const [conversationId, setConversationId] = useState('');
   const [transcriptPath, setTranscriptPath] = useState('');
-  const [headerControlsTarget, setHeaderControlsTarget] = useState<HTMLElement | null>(null);
-  const [modelCycleRevision, setModelCycleRevision] = useState(0);
-  const [thinkingCycleRevision, setThinkingCycleRevision] = useState(0);
   const messagesRef = useRef<ChatMessage[]>([]);
   const runningRef = useRef(false);
   const runId = useRef(0);
@@ -85,6 +76,24 @@ export default function ChatPage() {
   const pendingHumanRef = useRef<ChatMessage | null>(null);
 
   useEffect(() => { configRef.current = config; }, [config]);
+
+  // Model/Thinking is a shared, persisted setting across Home, Project and
+  // Brainstorm. Read it immediately before every new inference request, not
+  // once when the alternating conversation starts.
+  async function currentTurnSettings(): Promise<ChatConfig> {
+    const selected = configRef.current;
+    if (!selected?.available) throw new Error('The selected AI account is unavailable.');
+    const response = await fetch('/api/user-preferences/research-settings', {
+      cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+    });
+    if (!response.ok) throw new Error('Could not load the current Model/Thinking selection. Retry the turn.');
+    const settings = await response.json() as { ai_model?: string; reasoning_effort?: string };
+    const available = selected.models.find(item => item.id === settings.ai_model);
+    if (!available || !settings.reasoning_effort || !available.efforts.includes(settings.reasoning_effort as ChatConfig['reasoning_effort'])) {
+      throw new Error('The selected Model/Thinking is unavailable for Brainstorm. Choose another setting and Retry.');
+    }
+    return { ...selected, model: available.id, reasoning_effort: settings.reasoning_effort as ChatConfig['reasoning_effort'] };
+  }
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -106,32 +115,6 @@ export default function ChatPage() {
       if (!signal?.aborted) setError(errorText(cause));
     }
   }, []);
-
-  function cycleModel() {
-    if (!config) return;
-    const available = config.models;
-    const index = available.findIndex(item => item.id === config.model);
-    const next = available[(index + 1 + available.length) % available.length];
-    if (!next) return;
-    const updated = { ...config, model: next.id,
-      reasoning_effort: next.efforts.includes(config.reasoning_effort) ? config.reasoning_effort : next.efforts[0] };
-    configRef.current = updated;
-    setConfig(updated);
-    setModelCycleRevision(revision => revision + 1);
-  }
-
-  function cycleThinking() {
-    if (!config) return;
-    const efforts = config.models.find(item => item.id === config.model)?.efforts ?? [];
-    const index = efforts.indexOf(config.reasoning_effort);
-    const next = efforts[(index + 1 + efforts.length) % efforts.length];
-    if (next) {
-      const updated = { ...config, reasoning_effort: next };
-      configRef.current = updated;
-      setConfig(updated);
-      setThinkingCycleRevision(revision => revision + 1);
-    }
-  }
 
   const openTranscript = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/chat/session', {
@@ -180,7 +163,6 @@ export default function ChatPage() {
 
   useEffect(() => {
     document.title = 'Brainstorm · SIGMA';
-    setHeaderControlsTarget(document.querySelector<HTMLElement>('.chat-site-header .chat-header-center-slot'));
     const controller = new AbortController();
     void refreshConfig(controller.signal);
     void openTranscript(controller.signal).catch(cause => {
@@ -280,8 +262,7 @@ export default function ChatPage() {
         // If a response was generated but its transcript write failed, resume
         // that write instead of making another potentially billable request.
         if (!pendingReplyRef.current) {
-          const settings = configRef.current;
-          if (!settings?.available) throw new Error('The selected AI account is unavailable.');
+          const settings = await currentTurnSettings();
           const result = await requestTurn(who, messagesRef.current, controller, settings);
           if (!runningRef.current || id !== runId.current) return;
           const reply: ChatMessage = { speaker: who, text: result };
@@ -408,40 +389,11 @@ export default function ChatPage() {
     : turnTimedOut ? 'Timed out' : '';
 
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
-  const modelControlHint = !config
-    ? error || 'Brainstorm settings are loading.'
-    : !config.available
-      ? config.message || 'Connect an AI account to enable model selection.'
-      : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle through models; changes apply on the next AI turn.`;
-  const thinkingControlHint = !config
-    ? error || 'Brainstorm settings are loading.'
-    : !config.available
-      ? config.message || 'Connect an AI account to enable Thinking selection.'
-      : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle through supported levels; changes apply on the next AI turn.`;
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
-  const selectedModel = config?.models.find(item => item.id === config.model);
-  const displayedModel = selectedModel ? modelDisplayLabel(selectedModel) : config?.model ?? 'Loading';
-  const displayedThinking = thinkingLabels[config?.reasoning_effort ?? 'low'];
-  const selectionDisabled = !config?.available || !config.models.length;
-  const modelThinkingControls = <div className="sigma-header-model-column chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
-    <span className="global-model-pill-position">
-      <ModelThinkingPillButton label={displayedModel} thinkingLabel={`Thinking · ${displayedThinking}`}
-        tooltip={`${modelControlHint} ${thinkingControlHint} Click the upper half to cycle models; click the lower half to cycle thinking levels.`}
-        disabled={selectionDisabled}
-        modelCycleRevision={modelCycleRevision} thinkingCycleRevision={thinkingCycleRevision}
-        onCycleModel={cycleModel} onCycleThinking={cycleThinking}/>
-    </span>
-  </div>;
-
   return <>
-  {headerControlsTarget && createPortal(modelThinkingControls, headerControlsTarget)}
   <main className="chat-page">
-    <header className="chat-page-header">
-      <div className="chat-title-group"><p className="chat-eyebrow">Open conversation</p><h1>Brainstorm</h1></div>
-      <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
-    </header>
     <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
