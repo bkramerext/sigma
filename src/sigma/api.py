@@ -3439,6 +3439,18 @@ class ChatSupervisorRequest(BaseModel):
     milestone_latched: bool = False
 
 
+@app.get("/api/chat/transcripts")
+def list_chat_transcripts():
+    """List private, resumable Brainstorm transcripts."""
+    return JSONResponse(chat_transcripts.list_transcripts(), headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/chat/transcripts/{name}")
+def load_chat_transcript(name: str):
+    """Restore a saved Brainstorm transcript from the private state directory."""
+    return JSONResponse(chat_transcripts.load_transcript(name), headers={"Cache-Control": "no-store"})
+
+
 @app.post("/api/chat/session")
 def open_chat_transcript():
     """Create a timestamped transcript in the authenticated user's private state."""
