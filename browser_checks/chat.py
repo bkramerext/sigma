@@ -19,6 +19,7 @@ active_fixture_binding = "fixture-account"
 session_calls = 0
 transcript_messages: list[dict] = []
 fail_next_turn = False
+fail_next_supervisor = False
 selected_settings = {
     "limits": {},
     "ai_model": "gpt-6.1-sol",
@@ -33,7 +34,7 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def respond(route):
-        global config_calls, session_calls, fail_next_turn
+        global config_calls, session_calls, fail_next_turn, fail_next_supervisor
         url = route.request.url
         if url.endswith("/api/chat/transcripts/20261112_101010.md"):
             route.fulfill(
@@ -191,6 +192,10 @@ with sync_playwright() as playwright:
             return
         if url.endswith("/api/chat/supervisor"):
             supervisor_calls.append(route.request.post_data_json)
+            if fail_next_supervisor:
+                fail_next_supervisor = False
+                route.fulfill(status=503, content_type="application/json", body='{"detail":"Assessment provider unavailable"}')
+                return
             route.fulfill(
                 status=200,
                 content_type="application/json",
@@ -508,6 +513,7 @@ with sync_playwright() as playwright:
     expect(second.locator(".chat-markdown strong")).to_have_text("formatted")
 
     before_repeated_edit = len(turns)
+    fail_next_supervisor = True
     page.get_by_label("Enable Supervisor").check()
     expect(page.get_by_label("Enable Supervisor")).to_be_checked()
     deadline = time.monotonic() + 5
@@ -642,6 +648,27 @@ with sync_playwright() as playwright:
     )
     assert session_calls == 4
     assert supervisor_calls, "Supervisor should assess at least one completed AI pair"
+    # An assessment failure must become a durable Supervisor record rather
+    # than silently disappearing. It must not stop AI #1 / AI #2 either.
+    assert any(
+        item["speaker"] == "supervisor"
+        and "Supervisor assessment unavailable: Assessment provider unavailable" in item["text"]
+        for item in transcript_messages
+    ), "Failed Supervisor assessments must be recorded in the transcript"
+    assert any(
+        item["speaker"] == "supervisor"
+        and "Research progress:" in item["text"]
+        for item in transcript_messages
+    ), "A later successful Supervisor assessment must still be recorded"
+    assert all(
+        not any(
+            message["speaker"] == "supervisor"
+            and message["text"].startswith("Supervisor assessment unavailable:")
+            for message in request["messages"]
+        )
+        for request in turns
+    ), "Supervisor failure diagnostics must not contaminate AI research context"
+
     assert any(item["speaker"] == "supervisor" for item in transcript_messages)
     assert any(item["speaker"] == "objective" for item in transcript_messages)
 
