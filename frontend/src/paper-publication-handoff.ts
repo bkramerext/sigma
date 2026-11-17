@@ -7,6 +7,7 @@
 export type PaperRunPublication = {
   paper_id?: string | null;
   status?: string | null;
+  progress?: { stage?: string | null } | null;
 };
 type PaperListingItem = { paper_id: string };
 
@@ -20,6 +21,15 @@ export function publishedRunStillFinishing(
   run: PaperRunPublication | null | undefined,
 ): boolean {
   return Boolean(run?.paper_id && (run.status === 'active' || run.status === 'queued'));
+}
+
+/** A published run is still the same generation operation. Do not label
+ * its finishing/publishing time as a second AI scoring evaluation.
+ */
+export function publishedRunActivityLabel(run: PaperRunPublication): 'Scoring' | 'Finishing' | 'Preparing' {
+  if (run.progress?.stage === 'scoring') return 'Scoring';
+  if (['finishing', 'score_failed', 'complete'].includes(run.progress?.stage ?? '')) return 'Finishing';
+  return 'Preparing';
 }
 
 /** Keep the saved row preloaded, but do not show it until Score + Finish ended.
