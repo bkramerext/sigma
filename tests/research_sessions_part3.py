@@ -2252,6 +2252,21 @@ async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Pat
     assert [step["role"] for step in finished["steps"][2:]] == ["investigator", "skeptic"]
 
 
+def test_completed_provider_reply_distinguishes_validation_from_internal_errors() -> None:
+    assert (
+        research_sessions._completed_response_failure_kind(
+            ProjectError("Unsupported response evidence ID")
+        )
+        == "response_invalid"
+    )
+    assert (
+        research_sessions._completed_response_failure_kind(
+            RuntimeError("Unexpected SIGMA processing failure")
+        )
+        == "internal_processing_failure"
+    )
+
+
 def test_schema_validation_diagnosis_contains_no_model_generated_values() -> None:
     from pydantic import ValidationError
 
