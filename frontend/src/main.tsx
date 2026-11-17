@@ -12,6 +12,7 @@ import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
 import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
+import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun } from './paper-completion-transition';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -4838,8 +4839,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const draftVersion = selectedRun?.number ?? nextPaperNumber ?? (Math.max(0, ...papers.map(paper => paper.paper_version)) + 1);
   // The unreserved next number can race other collaborators. Display a number
   // only once the server has allocated this run's authoritative number.
-  const assignedPaperNumber = selectedRun?.number ??
-    (reservedPaperNumber?.runId === selectedRunId ? reservedPaperNumber.number : null);
+  const assignedPaperNumber = displayedPaperNumber(selectedRun, reservedPaperNumber, selectedRunId);
   const draftDisplayTitle = assignedPaperNumber !== null ? `Paper ${assignedPaperNumber}` : 'New paper';
   const orderedPapers = [...papers].filter(paper => !hiddenRemovalIds.has(paper.paper_id))
     .sort((a, b) => b.paper_version - a.paper_version);
@@ -4879,8 +4879,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
   // A completed selected run can be cleared while its SSE stream is still
   // closing. Do not let stale busy/progress state fabricate a "New paper".
-  const hasDraftIdentity = !!selectedRunId || continuationAvailable ||
-    !!checkpointMismatch || !!restartableCheckpoint || restartReady;
+  const hasDraftIdentity = hasActualDraftIdentity(selectedRunId, continuationAvailable,
+    !!checkpointMismatch, !!restartableCheckpoint, restartReady);
   const showDraftPaper = !guest && !removingLegacyDraft && hasDraftIdentity &&
     (!selectedRun?.paper_id || selectedPublicationPending) &&
     !hiddenRemovalIds.has(selectedRunId ?? '') && (
@@ -5103,7 +5103,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <>
 
       {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <DialogDismissButton label="Dismiss paper score error" onClick={() => setScoreError('')}/></p>}
-      {loading && !papers.length && !paperRuns.length && !newPaperRequested && <p>Loading papers…</p>}
+      {shouldShowPaperLoading(loading, papers.length, paperRuns.length, newPaperRequested) && <p>Loading papers…</p>}
 
       {(showDraftPaper || otherPaperRuns.length > 0 || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={draftDisplayTitle} data-paper-version={assignedPaperNumber ?? undefined}>
@@ -5125,7 +5125,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => startOverPaperFromControl(event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
 
                 </span>}
-                {canRemoveDraft && (selectedRun?.paper_id ? selectedRun.status === 'complete' : (!generationRunning || canControlDraft)) && <span className="paper-remove-anchor">
+                {canRemoveDraft && (selectedRun ? canRemoveDisplayedPaperRun(selectedRun) : (!generationRunning || canControlDraft)) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove ${selectedRun?.paper_id ? '' : 'unfinished '}Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip={selectedRun?.paper_id ? 'Remove saved paper' : 'Remove unfinished paper'} disabled={loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
                     <p>{selectedRun?.paper_id ? 'Remove this paper and its PDF?' : generationRunning ? 'Stop and remove this paper?' : 'Remove this paper?'}</p>
@@ -5214,7 +5214,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 onClick={event => resumeOtherPaperRun(run, event.currentTarget)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
               </button>}
-              {!guest && run.can_remove && (run.paper_id ? run.status === 'complete' : (run.can_control || !['active', 'queued'].includes(run.status))) && <span className="paper-remove-anchor">
+              {!guest && canRemoveDisplayedPaperRun(run) && <span className="paper-remove-anchor">
                 <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
                   aria-label={`Remove ${run.paper_id ? '' : 'unfinished '}Paper ${run.number}`} data-tooltip={run.paper_id ? 'Remove saved paper' : 'Remove unfinished paper'} data-paper-discard-trigger="true" disabled={loading}
                   onClick={event => showDiscardRunConfirmation(run.run_id, event.currentTarget)}>
