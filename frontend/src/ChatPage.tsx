@@ -500,6 +500,7 @@ export default function ChatPage() {
     <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
       <div className="chat-field-heading">
         <label htmlFor="chat-human-message">Human:</label>
+        <CopyReplyButton name="Human" text={draft}/>
       </div>
       <textarea id="chat-human-message" aria-label="Human" rows={2} value={draft}
         onChange={event => setDraft(event.target.value)}
