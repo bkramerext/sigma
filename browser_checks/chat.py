@@ -236,6 +236,7 @@ with sync_playwright() as playwright:
     description_box = header.locator(".brainstorm-header-copy .chat-description").bounding_box()
     google_box = header.locator(".project-google-signin").bounding_box()
     chatgpt_box = header.locator(".api-connection > summary").bounding_box()
+    account_stack_box = header.locator(".brainstorm-header-pill-stack").bounding_box()
     model_box = header.locator(".brainstorm-header-model-column .global-model-pill").bounding_box()
     header_box = header.bounding_box()
     assert all(
@@ -247,6 +248,7 @@ with sync_playwright() as playwright:
             description_box,
             google_box,
             chatgpt_box,
+            account_stack_box,
             model_box,
             header_box,
         )
@@ -255,7 +257,8 @@ with sync_playwright() as playwright:
     # entire header 365px tall and cropped the wordmark in the user smoke test.
     assert artwork_box["width"] <= 340, artwork_box
     assert artwork_box["height"] <= 245, artwork_box
-    assert 160 <= header_box["height"] <= 170, header_box
+    # The reference Project header is 166px at this viewport.
+    assert abs(header_box["height"] - 166) <= 2, header_box
     assert artwork_box["x"] + artwork_box["width"] <= heading_box["x"] + 2
     assert description_box["x"] + description_box["width"] <= google_box["x"] - 4
     assert eyebrow_box["y"] + eyebrow_box["height"] <= title_box["y"] + 3
@@ -273,7 +276,19 @@ with sync_playwright() as playwright:
         )
         <= 28
     )
-    assert 10 <= google_box["y"] - header_box["y"] <= 28
+    # Like the Project header, vertically center the two account pills,
+    # leaving balanced top and bottom insets, while keeping their right inset.
+    top_gap = account_stack_box["y"] - header_box["y"]
+    bottom_gap = header_box["y"] + header_box["height"] - (
+        account_stack_box["y"] + account_stack_box["height"]
+    )
+    right_gap = 2048 - max(
+        google_box["x"] + google_box["width"],
+        chatgpt_box["x"] + chatgpt_box["width"],
+    )
+    assert 12 <= top_gap <= 35, (header_box, account_stack_box)
+    assert abs(top_gap - bottom_gap) <= 5, (top_gap, bottom_gap)
+    assert abs(top_gap - right_gap) <= 18, (top_gap, right_gap)
     page.set_viewport_size({"width": 1360, "height": 900})
     human = page.get_by_label("Human", exact=True)
     first = page.get_by_role("region", name="AI #1 latest reply")
