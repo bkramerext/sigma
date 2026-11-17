@@ -15,6 +15,7 @@ CHROME = os.environ.get(
 turns: list[dict] = []
 errors: list[str] = []
 config_calls = 0
+active_fixture_binding = "fixture-account"
 session_calls = 0
 transcript_messages: list[dict] = []
 fail_next_turn = False
@@ -92,7 +93,7 @@ with sync_playwright() as playwright:
                         "mode": "chatgpt",
                         "status": "connected",
                         "message": "Ready.",
-                        "binding": "fixture-account",
+                        "binding": active_fixture_binding,
                         "model": "gpt-6.1-sol",
                         "models": [
                             {
@@ -627,6 +628,8 @@ with sync_playwright() as playwright:
     assert session_calls == 5
     # Resume reuses the saved ID/history and automatically dispatches AI #2.
     turns_before_resume = len(turns)
+    # Switching the selected account cannot invalidate a saved conversation.
+    active_fixture_binding = "another-fixture-account"
     page.locator("#chat-saved-transcript").select_option("20261112_101010.md")
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261112_101010.md")
     expect(repeated).to_have_value("Continue exploring theta kernels.")
@@ -637,6 +640,7 @@ with sync_playwright() as playwright:
     resumed = turns[turns_before_resume]
     assert resumed["conversation_id"] == "4b1657d0-d9a4-467d-bc8b-29d48111e124"
     assert resumed["speaker"] == "ai_2"
+    assert "expected_binding" not in resumed
     assert resumed["research_objective"] == "Continue exploring theta kernels."
     assert any(
         message["text"] == "Consider the theta transformation." for message in resumed["messages"]
