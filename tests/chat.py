@@ -284,6 +284,41 @@ def check_api() -> None:
     print("PASS chat API model/thinking validation, SSE completion and participant validation")
 
 
+
+def check_slow_turn_heartbeat() -> None:
+    """A slow model turn must keep its SSE connection alive and still complete."""
+    body = {
+        "conversation_id": str(uuid4()),
+        "expected_binding": "api_key",
+        "speaker": "ai_1",
+        "messages": [{"speaker": "human", "text": "Think carefully."}],
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+    }
+    config = {
+        "available": True,
+        "message": "Ready.",
+        "binding": "api_key",
+        "models": [{"id": "gpt-6.1-sol", "efforts": ["high"]}],
+    }
+
+    async def slow_turn(**_kwargs):
+        await asyncio.sleep(0.05)
+        return "A carefully reasoned reply."
+
+    with (
+        patch("sigma.chat.configuration", new=AsyncMock(return_value=config)),
+        patch("sigma.chat.respond", side_effect=slow_turn),
+        patch("sigma.api.CHAT_HEARTBEAT_SECONDS", 0.01),
+        TestClient(app) as client,
+    ):
+        response = client.post("/api/chat/turn", json=body)
+    assert response.status_code == 200, response.text
+    assert ": keepalive\\n\\n" in response.text
+    assert '"type": "complete", "text": "A carefully reasoned reply."' in response.text
+    print("PASS brainstorm SSE heartbeat during slow reasoning and eventual completion")
+
+
 def check_transcripts() -> None:
     with TemporaryDirectory() as temp:
         state = Path(temp)
@@ -340,6 +375,7 @@ def main() -> None:
     check_configuration()
     check_service()
     check_api()
+    check_slow_turn_heartbeat()
     check_transcripts()
 
 
