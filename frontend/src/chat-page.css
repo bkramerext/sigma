@@ -139,9 +139,9 @@
 .brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
 .brainstorm-workspace .chat-history-objective { border-left-color: #a891bf !important; }
 
-/* Brainstorm header: match Home's 166px artwork/header geometry.
-   Its decorative background renders through workspace.css. The separate
-   headline and pill columns must not make the image or header taller. */
+/* Keep the Project header's content-sized geometry. The decorative
+   SIGMA background in workspace.css scales proportionally with header height.
+   Do not reserve excess vertical space for the shorter Brainstorm pill stack. */
 @media (min-width: 1201px) {
   .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
     display: grid;
@@ -171,7 +171,7 @@
 @media (min-width: 901px) {
   .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
     box-sizing: border-box;
-    height: 166px;
+    height: auto;
     min-height: 0;
     padding-top: 13px;
     padding-bottom: 13px;
@@ -211,8 +211,8 @@
   grid-template-areas: "model-column identity";
   column-gap: calc(var(--identity-pill-gap) * 1.2);
   align-items: start;
-  /* Match Project: center the complete two-row pill group vertically, so
-     the top and bottom insets are balanced within the 166px artwork header. */
+  /* Center the pill stack within the content-sized header row, preserving
+     balanced top and bottom insets without making the header taller. */
   align-self: center;
   justify-self: end;
   flex: 0 0 auto;
