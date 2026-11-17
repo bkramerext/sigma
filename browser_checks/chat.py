@@ -253,6 +253,23 @@ with sync_playwright() as playwright:
             header_box,
         )
     )
+    print(
+        "BRAINSTORM_HEADER_GEOMETRY",
+        {
+            "header": header_box,
+            "artwork": artwork_box,
+            "heading": heading_box,
+            "controls": header.locator(".header-controls").bounding_box(),
+            "account_stack": account_stack_box,
+            "model": model_box,
+            "google": google_box,
+            "chatgpt": chatgpt_box,
+            "grid": header.evaluate(
+                "(el) => ({height: getComputedStyle(el).height, rows: getComputedStyle(el).gridTemplateRows})"
+            ),
+        },
+        flush=True,
+    )
     # Rendering, not just column positions: the oversized artwork made the
     # entire header 365px tall and cropped the wordmark in the user smoke test.
     assert artwork_box["width"] <= 340, artwork_box
