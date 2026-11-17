@@ -6,7 +6,7 @@ const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 type Speaker = 'human' | 'ai_1' | 'ai_2' | 'objective' | 'supervisor';
 type TranscriptSpeaker = Speaker | 'supervisor_setting';
 type Target = 'ai_1' | 'ai_2' | 'both';
-type ChatMessage = { speaker: TranscriptSpeaker; text: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
+type ChatMessage = { speaker: TranscriptSpeaker; text: string; timestamp?: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
 type SupervisorAssessment = {
   score: number;
   rubric: Record<'alignment' | 'originality' | 'advancement' | 'evidence' | 'momentum', number>;
@@ -39,8 +39,34 @@ type ChatConfig = {
 };
 
 const labels: Record<TranscriptSpeaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor', supervisor_setting: 'Supervisor setting' };
-// The UI retains the entire saved transcript. Limits on model input are applied
-// separately when building each inference request.
+// Keep the complete transcript in memory; pagination only affects rendering.
+const TRANSCRIPT_GROUPS_PER_PAGE = 20;
+type IndexedEntry = { message: ChatMessage; index: number };
+type TranscriptGroup = { entries: IndexedEntry[] };
+
+function groupTranscriptEntries(messages: ChatMessage[]): TranscriptGroup[] {
+  const groups: TranscriptGroup[] = [];
+  for (const [index, message] of messages.entries()) {
+    if (message.speaker === 'supervisor_setting') continue;
+    const last = groups[groups.length - 1];
+    const lastSpeaker = last?.entries[last.entries.length - 1].message.speaker;
+    if ((message.speaker === 'ai_2' && lastSpeaker === 'ai_1')
+      || (message.speaker === 'supervisor' && lastSpeaker === 'ai_2')) {
+      last.entries.push({ message, index });
+    } else {
+      groups.push({ entries: [{ message, index }] });
+    }
+  }
+  return groups.reverse();
+}
+
+function entryTimestamp(timestamp?: string): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : new Intl.DateTimeFormat(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
+  }).format(date);
+}
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
 function CopyReplyButton({ name, text }: { name: string; text: string }) {
@@ -75,6 +101,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Only manual changes override the initial disclosure state for each entry.
   const [expandedEntries, setExpandedEntries] = useState<Record<number, boolean>>({});
+  const [visibleGroupCount, setVisibleGroupCount] = useState(TRANSCRIPT_GROUPS_PER_PAGE);
   const [draft, setDraft] = useState('');
   const [researchObjective, setResearchObjective] = useState('');
   const researchObjectiveRef = useRef('');
@@ -253,7 +280,7 @@ export default function ChatPage() {
   const addMessage = useCallback((message: ChatMessage) => {
     // Keep all history visible, including early Supervisor assessments.
     // Inference requests are separately bounded by settings.max_messages.
-    const next = [...messagesRef.current, message];
+    const next = [...messagesRef.current, { ...message, timestamp: message.timestamp ?? new Date().toISOString() }];
     messagesRef.current = next;
     setMessages(next);
   }, []);
@@ -441,6 +468,7 @@ export default function ChatPage() {
       messagesRef.current = restored;
       setMessages(restored);
       setExpandedEntries({});
+      setVisibleGroupCount(TRANSCRIPT_GROUPS_PER_PAGE);
       setConversationId(saved.conversation_id);
       setTranscriptPath(saved.transcript_path);
       recordedObjectiveRef.current = saved.research_objective;
@@ -574,6 +602,7 @@ export default function ChatPage() {
     messagesRef.current = [];
     setMessages([]);
     setExpandedEntries({});
+    setVisibleGroupCount(TRANSCRIPT_GROUPS_PER_PAGE);
     setConversationId('');
     setTranscriptPath('');
     setSelectedTranscript('');
@@ -611,6 +640,9 @@ export default function ChatPage() {
     // until the user explicitly resets them again.
     setExpandedEntries({});
   };
+  const transcriptGroups = groupTranscriptEntries(messages);
+  const shownGroups = transcriptGroups.slice(0, visibleGroupCount);
+  const hiddenGroups = transcriptGroups.length - shownGroups.length;
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
@@ -692,27 +724,42 @@ export default function ChatPage() {
         </button>
       </h2>
       <ol id="chat-transcript-history" className="chat-history" aria-label="Conversation history">
-        {messages.map((message, index) => {
-          const expanded = isEntryExpanded(message, index);
-          return <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-            <div className="chat-reply-heading">
-              <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
-                aria-controls={`chat-transcript-entry-${index}`}
-                onClick={() => setExpandedEntries(previous => ({ ...previous, [index]: !expanded }))}>
-                <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
-                <strong>{labels[message.speaker]}</strong>
-              </button>
-              <CopyReplyButton name={labels[message.speaker]} text={message.text}/>
-            </div>
-            <div id={`chat-transcript-entry-${index}`} hidden={!expanded}>
-              {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
-                Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
-              </p>}
-              {expanded && <MarkdownReply body={message.text}/>}
-            </div>
-          </li>;
-        })}
+        {shownGroups.map(group => <li key={group.entries[0].index} className="chat-transcript-group">
+          <ol className="chat-transcript-group-entries">
+            {group.entries.map(({ message, index }) => {
+              const expanded = isEntryExpanded(message, index);
+              return <li key={index} className={`chat-history-entry chat-history-${message.speaker}`}>
+                <div className="chat-reply-heading">
+                  <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
+                    aria-controls={`chat-transcript-entry-${index}`}
+                    onClick={() => setExpandedEntries(previous => ({ ...previous, [index]: !expanded }))}>
+                    <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
+                    <strong>{labels[message.speaker]}</strong>
+                  </button>
+                  <CopyReplyButton name={labels[message.speaker]} text={message.text}/>
+                  {message.timestamp && <time className="chat-entry-timestamp" dateTime={message.timestamp}>
+                    {entryTimestamp(message.timestamp)}
+                  </time>}
+                </div>
+                <div id={`chat-transcript-entry-${index}`} hidden={!expanded}>
+                  {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
+                    Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
+                  </p>}
+                  {expanded && <MarkdownReply body={message.text}/>}
+                </div>
+              </li>;
+            })}
+          </ol>
+        </li>)}
       </ol>
+      {hiddenGroups > 0 && <div className="chat-history-pagination" role="status">
+        <p>Showing the latest {shownGroups.length} of {transcriptGroups.length} exchanges.
+          {hiddenGroups} earlier {hiddenGroups === 1 ? 'exchange is' : 'exchanges are'} hidden from this view,
+          but the complete record remains in the transcript file.</p>
+        <button type="button" onClick={() => setVisibleGroupCount(previous => previous + TRANSCRIPT_GROUPS_PER_PAGE)}>
+          Show {Math.min(hiddenGroups, TRANSCRIPT_GROUPS_PER_PAGE)} earlier
+        </button>
+      </div>}
     </section>}
   </main>
   </>;
