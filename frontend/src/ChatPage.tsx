@@ -294,7 +294,8 @@ export default function ChatPage() {
       body: JSON.stringify({
         conversation_id: sessionId,
                 speaker: who,
-        messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
+        messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting'
+          && !(item.speaker === 'supervisor' && item.text.startsWith('Supervisor assessment unavailable:'))).slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
@@ -336,7 +337,8 @@ export default function ChatPage() {
       method: 'POST', cache: 'no-store', signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting')
+        conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting'
+          && !(item.speaker === 'supervisor' && item.text.startsWith('Supervisor assessment unavailable:')))
           .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model, reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
@@ -416,9 +418,24 @@ export default function ChatPage() {
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
         if (who === 'ai_2' && supervisorEnabledRef.current && !skipNextSupervisorAssessmentRef.current) {
           try { await assessPair(id, sessionId); }
-          catch {
-            if (runningRef.current && id === runId.current) {
-              setNotice('Supervisor assessment unavailable; AIs are continuing.');
+          catch (cause) {
+            if (runningRef.current && id === runId.current && supervisorEnabledRef.current) {
+              const detail = errorText(cause);
+              // Supervisor failures belong in the permanent record too. Never
+              // silently omit an assessment or interrupt the two researchers.
+              const failure: ChatMessage = {
+                speaker: 'supervisor',
+                text: `Supervisor assessment unavailable: ${detail}`,
+              };
+              // A failed write of a completed assessment must be handled by
+              // the same durable transcript queue, not hidden by a toast.
+              try {
+                await appendTranscriptMessage(sessionId, failure);
+                addMessage(failure);
+                setNotice('Supervisor assessment failed and was recorded; the AIs are continuing.');
+              } catch (writeCause) {
+                setError(`Supervisor assessment could not be recorded: ${errorText(writeCause)}`);
+              }
             }
           }
         }
