@@ -413,7 +413,8 @@ def test_scoring_is_single_flight_across_processes_and_legacy_json() -> None:
                 ]
                 assert calls.value == 1, "both workers dispatched scoring evaluation"
                 saved = papers.get_paper(str(path), paper_id, include_tex=False)
-                assert paper_scores.cached_score(saved)["total"] == 76
+                durable = paper_scores.cached_score(saved)
+                assert durable is not None and durable["total"] == 76
             finally:
                 for worker in workers:
                     if worker.is_alive():
