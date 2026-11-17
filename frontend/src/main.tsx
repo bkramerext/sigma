@@ -13,7 +13,7 @@ import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
 import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
-import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper } from './paper-completion-transition';
+import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper, orderPaperRunsDescending } from './paper-completion-transition';
 import { activatePaperScoreStep } from './paper-score-action';
 import { createRoot } from 'react-dom/client';
 import './style.css';
@@ -4859,10 +4859,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       setReservedPaperNumber(previous => previous?.runId === selectedRunId &&
         previous.number === selectedRun.number ? previous : { runId: selectedRunId, number: selectedRun.number });
   }, [selectedRun?.number, selectedRunId]);
-  const otherPaperRuns = paperRuns.filter(run =>
+  const otherPaperRuns = orderPaperRunsDescending(paperRuns.filter(run =>
     run.run_id !== selectedRunId && !hiddenRemovalIds.has(run.run_id) &&
     (publicationAwaitingLibrary(run, papers) || (run.status !== 'complete' && !run.paper_id))
-  );
+  ));
   const unfinishedDraftPresent = continuationAvailable || Boolean(checkpointMismatch) ||
     Boolean(restartableCheckpoint) || (paperProgress != null && paperProgress.status !== 'complete');
   const canControlDraft = paperStepRestartBusy || (selectedRun ? selectedRun.can_control
