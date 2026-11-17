@@ -1943,11 +1943,12 @@ def status(request: Request):
                 "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
                 "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
             }
-    personal_browser_ui_mode = "external"
-    if cfg.local and os.environ.get("SIGMA_LOCAL_PERSONAL_UI_MODE") == "container":
-        personal_browser_ui_mode = "container"
-    elif not cfg.local and hosted_personal_enabled():
-        personal_browser_ui_mode = "container"
+    container_browser = (
+        os.environ.get("SIGMA_LOCAL_PERSONAL_UI_MODE") == "container"
+        if cfg.local
+        else hosted_personal_enabled()
+    )
+    personal_browser_ui_mode = "container" if container_browser else "external"
     return {
         "enabled": cfg.enabled,
         "mock_auth": _mock_enabled(cfg),
