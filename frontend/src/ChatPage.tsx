@@ -55,6 +55,7 @@ function MarkdownReply({ body }: { body: string }) {
 
 export default function ChatPage() {
   const [config, setConfig] = useState<ChatConfig | null>(null);
+  const configRef = useRef<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [repeatedText, setRepeatedText] = useState('');
@@ -78,6 +79,8 @@ export default function ChatPage() {
   const turnStartedAtRef = useRef<number | null>(null);
   const transcriptWrites = useRef<Promise<void>>(Promise.resolve());
 
+  useEffect(() => { configRef.current = config; }, [config]);
+
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
       const response = await fetch('/api/chat/config', { cache: 'no-store', signal });
@@ -100,23 +103,27 @@ export default function ChatPage() {
   }, []);
 
   function cycleModel() {
-    if (!config || running) return;
+    if (!config) return;
     const available = config.models;
     const index = available.findIndex(item => item.id === config.model);
     const next = available[(index + 1 + available.length) % available.length];
     if (!next) return;
-    setConfig({ ...config, model: next.id,
-      reasoning_effort: next.efforts.includes(config.reasoning_effort) ? config.reasoning_effort : next.efforts[0] });
+    const updated = { ...config, model: next.id,
+      reasoning_effort: next.efforts.includes(config.reasoning_effort) ? config.reasoning_effort : next.efforts[0] };
+    configRef.current = updated;
+    setConfig(updated);
     setModelCycleRevision(revision => revision + 1);
   }
 
   function cycleThinking() {
-    if (!config || running) return;
+    if (!config) return;
     const efforts = config.models.find(item => item.id === config.model)?.efforts ?? [];
     const index = efforts.indexOf(config.reasoning_effort);
     const next = efforts[(index + 1 + efforts.length) % efforts.length];
     if (next) {
-      setConfig({ ...config, reasoning_effort: next });
+      const updated = { ...config, reasoning_effort: next };
+      configRef.current = updated;
+      setConfig(updated);
       setThinkingCycleRevision(revision => revision + 1);
     }
   }
@@ -245,7 +252,7 @@ export default function ChatPage() {
     throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
-  async function runConversation(id: number, settings: ChatConfig) {
+  async function runConversation(id: number) {
     let nextSpeaker: 'ai_1' | 'ai_2' = 'ai_1';
     try {
       while (runningRef.current && id === runId.current) {
@@ -259,6 +266,10 @@ export default function ChatPage() {
         setTurnElapsedSeconds(0);
         setTurnTimedOut(false);
         setSpeaker(who);
+        // Snapshot current selection for this turn. Changes made during an
+        // in-flight request take effect at the next turn, without interrupting it.
+        const settings = configRef.current;
+        if (!settings?.available) throw new Error('The selected AI account is unavailable.');
         const result = await requestTurn(who, messagesRef.current, controller, settings);
         if (!runningRef.current || id !== runId.current) return;
         const reply = { speaker: who, text: result } as const;
@@ -314,7 +325,7 @@ export default function ChatPage() {
     runId.current += 1;
     runningRef.current = true;
     setRunning(true);
-    void runConversation(runId.current, config);
+    void runConversation(runId.current);
   }
 
   function stopConversation() {
@@ -358,23 +369,19 @@ export default function ChatPage() {
     ? error || 'Brainstorm settings are loading.'
     : !config.available
       ? config.message || 'Connect an AI account to enable model selection.'
-      : running
-        ? 'Stop the exchange before changing the model.'
-        : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle through models available to this account.`;
+      : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle through models; changes apply on the next AI turn.`;
   const thinkingControlHint = !config
     ? error || 'Brainstorm settings are loading.'
     : !config.available
       ? config.message || 'Connect an AI account to enable Thinking selection.'
-      : running
-        ? 'Stop the exchange before changing the Thinking level.'
-        : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle through levels supported by this model.`;
+      : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle through supported levels; changes apply on the next AI turn.`;
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
   const selectedModel = config?.models.find(item => item.id === config.model);
   const displayedModel = selectedModel ? modelDisplayLabel(selectedModel) : config?.model ?? 'Loading';
   const displayedThinking = thinkingLabels[config?.reasoning_effort ?? 'low'];
-  const selectionDisabled = !config?.available || !config.models.length || running;
+  const selectionDisabled = !config?.available || !config.models.length;
   const modelThinkingControls = <div className="sigma-header-model-column chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
     <span className="global-model-pill-position">
       <ModelThinkingPillButton label={displayedModel} thinkingLabel={`Thinking · ${displayedThinking}`}
