@@ -260,6 +260,9 @@ def load_transcript(name: str) -> dict[str, Any]:
         "messages": messages,
         "research_objective": objective,
         "next_speaker": next_speaker,
-        "supervisor_enabled": (supervisor_enabled if supervisor_enabled is not None
-                               else any(m["speaker"] == "supervisor" for m in messages)),
+        "supervisor_enabled": (
+            supervisor_enabled
+            if supervisor_enabled is not None
+            else any(m["speaker"] == "supervisor" for m in messages)
+        ),
     }
