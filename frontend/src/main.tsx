@@ -6478,7 +6478,6 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : chatPage
       ? <>
-          <MockAuthSelector/>
           <div className="brainstorm-header-pill-stack identity-pill-stack project-identity-pill-stack sigma-header-account-column">
             <GoogleIdentityPill inviteInHeader/>
             {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
