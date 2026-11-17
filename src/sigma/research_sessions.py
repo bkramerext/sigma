@@ -3612,6 +3612,20 @@ def _retain_unknown_cost_reservation(record: dict[str, Any], step: dict[str, Any
     record["estimated_cost_usd"] = round(known_cost, 9)
 
 
+def _completed_response_failure_kind(exc: Exception) -> str:
+    """Distinguish a rejected provider payload from a SIGMA processing crash.
+
+    Receiving a response does not make an unrelated Python exception a
+    provider validation error. Structured and scientific-validation failures
+    are raised as ProjectError; unexpected runtime errors are internal.
+    """
+    return (
+        "response_invalid"
+        if isinstance(exc, (ProjectError, ValidationError))
+        else "internal_processing_failure"
+    )
+
+
 def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
     """Persist bounded response classification without storing provider bodies."""
     if isinstance(exc, ChatGPTProviderRejection):
@@ -12461,11 +12475,12 @@ async def _portfolio_role_call(
                     # is not uncertain dispatch: account for known usage and
                     # preserve the rejection without publishing its output.
                     validation_kind = step.get("failure_kind")
-                    step["failure_kind"] = "response_invalid"
-                    if isinstance(validation_kind, str) and validation_kind not in {
-                        "provider_error",
-                        "response_invalid",
-                    }:
+                    step["failure_kind"] = _completed_response_failure_kind(exc)
+                    if (
+                        step["failure_kind"] == "response_invalid"
+                        and isinstance(validation_kind, str)
+                        and validation_kind not in {"provider_error", "response_invalid"}
+                    ):
                         step["response_validation_kind"] = validation_kind
                     if response_usage is not None:
                         step["token_usage"] = response_usage
@@ -13298,6 +13313,7 @@ def _portfolio_termination(record: dict[str, Any], runs: list[dict[str, Any]]) -
             "provider_rejected": "provider rejected the request",
             "provider_error": "provider response failed",
             "response_invalid": "provider response could not be validated",
+            "internal_processing_failure": "SIGMA failed while processing the completed provider response",
             "response_too_large": "provider response exceeded the safe size limit",
             "context_failure": "required research context could not be prepared",
             "context_limit": "required research context exceeded its safe limit",
