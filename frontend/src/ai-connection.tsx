@@ -381,6 +381,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const dialogActive = useRef(false);
   const activatingPersonal = useRef(false);
   const restoringSponsored = useRef(false);
+  // A deliberate Sponsored -> Personal click must finish a fresh OAuth
+  // attempt. Existing saved credentials must not silently skip its chooser.
+  const freshBrowserIntent = useRef(false);
+  const freshBrowserStarted = useRef(false);
   const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'preparing' | 'starting' | 'ready' | 'error'>('closed');
   const [personalDialogError, setPersonalDialogError] = useState('');
   const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
@@ -460,6 +464,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     if (localLabAccount) return;
     dialogActive.current = false;
     browserLaunchSequence.current += 1;
+    freshBrowserIntent.current = false;
+    freshBrowserStarted.current = false;
     setRestoringPersonal(false);
     setTestAccountOwner(null);
     setAuthorizedPreviewOwner(null);
@@ -483,6 +489,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       ]);
       if (controller.signal.aborted) return;
       if (preview.status === 'fulfilled') {
+        if (freshBrowserIntent.current && ['connecting', 'failed', 'ready'].includes(preview.value?.phase ?? ''))
+          freshBrowserStarted.current = true;
         setAuthorizedPreviewOwner(preview.value?.phase === 'connected' ? localLabAccount : null);
       }
       if (test.status === 'fulfilled') {
@@ -519,6 +527,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         return;
       }
       if (preview.status === 'fulfilled' && preview.value?.phase === 'connected'
+          && (!freshBrowserIntent.current || freshBrowserStarted.current)
           && personalSelectionAllowed && !activatingPersonal.current) {
         if (selectingConnection) {
           timer = setTimeout(check, 750);
@@ -546,6 +555,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
             await refreshConnection('manual');
             if (dialogActive.current && activationSequence === browserLaunchSequence.current) {
               dialogActive.current = false;
+              freshBrowserIntent.current = false;
+              freshBrowserStarted.current = false;
               setPersonalDialogState('closed');
               // The shared worker continues model inference; release Chromium
               // and its X11/VNC helpers as soon as authorization succeeds.
@@ -676,6 +687,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   async function closePersonalBrowserDialog() {
     dialogActive.current = false;
     browserLaunchSequence.current += 1;
+    freshBrowserIntent.current = false;
+    freshBrowserStarted.current = false;
     const activationPending = activatingPersonal.current;
     const wasReady = personalDialogState === 'ready' || personalDialogState === 'error';
     setPersonalDialogState('closed');
@@ -703,7 +716,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       });
       const account = response.ok ? await response.json() as { status?: string } : null;
       if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
-      if (account?.status === 'verified' && personalSelectionAllowed) {
+      if (account?.status === 'verified' && personalSelectionAllowed
+          && !freshBrowserIntent.current) {
         activatingPersonal.current = true;
         try {
           if (selectedConnection !== 'personal') await selectConnection?.('personal');
@@ -735,6 +749,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       setRestoringPersonal(false);
     }
     if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+    // The shared worker reports "ready", not a stale "connected", until
+    // Chromium initiates this fresh chooser. The callback can finish faster
+    // than a polling interval; don't require observing "connecting" first.
+    if (freshBrowserIntent.current) freshBrowserStarted.current = true;
     setPersonalDialogState('ready');
   }
 
@@ -753,6 +771,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     // The user remains in SIGMA. The iframe embeds SIGMA's authenticated VNC
     // viewer; OpenAI itself is never framed or deprived of its CSP protections.
     const sequence = ++browserLaunchSequence.current;
+    freshBrowserIntent.current = selectedConnection === 'sponsored';
+    freshBrowserStarted.current = false;
     const diagnosticAttempt = personalDiagnosticsEnabled
       ? crypto.randomUUID().replaceAll('-', '').slice(0, 12) : '';
     if (personalDiagnosticsEnabled) console.info('[SIGMA Personal] browser launch', diagnosticAttempt);
@@ -911,7 +931,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       setDisconnectOpen(true);
       return;
     }
-    if (previewAuthorized && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
+    if (previewAuthorized && selectedConnection !== 'sponsored'
+        && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
       try {
         await cloudFunding.selectConnection?.('personal');
         dialogActive.current = false;

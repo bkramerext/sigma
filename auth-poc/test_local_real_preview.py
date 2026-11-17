@@ -382,31 +382,43 @@ async def main() -> None:
                 cancel.assert_called_once_with(attempt_id)
                 assert server._ATTEMPT_ID == "fresh-attempt-id"
 
+            # A deliberate return from Sponsored must open the chooser even
+            # when this workspace retains a previously connected account. A
+            # blank cached-session HTML page strands the noVNC viewer.
             server._ATTEMPT_ID = None
             with (
+                patch.object(server.chatgpt_auth, "session", new_callable=AsyncMock) as saved,
                 patch.object(
-                    server.chatgpt_auth, "session",
-                    new_callable=AsyncMock,
-                    return_value={
-                        "status": "connected",
-                        "mode": "chatgpt",
-                        "account": {"plan_authorized": True},
-                    },
-                ),
-                patch.object(server.chatgpt_auth, "begin", new_callable=AsyncMock) as begin,
+                    server.chatgpt_auth, "begin", new_callable=AsyncMock,
+                    return_value={"id": "new-chooser-attempt"},
+                ) as begin,
+                patch.object(server.chatgpt_auth, "authorization_url", return_value=target),
+                patch.object(server.chatgpt_auth, "disconnect") as disconnect,
             ):
-                existing = await client.get("/")
-                assert existing.status_code == 200
-                assert "Continue with ChatGPT" not in existing.text
-                begin.assert_not_awaited()
+                new_chooser = await client.get("/")
+                assert new_chooser.status_code in (302, 303, 307, 308)
+                assert new_chooser.headers["location"] == target
+                assert "no-store" in new_chooser.headers["cache-control"]
+                begin.assert_awaited_once()
+                saved.assert_not_awaited()
+                disconnect.assert_not_called()
 
-            with patch.object(
-                server.chatgpt_auth, "session",
-                new_callable=AsyncMock,
-                return_value={"status": "unavailable", "mode": "chatgpt"},
+            # A saved token refresh failure must not block a new account
+            # chooser; the new OAuth attempt is independent of cached status.
+            server._ATTEMPT_ID = None
+            with (
+                patch.object(server.chatgpt_auth, "session", new_callable=AsyncMock) as saved,
+                patch.object(
+                    server.chatgpt_auth, "begin", new_callable=AsyncMock,
+                    return_value={"id": "retry-chooser-attempt"},
+                ) as begin,
+                patch.object(server.chatgpt_auth, "authorization_url", return_value=target),
             ):
-                unavailable = await client.get("/")
-                assert unavailable.status_code == 503
+                retry_chooser = await client.get("/")
+                assert retry_chooser.status_code in (302, 303, 307, 308)
+                assert retry_chooser.headers["location"] == target
+                begin.assert_awaited_once()
+                saved.assert_not_awaited()
 
             missing_origin = await client.post("/begin")
             assert missing_origin.status_code == 403
@@ -440,6 +452,18 @@ async def main() -> None:
                 preview = await client.get("/preview-state")
                 assert preview.status_code == 200
                 assert preview.json() == {"phase": "connected"}
+                # A new OAuth attempt must take precedence over previously
+                # saved tokens. Otherwise the UI switches back to Personal
+                # before the requested account chooser has finished.
+                server._ATTEMPT_ID = "fresh-active-attempt"
+                with patch.object(
+                    server.chatgpt_auth, "attempt_status",
+                    return_value={"status": "connecting", "message": ""},
+                ):
+                    pending_preview = await client.get("/preview-state")
+                    assert pending_preview.status_code == 200
+                    assert pending_preview.json() == {"phase": "connecting"}
+                server._ATTEMPT_ID = None
 
         assert model_gateway._valid_rpc_key(
             type("RequestStub", (), {"headers": {"x-sigma-worker-key": key}})()

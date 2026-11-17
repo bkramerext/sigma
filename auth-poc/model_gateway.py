@@ -1,9 +1,8 @@
-"""Private model RPC for both legacy tests and shared Personal POC.
+"""Private model RPC for SIGMA's shared, user-isolated Personal worker.
 
-The greenfield shared Docker service uses port 8001 and per-workspace HMACs.
-Its credential worker is UID-isolated from on-demand Chromium. Provider
-credentials remain private; no OAuth code or token is returned over this API.
-Hosted plan usage requires separate acceptance before deployment.
+Runs locally and hosted. The worker uses per-workspace HMACs and retains all
+provider credentials privately; no OAuth code or token crosses the frontend.
+Legacy synthetic providers are available only in explicit CI test mode.
 """
 
 from __future__ import annotations
@@ -27,8 +26,14 @@ from sigma import chatgpt_auth, openai_connection, plan_stream
 from sigma.model_catalog import CATALOG
 from sigma.projects import ProjectError
 
-if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
-    raise RuntimeError("Worker model transport is not enabled outside the POC")
+if not (
+    os.environ.get("SIGMA_AUTH_POC_LAB") == "1"
+    or (
+        os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1"
+        and os.environ.get("SIGMA_PERSONAL_SHARED_REAL_SIGNIN") == "1"
+    )
+):
+    raise RuntimeError("Private Personal model worker is not enabled")
 
 MAX_RPC_BYTES = 1_000_000
 
@@ -158,10 +163,17 @@ async def preview_state(request: Request) -> dict[str, str]:
         # An idle or foreign workspace must never see the active user's
         # OAuth progress, even though the account RPC itself is authenticated.
         return {"phase": "unavailable"}
-    if (
-        os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") != "1"
-        or os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
-    ):
+    shared_real = (
+        os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1"
+        and os.environ.get("SIGMA_PERSONAL_SHARED_REAL_SIGNIN") == "1"
+    )
+    legacy_local = (
+        os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") != "1"
+        and os.environ.get("SIGMA_AUTH_POC_LAB") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") == "1"
+    )
+    if not (shared_real or legacy_local):
         raise HTTPException(404)
     try:
         async with httpx.AsyncClient(timeout=2, trust_env=False) as client:
