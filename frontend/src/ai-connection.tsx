@@ -368,7 +368,7 @@ function SponsorProvisioningDialog({ open, message, onClose }: {
   </dialog>;
 }
 
-export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalBrowserLabEnabled?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
+export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalBrowserLabEnabled?: boolean; personalBrowserUiMode?: 'external' | 'container'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
   const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
@@ -446,7 +446,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const localHostedNoticePreview = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticePreview
     && !!cloudFunding.personalChatGPTNoticeEnabled;
-  const containerBrowserLab = !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled;
+  // The launcher is authoritative: plain "sigma start" always opens a
+  // separate, real ChatGPT browser tab. An inherited lab/worker flag alone
+  // must never route this path through the embedded Docker browser.
+  const containerBrowserLab = !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled
+    && cloudFunding.personalBrowserUiMode === 'container';
   // The isolated Docker worker is shared by local preview and opt-in hosted
   // deployments. Never rely on target === 'local' as the authorization gate.
   const localLabAccount = containerBrowserLab ? cloudFunding?.googleAccount ?? null : null;
@@ -1049,7 +1053,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       </div>
     </div>, document.body)}
   {createPortal(
-    <PersonalBrowserDialog state={personalDialogState}
+    <PersonalBrowserDialog
+      // Ordinary local sign-in already opens a real browser tab on click.
+      // Never overlay the container-style dialog unless that popup was
+      // blocked and we need to show the safe manual handoff link.
+      state={!containerBrowserLab && !hosted && !ai.handoff ? 'closed' : personalDialogState}
       error={personalDialogError || (!containerBrowserLab ? ai.error : '')}
       external={!containerBrowserLab && !hosted}
       handoff={ai.handoff}

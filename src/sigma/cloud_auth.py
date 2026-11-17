@@ -1943,6 +1943,11 @@ def status(request: Request):
                 "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
                 "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
             }
+    personal_browser_ui_mode = "external"
+    if cfg.local and os.environ.get("SIGMA_LOCAL_PERSONAL_UI_MODE") == "container":
+        personal_browser_ui_mode = "container"
+    elif not cfg.local and hosted_personal_enabled():
+        personal_browser_ui_mode = "container"
     return {
         "enabled": cfg.enabled,
         "mock_auth": _mock_enabled(cfg),
@@ -1959,6 +1964,8 @@ def status(request: Request):
         "account": account,
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,
         "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
+        # Source of truth for how the ChatGPT sign-in is presented.
+        "personal_browser_ui_mode": personal_browser_ui_mode,
         "personal_chatgpt_notice_enabled": personal_chatgpt_notice_enabled,
         "personal_chatgpt_notice_preview": personal_chatgpt_notice_preview,
         "personal_browser_lab_enabled": bool(

@@ -214,6 +214,9 @@ def run_ui(
                             "SIGMA_LOCAL_PERSONAL_STARTUP_ERROR": "",
                         }
                     )
+                # Browser presentation is a launcher decision, not inherited
+                # credentials, old --prod state, or a sticky browser setting.
+                child_env["SIGMA_LOCAL_PERSONAL_UI_MODE"] = "container" if prod else "external"
                 # The frontend must match the server's explicit opt-in state.
                 # Do not inherit a stale Vite flag from the invoking shell.
                 child_env["VITE_SIGMA_PERSONAL_DIAGNOSTICS_ENABLED"] = (
