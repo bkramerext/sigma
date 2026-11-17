@@ -67,11 +67,30 @@ def test_tectonic_failure_hides_raw_output_but_records_backend_diagnostics() -> 
             assert "Tectonic could not compile" in str(exc)
             assert "SECRET-TEX-DETAIL" not in str(exc)
             assert "Missing $ inserted" not in str(exc)
+            assert "missing math-mode delimiter near TeX line 88" in str(exc)
         else:
             raise AssertionError("The failed PDF must not be published")
         assert any("Missing $ inserted" in item for item in diagnostics)
         assert any("l.88" in item for item in diagnostics)
+        assert any(
+            item == "SIGMA compiler category: missing math-mode delimiter near TeX line 88"
+            for item in diagnostics
+        )
         assert logger.return_value.error.called
+
+
+def test_pdf_compiler_unrecognized_error_never_echoes_manuscript() -> None:
+    """Unknown failures still include a stable status without source text."""
+    from sigma.project_reports import _safe_tectonic_failure_summary
+
+    output = "error: report.tex:129: PRIVATE PROOF OR TOKEN\nl.129 PRIVATE SOURCE"
+    summary = _safe_tectonic_failure_summary(output, 1)
+    assert summary == "unclassified Tectonic error (exit 1) near TeX line 129"
+    assert "PRIVATE" not in summary
+    invalid = "error: report.tex:63: Text line contains an invalid character"
+    assert _safe_tectonic_failure_summary(invalid, 1) == (
+        "invalid TeX control character near TeX line 63"
+    )
 
 
 def fixture() -> dict:
@@ -473,6 +492,7 @@ def test_computation_provenance_precedes_authored_claims() -> None:
 def main() -> None:
     test_cold_cache_collision_retries_once_without_provider_calls()
     test_tectonic_failure_hides_raw_output_but_records_backend_diagnostics()
+    test_pdf_compiler_unrecognized_error_never_echoes_manuscript()
     test_pdf_compiler_architecture_failure_is_classified_without_source_leak()
     test_computation_provenance_precedes_authored_claims()
     test_verification_presentation()
