@@ -3653,8 +3653,8 @@ async def auth_mode(body: AuthModeRequest, request: Request):
                 except (OSError, RuntimeError, ValueError) as exc:
                     raise HTTPException(503, "Personal authorization could not be saved.") from exc
             elif cloud_auth.sponsored_access_enabled():
-                # Preserve existing hosted behavior when sponsorship is off:
-                # Personal may remain selected but no worker/provider is usable.
+                # An enabled sponsor must not allow unverified Personal.
+                # With sponsorship off, the legacy Personal choice remains.
                 raise HTTPException(403, "Hosted Personal ChatGPT is not enabled.")
         try:
             cloud_auth.set_model_access(principal.subject, body.mode)

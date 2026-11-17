@@ -32,6 +32,12 @@ def resolve_commit(repository: Path, requested: str) -> str:
 
 
 def build(
+    repository: Path,
+    requested: str,
+    runner=_run,
+    *,
+    auth_poc: bool = False,
+    personal_shared: bool = False,
 ) -> None:
     commit = resolve_commit(repository, requested)
     with tempfile.TemporaryDirectory(prefix="sigma-release-") as directory:

@@ -700,6 +700,9 @@ def hosted_personal_enabled() -> bool:
     """The hosted Personal path must be a deliberate, fully configured opt-in."""
     cfg = config()
     return (
+        cfg.enabled
+        and not cfg.local
+        and not cfg.error
         and os.environ.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
         and os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1"
         and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1"
