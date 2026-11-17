@@ -3401,8 +3401,10 @@ class ApiKeyRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    speaker: Literal["human", "ai_1", "ai_2", "repeated"]
+    speaker: Literal["human", "ai_1", "ai_2", "objective", "supervisor"]
     text: str = Field(min_length=1)
+    recipient: Literal["ai_1", "ai_2", "both"] | None = None
+    guidance: str = ""
 
 
 class ChatTranscriptMessageRequest(ChatMessageRequest):
@@ -3421,7 +3423,19 @@ class ChatTurnRequest(BaseModel):
     messages: list[ChatMessageRequest] = Field(min_length=1, max_length=chat.MAX_MESSAGES)
     model: str = Field(min_length=1, max_length=100)
     reasoning_effort: Literal["low", "medium", "high", "xhigh"]
-    repeated_text: str = ""
+    research_objective: str = ""
+
+
+class ChatSupervisorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    conversation_id: str = Field(
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    )
+    expected_binding: str = Field(min_length=1, max_length=256)
+    messages: list[ChatMessageRequest] = Field(min_length=2, max_length=chat.MAX_MESSAGES)
+    model: str = Field(min_length=1, max_length=100)
+    reasoning_effort: Literal["low", "medium", "high", "xhigh"]
+    research_objective: str = Field(min_length=1, max_length=10000)
 
 
 @app.post("/api/chat/session")
@@ -3471,7 +3485,7 @@ async def chat_turn_view(body: ChatTurnRequest):
                 expected_binding=body.expected_binding,
                 model=body.model,
                 reasoning_effort=body.reasoning_effort,
-                repeated_text=body.repeated_text,
+                research_objective=body.research_objective,
             )
         )
         try:
@@ -3501,6 +3515,34 @@ async def chat_turn_view(body: ChatTurnRequest):
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
+
+
+
+@app.post("/api/chat/supervisor")
+async def chat_supervisor_view(body: ChatSupervisorRequest):
+    """Assess a completed pair without contributing subject-matter ideas."""
+    config = await chat.configuration()
+    if not config["available"]:
+        raise HTTPException(503, config["message"] or "Connect an AI account before chatting.")
+    if body.expected_binding != config["binding"]:
+        raise HTTPException(409, "The selected AI account changed. Review and retry.")
+    selected = next(
+        (item for item in config.get("models", []) if item.get("id") == body.model), None
+    )
+    if not selected or body.reasoning_effort not in selected.get("efforts", []):
+        raise HTTPException(422, "Choose a model and Thinking level available to this account.")
+    from sigma import chat_supervisor
+
+    raw = await chat.respond(
+        speaker="supervisor",
+        messages=[item.model_dump() for item in body.messages],
+        conversation_id=str(UUID(body.conversation_id)),
+        expected_binding=body.expected_binding,
+        model=body.model,
+        reasoning_effort=body.reasoning_effort,
+        research_objective=body.research_objective,
+    )
+    return JSONResponse(chat_supervisor.parse_assessment(raw), headers={"Cache-Control": "no-store"})
 
 @app.post("/api/ai/auth/begin")
 async def auth_begin(body: AuthBeginRequest):
