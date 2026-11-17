@@ -444,3 +444,21 @@
   outline: 2px solid #e5a785; outline-offset: 2px;
 }
 .brainstorm-workspace .chat-transcript-picker select:disabled { opacity: .55; }
+
+/* Explicit recovery when repeated provider validation failures block Retry. */
+.brainstorm-workspace .chat-skip {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 38px; padding: 7px 18px;
+  border: 1px solid #bd8246; border-radius: 8px;
+  color: #f0e6d7; background: #07111e;
+  font: 500 .92rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+.brainstorm-workspace .chat-skip:hover:not(:disabled) { background: #6b4329; color: #fff2e9; }
+.brainstorm-workspace .chat-skip:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px;
+}
+.brainstorm-workspace .chat-skip:disabled { opacity: .5; cursor: default; }
+@media (max-width: 700px) {
+  .brainstorm-workspace .chat-skip { padding-inline: 12px; }
+}
