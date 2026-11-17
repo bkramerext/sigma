@@ -2875,9 +2875,7 @@ def test_terminal_protocol_completion_plan_preserves_attempt_history() -> None:
     plan, error = research_sessions._protocol_completion_recovery_plan(unsafe)
     assert error is None and plan is not None
     assert any(
-        item["strategy_id"] == second
-        and item["role"] == "investigator"
-        and item["cycle"] == 3
+        item["strategy_id"] == second and item["role"] == "investigator" and item["cycle"] == 3
         for item in plan["branches"]
     )
     # A claimed unknown dispatch for an unconfigured future round is unsafe.
