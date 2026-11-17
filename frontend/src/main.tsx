@@ -6465,6 +6465,11 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
           ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" data-tooltip-follow-cursor="true" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
+      {chatPage && <div className="brainstorm-header-copy">
+        <p className="chat-eyebrow">Open conversation</p>
+        <h1>Brainstorm</h1>
+        <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
+      </div>}
     </div>
     <div ref={headerPillsRef} className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
@@ -6472,10 +6477,16 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : chatPage
-      ? <div className="brainstorm-header-pill-stack">
-          {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-          <div className="chat-header-center-slot" aria-label="Brainstorm model and thinking settings"/>
-        </div>
+      ? <>
+          <MockAuthSelector/>
+          <div className="brainstorm-header-pill-stack identity-pill-stack project-identity-pill-stack sigma-header-account-column">
+            <GoogleIdentityPill inviteInHeader/>
+            {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+          </div>
+          <div className="brainstorm-header-model-column sigma-header-model-column">
+            <ConnectedModelPill enabled={showConnectionStatus}/>
+          </div>
+        </>
       : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>} 
     {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
