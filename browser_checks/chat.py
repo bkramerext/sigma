@@ -304,7 +304,7 @@ with sync_playwright() as playwright:
     assert abs(narrow_bounds["width"] - filled_bounds["width"]) < 1
     assert abs(narrow_bounds["x"] - filled_bounds["x"]) < 1
     transcript_filename = page.locator(".chat-privacy-note code")
-    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120002.md")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120004.md")
     expect(transcript_filename).to_contain_text(".md")
     expect(page.get_by_role("button", name="Send", exact=True)).to_be_visible()
     model_pill = page.locator(".brainstorm-header-model-column .global-model-pill")
@@ -434,7 +434,7 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
     page.get_by_role("button", name="Clear", exact=True).click()
-    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120003.md")
+    expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120005.md")
     assert session_calls == 5
     # A new normal page load must not inherit the earlier local opt-in.
     page.goto(ORIGIN + "/", wait_until="networkidle")

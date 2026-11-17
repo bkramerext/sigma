@@ -397,14 +397,15 @@ export default function ChatPage() {
     setError('');
     setNotice('');
     setTurnTimedOut(false);
-    setFailedTurn(null);
-    pendingReplyRef.current = null;
-    pendingHumanRef.current = null;
+    // A Human intervention during an active turn must not discard a
+    // completed reply that still needs to be written to the transcript.
     if (runningRef.current) return;
+    const resumeSpeaker = failedTurn ?? 'ai_1';
+    if (!pendingReplyRef.current) pendingHumanRef.current = null;
     runId.current += 1;
     runningRef.current = true;
     setRunning(true);
-    void runConversation(runId.current);
+    void runConversation(runId.current, resumeSpeaker);
   }
 
   function retryConversation() {
