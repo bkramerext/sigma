@@ -3448,7 +3448,9 @@ def list_chat_transcripts():
 @app.get("/api/chat/transcripts/{name}")
 def load_chat_transcript(name: str):
     """Restore a saved Brainstorm transcript from the private state directory."""
-    return JSONResponse(chat_transcripts.load_transcript(name), headers={"Cache-Control": "no-store"})
+    return JSONResponse(
+        chat_transcripts.load_transcript(name), headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.post("/api/chat/session")
