@@ -6460,12 +6460,17 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   return <header className={`${projectArtwork ? 'site-header project-art-header' : 'site-header'}${chatPage ? ' chat-site-header' : ''}`}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
+      {projectArtwork ? (close && !chatPage) && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
         ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" data-tooltip-follow-cursor="true" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={onActivityClick ?? (() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa')))}><span className="project-header-title-text"><span className="project-header-title-label">{projectTitle}</span><span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
           ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" data-tooltip-follow-cursor="true" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
-        : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
+        : chatPage ? null : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
+      {chatPage && <div className="brainstorm-header-copy">
+        <p className="chat-eyebrow">Open conversation</p>
+        <h1>Brainstorm</h1>
+        <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
+      </div>}
     </div>
     <div ref={headerPillsRef} className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
@@ -6473,10 +6478,16 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : chatPage
-      ? <div className="brainstorm-header-pill-stack">
-          {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
-          <div className="chat-header-center-slot" aria-label="Brainstorm model and thinking settings"/>
-        </div>
+      ? <>
+          <MockAuthSelector/>
+          <div className="brainstorm-header-pill-stack identity-pill-stack project-identity-pill-stack sigma-header-account-column">
+            <GoogleIdentityPill inviteInHeader/>
+            {showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}
+          </div>
+          <div className="brainstorm-header-model-column sigma-header-model-column">
+            <ConnectedModelPill enabled={showConnectionStatus}/>
+          </div>
+        </>
       : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>} 
     {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
@@ -9828,9 +9839,9 @@ function App() {
     recentProjectViewCache.get(projectViewCacheKey(cacheScope, path)), [cacheScope]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const route = new URL(location, window.location.origin);
-  // Hosted: visiting the hidden route reveals the pill in this account's tab.
-  // Local: only this launch's --brainstorm flag (or an explicit ?brainstorm=1
-  // visit) reveals it. Never restore a prior local launch from sessionStorage.
+  // Brainstorm routes are always reachable. --brainstorm only initially shows
+  // the Home pill; a direct route visit also reveals it on return to Home.
+  // Local discoverability is not persisted across fresh app launches.
   const localBrainstormLaunched = import.meta.env.VITE_SIGMA_LOCAL_BRAINSTORM === 'true';
   const [localBrainstormRevealed, setLocalBrainstormRevealed] = useState(false);
   const [brainstormUnlockedFor, setBrainstormUnlockedFor] = useState<string | null>(() => {
@@ -9854,8 +9865,12 @@ function App() {
       setLocation('/');
       return;
     }
-    if (!brainstormScope || brainstormScope === 'local') return;
     if (!['/brainstorm', '/chat'].includes(route.pathname)) return;
+    if (brainstormScope === 'local') {
+      setLocalBrainstormRevealed(true);
+      return;
+    }
+    if (!brainstormScope) return;
     try { window.sessionStorage.setItem('sigma.brainstorm.unlockedFor', brainstormScope); }
     catch { /* Keep this navigation's discoverability in memory. */ }
     setBrainstormUnlockedFor(brainstormScope);
@@ -9863,14 +9878,6 @@ function App() {
   const showBrainstorm = brainstormScope === 'local'
     ? localBrainstormLaunched || localBrainstormRevealed
     : !!brainstormScope && brainstormUnlockedFor === brainstormScope;
-  const unexpectedLocalBrainstormRoute = brainstormScope === 'local' && !showBrainstorm
-    && ['/brainstorm', '/chat'].includes(route.pathname);
-  useEffect(() => {
-    // Old /brainstorm tabs cannot reopen Brainstorm after a normal restart.
-    if (!unexpectedLocalBrainstormRoute) return;
-    window.history.replaceState(window.history.state, '', '/');
-    setLocation('/');
-  }, [unexpectedLocalBrainstormRoute]);
   useEffect(() => {
     if (route.pathname !== '/project') return;
     let cancelled = false;
@@ -10007,9 +10014,6 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
-    if (unexpectedLocalBrainstormRoute) {
-      return <main className="home-page"><p role="status">Opening SIGMA Home…</p></main>;
-    }
     if (cloud?.enabled && cloud.target === 'hosted' && !hostedBrainstormMember) {
       return <main className="workspace-page"><p role="status">Brainstorm requires a signed-in SIGMA member account.</p><a href="/api/cloud-auth/login?return_to=%2Fbrainstorm">Sign in with Google</a><a href="/">Return to SIGMA</a></main>;
     }

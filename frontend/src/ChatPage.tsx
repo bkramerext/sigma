@@ -1,13 +1,21 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
-import { ModelThinkingPillButton } from './GlobalModelPill';
-import { modelDisplayLabel } from './model-display';
 import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
-type Speaker = 'human' | 'ai_1' | 'ai_2';
-type ChatMessage = { speaker: Speaker; text: string };
+type Speaker = 'human' | 'ai_1' | 'ai_2' | 'objective' | 'supervisor';
+type Target = 'ai_1' | 'ai_2' | 'both';
+type ChatMessage = { speaker: Speaker; text: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
+type SupervisorAssessment = {
+  score: number;
+  rubric: Record<'alignment' | 'originality' | 'advancement' | 'evidence' | 'momentum', number>;
+  assessment: string;
+  action: 'continue' | 'nudge' | 'redirect';
+  recipient: Target | null;
+  guidance: string;
+  breakthrough_candidate: boolean;
+  breakthrough_invalidated?: boolean;
+};
 type ChatConfig = {
   available: boolean;
   mode: string;
@@ -20,12 +28,29 @@ type ChatConfig = {
   max_messages: number;
 };
 
-const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2' };
-const thinkingLabels: Record<ChatConfig['reasoning_effort'], string> = {
-  low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high',
-};
+const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor' };
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
+
+function CopyReplyButton({ name, text }: { name: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button chat-copy-button"
+    aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`}
+    data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={!text} onClick={() => void copy()}>
+    {copied
+      ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg>
+      : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}
+  </button>;
+}
 
 function MarkdownReply({ body }: { body: string }) {
   return <div className="chat-markdown">
@@ -35,24 +60,55 @@ function MarkdownReply({ body }: { body: string }) {
 
 export default function ChatPage() {
   const [config, setConfig] = useState<ChatConfig | null>(null);
+  const configRef = useRef<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [repeatedText, setRepeatedText] = useState('');
-  const repeatedTextRef = useRef('');
+  const [researchObjective, setResearchObjective] = useState('');
+  const researchObjectiveRef = useRef('');
+  const recordedObjectiveRef = useRef('');
+  const [supervisorEnabled, setSupervisorEnabled] = useState(false);
+  const supervisorEnabledRef = useRef(false);
+  const [progressScore, setProgressScore] = useState<number | null>(null);
+  const breakthroughLatched = useRef(false);
   const [running, setRunning] = useState(false);
+  const [turnElapsedSeconds, setTurnElapsedSeconds] = useState(0);
+  const [turnTimedOut, setTurnTimedOut] = useState(false);
+  const [failedTurn, setFailedTurn] = useState<'ai_1' | 'ai_2' | null>(null);
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [conversationId, setConversationId] = useState('');
   const [transcriptPath, setTranscriptPath] = useState('');
-  const [headerControlsTarget, setHeaderControlsTarget] = useState<HTMLElement | null>(null);
-  const [modelCycleRevision, setModelCycleRevision] = useState(0);
-  const [thinkingCycleRevision, setThinkingCycleRevision] = useState(0);
   const messagesRef = useRef<ChatMessage[]>([]);
   const runningRef = useRef(false);
   const runId = useRef(0);
   const abort = useRef<AbortController | null>(null);
+  const turnStartedAtRef = useRef<number | null>(null);
   const transcriptWrites = useRef<Promise<void>>(Promise.resolve());
+  // If the provider completed but saving the response failed, Retry must
+  // save that exact response rather than generate and bill for a duplicate.
+  const pendingReplyRef = useRef<ChatMessage | null>(null);
+  const pendingHumanRef = useRef<ChatMessage | null>(null);
+
+  useEffect(() => { configRef.current = config; }, [config]);
+
+  // Model/Thinking is a shared, persisted setting across Home, Project and
+  // Brainstorm. Read it immediately before every new inference request, not
+  // once when the alternating conversation starts.
+  async function currentTurnSettings(): Promise<ChatConfig> {
+    const selected = configRef.current;
+    if (!selected?.available) throw new Error('The selected AI account is unavailable.');
+    const response = await fetch('/api/user-preferences/research-settings', {
+      cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+    });
+    if (!response.ok) throw new Error('Could not load the current Model/Thinking selection. Retry the turn.');
+    const settings = await response.json() as { ai_model?: string; reasoning_effort?: string };
+    const available = selected.models.find(item => item.id === settings.ai_model);
+    if (!available || !settings.reasoning_effort || !available.efforts.includes(settings.reasoning_effort as ChatConfig['reasoning_effort'])) {
+      throw new Error('The selected Model/Thinking is unavailable for Brainstorm. Choose another setting and Retry.');
+    }
+    return { ...selected, model: available.id, reasoning_effort: settings.reasoning_effort as ChatConfig['reasoning_effort'] };
+  }
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -75,28 +131,6 @@ export default function ChatPage() {
     }
   }, []);
 
-  function cycleModel() {
-    if (!config || running) return;
-    const available = config.models;
-    const index = available.findIndex(item => item.id === config.model);
-    const next = available[(index + 1 + available.length) % available.length];
-    if (!next) return;
-    setConfig({ ...config, model: next.id,
-      reasoning_effort: next.efforts.includes(config.reasoning_effort) ? config.reasoning_effort : next.efforts[0] });
-    setModelCycleRevision(revision => revision + 1);
-  }
-
-  function cycleThinking() {
-    if (!config || running) return;
-    const efforts = config.models.find(item => item.id === config.model)?.efforts ?? [];
-    const index = efforts.indexOf(config.reasoning_effort);
-    const next = efforts[(index + 1 + efforts.length) % efforts.length];
-    if (next) {
-      setConfig({ ...config, reasoning_effort: next });
-      setThinkingCycleRevision(revision => revision + 1);
-    }
-  }
-
   const openTranscript = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/chat/session', {
       method: 'POST', cache: 'no-store', signal,
@@ -109,6 +143,7 @@ export default function ChatPage() {
     }
     if (!signal?.aborted) {
       transcriptWrites.current = Promise.resolve();
+      recordedObjectiveRef.current = '';
       setConversationId(value.conversation_id);
       setTranscriptPath(value.transcript_path);
     }
@@ -116,7 +151,7 @@ export default function ChatPage() {
   }, []);
 
   function appendTranscriptMessage(id: string, message: ChatMessage): Promise<void> {
-    const write = transcriptWrites.current.then(async () => {
+    const write = transcriptWrites.current.catch(() => undefined).then(async () => {
       const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,9 +167,17 @@ export default function ChatPage() {
     return write;
   }
 
+  function recordResearchObjective(id: string) {
+    const value = researchObjectiveRef.current.trim();
+    if (!id || value === recordedObjectiveRef.current) return;
+    recordedObjectiveRef.current = value;
+    const message: ChatMessage = { speaker: 'objective', text: value || '(cleared)' };
+    addMessage(message);
+    void appendTranscriptMessage(id, message).catch(cause => setError(errorText(cause)));
+  }
+
   useEffect(() => {
     document.title = 'Brainstorm · SIGMA';
-    setHeaderControlsTarget(document.querySelector<HTMLElement>('.chat-site-header .chat-header-center-slot'));
     const controller = new AbortController();
     void refreshConfig(controller.signal);
     void openTranscript(controller.signal).catch(cause => {
@@ -149,6 +192,18 @@ export default function ChatPage() {
       abort.current?.abort();
     };
   }, [openTranscript, refreshConfig]);
+
+  useEffect(() => {
+    if (!running || turnStartedAtRef.current === null) return;
+    const update = () => {
+      if (turnStartedAtRef.current !== null) {
+        setTurnElapsedSeconds(Math.floor((Date.now() - turnStartedAtRef.current) / 1000));
+      }
+    };
+    update();
+    const interval = window.setInterval(update, 1000);
+    return () => window.clearInterval(interval);
+  }, [running, speaker]);
 
   const addMessage = useCallback((message: ChatMessage) => {
     const next = [...messagesRef.current, message].slice(-MAX_LOCAL_MESSAGES);
@@ -166,10 +221,10 @@ export default function ChatPage() {
         conversation_id: conversationId,
         expected_binding: settings.binding,
         speaker: who,
-        messages: history.slice(-settings.max_messages),
+        messages: history.filter(item => item.speaker !== 'objective').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
-        repeated_text: repeatedTextRef.current,
+        research_objective: researchObjectiveRef.current,
       }),
     });
     if (!response.ok) {
@@ -199,33 +254,118 @@ export default function ChatPage() {
     throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
-  async function runConversation(id: number, settings: ChatConfig) {
-    let nextSpeaker: 'ai_1' | 'ai_2' = 'ai_1';
+  async function assessPair(id: number) {
+    if (!supervisorEnabledRef.current || !researchObjectiveRef.current.trim()) return;
+    const settings = await currentTurnSettings();
+    const controller = new AbortController();
+    abort.current = controller;
+    const response = await fetch('/api/chat/supervisor', {
+      method: 'POST', cache: 'no-store', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: conversationId, expected_binding: settings.binding,
+        messages: messagesRef.current.filter(item => item.speaker !== 'objective')
+          .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
+        model: settings.model, reasoning_effort: settings.reasoning_effort,
+        research_objective: researchObjectiveRef.current,
+        milestone_latched: breakthroughLatched.current,
+      }),
+    });
+    const assessment = await response.json() as SupervisorAssessment & { detail?: string; error?: string };
+    if (!response.ok) throw new Error(assessment.detail ?? assessment.error ?? 'Supervisor assessment failed.');
+    if (typeof assessment.score !== 'number' || !Number.isFinite(assessment.score) ||
+        typeof assessment.assessment !== 'string' || !assessment.assessment) {
+      throw new Error('The supervisor returned an invalid assessment.');
+    }
+    if (!runningRef.current || id !== runId.current) return;
+    if (assessment.breakthrough_invalidated) breakthroughLatched.current = false;
+    if (assessment.breakthrough_candidate) breakthroughLatched.current = true;
+    const score = breakthroughLatched.current ? 10 : assessment.score;
+    const guidance = assessment.guidance?.trim() ?? '';
+    const recipient = assessment.recipient;
+    const summary = assessment.rubric ? Object.entries(assessment.rubric).map(([name, points]) =>
+      `${name}: ${Number(points).toFixed(1)}`).join(' · ') : '';
+    const text = [
+      `Research progress: ${score.toFixed(1)} / 10.0`,
+      assessment.breakthrough_candidate ? 'POTENTIAL BREAKTHROUGH DETECTED — independent validation required.'
+        : assessment.breakthrough_invalidated ? 'Previous breakthrough candidate invalidated; normal scoring resumed.'
+          : breakthroughLatched.current ? 'Breakthrough candidate remains under validation.' : '',
+      summary ? `Rubric — ${summary}` : '',
+      assessment.assessment,
+      assessment.action !== 'continue' && recipient && guidance
+        ? `To ${recipient === 'both' ? 'AI #1 and AI #2' : labels[recipient]}: ${guidance}`
+        : 'No intervention.',
+    ].filter(Boolean).join('\n\n');
+    const entry: ChatMessage = { speaker: 'supervisor', text, score,
+      breakthrough: breakthroughLatched.current,
+      ...(assessment.action !== 'continue' && recipient && guidance ? { recipient, guidance } : {}),
+    };
+    addMessage(entry);
+    await appendTranscriptMessage(conversationId, entry);
+    setProgressScore(score);
+  }
+
+  async function runConversation(id: number, initialSpeaker: 'ai_1' | 'ai_2' = 'ai_1') {
+    let nextSpeaker: 'ai_1' | 'ai_2' = initialSpeaker;
     try {
       while (runningRef.current && id === runId.current) {
-        await transcriptWrites.current;
+        recordResearchObjective(conversationId);
+        // A previous transcript write error must not permanently poison Retry.
+        await transcriptWrites.current.catch(() => undefined);
         if (!runningRef.current || id !== runId.current) return;
+        if (pendingHumanRef.current) {
+          await appendTranscriptMessage(conversationId, pendingHumanRef.current);
+          pendingHumanRef.current = null;
+        }
         const who: 'ai_1' | 'ai_2' = nextSpeaker;
         const controller = new AbortController();
         abort.current = controller;
+        turnStartedAtRef.current = Date.now();
+        setTurnElapsedSeconds(0);
+        setTurnTimedOut(false);
         setSpeaker(who);
-        const result = await requestTurn(who, messagesRef.current, controller, settings);
-        if (!runningRef.current || id !== runId.current) return;
-        const reply = { speaker: who, text: result } as const;
-        addMessage(reply);
+        // Snapshot the selected model/thinking on each new provider request.
+        // If a response was generated but its transcript write failed, resume
+        // that write instead of making another potentially billable request.
+        if (!pendingReplyRef.current) {
+          const settings = await currentTurnSettings();
+          const result = await requestTurn(who, messagesRef.current, controller, settings);
+          if (!runningRef.current || id !== runId.current) return;
+          const reply: ChatMessage = { speaker: who, text: result };
+          pendingReplyRef.current = reply;
+          addMessage(reply);
+        }
+        const reply = pendingReplyRef.current;
+        if (!reply || reply.speaker !== who) throw new Error('The pending AI reply does not match the retry turn.');
         await appendTranscriptMessage(conversationId, reply);
+        pendingReplyRef.current = null;
+        turnStartedAtRef.current = null;
+        setTurnElapsedSeconds(0);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
+        if (who === 'ai_2' && supervisorEnabledRef.current) {
+          try { await assessPair(id); }
+          catch {
+            if (runningRef.current && id === runId.current) {
+              setNotice('Supervisor assessment unavailable; AIs are continuing.');
+            }
+          }
+        }
         setSpeaker(nextSpeaker);
         await new Promise(resolve => window.setTimeout(resolve, 500));
       }
     } catch (cause) {
       if (id === runId.current && runningRef.current) {
-        setError(errorText(cause));
-        setNotice('The exchange stopped. Check the message above before starting again.');
+        const message = errorText(cause);
+        const timedOut = /timed out|timeout/i.test(message);
+        setTurnTimedOut(timedOut);
+        setFailedTurn(nextSpeaker);
+        setError(message);
+        setNotice(timedOut ? 'Timed out. Retry the failed turn when ready.' : 'The exchange stopped. Retry the failed turn when ready.');
       }
     } finally {
       if (id === runId.current) {
         abort.current = null;
+        turnStartedAtRef.current = null;
         runningRef.current = false;
         setRunning(false);
         setSpeaker(null);
@@ -238,6 +378,7 @@ export default function ChatPage() {
     const text = draft.trim();
     if (!text || !config?.available || !conversationId) return;
     const message = { speaker: 'human', text } as const;
+    recordResearchObjective(conversationId);
     addMessage(message);
     void appendTranscriptMessage(conversationId, message).catch(cause => {
       if (runningRef.current) {
@@ -247,16 +388,37 @@ export default function ChatPage() {
         setRunning(false);
         setSpeaker(null);
       }
+      pendingHumanRef.current = message;
+      setFailedTurn('ai_1');
+      setNotice('The exchange stopped. Retry to save the Human message and continue.');
       setError(errorText(cause));
     });
     setDraft('');
     setError('');
     setNotice('');
+    setTurnTimedOut(false);
+    // A Human intervention during an active turn must not discard a
+    // completed reply that still needs to be written to the transcript.
     if (runningRef.current) return;
+    const resumeSpeaker = failedTurn ?? 'ai_1';
+    if (!pendingReplyRef.current) pendingHumanRef.current = null;
     runId.current += 1;
     runningRef.current = true;
     setRunning(true);
-    void runConversation(runId.current, config);
+    void runConversation(runId.current, resumeSpeaker);
+  }
+
+  function retryConversation() {
+    if (runningRef.current || !failedTurn || !conversationId) return;
+    const who = failedTurn;
+    setError('');
+    setNotice('');
+    setTurnTimedOut(false);
+    setFailedTurn(null);
+    runId.current += 1;
+    runningRef.current = true;
+    setRunning(true);
+    void runConversation(runId.current, who);
   }
 
   function stopConversation() {
@@ -265,6 +427,11 @@ export default function ChatPage() {
     runningRef.current = false;
     abort.current?.abort();
     abort.current = null;
+    turnStartedAtRef.current = null;
+    setTurnTimedOut(false);
+    setFailedTurn(null);
+    pendingReplyRef.current = null;
+    pendingHumanRef.current = null;
     setRunning(false);
     setSpeaker(null);
     setNotice('Stopped. A provider request in progress may have completed and used account allowance.');
@@ -277,8 +444,17 @@ export default function ChatPage() {
     setConversationId('');
     setTranscriptPath('');
     transcriptWrites.current = Promise.resolve();
+    recordedObjectiveRef.current = '';
+    researchObjectiveRef.current = '';
+    setResearchObjective('');
+    breakthroughLatched.current = false;
+    setProgressScore(null);
     setError('');
     setNotice('');
+    setTurnTimedOut(false);
+    setFailedTurn(null);
+    pendingReplyRef.current = null;
+    pendingHumanRef.current = null;
     try {
       await openTranscript();
     } catch (cause) {
@@ -286,59 +462,45 @@ export default function ChatPage() {
     }
   }
 
+  const timeoutMinutesRemaining = Math.max(1, Math.ceil((600 - turnElapsedSeconds) / 60));
+  const timeoutStatus = running && turnElapsedSeconds >= 300
+    ? (turnElapsedSeconds >= 600 ? 'Timed out' : `Timing out in ${timeoutMinutesRemaining} minute${timeoutMinutesRemaining === 1 ? '' : 's'}`)
+    : turnTimedOut ? 'Timed out' : '';
+
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
-  const modelControlHint = !config
-    ? error || 'Brainstorm settings are loading.'
-    : !config.available
-      ? config.message || 'Connect an AI account to enable model selection.'
-      : running
-        ? 'Stop the exchange before changing the model.'
-        : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle through models available to this account.`;
-  const thinkingControlHint = !config
-    ? error || 'Brainstorm settings are loading.'
-    : !config.available
-      ? config.message || 'Connect an AI account to enable Thinking selection.'
-      : running
-        ? 'Stop the exchange before changing the Thinking level.'
-        : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle through levels supported by this model.`;
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
-  const selectedModel = config?.models.find(item => item.id === config.model);
-  const displayedModel = selectedModel ? modelDisplayLabel(selectedModel) : config?.model ?? 'Loading';
-  const displayedThinking = thinkingLabels[config?.reasoning_effort ?? 'low'];
-  const selectionDisabled = !config?.available || !config.models.length || running;
-  const modelThinkingControls = <div className="sigma-header-model-column chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
-    <span className="global-model-pill-position">
-      <ModelThinkingPillButton label={displayedModel} thinkingLabel={`Thinking · ${displayedThinking}`}
-        tooltip={`${modelControlHint} ${thinkingControlHint} Click the upper half to cycle models; click the lower half to cycle thinking levels.`}
-        disabled={selectionDisabled}
-        modelCycleRevision={modelCycleRevision} thinkingCycleRevision={thinkingCycleRevision}
-        onCycleModel={cycleModel} onCycleThinking={cycleThinking}/>
-    </span>
-  </div>;
-
   return <>
-  {headerControlsTarget && createPortal(modelThinkingControls, headerControlsTarget)}
   <main className="chat-page">
-    <header className="chat-page-header">
-      <div className="chat-title-group"><p className="chat-eyebrow">Open conversation</p><h1>Brainstorm</h1></div>
-      <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
-    </header>
     <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
-    <section className="chat-repeated-prompt" aria-label="Repeated text">
+    <section className="chat-repeated-prompt" aria-label="Research objective">
       <div className="chat-field-heading">
-        <label htmlFor="chat-repeated-text" data-tooltip="Prepended to every AI request; changes apply on the next turn.">Repeated:</label>
+        <label htmlFor="chat-research-objective" data-tooltip="Shared with both AIs and the optional supervisor; changes apply on the next turn.">Research Objective:</label>
+        <CopyReplyButton name="Research Objective" text={researchObjective}/>
       </div>
-      <textarea id="chat-repeated-text" rows={2} value={repeatedText}
-        onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
-        placeholder="Optional text prepended to every AI turn…"/>
+      <textarea id="chat-research-objective" rows={2} value={researchObjective}
+        onBlur={() => recordResearchObjective(conversationId)}
+        onChange={event => { researchObjectiveRef.current = event.target.value; setResearchObjective(event.target.value); }}
+        placeholder="What finding or research goal should the two AIs pursue?"/>
     </section>
+    <section className="chat-supervisor-option" aria-label="Brainstorm supervisor">
+      <label><input type="checkbox" checked={supervisorEnabled}
+        onChange={event => { supervisorEnabledRef.current = event.target.checked; setSupervisorEnabled(event.target.checked); }}/>
+        Enable Supervisor</label>
+      <p>A third AI reviews progress after each AI pair, recording a brief assessment and offering occasional
+         gentle process-only guidance, without contributing research ideas.</p>
+    </section>
+    {supervisorEnabled && progressScore !== null && <p className="chat-progress-status" aria-live="polite">
+      Research progress: <strong>{progressScore.toFixed(1)} / 10.0</strong>
+      {breakthroughLatched.current ? ' · Potential breakthrough — independent validation needed' : ''}
+    </p>}
     <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
       <div className="chat-field-heading">
         <label htmlFor="chat-human-message">Human:</label>
+        <CopyReplyButton name="Human" text={draft}/>
       </div>
       <textarea id="chat-human-message" aria-label="Human" rows={2} value={draft}
         onChange={event => setDraft(event.target.value)}
@@ -347,15 +509,17 @@ export default function ChatPage() {
     </form>
     <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">
       <button type="submit" form="brainstorm-human-form" className="chat-send" disabled={!canSend}>Send</button>
+      {failedTurn && !running && <button type="button" className="chat-retry" aria-label={`Retry ${labels[failedTurn]}`} data-tooltip={`Retry the interrupted ${labels[failedTurn]} turn`} disabled={!conversationId} onClick={retryConversation}>Retry</button>}
       <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
       <button type="button" className="chat-clear" disabled={running || !messages.length} onClick={clearConversation}>Clear</button>
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
+      {timeoutStatus && <span className="chat-timeout-status" role="timer" aria-label="Brainstorm turn time limit">{timeoutStatus}</span>}
     </div>
     <section className="chat-boxes" aria-label="AI responses">
       {(['ai_1', 'ai_2'] as const).map(who => <section key={who}
         className={`chat-box chat-agent${speaker === who ? ' is-speaking' : ''}`}
         aria-label={`${labels[who]} latest reply`}>
-        <h2>{labels[who]}{speaker === who ? ' · responding' : ''}</h2>
+        <div className="chat-reply-heading"><h2>{labels[who]}{speaker === who ? ' · responding' : ''}</h2><CopyReplyButton name={labels[who]} text={latest(who)}/></div>
         {latest(who)
           ? <MarkdownReply body={latest(who)}/>
           : <p className="chat-agent-placeholder">{labels[who]}’s reply will appear here.</p>}
@@ -363,7 +527,11 @@ export default function ChatPage() {
     </section>
     {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
       {messages.map((message, index) => <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-        <strong>{labels[message.speaker]}</strong><MarkdownReply body={message.text}/>
+        <div className="chat-reply-heading"><strong>{labels[message.speaker]}</strong><CopyReplyButton name={labels[message.speaker]} text={message.text}/></div>
+        {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
+          Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
+        </p>}
+        <MarkdownReply body={message.text}/>
       </li>)}
     </ol>}
   </main>

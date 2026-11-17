@@ -27,10 +27,21 @@
   min-width: 0; margin: 0 0 14px;
 }
 .brainstorm-workspace .chat-field-heading {
-  display: flex; align-items: baseline; justify-content: space-between;
-  min-width: 0; gap: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  gap: 6px;
 }
-.brainstorm-workspace .chat-field-heading label { color: #f2c48d; font-weight: 700; }
+.brainstorm-workspace .chat-field-heading label {
+  color: #f2c48d;
+  font-weight: 700;
+  margin: 0;
+}
+.brainstorm-workspace .chat-field-heading .chat-copy-button {
+  flex: 0 0 26px;
+  margin: 0;
+}
 .brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea {
   box-sizing: border-box; display: block; width: 100%; min-width: 0;
   height: 74px; min-height: 74px; padding: 10px 13px;
@@ -46,23 +57,27 @@
   display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap;
   gap: 12px; min-height: 42px; margin: 0 0 20px;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear) {
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) {
   box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
   min-height: 38px; padding: 7px 18px; border: 1px solid #bd8246;
   border-radius: 8px; color: #f0e6d7; background: #07111e;
   font: 500 .92rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer;
 }
+.brainstorm-workspace .chat-retry {
+  min-width: 108px; border-color: #e4b679; background: #80512c;
+  color: #fff5e8; font-weight: 700;
+}
 .brainstorm-workspace .chat-send {
   min-width: 92px; border-color: #e4b679; background: #80512c;
   color: #fff5e8; font-weight: 700;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear):hover:not(:disabled) {
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):hover:not(:disabled) {
   background: #6b4329; color: #fff2e9;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear):focus-visible {
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):focus-visible {
   outline: 2px solid #e5a785; outline-offset: 3px;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear):disabled { opacity: .5; cursor: default; }
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):disabled { opacity: .5; cursor: default; }
 .brainstorm-workspace .chat-controls [role="status"] {
   color: #d1c5b7; font-size: .9rem; overflow-wrap: anywhere;
 }
@@ -102,86 +117,6 @@
 .brainstorm-workspace .chat-history .chat-markdown { margin-top: 5px; line-height: 1.5; }
 .brainstorm-workspace .chat-error { margin: 10px 0; color: #ffb3a6; }
 
-/* Match the Project header: same header component, two-row pill dimensions,
-   original pill styling, row gap and measured outer top/right insets.
-   Only the account layout changes: ChatGPT above Model/Thinking at the right. */
-.workspace-page.brainstorm-workspace .project-art-header .header-controls {
-  display: flex;
-  flex-flow: column nowrap;
-  align-items: flex-end;
-  align-self: center;
-  justify-content: center;
-  gap: 0;
-  width: max-content;
-  min-width: 0;
-  margin-left: auto;
-  padding-top: 0;
-}
-.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack {
-  display: grid;
-  grid-template-columns: max-content;
-  grid-template-rows: max-content max-content;
-  align-items: start;
-  align-content: start;
-  justify-items: end;
-  row-gap: var(--sigma-project-pill-row-gap);
-  width: max-content;
-  min-width: 0;
-}
-.workspace-page.brainstorm-workspace .project-art-header
-.brainstorm-header-pill-stack > .api-connection {
-  position: relative;
-  contain: none;
-  box-sizing: border-box;
-  grid-area: auto; /* Project's named chatgpt grid-area must not create an implicit row. */
-  justify-self: end;
-  width: max-content;
-  min-width: 0;
-  max-width: none;
-  margin: 0;
-}
-.workspace-page.brainstorm-workspace .project-art-header
-.brainstorm-header-pill-stack > .api-connection > summary {
-  display: flex;
-  box-sizing: border-box;
-  align-items: center;
-  width: max-content;
-  min-width: 0;
-  max-width: none;
-  margin: 0 0 0 auto;
-}
-.workspace-page.brainstorm-workspace .project-art-header .chat-header-center-slot {
-  position: static;
-  inset: auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  justify-self: end;
-  width: max-content;
-  min-width: 0;
-  transform: none;
-}
-.workspace-page.brainstorm-workspace .project-art-header
-.chat-header-model-controls:has(> .global-model-pill-position) {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: max-content;
-  min-width: 0;
-  max-width: none;
-  padding-bottom: 0;
-}
-.workspace-page.brainstorm-workspace .project-art-header
-.chat-header-model-controls > .global-model-pill-position {
-  position: static;
-  grid-area: auto; /* Disable Project's named model area inside this one-column stack. */
-  inset: auto;
-  display: inline-flex;
-  flex: 0 0 auto;
-  width: max-content;
-  max-width: none;
-  margin: 0;
-}
 @media (max-width: 900px) {
   .brainstorm-workspace .chat-boxes { grid-template-columns: minmax(0, 1fr); }
 }
@@ -189,5 +124,247 @@
   .brainstorm-workspace .chat-page { width: calc(100% - 28px); }
   .brainstorm-workspace .chat-page-header h1 { font-size: 1.55rem; }
   .brainstorm-workspace .chat-controls { gap: 8px; }
-  .brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear) { padding-inline: 12px; }
+  .brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) { padding-inline: 12px; }
 }
+
+/* Shared project copy icon beside each brainstorm participant heading. */
+.brainstorm-workspace .chat-reply-heading {
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px; min-width: 0;
+}
+.brainstorm-workspace .chat-reply-heading h2 { margin: 0 0 10px; }
+.brainstorm-workspace .chat-reply-heading .chat-copy-button {
+  flex: 0 0 auto; width: 26px; height: 26px; padding: 3px; margin: 0 0 10px;
+}
+.brainstorm-workspace .chat-history .chat-reply-heading .chat-copy-button { margin: 0; }
+.brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
+.brainstorm-workspace .chat-history-objective { border-left-color: #a891bf !important; }
+
+/* Keep the Project header's content-sized geometry. The decorative
+   SIGMA background in workspace.css scales proportionally with header height.
+   Do not reserve excess vertical space for the shorter Brainstorm pill stack. */
+@media (min-width: 1201px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 470px) minmax(0, 1fr) max-content;
+    gap: 24px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 330px);
+    max-width: 330px;
+    justify-self: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    box-sizing: border-box;
+    height: auto;
+    min-height: 0;
+    padding-top: 13px;
+    padding-bottom: 13px;
+  }
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+  min-width: 0;
+  padding-top: 6px;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-eyebrow {
+  margin: 0 0 4px;
+  color: #c99a66;
+  font-size: .78rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy h1 {
+  margin: 0;
+  color: #f0e6d7;
+  font-size: clamp(1.45rem, 2vw, 2.1rem);
+  line-height: 1.2;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+  margin: 6px 0 0;
+  color: #c4b9aa;
+  font-size: .88rem;
+  line-height: 1.45;
+}
+@media (min-width: 1800px) {
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+    white-space: nowrap;
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  align-items: start;
+  /* Center the pill stack within the content-sized header row, preserving
+     balanced top and bottom insets without making the header taller. */
+  align-self: center;
+  justify-self: end;
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  justify-content: end;
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    transform: translateX(16px);
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack {
+  grid-area: identity;
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: max-content max-content;
+  row-gap: var(--sigma-project-pill-row-gap);
+  justify-items: end;
+  align-items: start;
+  width: max-content;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection {
+  grid-area: auto;
+  position: relative;
+  contain: none;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection > summary {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0 0 0 auto;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column {
+  grid-area: model-column;
+  display: flex;
+  align-items: flex-start;
+  justify-content: end;
+  min-width: 0;
+  pointer-events: auto;
+}
+/* Home reserves a second row beneath its Model column using padding.
+   Brainstorm has no About/Settings row there: remove the reservation. */
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column .global-model-pill-position {
+  display: inline-flex;
+  position: static;
+  margin: 0;
+}
+@media (min-width: 701px) and (max-width: 1200px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 330px) minmax(0, 1fr);
+    gap: 12px 20px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 330px);
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media (max-width: 700px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(34vw, 175px) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    width: 100%;
+    margin-left: -20px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+  }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+/* Opt-in process supervisor and objective history. */
+.brainstorm-workspace .chat-supervisor-option {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 14px;
+  padding: 12px 15px;
+  border: 1px solid #66513d;
+  border-radius: 8px;
+  background: #141a1c;
+}
+.brainstorm-workspace .chat-supervisor-option label {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  width: max-content;
+  gap: 9px;
+  margin: 0;
+  font-weight: 700;
+  color: #f2c48d;
+  cursor: pointer;
+}
+.brainstorm-workspace .chat-supervisor-option input[type="checkbox"] {
+  box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 17px;
+  width: 17px;
+  min-width: 17px;
+  height: 17px;
+  margin: 0;
+  padding: 0;
+  accent-color: #bd8246;
+}
+.brainstorm-workspace .chat-supervisor-option p {
+  margin: 0;
+  color: #c4b9aa;
+  font-size: .88rem;
+  line-height: 1.45;
+}
+.brainstorm-workspace .chat-progress-status {
+  color: #f2c48d; margin: 0 0 12px;
+}
+.brainstorm-workspace .chat-history li.chat-history-objective { border-left-color: #a891bf; }
+.brainstorm-workspace .chat-history li.chat-history-supervisor { border-left-color: #8cad9f; }
+.brainstorm-workspace .chat-supervisor-meta {
+  margin: 4px 0; color: #a5c7b7; font-size: .83rem;
+}
+

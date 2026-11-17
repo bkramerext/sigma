@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import chat, chat_transcripts
+from sigma import chat, chat_supervisor, chat_transcripts
 from sigma.api import app
 from sigma.projects import ProjectError
 
@@ -132,7 +132,7 @@ def check_service() -> None:
                 expected_binding="api_key",
                 model="gpt-6.1-sol",
                 reasoning_effort="low",
-                repeated_text="Always challenge the assumptions.",
+                research_objective="Always challenge the assumptions.",
             )
         )
     assert result == "A deterministic reply."
@@ -143,7 +143,7 @@ def check_service() -> None:
     assert captured["payload"]["instructions"] == chat.INSTRUCTIONS["ai_1"]
     assert "Human:\nQuestion for the pair." in captured["payload"]["input"][0]["content"]
     assert captured["payload"]["input"][0]["content"].startswith(
-        "Always challenge the assumptions.\n\nHuman:"
+        "Research Objective:\nAlways challenge the assumptions.\n\nHuman:"
     )
 
     # Chat omits the optional Responses text format. Sponsored billing must
@@ -247,12 +247,20 @@ def check_api() -> None:
                 "text": long_text,
             },
         )
+        repeated_record = client.post(
+            "/api/chat/message",
+            json={
+                "conversation_id": body["conversation_id"],
+                "speaker": "objective",
+                "text": "Check sources.",
+            },
+        )
         long_turn = client.post(
             "/api/chat/turn",
             json={
                 **body,
                 "messages": [{"speaker": "human", "text": long_text}],
-                "repeated_text": long_repeated,
+                "research_objective": long_repeated,
             },
         )
         mismatch = client.post("/api/chat/turn", json={**body, "expected_binding": "other"})
@@ -269,6 +277,7 @@ def check_api() -> None:
     assert opened.status_code == 200 and opened.json()["transcript_name"] == "fixture.md"
     assert recorded.status_code == 204
     assert long_record.status_code == 204
+    assert repeated_record.status_code == 204
     assert long_turn.status_code == 200, long_turn.text
     assert len(long_text) > 8000 and len(long_repeated) > 8000
     append_message.assert_any_call(body["conversation_id"], "human", "Hello.")
@@ -282,6 +291,102 @@ def check_api() -> None:
     assert selected.status_code == 200
     assert unsupported.status_code == 422
     print("PASS chat API model/thinking validation, SSE completion and participant validation")
+
+
+def check_slow_turn_heartbeat() -> None:
+    """A slow model turn must keep its SSE connection alive and still complete."""
+    body = {
+        "conversation_id": str(uuid4()),
+        "expected_binding": "api_key",
+        "speaker": "ai_1",
+        "messages": [{"speaker": "human", "text": "Think carefully."}],
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+    }
+    config = {
+        "available": True,
+        "message": "Ready.",
+        "binding": "api_key",
+        "models": [{"id": "gpt-6.1-sol", "efforts": ["high"]}],
+    }
+
+    async def slow_turn(**_kwargs):
+        await asyncio.sleep(0.05)
+        return "A carefully reasoned reply."
+
+    with (
+        patch("sigma.chat.configuration", new=AsyncMock(return_value=config)),
+        patch("sigma.chat.respond", side_effect=slow_turn),
+        patch("sigma.api.CHAT_HEARTBEAT_SECONDS", 0.01),
+        TestClient(app) as client,
+    ):
+        response = client.post("/api/chat/turn", json=body)
+    assert response.status_code == 200, response.text
+    assert ": keepalive\n\n" in response.text
+    assert '"type": "complete", "text": "A carefully reasoned reply."' in response.text
+    print("PASS brainstorm SSE heartbeat during slow reasoning and eventual completion")
+
+
+def check_supervisor() -> None:
+    assert "NEVER direct the AIs to stop the conversation" in chat_supervisor.INSTRUCTIONS
+    example = {
+        "rubric": {
+            "alignment": 1.2,
+            "originality": 0.8,
+            "advancement": 1.3,
+            "evidence": 1.0,
+            "momentum": 0.6,
+        },
+        "assessment": "Progress is constructive but validation is limited.",
+        "action": "nudge",
+        "recipient": "ai_2",
+        "guidance": "Clarify the question that remains unresolved.",
+        "breakthrough_candidate": False,
+        "breakthrough_invalidated": False,
+    }
+    result = chat_supervisor.parse_assessment(json.dumps(example))
+    assert result["score"] == 4.9
+    conversation = [
+        {"speaker": "human", "text": "Discover something new."},
+        {"speaker": "ai_1", "text": "An idea."},
+        {"speaker": "ai_2", "text": "An objection."},
+        {
+            "speaker": "supervisor",
+            "text": "Research progress: 4.9 / 10.0",
+            "recipient": result["recipient"],
+            "guidance": result["guidance"],
+        },
+    ]
+    assert "Research progress" not in chat._transcript(conversation, "ai_1")
+    assert "Research progress" not in chat._transcript(conversation, "ai_2")
+    assert "Clarify the question" not in chat._transcript(conversation, "ai_1")
+    assert "Clarify the question" in chat._transcript(conversation, "ai_2")
+    candidate = chat_supervisor.parse_assessment(
+        json.dumps(
+            {
+                **example,
+                "action": "continue",
+                "recipient": None,
+                "guidance": "",
+                "breakthrough_candidate": True,
+            }
+        )
+    )
+    assert candidate["score"] == 10.0
+    invalidation = chat_supervisor.parse_assessment(
+        json.dumps(
+            {
+                **example,
+                "action": "continue",
+                "recipient": None,
+                "guidance": "",
+                "breakthrough_invalidated": True,
+            }
+        )
+    )
+    assert invalidation["breakthrough_invalidated"] is True
+    assert invalidation["score"] == 4.9
+    print("PASS supervisor scoring, invalidation, and recipient-isolated guidance")
 
 
 def check_transcripts() -> None:
@@ -308,10 +413,17 @@ def check_transcripts() -> None:
             ]
             for speaker, text in messages:
                 chat_transcripts.append_message(session["conversation_id"], speaker, text)
+            chat_transcripts.append_message(
+                session["conversation_id"], "objective", "Challenge the assumptions."
+            )
+            chat_transcripts.append_message(session["conversation_id"], "objective", "(cleared)")
             long_entry = "Detailed workbench evidence. " * 320
             assert len(long_entry) > 8000
             chat_transcripts.append_message(session["conversation_id"], "human", long_entry)
             content = path.read_text(encoding="utf-8")
+            assert "## Research Objective ·" in content
+            assert "Challenge the assumptions." in content
+            assert "(cleared)" in content
             assert long_entry in content
             assert f"Session ID: {session['conversation_id']}" in content
             assert content.index("## Human ·") < content.index("## AI #1 ·")
@@ -340,6 +452,8 @@ def main() -> None:
     check_configuration()
     check_service()
     check_api()
+    check_slow_turn_heartbeat()
+    check_supervisor()
     check_transcripts()
 
 
