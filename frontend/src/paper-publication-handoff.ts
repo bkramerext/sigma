@@ -4,8 +4,49 @@
  * its paper_id while the browser still holds an older saved-paper listing.
  * Hiding the run solely because paper_id exists creates an empty gap.
  */
-type PaperRunPublication = { paper_id?: string | null };
+export type PaperRunPublication = {
+  paper_id?: string | null;
+  status?: string | null;
+};
 type PaperListingItem = { paper_id: string };
+
+/** Publishing the PDF is not the end of the paper-generation job. The AI Score
+ * step still runs *after* the published record becomes listable. While that
+ * original job is active, its generating card owns the Score and Finish steps.
+ * A saved-paper card that says "Scoring…" at this point would falsely suggest
+ * that a second scoring operation started.
+ */
+export function publishedRunStillFinishing(
+  run: PaperRunPublication | null | undefined,
+): boolean {
+  return Boolean(run?.paper_id && (run.status === 'active' || run.status === 'queued'));
+}
+
+/** Keep the saved row preloaded, but do not show it until Score + Finish ended.
+ * An explicit terminal generation SSE receipt is authoritative even when the
+ * progress poll still has a stale active run snapshot.
+ */
+export function savedPaperAwaitingGenerationFinish(
+  paperId: string,
+  runs: ReadonlyArray<PaperRunPublication>,
+  terminalSsePaperId: string | null = null,
+): boolean {
+  if (paperId === terminalSsePaperId) return false;
+  return runs.some(run => run.paper_id === paperId && publishedRunStillFinishing(run));
+}
+
+/** Do not retire the generating paper merely because its PDF exists.
+ * The first score is not yet available in its canonical paper metadata.
+ */
+export function publishedRunReadyForHandoff(
+  run: PaperRunPublication | null | undefined,
+  papers: ReadonlyArray<PaperListingItem>,
+  terminalSsePaperId: string | null = null,
+): boolean {
+  if (typeof run?.paper_id !== 'string' || !run.paper_id ||
+      !papers.some(paper => paper.paper_id === run.paper_id)) return false;
+  return run.paper_id === terminalSsePaperId || !publishedRunStillFinishing(run);
+}
 
 export function publicationAwaitingLibrary(
   run: PaperRunPublication | null | undefined,
