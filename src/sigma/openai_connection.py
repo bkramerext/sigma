@@ -597,7 +597,7 @@ async def connection(
                             )
                             if cached_sponsor:
                                 target.result = {
-                                    **target.result,
+                                    **(target.result or {}),
                                     "cached_catalog": True,
                                     "checked_at": datetime.now(UTC).isoformat(),
                                 }
