@@ -37,6 +37,11 @@ export function hasActualDraftIdentity(
     restartReady || ['active', 'queued', 'interrupted', 'failed', 'cancelled'].includes(progressStatus ?? ''));
 }
 
+/** Keep paper-run placeholders in the same newest-first order as saved metadata. */
+export function orderPaperRunsDescending<T extends NumberedRun>(runs: readonly T[]): T[] {
+  return [...runs].sort((a, b) => (b.number ?? 0) - (a.number ?? 0));
+}
+
 export function shouldShowPaperLoading(
   loading: boolean,
   savedCount: number,

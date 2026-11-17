@@ -6,6 +6,7 @@ import {
   shouldShowPaperLoading,
   canRemoveDisplayedPaperRun,
   shouldAutoSelectUnfinishedPaper,
+  orderPaperRunsDescending,
 } from '../src/paper-completion-transition.ts';
 
 test('Paper 15 keeps its reserved identity while progress and publication metadata change', () => {
@@ -23,6 +24,15 @@ test('Paper 15 keeps its reserved identity while progress and publication metada
   // resolve asynchronously but it must not materialize a new unnumbered card.
   assert.equal(hasActualDraftIdentity(null, false, false, false, false), false);
   assert.equal(displayedPaperNumber(null, reserved, null), null);
+});
+
+test('paper-run cards stay newest-first before metadata is available', () => {
+  const runs = [1, 2, 3, 5, 7].map(number => ({ number, run_id: `run-${number}` }));
+  const ordered = orderPaperRunsDescending(runs);
+  assert.deepEqual(ordered.map(run => run.number), [7, 5, 3, 2, 1]);
+  assert.deepEqual(runs.map(run => run.number), [1, 2, 3, 5, 7], 'input is not mutated');
+  assert.deepEqual(orderPaperRunsDescending([...ordered, { number: 8, run_id: 'new' }])
+    .map(run => run.number), [8, 7, 5, 3, 2, 1]);
 });
 
 test('background completion never shows a Loading papers interstitial', () => {
