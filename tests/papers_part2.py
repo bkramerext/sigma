@@ -618,6 +618,26 @@ def test_unreadable_authored_control_bytes_compile_with_visible_review_marks() -
     assert "\x02" in source and "\x02" not in repaired
 
 
+def test_del_and_c1_controls_are_visible_and_idempotent() -> None:
+    # XeTeX reports DEL as ^^?; the prior sanitizer only handled codepoints < 32.
+    source = (
+        "\\documentclass{article}\\begin{document}"
+        r"\$1,2,"
+        + "\x7f"
+        + r"\textbackslash{}ldots,n\$ "
+        + "\x85"
+        + "\n"
+        + "\t"
+        + "\\end{document}"
+    )
+    repaired, codes = papers._visible_invalid_tex_controls(source)
+    assert codes == ["U+007F", "U+0085"]
+    assert "[U+007F]" in repaired and "[U+0085]" in repaired
+    assert "\x7f" not in repaired and "\x85" not in repaired
+    assert "\n\t" in repaired, "TeX structural whitespace must be preserved"
+    assert papers._visible_invalid_tex_controls(repaired) == (repaired, [])
+
+
 def manual_tectonic_control_byte_pdf_compilation() -> None:
     """Optional Tectonic integration check; deliberately not in the routine test driver."""
     source = (
