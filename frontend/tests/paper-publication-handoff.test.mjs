@@ -82,6 +82,13 @@ test('terminal SSE receipt permits immediate transition despite a stale active p
   assert.equal(publishedRunReadyForHandoff(active, [saved]), false);
   assert.equal(publishedRunReadyForHandoff(active, [saved], 'paper-23'), true);
   assert.equal(savedPaperAwaitingGenerationFinish('paper-23', [active], 'paper-23'), false);
+  // A short-lived handoff pointer can be cleared after the first refresh,
+  // while the polling sidecar still says active. The durable terminal receipt
+  // must continue suppressing that stale status on every subsequent render.
+  for (let poll = 0; poll < 4; poll++) {
+    assert.equal(savedPaperAwaitingGenerationFinish('paper-23', [active], 'paper-23'), false);
+    assert.equal(publishedRunReadyForHandoff(active, [saved], 'paper-23'), true);
+  }
   assert.equal(publishedRunReadyForHandoff(active, [], 'paper-23'), false,
     'keep the numbered generating card until the saved metadata is available');
 });
