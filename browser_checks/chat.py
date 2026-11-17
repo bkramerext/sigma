@@ -607,6 +607,21 @@ with sync_playwright() as playwright:
     assert sum(item["speaker"] == "human" for item in transcript_messages) == human_writes
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
+    # If a provider repeatedly returns an unusable response, a user can skip
+    # that AI turn and continue without replaying or fabricating a message.
+    fail_next_turn = True
+    human.fill("Continue after the unparseable provider turn.")
+    page.get_by_role("button", name="Send", exact=True).click()
+    expect(page.get_by_role("button", name="Retry AI #1", exact=True)).to_be_visible()
+    skipped_at = len(turns)
+    page.get_by_role("button", name="Skip turn", exact=True).click()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and len(turns) <= skipped_at:
+        page.wait_for_timeout(50)
+    assert len(turns) > skipped_at, "Skip turn did not resume the exchange"
+    assert turns[skipped_at]["speaker"] == "ai_2"
+    page.get_by_role("button", name="Stop exchange", exact=True).click()
+
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120005.md")
     assert session_calls == 5
