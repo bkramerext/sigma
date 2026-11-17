@@ -216,7 +216,24 @@ def load_transcript(name: str) -> dict[str, Any]:
         body = body.removesuffix("\n\n")
         if not body.strip():
             raise ProjectError("The chat transcript contains an empty entry.")
-        messages.append({"speaker": _LABEL_SPEAKERS[match.group(1)], "text": body})
+        message: dict[str, Any] = {"speaker": _LABEL_SPEAKERS[match.group(1)], "text": body}
+        # Older transcript records stored the complete human-readable supervisor
+        # assessment but not its structured routing metadata. Recover only its
+        # final, explicitly addressed process guidance for the resumed AIs.
+        if message["speaker"] == "supervisor":
+            addressed = re.search(
+                r"(?:^|\\n)To (AI #1 and AI #2|AI #1|AI #2): (.+)\\Z",
+                body,
+                re.DOTALL,
+            )
+            if addressed:
+                message["recipient"] = {
+                    "AI #1": "ai_1",
+                    "AI #2": "ai_2",
+                    "AI #1 and AI #2": "both",
+                }[addressed.group(1)]
+                message["guidance"] = addressed.group(2).strip()
+        messages.append(message)
 
     objective = ""
     for message in messages:
