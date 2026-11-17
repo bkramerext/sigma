@@ -3,6 +3,14 @@
  */
 export type ResumeAnchorBounds = Readonly<{ top: number; bottom: number; right: number }>;
 
+/** A detached Play element returns an empty bounding rect. Keep click-time geometry. */
+export function resumeAuthorizationAnchor(
+  button: { isConnected: boolean; getBoundingClientRect: () => ResumeAnchorBounds } | null,
+  clickedBounds: ResumeAnchorBounds | null,
+): ResumeAnchorBounds | null {
+  return button?.isConnected ? button.getBoundingClientRect() : clickedBounds;
+}
+
 export function resumeAuthorizationPosition(
   anchor: ResumeAnchorBounds,
   panel: Readonly<{ width: number; height: number }>,
