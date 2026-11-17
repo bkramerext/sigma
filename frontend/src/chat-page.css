@@ -208,97 +208,134 @@
 .brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
 .brainstorm-workspace .chat-history-objective { border-left-color: #a891bf !important; }
 
-/* Brainstorm uses the same Google, ChatGPT, and persisted Model/Thinking
-   controls as Home. Keep all three interactive and reserve a real middle
-   column for the conversation title rather than overlaying account pills. */
-.workspace-page.brainstorm-workspace .chat-site-header {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: clamp(16px, 2vw, 32px);
-  min-width: 0;
-}
-.workspace-page.brainstorm-workspace .chat-site-header .brand-block {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  min-width: 0;
-  gap: clamp(12px, 1.5vw, 24px);
-}
-.workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
-  flex: 0 0 auto;
+/* Canonical Brainstorm header grid. Reuse the Home pill geometry and keep
+   artwork, three-line heading, and account controls in independent tracks. */
+@media (min-width: 1601px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 600px) minmax(0, 1fr) max-content;
+    column-gap: 24px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    padding-top: 6px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
+    grid-column: 3;
+    grid-row: 1;
+  }
 }
 .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
-  flex: 1 1 330px;
   min-width: 0;
-  max-width: 600px;
 }
 .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-eyebrow {
-  margin: 0 0 3px; color: #c99a66; font-size: .78rem;
+  margin: 0 0 4px; color: #c99a66; font-size: .78rem;
   letter-spacing: .1em; text-transform: uppercase;
 }
 .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy h1 {
-  margin: 0; font-size: clamp(1.45rem, 2vw, 2.1rem);
-  color: #f0e6d7; line-height: 1.2;
+  margin: 0; color: #f0e6d7;
+  font-size: clamp(1.45rem, 2vw, 2.1rem); line-height: 1.2;
 }
 .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
-  margin: 5px 0 0; color: #c4b9aa;
+  margin: 6px 0 0; color: #c4b9aa;
   font-size: .88rem; line-height: 1.45;
-  overflow-wrap: break-word;
 }
-.workspace-page.brainstorm-workspace .chat-site-header .header-controls {
-  position: relative;
+@media (min-width: 1800px) {
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+    white-space: nowrap;
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
   display: grid;
-  flex: 0 0 auto;
-  width: auto;
   grid-template-columns: max-content max-content;
   grid-template-areas: "identity model-column";
-  align-items: center;
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  align-items: start;
+  align-self: start;
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
   justify-content: end;
-  column-gap: var(--identity-pill-gap);
-  margin-left: auto;
 }
-.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-pill-stack {
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    /* Same 16px effective outer inset as the Project/Home pills. */
+    transform: translateX(16px);
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack {
   grid-area: identity;
   display: grid;
   grid-template-columns: max-content;
   grid-template-rows: max-content max-content;
   row-gap: var(--sigma-project-pill-row-gap);
-  align-items: start;
   justify-items: end;
-  min-width: 0;
+  align-items: start;
+  width: max-content;
 }
-.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-model-column {
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column {
   grid-area: model-column;
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-start;
+  justify-content: end;
   min-width: 0;
   pointer-events: auto;
 }
-.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-model-column .global-model-pill-position {
-  position: static; display: inline-flex; margin: 0;
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column .global-model-pill-position {
+  display: inline-flex;
+  position: static;
+  margin: 0;
 }
-@media (max-width: 1230px) {
-  .workspace-page.brainstorm-workspace .chat-site-header { flex-wrap: wrap; }
-  .workspace-page.brainstorm-workspace .chat-site-header .brand-block { flex: 1 1 100%; }
-  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
-    align-self: center; justify-self: end; margin-left: auto;
+@media (min-width: 701px) and (max-width: 1600px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 470px) minmax(0, 1fr);
+    grid-template-areas: "art title" "art controls";
+    align-items: start;
+    gap: 12px 20px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block { display: contents; }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-area: art;
+    width: 100%;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-area: title;
+    min-width: 0;
+  }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-area: controls;
+    justify-self: end;
   }
 }
 @media (max-width: 700px) {
-  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
-    flex-direction: row; align-items: center; gap: 12px;
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(34vw, 175px) minmax(0, 1fr);
+    gap: 12px;
   }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block { display: contents; }
   .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
-    width: min(34vw, 175px); margin-left: -20px;
+    grid-column: 1; width: 100%; margin-left: -20px;
   }
-  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
-    flex: 1 1 180px;
-  }
-  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
-    width: 100%; grid-template-columns: max-content max-content;
-    justify-content: end; gap: var(--identity-pill-gap);
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy { grid-column: 2; }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: end;
   }
 }
 
@@ -325,22 +362,3 @@
   margin: 4px 0; color: #a5c7b7; font-size: .83rem;
 }
 
-/* The Project expansion tagline is omitted on Brainstorm; use the released
-   flex space for the three-line title block, not an invisible spacer. */
-@media (min-width: 1500px) {
-  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
-    flex: 1 1 auto;
-    max-width: none;
-  }
-  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
-    white-space: nowrap;
-  }
-}
-
-@media (min-width: 1231px) {
-  /* The artwork's decorative wave extends beyond the original 330px
-     clickable image box. Reserve its real visual width before the title. */
-  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
-    width: min(29vw, 600px);
-  }
-}
