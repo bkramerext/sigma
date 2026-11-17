@@ -130,7 +130,6 @@ def check_service() -> None:
                 speaker="ai_1",
                 messages=[{"speaker": "human", "text": "Question for the pair."}],
                 conversation_id=str(uuid4()),
-                expected_binding="api_key",
                 model="gpt-6.1-sol",
                 reasoning_effort="low",
                 research_objective="Always challenge the assumptions.",
@@ -168,24 +167,34 @@ def check_service() -> None:
         else:
             raise AssertionError(f"Sponsored ledger accepted request without {required}")
 
-    with patch(
-        "sigma.chat.auth_context", new=AsyncMock(return_value={**credential, "identity": "changed"})
+    # An account switch changes the provider for the NEXT turn; it must
+    # never invalidate the current conversation/session identifier.
+    switched = {**credential, "identity": "different-account", "token": "other-token"}
+    with (
+        patch("sigma.chat.auth_context", new=AsyncMock(return_value=switched)),
+        patch(
+            "sigma.chat.models",
+            new=AsyncMock(
+                return_value={
+                    "connection": {"status": "connected", "guidance": "Ready."},
+                    "models": [{"id": "gpt-6.1-sol", "availability": "available"}],
+                }
+            ),
+        ),
+        patch("sigma.chat.cloud_research.billing_enabled", return_value=False),
+        patch("sigma.chat.httpx.AsyncClient", Client),
     ):
-        try:
-            asyncio.run(
-                chat.respond(
-                    speaker="ai_1",
-                    messages=[{"speaker": "human", "text": "Question."}],
-                    conversation_id=str(uuid4()),
-                    expected_binding="api_key",
-                    model="gpt-6.1-sol",
-                    reasoning_effort="low",
-                )
+        result_after_switch = asyncio.run(
+            chat.respond(
+                speaker="ai_2",
+                messages=[{"speaker": "human", "text": "Question."}],
+                conversation_id=str(uuid4()),
+                model="gpt-6.1-sol",
+                reasoning_effort="low",
             )
-        except ProjectError as exc:
-            assert "account changed" in str(exc)
-        else:
-            raise AssertionError("A credential change must stop chat before provider dispatch")
+        )
+    assert result_after_switch == "A deterministic reply."
+    assert captured["headers"]["Authorization"] == "Bearer other-token"
 
     messages = [{"speaker": "human", "text": "earlier"}] + [
         {"speaker": "ai_1", "text": f"turn {index}"} for index in range(chat.MAX_MESSAGES)
@@ -194,7 +203,7 @@ def check_service() -> None:
     assert "Earlier conversation turns omitted" in transcript
     assert f"turn {chat.MAX_MESSAGES - 1}" in transcript
     print(
-        "PASS selected-credential request, no-store payload, binding recheck and bounded transcript"
+        "PASS live-connection requests, account switching, no-store payload and bounded transcript"
     )
 
 
@@ -286,7 +295,6 @@ def check_api() -> None:
     }
     body = {
         "conversation_id": str(uuid4()),
-        "expected_binding": "api_key",
         "speaker": "ai_2",
         "messages": [{"speaker": "human", "text": "Hello."}],
         "model": "gpt-6.1-sol",
@@ -337,7 +345,6 @@ def check_api() -> None:
                 "research_objective": long_repeated,
             },
         )
-        mismatch = client.post("/api/chat/turn", json={**body, "expected_binding": "other"})
         invalid = client.post("/api/chat/turn", json={**body, "speaker": "ai_3"})
         invalid_record = client.post(
             "/api/chat/message",
@@ -360,7 +367,6 @@ def check_api() -> None:
     assert response.status_code == 200, response.text
     assert '"type":"started"' in response.text
     assert '"type": "complete", "text": "AI #2 reply."' in response.text
-    assert mismatch.status_code == 409
     assert invalid.status_code == 422
     assert selected.status_code == 200
     assert unsupported.status_code == 422
@@ -371,7 +377,6 @@ def check_slow_turn_heartbeat() -> None:
     """A slow model turn must keep its SSE connection alive and still complete."""
     body = {
         "conversation_id": str(uuid4()),
-        "expected_binding": "api_key",
         "speaker": "ai_1",
         "messages": [{"speaker": "human", "text": "Think carefully."}],
         "model": "gpt-6.1-sol",
