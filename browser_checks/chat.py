@@ -504,6 +504,13 @@ with sync_playwright() as playwright:
     expect(page.get_by_text("Edit reply text", exact=True)).to_have_count(0)
     history = page.get_by_role("list", name="Conversation history")
     assert history.locator("li").count() >= 4
+    # AI transcript entries are collapsed by default; expand one before
+    # inspecting its formatted content.
+    ai_2_entry = history.locator(".chat-history-ai_2").first
+    ai_2_disclosure = ai_2_entry.locator("button.chat-disclosure-button")
+    expect(ai_2_disclosure).to_have_attribute("aria-expanded", "false")
+    ai_2_disclosure.click()
+    expect(ai_2_disclosure).to_have_attribute("aria-expanded", "true")
     expect(history.locator(".chat-history-ai_2 .chat-markdown strong").first).to_have_text(
         "formatted"
     )

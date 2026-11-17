@@ -62,6 +62,8 @@ export default function ChatPage() {
   const [config, setConfig] = useState<ChatConfig | null>(null);
   const configRef = useRef<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Only manual changes override the initial disclosure state for each entry.
+  const [expandedEntries, setExpandedEntries] = useState<Record<number, boolean>>({});
   const [draft, setDraft] = useState('');
   const [researchObjective, setResearchObjective] = useState('');
   const researchObjectiveRef = useRef('');
@@ -206,8 +208,13 @@ export default function ChatPage() {
   }, [running, speaker]);
 
   const addMessage = useCallback((message: ChatMessage) => {
+    const overflow = Math.max(0, messagesRef.current.length + 1 - MAX_LOCAL_MESSAGES);
     const next = [...messagesRef.current, message].slice(-MAX_LOCAL_MESSAGES);
     messagesRef.current = next;
+    if (overflow) setExpandedEntries(previous => Object.fromEntries(
+      Object.entries(previous).filter(([index]) => Number(index) >= overflow)
+        .map(([index, expanded]) => [Number(index) - overflow, expanded]),
+    ));
     setMessages(next);
   }, []);
 
@@ -441,6 +448,7 @@ export default function ChatPage() {
     if (runningRef.current) return;
     messagesRef.current = [];
     setMessages([]);
+    setExpandedEntries({});
     setConversationId('');
     setTranscriptPath('');
     transcriptWrites.current = Promise.resolve();
@@ -468,6 +476,13 @@ export default function ChatPage() {
     : turnTimedOut ? 'Timed out' : '';
 
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
+  const isEntryExpanded = (message: ChatMessage, index: number) =>
+    expandedEntries[index] ?? (message.speaker !== 'ai_1' && message.speaker !== 'ai_2');
+  const anyEntryExpanded = messages.some(isEntryExpanded);
+  const toggleAllEntries = () => {
+    const expanded = !anyEntryExpanded;
+    setExpandedEntries(Object.fromEntries(messages.map((_, index) => [index, expanded])));
+  };
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
@@ -525,15 +540,38 @@ export default function ChatPage() {
           : <p className="chat-agent-placeholder">{labels[who]}’s reply will appear here.</p>}
       </section>)}
     </section>
-    {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
-      {messages.map((message, index) => <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-        <div className="chat-reply-heading"><strong>{labels[message.speaker]}</strong><CopyReplyButton name={labels[message.speaker]} text={message.text}/></div>
-        {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
-          Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
-        </p>}
-        <MarkdownReply body={message.text}/>
-      </li>)}
-    </ol>}
+    {!!messages.length && <section className="chat-transcript" aria-label="Transcript">
+      <h2 className="chat-transcript-heading">
+        <button type="button" className="chat-disclosure-button" aria-expanded={anyEntryExpanded}
+          aria-controls="chat-transcript-history" onClick={toggleAllEntries}
+          data-tooltip={anyEntryExpanded ? 'Collapse all transcript entries' : 'Expand all transcript entries'}>
+          <svg aria-hidden="true" className={`disclosure-chevron${anyEntryExpanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
+          Transcript
+        </button>
+      </h2>
+      <ol id="chat-transcript-history" className="chat-history" aria-label="Conversation history">
+        {messages.map((message, index) => {
+          const expanded = isEntryExpanded(message, index);
+          return <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
+            <div className="chat-reply-heading">
+              <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
+                aria-controls={`chat-transcript-entry-${index}`}
+                onClick={() => setExpandedEntries(previous => ({ ...previous, [index]: !expanded }))}>
+                <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
+                <strong>{labels[message.speaker]}</strong>
+              </button>
+              <CopyReplyButton name={labels[message.speaker]} text={message.text}/>
+            </div>
+            <div id={`chat-transcript-entry-${index}`} hidden={!expanded}>
+              {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
+                Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
+              </p>}
+              {expanded && <MarkdownReply body={message.text}/>}
+            </div>
+          </li>;
+        })}
+      </ol>
+    </section>}
   </main>
   </>;
 }
