@@ -225,6 +225,32 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_be_visible()
     page.get_by_role("button", name="Brainstorm", exact=True).click()
     expect(page).to_have_url(ORIGIN + "/brainstorm")
+    # Desktop header: three distinct text lines, artwork left, Home-aligned
+    # account/model pills right. Verify at the reported wide screenshot size.
+    page.set_viewport_size({"width": 2048, "height": 900})
+    header = page.locator(".chat-site-header")
+    artwork_box = header.locator(".project-header-art").bounding_box()
+    heading_box = header.locator(".brainstorm-header-copy").bounding_box()
+    eyebrow_box = header.locator(".chat-eyebrow").bounding_box()
+    title_box = header.locator(".brainstorm-header-copy h1").bounding_box()
+    description_box = header.locator(".brainstorm-header-copy .chat-description").bounding_box()
+    google_box = header.locator(".project-google-signin").bounding_box()
+    chatgpt_box = header.locator(".api-connection > summary").bounding_box()
+    model_box = header.locator(".brainstorm-header-model-column .global-model-pill").bounding_box()
+    header_box = header.bounding_box()
+    assert all((artwork_box, heading_box, eyebrow_box, title_box, description_box,
+                google_box, chatgpt_box, model_box, header_box))
+    assert artwork_box["x"] + artwork_box["width"] <= heading_box["x"] + 2
+    assert description_box["x"] + description_box["width"] <= google_box["x"] - 4
+    assert eyebrow_box["y"] + eyebrow_box["height"] <= title_box["y"] + 3
+    assert title_box["y"] + title_box["height"] <= description_box["y"] + 3
+    assert description_box["height"] < 28, "Description should occupy exactly one line"
+    assert model_box["x"] >= google_box["x"] + google_box["width"] + 4
+    assert abs(google_box["y"] - model_box["y"]) < 4
+    assert chatgpt_box["y"] >= google_box["y"] + google_box["height"] + 8
+    assert 10 <= 2048 - (model_box["x"] + model_box["width"]) <= 28
+    assert 10 <= google_box["y"] - header_box["y"] <= 28
+    page.set_viewport_size({"width": 1360, "height": 900})
     human = page.get_by_label("Human", exact=True)
     first = page.get_by_role("region", name="AI #1 latest reply")
     second = page.get_by_role("region", name="AI #2 latest reply")
