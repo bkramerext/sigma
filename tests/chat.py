@@ -197,6 +197,44 @@ def check_service() -> None:
     )
 
 
+def check_streamed_multisegment_completion() -> None:
+    from sigma.plan_stream import completed
+
+    response_id = "resp_bounded_fixture"
+    text = ["First line.", " Second line."]
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": response_id}},
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": "".join(text)},
+        {
+            "type": "response.completed",
+            "sequence_number": 2,
+            "response": {
+                "id": response_id,
+                "model": "gpt-6.1-sol",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": part} for part in text],
+                    }
+                ],
+            },
+        },
+    ]
+
+    class FakeStream:
+        status_code = 200
+        headers = {"content-type": "text/event-stream"}
+
+        async def aiter_bytes(self):
+            for event in events:
+                yield ("data: " + json.dumps(event) + "\\n\\n").encode()
+
+    raw = asyncio.run(completed(FakeStream()))
+    assert chat._response_text(raw, "gpt-6.1-sol") == "".join(text)
+    print("PASS multi-part completed output matches joined stream text")
+
+
 def check_response_recovery() -> None:
     completed = {
         "model": "gpt-6.1-sol",
@@ -532,6 +570,7 @@ def main() -> None:
     check_configuration()
     check_service()
     check_response_recovery()
+    check_streamed_multisegment_completion()
     check_api()
     check_slow_turn_heartbeat()
     check_supervisor()
