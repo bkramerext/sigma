@@ -8,12 +8,14 @@ from __future__ import annotations
 import asyncio
 import hmac
 import os
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
 from sigma import ai_store
+import server
 import shared_service
+import synthetic_signin
 
 A, B = "a" * 32, "b" * 32
 
@@ -54,6 +56,63 @@ async def verify() -> None:
             async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
                 response = await client.post("/v1/browser/start", headers=headers(A))
                 assert response.status_code == 200, response.text
+                # This is the actual production worker: a real OAuth chooser
+                # must be available with *no* legacy local/laboratory flags.
+                with patch.dict(
+                    os.environ,
+                    {
+                        "SIGMA_AUTH_POC_LOCAL_DOCKER": "0",
+                        "SIGMA_AUTH_POC_REAL_SIGNIN": "0",
+                        "SIGMA_AUTH_POC_LAB": "0",
+                    },
+                ):
+                    assert server.real_signin_enabled()
+                    assert not synthetic_signin.enabled()
+                    saved_id = server._ATTEMPT_ID
+                    server._ATTEMPT_ID = None
+                    target = "https://auth.openai.com/authorize?state=ci"
+                    try:
+                        with (
+                            patch.object(
+                                server.chatgpt_auth,
+                                "begin",
+                                new_callable=AsyncMock,
+                                return_value={"id": "shared-real-oauth"},
+                            ) as begin,
+                            patch.object(server.chatgpt_auth, "authorization_url", return_value=target),
+                            patch.object(server.chatgpt_auth, "session", new_callable=AsyncMock) as saved,
+                        ):
+                            chooser = await client.get(
+                                "/", headers={"Host": "127.0.0.1:8001"},
+                                follow_redirects=False,
+                            )
+                            assert chooser.status_code in (302, 303, 307, 308), chooser.text
+                            assert chooser.headers["location"] == target
+                            begin.assert_awaited_once()
+                            saved.assert_not_awaited()
+                        # The synthetic chooser is not even mounted on the
+                        # production shared runtime.
+                        synthetic = await client.get(
+                            "/test-signin/choose?state=fake",
+                            headers={"Host": "127.0.0.1:8001"},
+                        )
+                        assert synthetic.status_code == 404
+                        # A previously connected account must not be mistaken
+                        # for the result of this explicit new chooser request.
+                        server._ATTEMPT_ID = None
+                        with patch.object(
+                            server, "_saved_preview_is_authorized", return_value=True
+                        ) as cached:
+                            preview = await client.get(
+                                "/preview-state",
+                                headers={"Host": "127.0.0.1:8001"},
+                            )
+                            assert preview.status_code == 200
+                            assert preview.json() == {"phase": "ready"}
+                            cached.assert_not_called()
+                    finally:
+                        server._ATTEMPT_ID = saved_id
+
                 response = await client.post("/v1/browser/start", headers=headers(B))
                 assert response.status_code == 409
                 assert cancellation_scopes == []

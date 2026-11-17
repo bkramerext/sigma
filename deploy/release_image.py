@@ -31,7 +31,14 @@ def resolve_commit(repository: Path, requested: str) -> str:
     return resolved
 
 
-def build(repository: Path, requested: str, runner=_run, *, auth_poc: bool = False) -> None:
+def build(
+    repository: Path,
+    requested: str,
+    runner=_run,
+    *,
+    auth_poc: bool = False,
+    personal_shared: bool = False,
+) -> None:
     commit = resolve_commit(repository, requested)
     with tempfile.TemporaryDirectory(prefix="sigma-release-") as directory:
         context = Path(directory)
@@ -56,6 +63,8 @@ def build(repository: Path, requested: str, runner=_run, *, auth_poc: bool = Fal
                     ("auth-browser-poc", "auth-poc/browser.Dockerfile"),
                 ]
             )
+        if personal_shared:
+            specifications.append(("shared-personal", "auth-poc/shared.Dockerfile"))
         for name, dockerfile in specifications:
             args = [
                 "docker",
@@ -96,12 +105,18 @@ def record(
     if not SHA_RE.fullmatch(requested):
         raise ValueError("requested release must be a full lowercase 40-character Git SHA")
     mandatory = {"backend", "frontend"}
-    optional = {"auth-poc", "auth-browser-poc"}
-    if set(containers) not in (mandatory, mandatory | optional) or any(
-        not value for value in containers.values()
-    ):
+    synthetic = {"auth-poc", "auth-browser-poc"}
+    personal = {"shared-personal"}
+    permitted = (
+        mandatory,
+        mandatory | synthetic,
+        mandatory | personal,
+        mandatory | synthetic | personal,
+    )
+    if set(containers) not in permitted or any(not value for value in containers.values()):
         raise ValueError(
-            "recording requires the backend/frontend and both optional auth POC containers"
+            "recording requires backend/frontend and both optional auth POC "
+            "containers when selected; shared Personal is independent"
         )
     images = {
         name: image_info(f"sigma-{name}:{requested}", requested, runner) for name in containers
@@ -131,12 +146,20 @@ def record(
     return destination
 
 
-def verify(requested: str, runner=_run, *, auth_poc: bool = False) -> dict[str, Any]:
+def verify(
+    requested: str,
+    runner=_run,
+    *,
+    auth_poc: bool = False,
+    personal_shared: bool = False,
+) -> dict[str, Any]:
     if not SHA_RE.fullmatch(requested):
         raise ValueError("requested release must be a full lowercase 40-character Git SHA")
     names = ["backend", "frontend"]
     if auth_poc:
         names.extend(["auth-poc", "auth-browser-poc"])
+    if personal_shared:
+        names.append("shared-personal")
     return {name: image_info(f"sigma-{name}:{requested}", requested, runner) for name in names}
 
 
@@ -147,6 +170,7 @@ def main() -> None:
     build_parser.add_argument("repository", type=Path)
     build_parser.add_argument("sha")
     build_parser.add_argument("--auth-poc", action="store_true")
+    build_parser.add_argument("--personal-shared", action="store_true")
     record_parser = commands.add_parser("record")
     record_parser.add_argument("sha")
     record_parser.add_argument("--directory", type=Path, default=Path("/var/lib/sigma/releases"))
@@ -154,12 +178,19 @@ def main() -> None:
     record_parser.add_argument("--frontend-container", required=True)
     record_parser.add_argument("--auth-poc-container")
     record_parser.add_argument("--auth-browser-poc-container")
+    record_parser.add_argument("--shared-personal-container")
     verify_parser = commands.add_parser("verify")
     verify_parser.add_argument("sha")
     verify_parser.add_argument("--auth-poc", action="store_true")
+    verify_parser.add_argument("--personal-shared", action="store_true")
     args = parser.parse_args()
     if args.command == "build":
-        build(args.repository.resolve(), args.sha, auth_poc=args.auth_poc)
+        build(
+            args.repository.resolve(),
+            args.sha,
+            auth_poc=args.auth_poc,
+            personal_shared=args.personal_shared,
+        )
         print(f"PASS: built release images from {args.sha}")
     elif args.command == "record":
         containers = {"backend": args.backend_container, "frontend": args.frontend_container}
@@ -172,10 +203,12 @@ def main() -> None:
                     "auth-browser-poc": args.auth_browser_poc_container,
                 }
             )
+        if args.shared_personal_container:
+            containers["shared-personal"] = args.shared_personal_container
         path = record(args.sha, args.directory, containers)
         print(f"PASS: verified image source labels and recorded image IDs at {path}")
     else:
-        verify(args.sha, auth_poc=args.auth_poc)
+        verify(args.sha, auth_poc=args.auth_poc, personal_shared=args.personal_shared)
         print(f"PASS: release images match source {args.sha}")
 
 

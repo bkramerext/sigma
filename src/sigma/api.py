@@ -353,8 +353,16 @@ async def require_cloud_inference_binding(
         )
     from sigma.openai_connection import cloud_credential
 
-    if not cloud_credential(credential):
-        raise HTTPException(503, "Sponsored cloud inference is not configured.")
+    # A verified Personal worker is an independent, subject-bound provider;
+    # it must not be mistaken for sponsored API-key or sponsor credentials.
+    personal_ready = (
+        cloud_auth.hosted_personal_enabled()
+        and credential.get("transport") == "personal_worker"
+        and credential.get("status") == "connected"
+        and bool(credential.get("worker_binding"))
+    )
+    if not personal_ready and not cloud_credential(credential):
+        raise HTTPException(503, "The selected cloud inference connection is unavailable.")
     # Admission callers may reuse this authorized project and connection.
     # Avoid re-reading a large bundle and re-resolving the provider binding.
     return view, credential
@@ -3317,7 +3325,7 @@ async def personal_browser_account(request: Request):
 @app.post("/api/ai/personal-browser/disconnect")
 async def personal_browser_disconnect(request: Request):
     principal = _personal_browser_principal(request)
-    if not cloud_auth.config().local or not personal_browser.sign_in_preview_enabled():
+    if not personal_browser.sign_in_preview_enabled():
         raise HTTPException(404, "Personal ChatGPT disconnect is unavailable.")
     try:
         await personal_inference.disconnect(principal)
@@ -3625,10 +3633,35 @@ async def auth_mode(body: AuthModeRequest, request: Request):
             raise HTTPException(422, "Choose personal or sponsored access.")
         if body.mode == "sponsored" and not cloud_auth.sponsored_access_enabled():
             raise HTTPException(403, "Sponsored access is disabled.")
+        if body.mode == "personal":
+            if cloud_auth.hosted_personal_enabled():
+                if not personal_browser.sign_in_preview_enabled():
+                    raise HTTPException(403, "Hosted Personal ChatGPT is not enabled.")
+                try:
+                    account = await personal_inference.account(principal)
+                    if account["status"] != "verified":
+                        raise HTTPException(
+                            403, "Connect and verify ChatGPT before selecting Personal."
+                        )
+                    await run_in_threadpool(
+                        cloud_auth.record_personal_authorization, principal.subject
+                    )
+                except personal_inference.PersonalInferenceUnavailable as exc:
+                    raise HTTPException(
+                        403, "Connect and verify ChatGPT before selecting Personal."
+                    ) from exc
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise HTTPException(503, "Personal authorization could not be saved.") from exc
+            elif cloud_auth.sponsored_access_enabled():
+                # An enabled sponsor must not allow unverified Personal.
+                # With sponsorship off, the legacy Personal choice remains.
+                raise HTTPException(403, "Hosted Personal ChatGPT is not enabled.")
         try:
             cloud_auth.set_model_access(principal.subject, body.mode)
         except PermissionError as exc:
-            raise HTTPException(403, "This account cannot select sponsored access.") from exc
+            raise HTTPException(
+                403, "This account cannot select the requested connection."
+            ) from exc
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(503, "Connection choice could not be saved.") from exc
         return connection_view_state(await connection(refresh=True), request)

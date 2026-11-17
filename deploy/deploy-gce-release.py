@@ -159,6 +159,22 @@ class Deployment:
                 "/etc/systemd/system/sigma.service",
             ],
         )
+        broker = self.repository / "deploy/systemd/sigma-personal-broker.service"
+        if broker.is_file() and not broker.is_symlink():
+            _call(
+                self.runner,
+                [
+                    "install",
+                    "-o",
+                    "root",
+                    "-g",
+                    "root",
+                    "-m",
+                    "0644",
+                    str(broker),
+                    "/etc/systemd/system/sigma-personal-broker.service",
+                ],
+            )
         _call(self.runner, ["systemctl", "daemon-reload"])
 
     def check_preflight(self) -> None:
@@ -285,6 +301,8 @@ class Deployment:
             ]
             if self.auth_lab_enabled():
                 build_command.append("--auth-poc")
+            if self.personal_enabled():
+                build_command.append("--personal-shared")
             _call(self.runner, build_command)
             if not initial and maintenance_switch.is_file():
                 _call(self.runner, ["python3", str(maintenance_switch), "on"])
@@ -324,6 +342,15 @@ class Deployment:
                     _call(self.runner, ["systemctl", "stop", "sigma.service"])
                     service_stopped = True
                     candidate_started = False
+                # An unsuccessful ExecStart might have launched the independent
+                # Personal container before the main systemd unit became active.
+                # Stop that candidate before restoring the prior release.
+                if self.personal_enabled() and (service_stopped or candidate_started):
+                    _call(
+                        self.runner,
+                        ["sh", str(self.repository / "deploy/compose-personal-gce.sh"), "stop"],
+                    )
+                    _call(self.runner, ["systemctl", "stop", "sigma-personal-broker.service"])
                 _replace_release(self.env_file, self.env_file.read_bytes(), previous, owner)
                 _call(
                     self.runner,
@@ -359,6 +386,28 @@ class Deployment:
             return b"SIGMA_AUTH_POC_LAB_ENABLED=true" in self.env_file.read_bytes().splitlines()
         except OSError as exc:
             raise DeployFailure("cannot read reviewed auth-lab deployment setting") from exc
+
+    def personal_checkout_id(self) -> str:
+        """Extract only the allowlisted stable Docker project suffix."""
+        try:
+            lines = self.env_file.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise DeployFailure("cannot read hosted Personal project identity") from exc
+        matches = [
+            line.partition("=")[2]
+            for line in lines
+            if line.startswith("SIGMA_AUTH_POC_CHECKOUT_ID=")
+        ]
+        if len(matches) != 1 or re.fullmatch(r"[0-9a-f]{32}", matches[0]) is None:
+            raise DeployFailure("hosted Personal project identity is invalid")
+        return matches[0]
+
+    def personal_enabled(self) -> bool:
+        """The isolated shared Personal service has an independent release image."""
+        try:
+            return b"SIGMA_PERSONAL_HOSTED_ENABLED=true" in self.env_file.read_bytes().splitlines()
+        except OSError as exc:
+            raise DeployFailure("cannot read hosted Personal deployment setting") from exc
 
     def host_direct_enabled(self) -> bool:
         """Hosted direct-routing activation is explicitly reviewed and optional."""
@@ -435,6 +484,47 @@ class Deployment:
                         raise DeployFailure(
                             f"{service} image source label does not match selected release"
                         )
+            if not waiting_for and self.personal_enabled():
+                personal = [
+                    "docker",
+                    "compose",
+                    "--project-name",
+                    "sigma-shared-" + self.personal_checkout_id(),
+                    "--env-file",
+                    str(self.env_file),
+                    "-f",
+                    str(self.repository / "deploy/personal-shared.compose.yaml"),
+                    "-f",
+                    str(self.repository / "deploy/personal-shared.gce.yaml"),
+                ]
+                container = _call(self.runner, personal + ["ps", "-q", "personal"])
+                if not container:
+                    waiting_for.append("personal")
+                else:
+                    state = _call(
+                        self.runner,
+                        ["docker", "inspect", "--format", "{{.State.Health.Status}}", container],
+                    )
+                    image = _call(
+                        self.runner,
+                        ["docker", "inspect", "--format", "{{.Config.Image}}", container],
+                    )
+                    source = _call(
+                        self.runner,
+                        [
+                            "docker",
+                            "inspect",
+                            "--format",
+                            '{{ index .Config.Labels "org.opencontainers.image.revision" }}',
+                            container,
+                        ],
+                    )
+                    if image != f"sigma-shared-personal:{sha}" or source != sha:
+                        raise DeployFailure(
+                            "Personal worker image does not match the selected release"
+                        )
+                    if state != "healthy":
+                        waiting_for.append("personal")
             if not waiting_for:
                 break
             if time.monotonic() >= deadline:

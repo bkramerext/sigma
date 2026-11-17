@@ -6,8 +6,8 @@
 FROM python:3.12.8-slim@sha256:2199a62885a12290dc9c5be3ca0681d367576ab7bf037da120e564723292a2f0
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 PYTHONPATH=/opt/sigma/auth-poc:/opt/sigma/src \
-    SIGMA_AUTH_POC_LAB=1 SIGMA_AUTH_POC_LOCAL_DOCKER=1 SIGMA_AUTH_POC_REAL_SIGNIN=1 \
-    SIGMA_CLOUD_AUTH_ENABLED=false SIGMA_PERSONAL_SHARED_VAULT=1 \
+    SIGMA_PERSONAL_SHARED_REAL_SIGNIN=1 SIGMA_PERSONAL_SHARED_VAULT=1 \
+    SIGMA_CLOUD_AUTH_ENABLED=false \
     SIGMA_PERSONAL_SHARED_RECORDS=/var/lib/sigma-shared/records \
     SIGMA_PERSONAL_SHARED_WORKSPACES=/var/lib/sigma-shared/workspaces \
     SIGMA_PERSONAL_SHARED_KEY_FILE=/var/lib/sigma-shared-key/master \
@@ -18,12 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin sigma-personal \
     && useradd --uid 11001 --no-create-home --shell /usr/sbin/nologin sigma-browser \
-    && mkdir -p /etc/chromium/policies/managed /var/lib/sigma-shared/records \
+    && mkdir -p /var/lib/sigma-shared/records \
        /var/lib/sigma-shared/workspaces /var/lib/sigma-shared-key \
     && chown -R 10001:10001 /var/lib/sigma-shared /var/lib/sigma-shared-key \
     && chmod 0700 /var/lib/sigma-shared/records /var/lib/sigma-shared/workspaces /var/lib/sigma-shared-key
-RUN printf '%s' '{"PasswordManagerPasskeysEnabled":false,"PasswordManagerEnabled":false}' \
-    > /etc/chromium/policies/managed/sigma-no-passkeys.json
+# Suppress password saving and passkey helper while using real Google OAuth.
+RUN mkdir -p /etc/chromium/policies/managed \
+    && printf '%s' '{"PasswordManagerPasskeysEnabled":false,"PasswordManagerEnabled":false}' \
+       > /etc/chromium/policies/managed/sigma-no-password-saving.json
 WORKDIR /opt/sigma
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src

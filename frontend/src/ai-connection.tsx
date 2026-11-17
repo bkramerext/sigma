@@ -368,9 +368,8 @@ function SponsorProvisioningDialog({ open, message, onClose }: {
   </dialog>;
 }
 
-export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalBrowserLabEnabled?: boolean; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
+export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllowanceAction }: { projectHeader?: boolean; zeroAllowanceAction?: ReactNode; cloudFunding?: { target: 'local' | 'hosted'; personalChatGPTNoticeEnabled?: boolean; personalChatGPTNoticePreview?: boolean; personalBrowserLabEnabled?: boolean; personalBrowserUiMode?: 'external' | 'container'; authenticationEnabled: boolean; googleAccount: string | null; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number | null; global_cap_exempt?: boolean; global_remaining_usd?: number; global_ceiling_usd?: number; global_spend_period?: 'cumulative' | 'calendar_month'; global_reset_at?: string | null; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean; sponsorshipEligible?: boolean; sponsorshipUnlimited?: boolean; provider: { provider?: SponsoredInferenceProvider; status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection?: 'personal' | 'sponsored'; selectConnection?: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError?: string | null; selectingConnection?: boolean; forcedSponsored?: boolean; simulatedSponsored?: boolean; disconnectMockSponsored?: () => Promise<void> } } = {}) {
   const ai = useAI();
-  const [allowanceTipOpen, setAllowanceTipOpen] = useState(false);
   const [sponsorProvisioningHelpOpen, setSponsorProvisioningHelpOpen] = useState(false);
   const [personalHostedNoticeOpen, setPersonalHostedNoticeOpen] = useState(false);
   const openingContainerBrowser = useRef(false);
@@ -381,6 +380,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const dialogActive = useRef(false);
   const activatingPersonal = useRef(false);
   const restoringSponsored = useRef(false);
+  // A deliberate Sponsored -> Personal click must finish a fresh OAuth
+  // attempt. Existing saved credentials must not silently skip its chooser.
+  const freshBrowserIntent = useRef(false);
+  const freshBrowserStarted = useRef(false);
   const [personalDialogState, setPersonalDialogState] = useState<'closed' | 'preparing' | 'starting' | 'ready' | 'error'>('closed');
   const [personalDialogError, setPersonalDialogError] = useState('');
   const [testAccountOwner, setTestAccountOwner] = useState<string | null>(null);
@@ -442,9 +445,14 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   const localHostedNoticePreview = !!cloudFunding?.authorized
     && !!cloudFunding.personalChatGPTNoticePreview
     && !!cloudFunding.personalChatGPTNoticeEnabled;
-  const containerBrowserLab = !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled;
-  const localLabAccount = containerBrowserLab && cloudFunding?.target === 'local'
-    ? cloudFunding.googleAccount : null;
+  // The launcher is authoritative: plain "sigma start" always opens a
+  // separate, real ChatGPT browser tab. An inherited lab/worker flag alone
+  // must never route this path through the embedded Docker browser.
+  const containerBrowserLab = !!cloudFunding?.authorized && !!cloudFunding.personalBrowserLabEnabled
+    && cloudFunding.personalBrowserUiMode === 'container';
+  // The isolated Docker worker is shared by local preview and opt-in hosted
+  // deployments. Never rely on target === 'local' as the authorization gate.
+  const localLabAccount = containerBrowserLab ? cloudFunding?.googleAccount ?? null : null;
   const testConnected = localLabAccount !== null && testAccountOwner === localLabAccount;
   const previewAuthorized = localLabAccount !== null && authorizedPreviewOwner === localLabAccount;
   const selectConnection = cloudFunding?.selectConnection;
@@ -459,6 +467,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     if (localLabAccount) return;
     dialogActive.current = false;
     browserLaunchSequence.current += 1;
+    freshBrowserIntent.current = false;
+    freshBrowserStarted.current = false;
     setRestoringPersonal(false);
     setTestAccountOwner(null);
     setAuthorizedPreviewOwner(null);
@@ -482,6 +492,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       ]);
       if (controller.signal.aborted) return;
       if (preview.status === 'fulfilled') {
+        if (freshBrowserIntent.current && ['connecting', 'failed', 'ready'].includes(preview.value?.phase ?? ''))
+          freshBrowserStarted.current = true;
         setAuthorizedPreviewOwner(preview.value?.phase === 'connected' ? localLabAccount : null);
       }
       if (test.status === 'fulfilled') {
@@ -518,6 +530,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         return;
       }
       if (preview.status === 'fulfilled' && preview.value?.phase === 'connected'
+          && (!freshBrowserIntent.current || freshBrowserStarted.current)
           && personalSelectionAllowed && !activatingPersonal.current) {
         if (selectingConnection) {
           timer = setTimeout(check, 750);
@@ -545,6 +558,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
             await refreshConnection('manual');
             if (dialogActive.current && activationSequence === browserLaunchSequence.current) {
               dialogActive.current = false;
+              freshBrowserIntent.current = false;
+              freshBrowserStarted.current = false;
               setPersonalDialogState('closed');
               // The shared worker continues model inference; release Chromium
               // and its X11/VNC helpers as soon as authorization succeeds.
@@ -602,7 +617,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   // the pill as unavailable until an authorized Google session returns.
   const hostedConnected = hosted && sponsoredSelected && cloudFunding?.provider?.status === 'connected';
   const forcedSponsored = !!cloudFunding?.forcedSponsored && !!cloudFunding?.authorized;
-  const connected = (hosted ? hostedConnected : simulatedSponsored
+  const connected = (hosted ? (sponsoredSelected ? hostedConnected : status === 'connected') : simulatedSponsored
     ? sponsoredPill && sponsoredSelected && cloudFunding?.provider?.status === 'connected'
     : status === 'connected') && !googleRequired;
   const disabled = (!hosted && !hostedNoticeClick && (ai.connecting || ai.transitioning)) || googleRequired || !!cloudFunding?.selectingConnection || disconnecting || restoringPersonal;
@@ -634,28 +649,20 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     && !cloudFunding?.budget?.global_cap_exempt
     && typeof globalRemaining === 'number'
     && globalRemaining <= 0;
-  const sponsorStatus = connected ? 'Connected' : cloudFunding?.providerLoading ? 'Checking connection' : cloudFunding?.provider?.status ?? 'Not connected';
-  const providerDetail = cloudFunding?.providerError
-    ? 'Sponsored model connection could not be checked.'
-    : `Sponsored model connection: ${sponsorStatus}. ${cloudFunding?.provider?.guidance ?? ''}`.trim();
-  const allowanceDescription = !cloudFunding?.authorized
-    ? 'Sign in with Google to view your sponsored allowance.'
-    : cloudFunding.loading
-      ? 'Loading your remaining sponsored allowance…'
-      : cloudFunding.error
-        ? 'Your sponsored allowance is unavailable. Try again after reconnecting.'
-        : adminSponsored
-          ? 'This administrator has no SIGMA member-level spending cap; provider and global spending limits may still apply.'
-          : cloudFunding.budget
-            ? cloudFunding.budget.remaining_usd === null
-              ? 'Your sponsored allocation is unlimited; provider and global spending limits may still apply.'
-              : `${cloudFunding.budget.remaining_usd <= 0 ? 'No sponsored allocation remains.' : `$${cloudFunding.budget.remaining_usd.toFixed(2)} remaining of $${cloudFunding.budget.allowance_usd.toFixed(2)} per-user sponsored allocation.`} $${cloudFunding.budget.estimated_usage_usd.toFixed(2)} estimated usage and $${cloudFunding.budget.held_usd.toFixed(2)} held for in-progress requests.`
-            : sponsoredSelected ? 'Your sponsored allocation is not yet available.' : 'Sponsored access is not selected.';
-  const sponsorDetails = `${simulatedSponsored ? 'This mock sponsorship is simulated; research cannot call a live provider. ' : 'SIGMA covers eligible model calls using its sponsored allocation; membership, spending and provider limits still apply. '}${providerDetail} ${allowanceDescription}${globalFundingExhausted ? ' Global sponsored spending limit has been reached.' : ''}`;
+  const sponsorDetails = simulatedSponsored
+    ? 'This Sponsored ChatGPT connection is simulated.'
+    : globalFundingExhausted
+      ? 'SIGMA has reached its sponsored spending limit.'
+      : !cloudFunding?.authorized
+        ? 'Sign in with Google to use Sponsored ChatGPT.'
+        : adminSponsored || cloudFunding?.budget?.remaining_usd === null
+          ? 'SIGMA covers ChatGPT requests. Your allowance is unlimited.'
+          : typeof cloudFunding?.budget?.remaining_usd === 'number'
+            ? `SIGMA covers ChatGPT requests. $${Math.max(0, cloudFunding.budget.remaining_usd).toFixed(2)} remaining.`
+            : 'SIGMA covers ChatGPT requests.';
   const sponsorProvisioningGuidance = cloudFunding?.provider?.provider === 'api_key'
     ? 'Hosted inference is currently routed to Sponsored OpenAI API key billing. SIGMA does not fall back between providers. To use the designated ChatGPT sponsor, set SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt and provision the sponsor registration using the supported local sign-in and protected VM import flow.'
     : 'Hosted ChatGPT sponsor credentials are not connected. The production HTTPS callback is not a supported ChatGPT sign-in flow. Complete sign-in locally with the designated account, then securely import its protected registration on the VM; SIGMA validates the account and scopes and keeps the VM host ID.';
-  const sponsorTooltip = 'SIGMA covers eligible ChatGPT model calls.';
   const sponsoredAccessibleLabel = `ChatGPT Sponsored${forcedSponsored ? '; sponsored mode required' : ''}${connected && sponsoredSelected ? adminSponsored ? '; sponsor connected' : '; connected' : ''}`;
   const allowanceText = !sponsoredPresentation
     ? 'Personal'
@@ -675,6 +682,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
   async function closePersonalBrowserDialog() {
     dialogActive.current = false;
     browserLaunchSequence.current += 1;
+    freshBrowserIntent.current = false;
+    freshBrowserStarted.current = false;
     const activationPending = activatingPersonal.current;
     const wasReady = personalDialogState === 'ready' || personalDialogState === 'error';
     setPersonalDialogState('closed');
@@ -702,7 +711,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       });
       const account = response.ok ? await response.json() as { status?: string } : null;
       if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
-      if (account?.status === 'verified' && personalSelectionAllowed) {
+      if (account?.status === 'verified' && personalSelectionAllowed
+          && !freshBrowserIntent.current) {
         activatingPersonal.current = true;
         try {
           if (selectedConnection !== 'personal') await selectConnection?.('personal');
@@ -734,6 +744,10 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       setRestoringPersonal(false);
     }
     if (sequence !== browserLaunchSequence.current || !dialogActive.current) return;
+    // The shared worker reports "ready", not a stale "connected", until
+    // Chromium initiates this fresh chooser. The callback can finish faster
+    // than a polling interval; don't require observing "connecting" first.
+    if (freshBrowserIntent.current) freshBrowserStarted.current = true;
     setPersonalDialogState('ready');
   }
 
@@ -752,6 +766,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
     // The user remains in SIGMA. The iframe embeds SIGMA's authenticated VNC
     // viewer; OpenAI itself is never framed or deprived of its CSP protections.
     const sequence = ++browserLaunchSequence.current;
+    freshBrowserIntent.current = selectedConnection === 'sponsored';
+    freshBrowserStarted.current = false;
     const diagnosticAttempt = personalDiagnosticsEnabled
       ? crypto.randomUUID().replaceAll('-', '').slice(0, 12) : '';
     if (personalDiagnosticsEnabled) console.info('[SIGMA Personal] browser launch', diagnosticAttempt);
@@ -910,7 +926,8 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       setDisconnectOpen(true);
       return;
     }
-    if (previewAuthorized && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
+    if (previewAuthorized && selectedConnection !== 'sponsored'
+        && cloudFunding?.sponsorshipEligible && !cloudFunding.forcedSponsored) {
       try {
         await cloudFunding.selectConnection?.('personal');
         dialogActive.current = false;
@@ -1001,13 +1018,13 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       : 'Connected to ChatGPT using your personal account.'
     : previewAuthorized && sponsoredSelected
       ? 'Click to use your ChatGPT plan for SIGMA requests.'
-      : sponsoredPill ? sponsorTooltip : connectionTooltip;
+      : sponsoredPill ? undefined : connectionTooltip;
   const zeroAllowance = sponsoredPill && sponsoredSelected && !adminSponsored && typeof cloudFunding?.budget?.remaining_usd === 'number' && cloudFunding.budget.remaining_usd < 0.05;
   return <>
   <details className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`}>
-    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? sponsoredAccessibleLabel : visibleLabel} data-tooltip={pillTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (localLabAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void selectContainerConnection(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
+    <summary ref={pillTrigger} className={sponsoredPill ? 'has-sponsored-allowance' : undefined} aria-label={sponsoredPill && !testConnected ? `${sponsoredAccessibleLabel}; ${allowanceText}` : visibleLabel} data-tooltip={sponsoredPill ? undefined : pillTooltip} aria-disabled={disabled} onClick={event => { event.preventDefault(); if (disabled) return; if (containerBrowserLab) { if (localLabAccount || sponsoredPill || cloudFunding?.selectedConnection !== 'personal') void selectContainerConnection(); else void cloudFunding?.selectConnection?.('sponsored').catch(() => undefined); return; } if (hostedNoticeClick) { setPersonalHostedNoticeOpen(true); return; } if ((connected && hosted && !adminNeedsSponsorProvisioning) || (forcedSponsored && sponsoredSelected)) return; if (simulatedSponsored && sponsoredSelected) void cloudFunding?.disconnectMockSponsored?.().catch(() => undefined); else if (connected && !sponsoredPill && cloudFunding?.sponsorshipEligible && !sponsoredSelected) void (async () => { if (await ai.disconnect()) { await cloudFunding.selectConnection?.('sponsored'); await ai.refresh('manual'); } })(); else if (connected && !sponsoredPill) void ai.disconnect(); else void connect(); }}>
       <span className={`connection-dot connection-${dotStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/>
-      {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><button type="button" className="sponsored-allowance-trigger" aria-label={`Sponsored allowance: ${allowanceText}`} aria-describedby="sponsored-allowance-tooltip" aria-expanded={allowanceTipOpen} onClick={event => { event.stopPropagation(); event.preventDefault(); setAllowanceTipOpen(open => !open); }} onKeyDown={event => event.stopPropagation()}><span className="sponsored-allowance-inline">{allowanceText}</span><span id="sponsored-allowance-tooltip" className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></button></span> : <span role="status">{visibleLabel}</span>}
+      {sponsoredPill && !testConnected ? <span className="connection-label-stack"><span role="status">{visibleLabel}</span><span className="sponsored-allowance-trigger"><span className="sponsored-allowance-inline">{allowanceText}</span><span className="sponsored-allowance-tooltip" role="tooltip">{sponsorDetails}</span></span></span> : <span role="status">{visibleLabel}</span>}
     </summary>
   </details>
   {localLabAccount && disconnectOpen && createPortal(
@@ -1027,7 +1044,11 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
       </div>
     </div>, document.body)}
   {createPortal(
-    <PersonalBrowserDialog state={personalDialogState}
+    <PersonalBrowserDialog
+      // Ordinary local sign-in already opens a real browser tab on click.
+      // Never overlay the container-style dialog unless that popup was
+      // blocked and we need to show the safe manual handoff link.
+      state={!containerBrowserLab && !hosted && !ai.handoff ? 'closed' : personalDialogState}
       error={personalDialogError || (!containerBrowserLab ? ai.error : '')}
       external={!containerBrowserLab && !hosted}
       handoff={ai.handoff}

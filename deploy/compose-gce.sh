@@ -18,6 +18,9 @@ fi
 if grep -qx 'SIGMA_HOST_DIRECT=true' "$env_file"; then
   set -- -f deploy/compose.direct.gce.yaml "$@"
 fi
+if grep -qx 'SIGMA_PERSONAL_HOSTED_ENABLED=true' "$env_file"; then
+  set -- -f deploy/compose.personal.backend.gce.yaml "$@"
+fi
 
 exec docker compose --project-name sigma --env-file "$env_file" \
   -f deploy/compose.yaml -f deploy/compose.gce.yaml "$@"

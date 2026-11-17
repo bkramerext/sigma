@@ -1,0 +1,30 @@
+[Unit]
+Description=SIGMA private hosted Personal ChatGPT Docker broker
+Requires=docker.service
+After=docker.service
+RequiresMountsFor=/srv/sigma-state
+
+[Service]
+Type=simple
+User=root
+Group=10001
+WorkingDirectory=/opt/sigma/current
+EnvironmentFile=/etc/sigma/deploy.env
+Environment=PYTHONPATH=/opt/sigma/current/src
+Environment=SIGMA_AUTH_BROKER_SOCKET=/run/sigma-personal-broker/broker.sock
+Environment=SIGMA_AUTH_BROKER_GATEWAY_ROOT=/run/sigma-personal-gateways
+Environment=SIGMA_AUTH_BROKER_CLIENT_UID=10001
+RuntimeDirectory=sigma-personal-broker sigma-personal-gateways
+RuntimeDirectoryMode=0750
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/sigma/current/auth-poc/shared_broker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=full
+ReadWritePaths=/run/sigma-personal-broker /run/sigma-personal-gateways
+
+[Install]
+WantedBy=multi-user.target

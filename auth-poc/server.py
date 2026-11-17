@@ -1,13 +1,14 @@
-"""Local OAuth browser routes, reused by the shared low-memory POC worker.
+"""Loopback OAuth browser routes for SIGMA's user-isolated Personal worker.
 
-Only the authenticated worker may read account records. The transient browser
-uses a separate UID in the shared container and a loopback-only callback.
-Hosted Personal ChatGPT remains separately gated and unapproved.
+The same real account sign-in runs locally and on hosted SIGMA. Chromium and
+the callback remain bound to the container loopback; tokens never enter the
+SIGMA frontend. Synthetic sign-in exists only for separate offline tests.
 """
 from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from urllib.parse import urlsplit
 
@@ -22,11 +23,16 @@ from model_gateway import _valid_rpc_key
 from sigma import ai_store, chatgpt_auth
 from sigma.projects import ProjectError
 
-if os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
-    raise RuntimeError("This is a local laboratory; hosted integration is not enabled")
+_shared_real = (
+    os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1"
+    and os.environ.get("SIGMA_PERSONAL_SHARED_REAL_SIGNIN") == "1"
+)
+if not _shared_real and os.environ.get("SIGMA_AUTH_POC_LAB") != "1":
+    raise RuntimeError("Personal ChatGPT worker is not enabled")
 
 app = FastAPI()
-app.include_router(synthetic_signin.router)
+if not _shared_real:
+    app.include_router(synthetic_signin.router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
 _ATTEMPT_ID: str | None = None
 _SIGNIN_START_LOCK = asyncio.Lock()
@@ -34,8 +40,16 @@ _SIGNIN_FAILED = False
 
 
 def real_signin_enabled() -> bool:
+    """The hosted shared worker is real, not a local/synthetic preview."""
+    if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1":
+        seed = os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")
+        return (
+            os.environ.get("SIGMA_PERSONAL_SHARED_REAL_SIGNIN") == "1"
+            and re.fullmatch(r"[0-9a-f]{64}", seed) is not None
+        )
     return (
-        os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
+        os.environ.get("SIGMA_AUTH_POC_LAB") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
         and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") == "1"
     )
 
@@ -44,7 +58,7 @@ def require_real_signin() -> None:
     if not real_signin_enabled():
         raise HTTPException(
             403,
-            "Real ChatGPT sign-in is available only in the explicit local authorization preview.",
+            "Real Personal ChatGPT sign-in is unavailable in this worker.",
         )
 
 
@@ -73,31 +87,19 @@ def cancel_pending_signin() -> None:
     _SIGNIN_FAILED = False
 
 
-async def _direct_local_signin() -> HTMLResponse | RedirectResponse:
-    """Go straight to the verified OpenAI chooser in this isolated browser.
+async def _direct_local_signin() -> RedirectResponse:
+    """Start fresh OAuth for every explicitly launched browser, never a blank page.
 
-    The broker starts a browser only after a deliberate SIGMA user action.
-    Never display an intermediary button or open a popup. Preserve saved
-    sessions without starting a second OAuth attempt.
+    A saved account remains intact until OAuth succeeds, but is *not* evidence
+    that a user's explicit Sponsored -> Personal click should reuse it. The
+    disposable Chromium profile opens directly on OpenAI's account chooser.
     """
     global _ATTEMPT_ID, _SIGNIN_FAILED
     require_real_signin()
     _SIGNIN_FAILED = False
-    try:
-        saved = await chatgpt_auth.session()
-    except (ProjectError, OSError, ValueError, KeyError, TypeError) as exc:
-        _SIGNIN_FAILED = True
-        raise HTTPException(503, "Could not check the saved ChatGPT account.") from exc
-    if saved.get("status") == "connected" and (saved.get("account") or {}).get("plan_authorized") is True:
-        return HTMLResponse(
-            "<!doctype html><html lang='en'><head><title>ChatGPT connected</title></head>"
-            "<body></body></html>",
-            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
-        )
-    if saved.get("status") == "unavailable":
-        _SIGNIN_FAILED = True
-        raise HTTPException(503, "Saved ChatGPT credentials could not be verified.")
-
+    # Do not serve an empty page for saved credentials: that was the white
+    # noVNC screen on a second connection attempt. An explicitly started GUI
+    # always requests a fresh account chooser without erasing saved tokens.
     async with _SIGNIN_START_LOCK:
         # Opening the isolated browser's start page is a new sign-in, not a
         # replay of its previous OAuth handoff. authorization_url() consumes
@@ -230,16 +232,22 @@ def _saved_preview_is_authorized() -> bool:
 @app.get("/preview-state")
 async def preview_state() -> dict[str, str]:
     require_real_signin()
-    # A verified stored account is authoritative even when an earlier OAuth
-    # attempt failed. Never leave a newly connected browser displaying a stale
-    # error until the worker process happens to restart.
-    if await run_in_threadpool(_saved_preview_is_authorized):
-        return {"phase": "connected"}
-    if _SIGNIN_FAILED:
-        return {"phase": "failed"}
+    # An explicit reauthorization must complete before existing saved tokens
+    # are treated as the result of this browser session. Otherwise a pending
+    # chooser gets short-circuited by last week's valid cached credentials.
     attempt = (await status())["attempt"]
     if attempt is not None:
         return {"phase": attempt}
+    if _SIGNIN_FAILED:
+        return {"phase": "failed"}
+    if os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") == "1":
+        # A shared-worker window was launched by explicit user intent. An
+        # earlier saved account is NOT completion of this new OAuth flow.
+        # The frontend verifies the saved account separately before opening
+        # the GUI when it is intentionally restoring a Personal session.
+        return {"phase": "ready"}
+    if await run_in_threadpool(_saved_preview_is_authorized):
+        return {"phase": "connected"}
     return {"phase": "ready"}
 
 

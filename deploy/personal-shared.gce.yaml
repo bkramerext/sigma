@@ -1,0 +1,13 @@
+# Persistent, nonpublic hosted Personal ChatGPT worker.
+# The two protected directories are prepared on the mounted state disk before
+# Docker starts. Never import legacy per-user experimental credentials.
+services:
+  personal:
+    volumes: !override
+      - type: bind
+        source: ${SIGMA_STATE_DISK_MOUNT:?persistent state disk required}/auth/personal-shared
+        target: /var/lib/sigma-shared
+      - type: bind
+        source: ${SIGMA_STATE_DISK_MOUNT:?persistent state disk required}/auth/personal-shared-key
+        target: /var/lib/sigma-shared-key
+volumes: {}

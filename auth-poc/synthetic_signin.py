@@ -34,7 +34,9 @@ _attempt: Attempt | None = None
 
 def enabled() -> bool:
     return (
-        os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
+        os.environ.get("SIGMA_PERSONAL_SHARED_VAULT") != "1"
+        and os.environ.get("SIGMA_AUTH_POC_LAB") == "1"
+        and os.environ.get("SIGMA_AUTH_POC_LOCAL_DOCKER") == "1"
         and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
     )
 

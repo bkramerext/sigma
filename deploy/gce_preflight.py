@@ -36,6 +36,9 @@ ALLOWED_ENV_KEYS = {
     "SIGMA_CLOUD_SPONSORED_ENABLED",
     "SIGMA_CLOUD_FORCE_SPONSORED_MODE",
     "SIGMA_CLOUD_PERSONAL_CHATGPT_NOTICE_ENABLED",
+    "SIGMA_PERSONAL_HOSTED_ENABLED",
+    "SIGMA_AUTH_POC_RPC_SEED",
+    "SIGMA_AUTH_POC_CHECKOUT_ID",
     "SIGMA_AUTH_POC_LAB_ENABLED",
     "SIGMA_HOST_DIRECT",
     "GOOGLE_OIDC_CLIENT_ID",
@@ -134,6 +137,15 @@ def _parse_env(path: Path) -> tuple[dict[str, str] | None, str]:
         return None, "personal ChatGPT notice setting must be true or false"
     if values.get("SIGMA_AUTH_POC_LAB_ENABLED", "false") not in {"true", "false"}:
         return None, "synthetic auth laboratory setting must be true or false"
+    if values.get("SIGMA_PERSONAL_HOSTED_ENABLED", "false") not in {"true", "false"}:
+        return None, "hosted Personal setting must be true or false"
+    if values.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "true":
+        if values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true":
+            return None, "synthetic auth lab and hosted Personal are mutually exclusive"
+        if not re.fullmatch(r"[0-9a-f]{64}", values.get("SIGMA_AUTH_POC_RPC_SEED", "")):
+            return None, "hosted Personal worker HMAC seed is missing or invalid"
+        if not re.fullmatch(r"[0-9a-f]{32}", values.get("SIGMA_AUTH_POC_CHECKOUT_ID", "")):
+            return None, "hosted Personal project identity is missing or invalid"
     if values.get("SIGMA_HOST_DIRECT", "false") not in {"true", "false"}:
         return None, "host-direct routing setting must be true or false"
     if provider not in {"api_key", "chatgpt"}:
@@ -745,9 +757,12 @@ class Preflight:
             "json",
         ]
         auth_lab = self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true"
+        hosted_personal = self.values.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "true"
         host_direct = self.values.get("SIGMA_HOST_DIRECT") == "true"
         if host_direct:
             argv[10:10] = ["-f", str(self.repository / "deploy/compose.direct.gce.yaml")]
+        if hosted_personal:
+            argv[10:10] = ["-f", str(self.repository / "deploy/compose.personal.backend.gce.yaml")]
         if auth_lab:
             argv[10:10] = [
                 "-f",
@@ -813,6 +828,23 @@ class Preflight:
                 and socket_mount.get("read_only") is True
                 and state == "/srv/sigma-state/auth"
                 and (
+                    not hosted_personal
+                    or (
+                        backend["environment"].get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
+                        and backend["environment"].get("SIGMA_PERSONAL_BROWSER_ENABLED") == "1"
+                        and backend["environment"].get("SIGMA_PERSONAL_SHARED_MODE") == "1"
+                        and backend["environment"].get("SIGMA_AUTH_POC_RPC_SEED")
+                        == self.values["SIGMA_AUTH_POC_RPC_SEED"]
+                        and {"/run/sigma-personal-broker", "/run/sigma-personal-gateways"}.issubset(
+                            {
+                                volume["target"]
+                                for volume in backend["volumes"]
+                                if volume.get("read_only") is True
+                            }
+                        )
+                    )
+                )
+                and (
                     (
                         not host_direct
                         and not services["backend"].get("ports")
@@ -857,6 +889,60 @@ class Preflight:
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             valid = False
+        if valid and hosted_personal:
+            personal_argv = [
+                "docker",
+                "compose",
+                "--project-name",
+                "sigma-shared-" + self.values["SIGMA_AUTH_POC_CHECKOUT_ID"],
+                "--env-file",
+                str(self._path(self.env_file)),
+                "-f",
+                str(self.repository / "deploy/personal-shared.compose.yaml"),
+                "-f",
+                str(self.repository / "deploy/personal-shared.gce.yaml"),
+                "config",
+                "--format",
+                "json",
+            ]
+            try:
+                personal_result = self.command(
+                    personal_argv,
+                    environment={
+                        "PATH": "/usr/bin:/bin",
+                        "HOME": "/root",
+                        "DOCKER_CONFIG": "/root/.docker",
+                    },
+                )
+                if personal_result.returncode:
+                    valid = False
+                else:
+                    personal_service = json.loads(personal_result.stdout)["services"]["personal"]
+                    ports = personal_service["ports"]
+                    mounts = {
+                        mount["target"]: mount["source"] for mount in personal_service["volumes"]
+                    }
+                    valid = (
+                        personal_service.get("read_only") is True
+                        and len(ports) == 2
+                        and {port["target"] for port in ports} == {8001, 6080}
+                        and all(port.get("host_ip") == "127.0.0.1" for port in ports)
+                        and personal_service["environment"]["SIGMA_AUTH_POC_RPC_SEED"]
+                        == self.values["SIGMA_AUTH_POC_RPC_SEED"]
+                        and mounts.get("/var/lib/sigma-shared")
+                        == "/srv/sigma-state/auth/personal-shared"
+                        and mounts.get("/var/lib/sigma-shared-key")
+                        == "/srv/sigma-state/auth/personal-shared-key"
+                    )
+            except (
+                KeyError,
+                OSError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+                subprocess.TimeoutExpired,
+            ):
+                valid = False
         if valid:
             self.add(
                 "Production Compose configuration",
@@ -898,8 +984,43 @@ class Preflight:
             "/opt/sigma/current/deploy/start-gce.sh",
             "gce_preflight.py",
         )
-        if self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true":
+        if self.values.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "true":
+            required += ("/opt/sigma/current/deploy/stop-gce.sh",)
+        elif self.values.get("SIGMA_AUTH_POC_LAB_ENABLED") == "true":
             required += ("/opt/sigma/current/deploy/compose-gce.sh",)
+        if self.values.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "true":
+            broker = self._path("/etc/systemd/system/sigma-personal-broker.service")
+            try:
+                broker_info = broker.lstat()
+                broker_unit = broker.read_text(encoding="utf-8")
+            except OSError:
+                self.add(
+                    "Hosted Personal broker service", "BLOCKED", "broker systemd unit is missing"
+                )
+            else:
+                if (
+                    stat.S_ISREG(broker_info.st_mode)
+                    and not stat.S_ISLNK(broker_info.st_mode)
+                    and broker_info.st_uid == 0
+                    and not stat.S_IMODE(broker_info.st_mode) & 0o022
+                    and "User=root" in broker_unit
+                    and "Group=10001" in broker_unit
+                    and "SIGMA_AUTH_BROKER_CLIENT_UID=10001" in broker_unit
+                    and "/auth-poc/shared_broker.py" in broker_unit
+                    and "RuntimeDirectory=sigma-personal-broker sigma-personal-gateways"
+                    in broker_unit
+                ):
+                    self.add(
+                        "Hosted Personal broker service",
+                        "PASS",
+                        "protected host-owned broker is installed",
+                    )
+                else:
+                    self.add(
+                        "Hosted Personal broker service",
+                        "FAIL",
+                        "broker ownership contract is invalid",
+                    )
         if all(item in content for item in required):
             self.add(
                 "SIGMA systemd service",
@@ -964,15 +1085,13 @@ class Preflight:
         self._command("Docker Compose v2", ["docker", "compose", "version"])
         self.check_compose()
         self.check_app_unit()
-        self._command(
-            "Systemd unit syntax",
-            [
-                "systemd-analyze",
-                "verify",
-                "/etc/systemd/system/sigma.service",
-                "/etc/systemd/system/sigma-sandbox.service",
-            ],
-        )
+        units = [
+            "/etc/systemd/system/sigma.service",
+            "/etc/systemd/system/sigma-sandbox.service",
+        ]
+        if self.values.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "true":
+            units.append("/etc/systemd/system/sigma-personal-broker.service")
+        self._command("Systemd unit syntax", ["systemd-analyze", "verify", *units])
         return self.results
 
     def _sandbox_socket(self) -> str | None:

@@ -66,6 +66,9 @@ jobs:
           test "$(id -u)" -ne 0
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/gce_host.py
           env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/tooling.py
+          if [[ "${{ matrix.shard }}" == "1" ]]; then
+            env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/hosted_personal_hotfix.py
+          fi
       - name: Run full repository verification
         shell: bash
         env:

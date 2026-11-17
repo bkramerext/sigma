@@ -95,8 +95,10 @@ def _stop() -> None:
 
 def _start() -> bool:
     global _BROWSER
-    if _browser_ready():
-        return True
+    # A start command is an explicit request for a *new* real ChatGPT
+    # chooser, including after a disconnect. A still-ready Chromium can be
+    # sitting on the consumed "Return to SIGMA" OAuth callback; never reuse
+    # that GUI or its profile. Only the encrypted worker credentials persist.
     _stop()
     BROWSER_HOME.mkdir(mode=0o700)
     os.chmod(BROWSER_HOME, 0o700)

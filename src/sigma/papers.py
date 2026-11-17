@@ -4730,19 +4730,52 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
         if row["status"] == "discarded":
             continue
         if row["status"] == "complete" and row.get("artifact_id"):
-            # An attributed published paper has a durable ledger receipt.
-            # It does not need checkpoint, preflight or PDF inspection on
-            # every project-page listing. Fetch those only for unfinished runs.
+            # Read only the tiny, run-scoped progress receipt, never the PDF.
+            # Otherwise the fast path erases a failed automatic Score step and
+            # incorrectly renders 'Scored' for a PDF which has no score.
             published_id = row["artifact_id"]
+            with paper_run_scope(row["run_id"]):
+                # Only actual project files have a persisted run sidecar.
+                # Legacy activity fixtures may pass an unsuffixed path.
+                saved_progress = (
+                    _read_progress_status(path)
+                    if Path(path).suffix in {".sigma", ".json"}
+                    else None
+                )
+                key = f"{Path(path).expanduser().resolve()}#paper:{row['run_id']}"
+                live_progress = _active_progress.get(key)
+            # The reservation receives its PDF artifact before Score begins.
+            # It is not yet a finished pipeline: preserve the live Score step
+            # rather than jumping straight to a falsely completed "Scored".
+            scoring_live = (
+                live_progress is not None
+                and live_progress.get("status") == "running"
+                and live_progress.get("stage")
+                in {"pdf_check", "scoring", "score_failed", "finishing"}
+            )
+            projected_status = "active" if scoring_live else "complete"
+            finished_progress = (
+                {**live_progress, "status": "active", "paper_id": published_id}
+                if scoring_live and live_progress is not None
+                else {
+                    "status": "complete",
+                    "stage": "complete",
+                    "paper_id": published_id,
+                }
+            )
+            if (
+                not scoring_live
+                and saved_progress is not None
+                and saved_progress.get("paper_id") == published_id
+                and saved_progress.get("status") == "complete"
+                and "scoring did not finish" in str(saved_progress.get("detail", ""))
+            ):
+                finished_progress["detail"] = saved_progress["detail"]
             result.append(
                 {
                     **row,
-                    "status": "complete",
-                    "progress": {
-                        "status": "complete",
-                        "stage": "complete",
-                        "paper_id": published_id,
-                    },
+                    "status": projected_status,
+                    "progress": finished_progress,
                     "preflight_needed": False,
                     "paper_id": published_id,
                     "can_control": False,

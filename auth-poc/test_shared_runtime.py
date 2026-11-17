@@ -131,6 +131,16 @@ def memory_report(stage: str) -> None:
 
 def main() -> None:
     assert os.geteuid() == 10001, "Vault test must not run as root"
+    # Verify the built container preserves both suppression settings.
+    import json
+
+    policy_file = Path("/etc/chromium/policies/managed/sigma-no-password-saving.json")
+    assert json.loads(policy_file.read_text(encoding="utf-8")) == {
+        "PasswordManagerEnabled": False,
+        "PasswordManagerPasskeysEnabled": False,
+    }, "Chromium must suppress password saving and passkey helper"
+    boot = Path("/opt/sigma/auth-poc/boot.sh").read_text(encoding="utf-8")
+    assert "--disable-blink-features=WebAuthenticationConditionalUI" not in boot
     memory_report("idle_before_login")
     asyncio.run(storage_check())
     assert call(A, "GET", "/v1/account", key_override="0"*64)[0] == 403

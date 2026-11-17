@@ -30,11 +30,18 @@ class PersonalBrowserUnavailable(RuntimeError):
 
 
 def enabled() -> bool:
-    return (
-        os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
-        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
-        and cloud_auth.config().enabled
-    )
+    cfg = cloud_auth.config()
+    if not cfg.enabled:
+        return False
+    if cfg.local:
+        # Keep the already-working --prod local preview gated as before.
+        return (
+            os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
+            and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
+        )
+    # Hosted real Personal has its own explicit production feature flag,
+    # independent of local testing and synthetic auth laboratory switches.
+    return cloud_auth.hosted_personal_enabled()
 
 
 def _socket() -> str:
@@ -285,7 +292,13 @@ async def _shared_rpc_headers(principal: cloud_auth.Principal | None) -> dict[st
 
 async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
     """Read only the isolated worker's test status. Never select a billing mode."""
-    if os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") != "1":
+    if not sign_in_preview_enabled():
+        return False
+    if os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1":
+        # /v1/test-account is a synthetic test-only signal. Do not reinterpret
+        # a real verified shared-worker account as a synthetic test connection:
+        # the frontend treats that signal as a separate, disposable mode and
+        # would otherwise ignore a click to disconnect Personal.
         return False
     try:
         path = await model_socket(principal)
@@ -305,11 +318,15 @@ async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
 
 
 def sign_in_preview_enabled() -> bool:
-    return (
-        enabled()
+    """Allow verified real sign-in only for an explicit local or hosted shared worker."""
+    cfg = cloud_auth.config()
+    local_preview = (
+        cfg.local
         and os.environ.get("SIGMA_AUTH_BROKER_LOCAL_POC") == "1"
         and os.environ.get("SIGMA_AUTH_POC_LOCAL_REAL_SIGNIN") == "1"
     )
+    hosted_shared = cloud_auth.hosted_personal_enabled()
+    return enabled() and (local_preview or hosted_shared)
 
 
 async def sign_in_preview_phase(principal: cloud_auth.Principal | None) -> str:
