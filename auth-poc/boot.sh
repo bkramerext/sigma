@@ -32,14 +32,15 @@ echo "SIGMA Personal browser: VNC relay launched; starting Chromium"
 # Use an app window in both real and synthetic modes: no Chromium tabs,
 # address bar, or popup. The local worker's / route redirects straight to
 # OpenAI authorization only when the account actually needs it.
-# Hide Chromium's hybrid-passkey autofill suggestion, automatic passkey
-# upgrades, and password-save UI. The managed profile separately forbids
-# passkey storage. Keep WebAuthn available if an account requires MFA;
-# Google's own sign-in page may still offer an account-level passkey.
+# Suppress *conditional WebAuthn autofill UI* in this disposable Chromium
+# profile. It is responsible for the native "Use passkey from another device"
+# suggestion over Google's email field. This does NOT disable explicit WebAuthn
+# prompts used for MFA/security keys. Keep the existing password-save/passkey-
+# upgrade protections; never alter Google's sign-in page or injected JS.
 exec /usr/bin/chromium --no-first-run --no-default-browser-check \
   --disable-dev-shm-usage --disable-extensions --password-store=basic \
   --disable-save-password-bubble \
   --enable-features=WebAuthnUsePasskeyFromAnotherDeviceInContextMenu \
-  --disable-features=AutofillReintroduceHybridPasskeyDropdownItem,WebAuthnPasskeyUpgrade,WebAuthnAmbientSignin \
+  --disable-features=WebAuthenticationConditionalUI,AutofillReintroduceHybridPasskeyDropdownItem,WebAuthnPasskeyUpgrade,WebAuthnAmbientSignin \
   --user-data-dir="$BROWSER_PROFILE" --window-size=1280,800 \
   --app=http://127.0.0.1:8001/
