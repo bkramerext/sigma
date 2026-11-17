@@ -4,8 +4,9 @@ import './chat-page.css';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 type Speaker = 'human' | 'ai_1' | 'ai_2' | 'objective' | 'supervisor';
+type TranscriptSpeaker = Speaker | 'supervisor_setting';
 type Target = 'ai_1' | 'ai_2' | 'both';
-type ChatMessage = { speaker: Speaker; text: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
+type ChatMessage = { speaker: TranscriptSpeaker; text: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
 type SupervisorAssessment = {
   score: number;
   rubric: Record<'alignment' | 'originality' | 'advancement' | 'evidence' | 'momentum', number>;
@@ -23,7 +24,7 @@ type SavedTranscript = {
   messages: ChatMessage[];
   research_objective: string;
   next_speaker: 'ai_1' | 'ai_2';
-  has_supervisor: boolean;
+  supervisor_enabled: boolean;
 };
 type ChatConfig = {
   available: boolean;
@@ -37,7 +38,7 @@ type ChatConfig = {
   max_messages: number;
 };
 
-const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor' };
+const labels: Record<TranscriptSpeaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor', supervisor_setting: 'Supervisor setting' };
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
@@ -249,7 +250,7 @@ export default function ChatPage() {
         conversation_id: sessionId,
         expected_binding: settings.binding,
         speaker: who,
-        messages: history.filter(item => item.speaker !== 'objective').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
+        messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
@@ -292,7 +293,7 @@ export default function ChatPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         conversation_id: sessionId, expected_binding: settings.binding,
-        messages: messagesRef.current.filter(item => item.speaker !== 'objective')
+        messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting')
           .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model, reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
@@ -305,7 +306,7 @@ export default function ChatPage() {
         typeof assessment.assessment !== 'string' || !assessment.assessment) {
       throw new Error('The supervisor returned an invalid assessment.');
     }
-    if (!runningRef.current || id !== runId.current) return;
+    if (!runningRef.current || id !== runId.current || !supervisorEnabledRef.current) return;
     if (assessment.breakthrough_invalidated) breakthroughLatched.current = false;
     if (assessment.breakthrough_candidate) breakthroughLatched.current = true;
     const score = breakthroughLatched.current ? 10 : assessment.score;
@@ -427,8 +428,8 @@ export default function ChatPage() {
       recordedObjectiveRef.current = saved.research_objective;
       researchObjectiveRef.current = saved.research_objective;
       setResearchObjective(saved.research_objective);
-      supervisorEnabledRef.current = saved.has_supervisor;
-      setSupervisorEnabled(saved.has_supervisor);
+      supervisorEnabledRef.current = saved.supervisor_enabled;
+      setSupervisorEnabled(saved.supervisor_enabled);
       const latestSupervisor = [...restored].reverse().find(item => item.speaker === 'supervisor');
       const score = latestSupervisor?.text.match(/Research progress:\s*(\d+(?:\.\d+)?)\s*\/\s*10\.0/);
       const restoredScore = score ? Number(score[1]) : null;
@@ -455,6 +456,19 @@ export default function ChatPage() {
       setError(errorText(cause));
     } finally {
       setRestoringTranscript(false);
+    }
+  }
+
+  function changeSupervisor(enabled: boolean) {
+    supervisorEnabledRef.current = enabled;
+    setSupervisorEnabled(enabled);
+    // Changing the supervisor never stops or restarts the current AI turn.
+    // Persist the setting independently of AI-visible history, in order.
+    if (conversationId) {
+      void appendTranscriptMessage(conversationId, {
+        speaker: 'supervisor_setting',
+        text: enabled ? 'enabled' : 'disabled',
+      }).catch(cause => setError(errorText(cause)));
     }
   }
 
@@ -595,7 +609,8 @@ export default function ChatPage() {
     </section>
     <section className="chat-supervisor-option" aria-label="Brainstorm supervisor">
       <label><input type="checkbox" checked={supervisorEnabled}
-        onChange={event => { supervisorEnabledRef.current = event.target.checked; setSupervisorEnabled(event.target.checked); }}/>
+        disabled={restoringTranscript}
+        onChange={event => changeSupervisor(event.target.checked)}/>
         Enable Supervisor</label>
       <p>A third AI reviews progress after each AI pair, recording a brief assessment and offering occasional
          gentle process-only guidance, without contributing research ideas.</p>
