@@ -466,7 +466,9 @@ def check_transcripts() -> None:
             )
             disabled = chat_transcripts.load_transcript(session["transcript_name"])
             assert disabled["supervisor_enabled"] is False
-            assert all(message["speaker"] != "supervisor_setting" for message in disabled["messages"])
+            assert all(
+                message["speaker"] != "supervisor_setting" for message in disabled["messages"]
+            )
             chat_transcripts.append_message(
                 session["conversation_id"], "supervisor_setting", "enabled"
             )
