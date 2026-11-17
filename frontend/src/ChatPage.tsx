@@ -253,6 +253,54 @@ export default function ChatPage() {
     throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
+  async function assessPair(id: number) {
+    if (!supervisorEnabledRef.current || !researchObjectiveRef.current.trim()) return;
+    const settings = await currentTurnSettings();
+    const controller = new AbortController();
+    abort.current = controller;
+    const response = await fetch('/api/chat/supervisor', {
+      method: 'POST', cache: 'no-store', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: conversationId, expected_binding: settings.binding,
+        messages: messagesRef.current.filter(item => item.speaker !== 'objective')
+          .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
+        model: settings.model, reasoning_effort: settings.reasoning_effort,
+        research_objective: researchObjectiveRef.current,
+      }),
+    });
+    const assessment = await response.json() as SupervisorAssessment & { detail?: string; error?: string };
+    if (!response.ok) throw new Error(assessment.detail ?? assessment.error ?? 'Supervisor assessment failed.');
+    if (typeof assessment.score !== 'number' || !Number.isFinite(assessment.score) ||
+        typeof assessment.assessment !== 'string' || !assessment.assessment) {
+      throw new Error('The supervisor returned an invalid assessment.');
+    }
+    if (!runningRef.current || id !== runId.current) return;
+    if (assessment.breakthrough_candidate) breakthroughLatched.current = true;
+    const score = breakthroughLatched.current ? 10 : assessment.score;
+    const guidance = assessment.guidance?.trim() ?? '';
+    const recipient = assessment.recipient;
+    const summary = assessment.rubric ? Object.entries(assessment.rubric).map(([name, points]) =>
+      `${name}: ${Number(points).toFixed(1)}`).join(' · ') : '';
+    const text = [
+      `Research progress: ${score.toFixed(1)} / 10.0`,
+      assessment.breakthrough_candidate ? 'POTENTIAL BREAKTHROUGH DETECTED — independent validation required.'
+        : breakthroughLatched.current ? 'Breakthrough candidate remains under validation.' : '',
+      summary ? `Rubric — ${summary}` : '',
+      assessment.assessment,
+      assessment.action !== 'continue' && recipient && guidance
+        ? `To ${recipient === 'both' ? 'AI #1 and AI #2' : labels[recipient]}: ${guidance}`
+        : 'No intervention.',
+    ].filter(Boolean).join('\n\n');
+    const entry: ChatMessage = { speaker: 'supervisor', text, score,
+      breakthrough: breakthroughLatched.current,
+      ...(assessment.action !== 'continue' && recipient && guidance ? { recipient, guidance } : {}),
+    };
+    addMessage(entry);
+    await appendTranscriptMessage(conversationId, entry);
+    setProgressScore(score);
+  }
+
   async function runConversation(id: number, initialSpeaker: 'ai_1' | 'ai_2' = 'ai_1') {
     let nextSpeaker: 'ai_1' | 'ai_2' = initialSpeaker;
     try {
@@ -290,6 +338,14 @@ export default function ChatPage() {
         turnStartedAtRef.current = null;
         setTurnElapsedSeconds(0);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
+        if (who === 'ai_2' && supervisorEnabledRef.current) {
+          try { await assessPair(id); }
+          catch {
+            if (runningRef.current && id === runId.current) {
+              setNotice('Supervisor assessment unavailable; AIs are continuing.');
+            }
+          }
+        }
         setSpeaker(nextSpeaker);
         await new Promise(resolve => window.setTimeout(resolve, 500));
       }
@@ -465,7 +521,11 @@ export default function ChatPage() {
     </section>
     {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
       {messages.map((message, index) => <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-        <div className="chat-reply-heading"><strong>{labels[message.speaker]}</strong><CopyReplyButton name={labels[message.speaker]} text={message.text}/></div><MarkdownReply body={message.text}/>
+        <div className="chat-reply-heading"><strong>{labels[message.speaker]}</strong><CopyReplyButton name={labels[message.speaker]} text={message.text}/></div>
+        {message.speaker === 'supervisor' && message.recipient && <p className="chat-supervisor-meta">
+          Process guidance to {message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}
+        </p>}
+        <MarkdownReply body={message.text}/>
       </li>)}
     </ol>}
   </main>
