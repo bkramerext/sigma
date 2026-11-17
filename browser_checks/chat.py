@@ -264,10 +264,15 @@ with sync_playwright() as playwright:
     assert model_box["x"] + model_box["width"] <= google_box["x"] - 4
     assert abs(google_box["y"] - model_box["y"]) < 4
     assert chatgpt_box["y"] >= google_box["y"] + google_box["height"] + 8
-    assert 10 <= 2048 - max(
-        google_box["x"] + google_box["width"],
-        chatgpt_box["x"] + chatgpt_box["width"],
-    ) <= 28
+    assert (
+        10
+        <= 2048
+        - max(
+            google_box["x"] + google_box["width"],
+            chatgpt_box["x"] + chatgpt_box["width"],
+        )
+        <= 28
+    )
     assert 10 <= google_box["y"] - header_box["y"] <= 28
     page.set_viewport_size({"width": 1360, "height": 900})
     human = page.get_by_label("Human", exact=True)
@@ -312,10 +317,13 @@ with sync_playwright() as playwright:
     for label_box, icon_box in ((objective_label, objective_icon), (human_label, human_icon)):
         gap = icon_box["x"] - (label_box["x"] + label_box["width"])
         assert 0 <= gap <= 12, (label_box, icon_box)
-        assert abs(
-            (label_box["y"] + label_box["height"] / 2)
-            - (icon_box["y"] + icon_box["height"] / 2)
-        ) <= 9, (label_box, icon_box)
+        assert (
+            abs(
+                (label_box["y"] + label_box["height"] / 2)
+                - (icon_box["y"] + icon_box["height"] / 2)
+            )
+            <= 9
+        ), (label_box, icon_box)
     expect(objective_copy).to_be_disabled()
     expect(human_copy).to_be_disabled()
     repeated = page.get_by_label("Research Objective:", exact=True)
