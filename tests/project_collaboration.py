@@ -114,9 +114,17 @@ class CollaborationTests(TestCase):
                         model, thinking, created_at, status, artifact_id)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                     (
-                        self.path, "paper", run_id, number, self.workspace.subject_hash,
-                        self.owner.email, "fixture-model", "medium", self.clock[0],
-                        "complete", artifact_id,
+                        self.path,
+                        "paper",
+                        run_id,
+                        number,
+                        self.workspace.subject_hash,
+                        self.owner.email,
+                        "fixture-model",
+                        "medium",
+                        self.clock[0],
+                        "complete",
+                        artifact_id,
                     ),
                 )
         with patch("sigma.projects.project_path", return_value=Path(self.path)):
@@ -132,8 +140,10 @@ class CollaborationTests(TestCase):
                 "SELECT number, status FROM shared_run_reservations WHERE run_id=?",
                 (unrelated_run,),
             ).fetchone()
-        self.assertEqual((deleted["number"], deleted["status"], deleted["artifact_id"]),
-                         (15, "discarded", published_id))
+        self.assertEqual(
+            (deleted["number"], deleted["status"], deleted["artifact_id"]),
+            (15, "discarded", published_id),
+        )
         self.assertEqual((other["number"], other["status"]), (16, "complete"))
 
     def test_collaboration_reads_do_not_wait_for_sqlite_writer(self) -> None:

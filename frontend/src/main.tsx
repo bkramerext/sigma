@@ -3144,6 +3144,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     };
   }, [includeOptionsOpen]);
   const [newPaperRequested, setNewPaperRequested] = useState(false);
+  const [publishedFinished, setPublishedFinished] = useState(false);
   const [guestPaperPreview, setGuestPaperPreview] = useState(false);
   const [guestScorePreview, setGuestScorePreview] = useState(false);
   const [guestExplainPreview, setGuestExplainPreview] = useState(false);
@@ -3163,6 +3164,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
 
   const request = useRef<AbortController | null>(null);
   const paperSubmissionDispatched = useRef(false);
+  const paperPublishedHandoff = useRef<{ runId: string; paperId: string } | null>(null);
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
@@ -3209,6 +3211,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     return () => window.removeEventListener('sigma-reveal-papers', reveal);
   }, [path, onSectionOpened, paperRuns]);
   function selectPaperRun(runId: string | null) {
+    if (runId) {
+      paperPublishedHandoff.current = null;
+      setPublishedFinished(false);
+    }
     selectedRunIdRef.current = runId;
     setSelectedRunId(runId);
   }
@@ -3527,7 +3533,18 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         const list = await listResponse.json();
         if (!listResponse.ok) throw new Error(list.error ?? 'Could not load papers.');
         if (!obsolete()) {
-          setPapers(Array.isArray(list.papers) ? list.papers as PaperSummary[] : []);
+          const listedPapers = Array.isArray(list.papers) ? list.papers as PaperSummary[] : [];
+          setPapers(listedPapers);
+          const handoff = paperPublishedHandoff.current;
+          // Commit the saved row and retire its generating card in one render,
+          // without waiting for slower configuration or progress requests.
+          if (handoff && selectedRunIdRef.current === handoff.runId &&
+              listedPapers.some(paper => paper.paper_id === handoff.paperId)) {
+            setPublishedFinished(true);
+            selectPaperRun(null);
+            setNewPaperRequested(false);
+            paperPublishedHandoff.current = null;
+          }
           setNextPaperNumber(typeof list.next_paper_number === 'number' ? list.next_paper_number : null);
           if (!silent) setLoading(false);
         }
@@ -3556,8 +3573,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       if (own?.paper_id && (list.papers as PaperSummary[]).some(paper => paper.paper_id === own.paper_id)) {
         // Retire the generating card only AFTER its saved-paper metadata is
         // available. Publication precedes automatic Score by many seconds.
+        setPublishedFinished(true);
         selectPaperRun(null);
         setNewPaperRequested(false);
+        paperPublishedHandoff.current = null;
       }
       const ownedProgress = own?.progress ?? (runs.length ? null : savedProgress?.progress);
       const generationRunning = ['active', 'queued'].includes(ownedProgress?.status);
@@ -3616,7 +3635,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       // its card is expanded, a deep link opens it, or an explicit operation
       // requests a particular saved paper. This avoids large paper payloads
       // during ordinary project navigation.
-      const nextId = keepId ?? (expandedPaperIdRef.current || undefined);
+      const nextId = keepId && !(list.papers as PaperSummary[]).some(paper => paper.paper_id === keepId)
+        ? (expandedPaperIdRef.current || undefined)
+        : keepId ?? (expandedPaperIdRef.current || undefined);
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
         const record = await response.json();
@@ -4709,7 +4730,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             throw new Error(event.error ?? 'Paper generation failed.');
           }
           if (actionEpoch !== paperActionEpoch.current || hasPaperStopIntent(runId)) continue;
-          if (event.type === 'complete') result = event.result as { paper_id: string };
+          if (event.type === 'complete') {
+            result = event.result as { paper_id: string };
+            if (result?.paper_id) paperPublishedHandoff.current = { runId, paperId: result.paper_id };
+          }
           if (event.type === 'progress') {
             const nextProgress = { ...event, status: event.state === 'complete' ? 'complete' : 'active', activity_state: event.state } as PaperProgress;
             if (!paperRewindAdmissionPending.current) {
@@ -4849,7 +4873,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const pendingPublicationIds = unlistedPublicationIds(
     paperRuns, papers, hiddenRemovalIds,
   );
-  const pendingPublicationKey = pendingPublicationIds.join('|');
+  const handoff = paperPublishedHandoff.current;
+  if (handoff && !papers.some(paper => paper.paper_id === handoff.paperId))
+    pendingPublicationIds.push(handoff.paperId);
+  const pendingPublicationKey = [...new Set(pendingPublicationIds)].sort().join('|');
   const selectedPublicationPending = publicationAwaitingLibrary(selectedRun, papers);
   const automaticScoringPaperIds = new Set(
     paperRuns.filter(run => run.paper_id && run.status === 'active' &&
@@ -4880,7 +4907,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // A completed selected run can be cleared while its SSE stream is still
   // closing. Do not let stale busy/progress state fabricate a "New paper".
   const hasDraftIdentity = hasActualDraftIdentity(selectedRunId, continuationAvailable,
-    !!checkpointMismatch, !!restartableCheckpoint, restartReady);
+    !!checkpointMismatch, !!restartableCheckpoint, restartReady, busy,
+    paperProgress?.status ?? null, publishedFinished);
   const showDraftPaper = !guest && !removingLegacyDraft && hasDraftIdentity &&
     (!selectedRun?.paper_id || selectedPublicationPending) &&
     !hiddenRemovalIds.has(selectedRunId ?? '') && (
@@ -4947,6 +4975,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (controller.signal.aborted || !Array.isArray(listing.papers)) return;
         if (listing.papers.some((paper: PaperSummary) => pendingIds.has(paper.paper_id))) {
           setPapers(listing.papers as PaperSummary[]);
+          const handoff = paperPublishedHandoff.current;
+          if (handoff && selectedRunIdRef.current === handoff.runId &&
+              listing.papers.some((paper: PaperSummary) => paper.paper_id === handoff.paperId)) {
+            setPublishedFinished(true);
+            selectPaperRun(null);
+            setNewPaperRequested(false);
+            paperPublishedHandoff.current = null;
+          }
           if (typeof listing.next_paper_number === 'number') setNextPaperNumber(listing.next_paper_number);
         }
       } catch { /* Preserve the run card and retry after a transient error. */ }

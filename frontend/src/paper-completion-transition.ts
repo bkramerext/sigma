@@ -23,9 +23,18 @@ export function hasActualDraftIdentity(
   checkpointMismatch: boolean,
   restartableCheckpoint: boolean,
   restartReady: boolean,
+  busy = false,
+  progressStatus: string | null = null,
+  publishedFinished = false,
 ): boolean {
-  return Boolean(selectedRunId || continuationAvailable || checkpointMismatch ||
-    restartableCheckpoint || restartReady);
+  if (selectedRunId) return true;
+  // An older local run can have a durable progress sidecar but no cloud
+  // reservation. Keep that bar visible, including after browser reload.
+  // After publication, never mistake a stale busy flag or checkpoint for a
+  // newly starting, unnumbered Paper.
+  if (busy || publishedFinished || progressStatus === 'complete') return false;
+  return Boolean(continuationAvailable || checkpointMismatch || restartableCheckpoint ||
+    restartReady || ['active', 'queued', 'interrupted', 'failed', 'cancelled'].includes(progressStatus ?? ''));
 }
 
 export function shouldShowPaperLoading(

@@ -28,6 +28,22 @@ class PublishedPaperProjectionTests(TestCase):
             "artifact_id": None,
         }
 
+    def test_project_owner_can_remove_published_collaborator_paper(self) -> None:
+        completed = {**self.reservation, "status": "complete", "artifact_id": self.paper_id}
+        with (
+            patch.object(project_collaboration, "list_execution_runs", return_value=[completed]),
+            patch.object(
+                project_collaboration,
+                "collaborator_identity",
+                return_value="project-owner@example.test",
+            ),
+            patch.object(project_collaboration, "is_project_owner", return_value=True),
+        ):
+            run = papers.run_progress_list(self.path)[0]
+        self.assertEqual(run["paper_id"], self.paper_id)
+        self.assertEqual(run["status"], "complete")
+        self.assertTrue(run["can_remove"])
+
     def test_interrupted_scoring_with_saved_pdf_is_a_published_paper(self) -> None:
         progress = {
             "status": "failed",

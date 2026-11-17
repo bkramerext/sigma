@@ -64,3 +64,14 @@ test('no X is shown to an unauthorized viewer; active creator can still Stop fir
     status: 'active', can_remove: true, can_control: true,
   }), true);
 });
+
+test('legacy active progress stays visible without a cloud reservation', () => {
+  assert.equal(hasActualDraftIdentity(null, false, false, false, false, false, 'active'), true);
+  assert.equal(hasActualDraftIdentity(null, false, false, false, false, false, 'interrupted'), true);
+});
+
+test('finished Paper never becomes unnumbered due to stale busy or restart state', () => {
+  assert.equal(hasActualDraftIdentity(null, true, true, true, true, true, 'active', true), false);
+  assert.equal(hasActualDraftIdentity(null, true, true, true, true, false, 'complete', false), false);
+  assert.equal(hasActualDraftIdentity(null, true, true, true, true, false, 'active', true), false);
+});
