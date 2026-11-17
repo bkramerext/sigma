@@ -314,7 +314,7 @@ def check_slow_turn_heartbeat() -> None:
     ):
         response = client.post("/api/chat/turn", json=body)
     assert response.status_code == 200, response.text
-    assert ": keepalive\\n\\n" in response.text
+    assert ": keepalive\n\n" in response.text
     assert '"type": "complete", "text": "A carefully reasoned reply."' in response.text
     print("PASS brainstorm SSE heartbeat during slow reasoning and eventual completion")
 
