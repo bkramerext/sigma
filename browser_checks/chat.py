@@ -231,9 +231,9 @@ with sync_playwright() as playwright:
             if fail_decode_attempts > 0:
                 fail_decode_attempts -= 1
                 route.fulfill(
-                    status=200,
-                    content_type="text/event-stream",
-                    body='data: {"type":"error","error":"The provider response could not be decoded."}\\n\\n',
+                    status=503,
+                    content_type="application/json",
+                    body='{"detail":"The sponsored account connection check could not reach OpenAI."}',
                 )
                 return
             if fail_next_turn:
@@ -737,11 +737,12 @@ with sync_playwright() as playwright:
     assert turns[skipped_at]["speaker"] == "ai_2"
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
-    # Bad provider frame decoding is retried automatically with the same
-    # speaker/history, rather than asking the human to repair provider output.
+    # A preflight 503 is safe to retry automatically: inference was never
+    # dispatched. The next valid turn is appended once, without duplicating
+    # the Human prompt or spending allowance on ambiguous responses.
     before_recovery = len(turns)
     fail_decode_attempts = 2
-    human.fill("Continue research despite transient malformed provider responses.")
+    human.fill("Continue research despite a temporary sponsored connection-check failure.")
     page.get_by_role("button", name="Send", exact=True).click()
     deadline = time.monotonic() + 7
     while time.monotonic() < deadline and len(turns) < before_recovery + 3:
