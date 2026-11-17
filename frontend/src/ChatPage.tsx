@@ -6,8 +6,18 @@ import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
-type Speaker = 'human' | 'ai_1' | 'ai_2';
-type ChatMessage = { speaker: Speaker; text: string };
+type Speaker = 'human' | 'ai_1' | 'ai_2' | 'supervisor';
+type Target = 'ai_1' | 'ai_2' | 'both';
+type ChatMessage = { speaker: Speaker; text: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
+type SupervisorAssessment = {
+  score: number;
+  rubric: Record<'alignment' | 'originality' | 'advancement' | 'evidence' | 'momentum', number>;
+  assessment: string;
+  action: 'continue' | 'nudge' | 'redirect';
+  recipient: Target | null;
+  guidance: string;
+  breakthrough_candidate: boolean;
+};
 type ChatConfig = {
   available: boolean;
   mode: string;
@@ -20,7 +30,7 @@ type ChatConfig = {
   max_messages: number;
 };
 
-const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2' };
+const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', supervisor: 'Supervisor' };
 const thinkingLabels: Record<ChatConfig['reasoning_effort'], string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high',
 };
@@ -37,8 +47,11 @@ export default function ChatPage() {
   const [config, setConfig] = useState<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [repeatedText, setRepeatedText] = useState('');
-  const repeatedTextRef = useRef('');
+  const [supervisorEnabled, setSupervisorEnabled] = useState(false);
+  const supervisorEnabledRef = useRef(false);
+  const researchObjectiveRef = useRef('');
+  const [progressScore, setProgressScore] = useState<number | null>(null);
+  const breakthroughLatched = useRef(false);
   const [running, setRunning] = useState(false);
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
@@ -116,12 +129,13 @@ export default function ChatPage() {
   }, []);
 
   function appendTranscriptMessage(id: string, message: ChatMessage): Promise<void> {
+    const { speaker, text, recipient, guidance } = message;
     const write = transcriptWrites.current.then(async () => {
       const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ conversation_id: id, ...message }),
+        body: JSON.stringify({ conversation_id: id, speaker, text, recipient, guidance }),
       });
       if (!response.ok) {
         const detail = await response.json().catch(() => null) as { detail?: string; error?: string } | null;
@@ -166,10 +180,10 @@ export default function ChatPage() {
         conversation_id: conversationId,
         expected_binding: settings.binding,
         speaker: who,
-        messages: history.slice(-settings.max_messages),
+        messages: history.slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) =>
+          ({ speaker, text, recipient, guidance })),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
-        repeated_text: repeatedTextRef.current,
       }),
     });
     if (!response.ok) {
@@ -199,6 +213,74 @@ export default function ChatPage() {
     throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
+  async function requestSupervisor(controller: AbortController, settings: ChatConfig): Promise<SupervisorAssessment> {
+    const response = await fetch('/api/chat/supervisor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      signal: controller.signal,
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        expected_binding: settings.binding,
+        messages: messagesRef.current.slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) =>
+          ({ speaker, text, recipient, guidance })),
+        model: settings.model,
+        reasoning_effort: settings.reasoning_effort,
+        research_objective: researchObjectiveRef.current,
+      }),
+    });
+    const value = await response.json() as SupervisorAssessment & { error?: string; detail?: string };
+    if (!response.ok) throw new Error(value.error ?? value.detail ?? 'Supervisor assessment failed.');
+    if (typeof value.score !== 'number' || !Number.isFinite(value.score) ||
+      typeof value.assessment !== 'string' || !value.assessment ||
+      !['continue', 'nudge', 'redirect'].includes(value.action)) {
+      throw new Error('The supervisor returned an invalid assessment.');
+    }
+    return value;
+  }
+
+  async function assessPair(id: number, settings: ChatConfig): Promise<void> {
+    const controller = new AbortController();
+    abort.current = controller;
+    setSpeaker(null);
+    try {
+      const assessment = await requestSupervisor(controller, settings);
+      if (!runningRef.current || id !== runId.current) return;
+      if (assessment.breakthrough_candidate) breakthroughLatched.current = true;
+      const score = breakthroughLatched.current ? 10 : assessment.score;
+      const guidance = assessment.guidance?.trim() ?? '';
+      const recipient = assessment.recipient;
+      const rubric = assessment.rubric;
+      const summary = rubric ? Object.entries(rubric).map(([name, points]) =>
+        `${name}: ${Number(points).toFixed(1)}`).join(' · ') : '';
+      const text = [
+        `Research progress: ${score.toFixed(1)} / 10.0`,
+        assessment.breakthrough_candidate ? 'POTENTIAL BREAKTHROUGH DETECTED — independent validation required.'
+          : breakthroughLatched.current ? 'Breakthrough candidate remains under validation.' : '',
+        summary ? `Rubric — ${summary}` : '',
+        assessment.assessment,
+        assessment.action !== 'continue' && recipient && guidance
+          ? `To ${recipient === 'both' ? 'AI #1 and AI #2' : labels[recipient]}: ${guidance}`
+          : 'No intervention.',
+      ].filter(Boolean).join('\n\n');
+      const entry: ChatMessage = { speaker: 'supervisor', text, score,
+        breakthrough: breakthroughLatched.current,
+        ...(assessment.action !== 'continue' && recipient && guidance
+          ? { recipient, guidance } : {}),
+      };
+      addMessage(entry);
+      await appendTranscriptMessage(conversationId, entry);
+      setProgressScore(score);
+    } catch (cause) {
+      if (!runningRef.current || id !== runId.current || controller.signal.aborted) return;
+      const entry: ChatMessage = { speaker: 'supervisor',
+        text: 'Assessment unavailable for this pair; the AIs can continue without supervisor guidance.' };
+      addMessage(entry);
+      await appendTranscriptMessage(conversationId, entry);
+      setNotice(errorText(cause));
+    }
+  }
+
   async function runConversation(id: number, settings: ChatConfig) {
     let nextSpeaker: 'ai_1' | 'ai_2' = 'ai_1';
     try {
@@ -215,6 +297,10 @@ export default function ChatPage() {
         addMessage(reply);
         await appendTranscriptMessage(conversationId, reply);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
+        if (who === 'ai_2' && supervisorEnabledRef.current && researchObjectiveRef.current) {
+          await assessPair(id, settings);
+          if (!runningRef.current || id !== runId.current) return;
+        }
         setSpeaker(nextSpeaker);
         await new Promise(resolve => window.setTimeout(resolve, 500));
       }
@@ -238,6 +324,7 @@ export default function ChatPage() {
     const text = draft.trim();
     if (!text || !config?.available || !conversationId) return;
     const message = { speaker: 'human', text } as const;
+    if (!researchObjectiveRef.current) researchObjectiveRef.current = text;
     addMessage(message);
     void appendTranscriptMessage(conversationId, message).catch(cause => {
       if (runningRef.current) {
@@ -276,6 +363,9 @@ export default function ChatPage() {
     setMessages([]);
     setConversationId('');
     setTranscriptPath('');
+    researchObjectiveRef.current = '';
+    breakthroughLatched.current = false;
+    setProgressScore(null);
     transcriptWrites.current = Promise.resolve();
     setError('');
     setNotice('');
@@ -328,21 +418,25 @@ export default function ChatPage() {
     <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
-    <section className="chat-repeated-prompt" aria-label="Repeated text">
-      <div className="chat-field-heading">
-        <label htmlFor="chat-repeated-text" data-tooltip="Prepended to every AI request; changes apply on the next turn.">Repeated:</label>
-      </div>
-      <textarea id="chat-repeated-text" rows={2} value={repeatedText}
-        onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
-        placeholder="Optional text prepended to every AI turn…"/>
+    <section className="chat-supervisor-option" aria-label="Brainstorm supervisor">
+      <label><input type="checkbox" checked={supervisorEnabled}
+        onChange={event => { supervisorEnabledRef.current = event.target.checked; setSupervisorEnabled(event.target.checked); }}/>
+        Enable Supervisor</label>
+      <p>A third AI quietly monitors the exchange, helping both participants express their thinking clearly and stay
+        independent and productive without suggesting research ideas. After each pair it records a brief assessment
+        and research progress score; occasional process guidance is addressed explicitly to the relevant AI.</p>
     </section>
+    {supervisorEnabled && progressScore !== null && <p className="chat-progress-status" aria-live="polite">
+      Research progress: <strong>{progressScore.toFixed(1)} / 10.0</strong>
+      {breakthroughLatched.current ? ' · Potential breakthrough — independent validation needed' : ''}
+    </p>}
     <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
       <div className="chat-field-heading">
-        <label htmlFor="chat-human-message">Human:</label>
+        <label htmlFor="chat-human-message">{messages.some(message => message.speaker === 'human') ? 'Human:' : 'Research Objective:'}</label>
       </div>
       <textarea id="chat-human-message" aria-label="Human" rows={2} value={draft}
         onChange={event => setDraft(event.target.value)}
-        placeholder="Write a message to AI #1…"
+        placeholder={messages.some(message => message.speaker === 'human') ? 'Add a direction or question…' : 'What research objective should the two AIs pursue?'}
         onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') event.currentTarget.form?.requestSubmit(); }}/>
     </form>
     <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">
@@ -362,8 +456,14 @@ export default function ChatPage() {
       </section>)}
     </section>
     {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
-      {messages.map((message, index) => <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-        <strong>{labels[message.speaker]}</strong><MarkdownReply body={message.text}/>
+      {messages.map((message, index) => <li key={`${message.speaker}-${index}`}
+        className={`chat-history-${message.speaker}${message.breakthrough ? ' chat-supervisor-breakthrough' : ''}`}>
+        <strong>{labels[message.speaker]}</strong>
+        {message.speaker === 'supervisor' && <p className="chat-supervisor-meta">
+          {message.breakthrough ? 'Potential breakthrough · validation needed' : 'Metacognitive assessment'}
+          {message.recipient ? ` · To ${message.recipient === 'both' ? 'both AIs' : labels[message.recipient]}` : ''}
+        </p>}
+        <MarkdownReply body={message.text}/>
       </li>)}
     </ol>}
   </main>

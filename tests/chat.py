@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import chat, chat_transcripts
+from sigma import chat, chat_supervisor, chat_transcripts
 from sigma.api import app
 from sigma.projects import ProjectError
 
@@ -284,6 +284,39 @@ def check_api() -> None:
     print("PASS chat API model/thinking validation, SSE completion and participant validation")
 
 
+def check_supervisor() -> None:
+    example = {
+        "rubric": {"alignment": 1.2, "originality": 0.8,
+                   "advancement": 1.3, "evidence": 1.0, "momentum": 0.6},
+        "assessment": "The conversation is productive but evidence remains limited.",
+        "action": "nudge",
+        "recipient": "ai_2",
+        "guidance": "Clarify which question is still unresolved.",
+        "breakthrough_candidate": False,
+    }
+    result = chat_supervisor.parse_assessment(json.dumps(example))
+    assert result["score"] == 4.9
+    conversation = [
+        {"speaker": "human", "text": "Discover something new."},
+        {"speaker": "ai_1", "text": "A proposed direction."},
+        {"speaker": "ai_2", "text": "An objection."},
+        {"speaker": "supervisor", "text": "Research progress: 4.9 / 10.0",
+         "recipient": result["recipient"], "guidance": result["guidance"]},
+    ]
+    for who in ("ai_1", "ai_2"):
+        visible = chat._transcript(conversation, who)
+        assert "4.9" not in visible
+    assert "Clarify which question" not in chat._transcript(conversation, "ai_1")
+    assert "Clarify which question" in chat._transcript(conversation, "ai_2")
+    assert "Research progress: 4.9" in chat._transcript(conversation, "supervisor")
+    candidate = chat_supervisor.parse_assessment(json.dumps({
+        **example, "action": "continue", "recipient": None, "guidance": "",
+        "breakthrough_candidate": True,
+    }))
+    assert candidate["score"] == 10.0
+    print("PASS supervisor rubric, candidate milestone, and targeted private guidance")
+
+
 def check_transcripts() -> None:
     with TemporaryDirectory() as temp:
         state = Path(temp)
@@ -305,6 +338,7 @@ def check_transcripts() -> None:
                 ("human", "Name the *sporadic finite simple groups*."),
                 ("ai_1", "The largest is the **Monster**."),
                 ("ai_2", r"Its order is \(8.08\times10^{53}\)."),
+                ("supervisor", "Research progress: 4.9 / 10.0. No intervention."),
             ]
             for speaker, text in messages:
                 chat_transcripts.append_message(session["conversation_id"], speaker, text)
@@ -340,6 +374,7 @@ def main() -> None:
     check_configuration()
     check_service()
     check_api()
+    check_supervisor()
     check_transcripts()
 
 

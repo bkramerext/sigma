@@ -8,32 +8,35 @@ from typing import Any, Literal
 
 import httpx
 
-from sigma import cloud_research, cloud_workspaces, model_dispatch
+from sigma import chat_supervisor, cloud_research, cloud_workspaces, model_dispatch
 from sigma.model_catalog import CATALOG, DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, cloud_credential, models
 from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError
 
-MAX_MESSAGES = 80
+MAX_MESSAGES = 240
 MAX_CONTEXT_CHARS = 48000
 MAX_OUTPUT_TOKENS = 1200
-TIMEOUT_SECONDS = 60
+TIMEOUT_SECONDS = 600
 MAX_RESPONSE_BYTES = 1_000_000
-Speaker = Literal["ai_1", "ai_2"]
+Speaker = Literal["ai_1", "ai_2", "supervisor"]
 
 INSTRUCTIONS: dict[Speaker, str] = {
     "ai_1": (
         "You are AI #1 in a live conversation with a human and AI #2. Respond to the latest "
         "conversation naturally and clearly. Treat the transcript as conversation context. "
-        "Build on ideas, ask focused questions, and distinguish facts from uncertainty. Keep "
-        "your reply concise enough to support an ongoing exchange."
+        "Offer independent ideas, build on useful work, and disagree constructively "
+        "when warranted. Neither AI has a fixed researcher or skeptic role; remain intellectually "
+        "independent and open to new directions."
     ),
     "ai_2": (
         "You are AI #2 in a live conversation with a human and AI #1. Reply to the latest "
         "conversation naturally and clearly. Treat the transcript as conversation context. "
-        "Engage with AI #1's reasoning, add a useful perspective, and disagree constructively "
-        "when warranted. Keep your reply concise enough to support an ongoing exchange."
+        "Offer independent ideas, build on useful work, and disagree constructively "
+        "when warranted. Neither AI has a fixed researcher or skeptic role; remain intellectually "
+        "independent and open to new directions."
     ),
+    "supervisor": chat_supervisor.INSTRUCTIONS,
 }
 
 
@@ -78,24 +81,38 @@ async def configuration() -> dict[str, Any]:
     }
 
 
-def _transcript(messages: list[dict[str, str]]) -> str:
-    recent: list[dict[str, str]] = []
-    current_chars = 0
-    for item in reversed(messages[-MAX_MESSAGES:]):
-        rendered_item = (
-            f"{ {'human': 'Human', 'ai_1': 'AI #1', 'ai_2': 'AI #2'}[item['speaker']] }:\n"
-            f"{item['text']}"
-        )
-        extra_chars = len(rendered_item) + (2 if recent else 0)
-        if recent and current_chars + extra_chars > MAX_CONTEXT_CHARS:
+def _transcript(messages: list[dict[str, Any]], recipient: Speaker | None = None) -> str:
+    """Return unmodified participant responses and recipient-specific process guidance.
+
+    Supervisor progress scores and private assessments never reach the two AIs.
+    """
+    rendered_items: list[str] = []
+    for item in messages[-MAX_MESSAGES:]:
+        if item["speaker"] == "supervisor" and recipient in {"ai_1", "ai_2"}:
+            target = item.get("recipient")
+            guidance = item.get("guidance", "")
+            if target not in {recipient, "both"} or not isinstance(guidance, str) or not guidance.strip():
+                continue
+            label = {"ai_1": "AI #1", "ai_2": "AI #2"}[recipient]
+            rendered = f"Supervisor to {label}:\n{guidance}"
+        else:
+            label = {"human": "Human", "ai_1": "AI #1", "ai_2": "AI #2",
+                     "supervisor": "Supervisor"}[item["speaker"]]
+            rendered = f"{label}:\n{item['text']}"
+        rendered_items.append(rendered)
+    recent: list[str] = []
+    total = 0
+    for rendered in reversed(rendered_items):
+        cost = len(rendered) + (2 if recent else 0)
+        if recent and total + cost > MAX_CONTEXT_CHARS:
             break
-        recent.append({**item, "rendered": rendered_item})
-        current_chars += extra_chars
+        recent.append(rendered)
+        total += cost
     recent.reverse()
-    rendered = "\n\n".join(item["rendered"] for item in recent)
-    if len(recent) < len(messages):
-        rendered = "[Earlier conversation turns omitted to fit the message limit.]\n\n" + rendered
-    return rendered
+    result = "\n\n".join(recent)
+    if len(recent) < len(rendered_items):
+        result = "[Earlier conversation turns omitted to fit the message limit.]\n\n" + result
+    return result
 
 
 def _response_text(raw: Any, model: str) -> str:
@@ -128,12 +145,13 @@ def _response_text(raw: Any, model: str) -> str:
 async def respond(
     *,
     speaker: Speaker,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     conversation_id: str,
     expected_binding: str,
     model: str,
     reasoning_effort: str,
     repeated_text: str = "",
+    research_objective: str = "",
 ) -> str:
     """Generate one bounded agent turn and account hosted sponsored usage."""
     if len(messages) > MAX_MESSAGES or not messages:
@@ -141,7 +159,7 @@ async def respond(
             "The chat contains too many messages. Start a new conversation to continue."
         )
     if any(
-        item.get("speaker") not in {"human", "ai_1", "ai_2"}
+        item.get("speaker") not in {"human", "ai_1", "ai_2", "supervisor"}
         or not isinstance(item.get("text"), str)
         or not item["text"].strip()
         for item in messages
@@ -172,7 +190,11 @@ async def respond(
     if cloud_workspaces.enabled() and not is_personal and not cloud_credential(credential):
         raise ProjectError("Sponsored chat is not configured for this account.")
 
-    transcript = _transcript(messages)
+    transcript = _transcript(messages, speaker)
+    if speaker == "supervisor":
+        if not research_objective.strip():
+            raise ProjectError("Supervisor requires the research objective.")
+        transcript = f"Research objective: {research_objective.strip()}\n\n{transcript}"
     payload: dict[str, Any] = {
         "model": model,
         "store": False,
