@@ -34,6 +34,9 @@ with sync_playwright() as playwright:
     def respond(route):
         global config_calls, session_calls, fail_next_turn
         url = route.request.url
+        if url.endswith("/api/chat/transcripts"):
+            route.fulfill(status=200, content_type="application/json", body="[]")
+            return
         if url.endswith("/api/chat/session"):
             session_calls += 1
             conversation_id = str(uuid4())
