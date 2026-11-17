@@ -432,6 +432,8 @@ async def score_paper(
     from sigma.openai_connection import auth_context
     from sigma.proposals import configuration
 
+    if origin == "manual" and papers._paper_run_id.get() is not None:
+        origin = "automatic"
     record = papers.get_paper(path, paper_id)
     if inspect_project(path).project.id != expected_project_id:
         raise ProjectError("Project identity changed; reopen and retry")
