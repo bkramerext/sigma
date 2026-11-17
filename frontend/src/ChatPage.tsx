@@ -16,6 +16,15 @@ type SupervisorAssessment = {
   breakthrough_candidate: boolean;
   breakthrough_invalidated?: boolean;
 };
+type SavedTranscript = {
+  conversation_id: string;
+  transcript_name: string;
+  transcript_path: string;
+  messages: ChatMessage[];
+  research_objective: string;
+  next_speaker: 'ai_1' | 'ai_2';
+  has_supervisor: boolean;
+};
 type ChatConfig = {
   available: boolean;
   mode: string;
@@ -81,6 +90,9 @@ export default function ChatPage() {
   const [notice, setNotice] = useState('');
   const [conversationId, setConversationId] = useState('');
   const [transcriptPath, setTranscriptPath] = useState('');
+  const [savedTranscripts, setSavedTranscripts] = useState<{ name: string }[]>([]);
+  const [selectedTranscript, setSelectedTranscript] = useState('');
+  const [restoringTranscript, setRestoringTranscript] = useState(false);
   const messagesRef = useRef<ChatMessage[]>([]);
   const runningRef = useRef(false);
   const runId = useRef(0);
@@ -111,6 +123,12 @@ export default function ChatPage() {
     }
     return { ...selected, model: available.id, reasoning_effort: settings.reasoning_effort as ChatConfig['reasoning_effort'] };
   }
+
+  const refreshTranscripts = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch('/api/chat/transcripts', { cache: 'no-store', signal });
+    if (!response.ok) throw new Error('Could not list saved Brainstorm transcripts.');
+    if (!signal?.aborted) setSavedTranscripts(await response.json() as { name: string }[]);
+  }, []);
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -182,6 +200,9 @@ export default function ChatPage() {
     document.title = 'Brainstorm · SIGMA';
     const controller = new AbortController();
     void refreshConfig(controller.signal);
+    void refreshTranscripts(controller.signal).catch(cause => {
+      if (!controller.signal.aborted) setError(errorText(cause));
+    });
     void openTranscript(controller.signal).catch(cause => {
       if (!controller.signal.aborted) setError(errorText(cause));
     });
@@ -193,7 +214,7 @@ export default function ChatPage() {
       runId.current += 1;
       abort.current?.abort();
     };
-  }, [openTranscript, refreshConfig]);
+  }, [openTranscript, refreshConfig, refreshTranscripts]);
 
   useEffect(() => {
     if (!running || turnStartedAtRef.current === null) return;
@@ -218,14 +239,14 @@ export default function ChatPage() {
     setMessages(next);
   }, []);
 
-  async function requestTurn(who: 'ai_1' | 'ai_2', history: ChatMessage[], controller: AbortController, settings: ChatConfig): Promise<string> {
+  async function requestTurn(who: 'ai_1' | 'ai_2', history: ChatMessage[], controller: AbortController, settings: ChatConfig, sessionId = conversationId): Promise<string> {
     const response = await fetch('/api/chat/turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       cache: 'no-store',
       signal: controller.signal,
       body: JSON.stringify({
-        conversation_id: conversationId,
+        conversation_id: sessionId,
         expected_binding: settings.binding,
         speaker: who,
         messages: history.filter(item => item.speaker !== 'objective').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
@@ -261,7 +282,7 @@ export default function ChatPage() {
     throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
-  async function assessPair(id: number) {
+  async function assessPair(id: number, sessionId = conversationId) {
     if (!supervisorEnabledRef.current || !researchObjectiveRef.current.trim()) return;
     const settings = await currentTurnSettings();
     const controller = new AbortController();
@@ -270,7 +291,7 @@ export default function ChatPage() {
       method: 'POST', cache: 'no-store', signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        conversation_id: conversationId, expected_binding: settings.binding,
+        conversation_id: sessionId, expected_binding: settings.binding,
         messages: messagesRef.current.filter(item => item.speaker !== 'objective')
           .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model, reasoning_effort: settings.reasoning_effort,
@@ -308,20 +329,20 @@ export default function ChatPage() {
       ...(assessment.action !== 'continue' && recipient && guidance ? { recipient, guidance } : {}),
     };
     addMessage(entry);
-    await appendTranscriptMessage(conversationId, entry);
+    await appendTranscriptMessage(sessionId, entry);
     setProgressScore(score);
   }
 
-  async function runConversation(id: number, initialSpeaker: 'ai_1' | 'ai_2' = 'ai_1') {
+  async function runConversation(id: number, initialSpeaker: 'ai_1' | 'ai_2' = 'ai_1', sessionId = conversationId) {
     let nextSpeaker: 'ai_1' | 'ai_2' = initialSpeaker;
     try {
       while (runningRef.current && id === runId.current) {
-        recordResearchObjective(conversationId);
+        recordResearchObjective(sessionId);
         // A previous transcript write error must not permanently poison Retry.
         await transcriptWrites.current.catch(() => undefined);
         if (!runningRef.current || id !== runId.current) return;
         if (pendingHumanRef.current) {
-          await appendTranscriptMessage(conversationId, pendingHumanRef.current);
+          await appendTranscriptMessage(sessionId, pendingHumanRef.current);
           pendingHumanRef.current = null;
         }
         const who: 'ai_1' | 'ai_2' = nextSpeaker;
@@ -336,7 +357,7 @@ export default function ChatPage() {
         // that write instead of making another potentially billable request.
         if (!pendingReplyRef.current) {
           const settings = await currentTurnSettings();
-          const result = await requestTurn(who, messagesRef.current, controller, settings);
+          const result = await requestTurn(who, messagesRef.current, controller, settings, sessionId);
           if (!runningRef.current || id !== runId.current) return;
           const reply: ChatMessage = { speaker: who, text: result };
           pendingReplyRef.current = reply;
@@ -344,13 +365,13 @@ export default function ChatPage() {
         }
         const reply = pendingReplyRef.current;
         if (!reply || reply.speaker !== who) throw new Error('The pending AI reply does not match the retry turn.');
-        await appendTranscriptMessage(conversationId, reply);
+        await appendTranscriptMessage(sessionId, reply);
         pendingReplyRef.current = null;
         turnStartedAtRef.current = null;
         setTurnElapsedSeconds(0);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
         if (who === 'ai_2' && supervisorEnabledRef.current) {
-          try { await assessPair(id); }
+          try { await assessPair(id, sessionId); }
           catch {
             if (runningRef.current && id === runId.current) {
               setNotice('Supervisor assessment unavailable; AIs are continuing.');
@@ -377,6 +398,63 @@ export default function ChatPage() {
         setRunning(false);
         setSpeaker(null);
       }
+    }
+  }
+
+  async function resumeTranscript(name: string) {
+    if (!name || runningRef.current || restoringTranscript) return;
+    setRestoringTranscript(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/chat/transcripts/${encodeURIComponent(name)}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('The selected transcript could not be restored.');
+      const saved = await response.json() as SavedTranscript;
+      if (runningRef.current) return;
+      // The existing conversation ID and file are reused. No historical entries
+      // are re-appended and the first new provider request follows the last AI.
+      runId.current += 1;
+      abort.current?.abort();
+      pendingReplyRef.current = null;
+      pendingHumanRef.current = null;
+      transcriptWrites.current = Promise.resolve();
+      const restored = saved.messages.slice(-MAX_LOCAL_MESSAGES);
+      messagesRef.current = restored;
+      setMessages(restored);
+      setExpandedEntries({});
+      setConversationId(saved.conversation_id);
+      setTranscriptPath(saved.transcript_path);
+      recordedObjectiveRef.current = saved.research_objective;
+      researchObjectiveRef.current = saved.research_objective;
+      setResearchObjective(saved.research_objective);
+      supervisorEnabledRef.current = saved.has_supervisor;
+      setSupervisorEnabled(saved.has_supervisor);
+      const latestSupervisor = [...restored].reverse().find(item => item.speaker === 'supervisor');
+      const score = latestSupervisor?.text.match(/Research progress:\\s*(\\d+(?:\\.\\d+)?)\\s*\\/\\s*10\\.0/);
+      const restoredScore = score ? Number(score[1]) : null;
+      setProgressScore(restoredScore);
+      breakthroughLatched.current = !!latestSupervisor?.text.includes('Breakthrough candidate remains under validation.')
+        || !!latestSupervisor?.text.includes('POTENTIAL BREAKTHROUGH DETECTED');
+      setSelectedTranscript(name);
+      setDraft('');
+      setFailedTurn(null);
+      setTurnTimedOut(false);
+      setTurnElapsedSeconds(0);
+      // Do not charge for a new inference if there is no actual conversation
+      // to continue; restore it for a Human kickoff instead.
+      if (!restored.some(item => item.speaker === 'human' || item.speaker === 'ai_1' || item.speaker === 'ai_2')) {
+        setNotice('Transcript restored. Enter a Human message to begin.');
+        return;
+      }
+      runId.current += 1;
+      runningRef.current = true;
+      setRunning(true);
+      setNotice('Transcript restored; continuing the exchange.');
+      void runConversation(runId.current, saved.next_speaker, saved.conversation_id);
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setRestoringTranscript(false);
     }
   }
 
@@ -451,6 +529,7 @@ export default function ChatPage() {
     setExpandedEntries({});
     setConversationId('');
     setTranscriptPath('');
+    setSelectedTranscript('');
     transcriptWrites.current = Promise.resolve();
     recordedObjectiveRef.current = '';
     researchObjectiveRef.current = '';
@@ -465,6 +544,7 @@ export default function ChatPage() {
     pendingHumanRef.current = null;
     try {
       await openTranscript();
+      await refreshTranscripts();
     } catch (cause) {
       setError(errorText(cause));
     }
@@ -488,6 +568,15 @@ export default function ChatPage() {
 
   return <>
   <main className="chat-page">
+    <div className="chat-transcript-picker">
+      <label htmlFor="chat-saved-transcript">Continue transcript:</label>
+      <select id="chat-saved-transcript" value={selectedTranscript}
+        disabled={running || restoringTranscript || !conversationId}
+        onChange={event => { void resumeTranscript(event.target.value); }}>
+        <option value="">Choose saved transcript…</option>
+        {savedTranscripts.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+      </select>
+    </div>
     <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
