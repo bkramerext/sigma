@@ -5074,7 +5074,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => startOverPaperFromControl(event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
 
                 </span>}
-                {canRemoveDraft && (!generationRunning || canControlDraft) && <span className="paper-remove-anchor">
+                {!selectedRun?.paper_id && canRemoveDraft && (!generationRunning || canControlDraft) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
                     <p>{generationRunning ? 'Stop and remove this paper?' : 'Remove this paper?'}</p>
@@ -5163,7 +5163,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 onClick={event => resumeOtherPaperRun(run, event.currentTarget)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
               </button>}
-              {!guest && run.can_remove && (run.can_control || !['active', 'queued'].includes(run.status)) && <span className="paper-remove-anchor">
+              {!guest && !run.paper_id && run.can_remove && (run.can_control || !['active', 'queued'].includes(run.status)) && <span className="paper-remove-anchor">
                 <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
                   aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" data-paper-discard-trigger="true" disabled={loading}
                   onClick={event => showDiscardRunConfirmation(run.run_id, event.currentTarget)}>
@@ -5190,7 +5190,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   model: run.progress?.model || run.model,
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
-                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
+                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.paper_id && run.status === 'active' ? 'Scoring' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
                 {' · Elapsed '}{savedPaperElapsed(Math.max(0, run.progress?.elapsed_seconds ?? 0))}
