@@ -254,6 +254,29 @@ with sync_playwright() as playwright:
         )
     )
     print(
+        "BRAINSTORM_GRID_CHILDREN",
+        header.evaluate(
+            """(el) => {
+                const describe = (node) => ({
+                    tag: node.tagName,
+                    cls: node.className && typeof node.className === 'string' ? node.className : '',
+                    text: node.textContent?.trim().slice(0, 40),
+                    rect: {y: node.getBoundingClientRect().y, height: node.getBoundingClientRect().height},
+                    grid: {row: getComputedStyle(node).gridRowStart, column: getComputedStyle(node).gridColumnStart},
+                });
+                const controls = el.querySelector('.header-controls');
+                return {
+                    header: Array.from(el.children).map(describe),
+                    brand: Array.from(el.querySelector('.brand-block').children).map(describe),
+                    controls: Array.from(controls.children).map(describe),
+                    controlStyles: {rows: getComputedStyle(controls).gridTemplateRows,
+                                    areas: getComputedStyle(controls).gridTemplateAreas},
+                };
+            }"""
+        ),
+        flush=True,
+    )
+    print(
         "BRAINSTORM_HEADER_GEOMETRY",
         {
             "header": header_box,
