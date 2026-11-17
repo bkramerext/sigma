@@ -263,6 +263,11 @@
   min-width: 0;
   pointer-events: auto;
 }
+/* Home reserves a second row beneath its Model column using padding.
+   Brainstorm has no About/Settings row there: remove the reservation. */
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: 0;
+}
 .workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column .global-model-pill-position {
   display: inline-flex;
   position: static;
