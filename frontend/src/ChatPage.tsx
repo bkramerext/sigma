@@ -572,7 +572,10 @@ export default function ChatPage() {
       <label htmlFor="chat-saved-transcript">Continue transcript:</label>
       <select id="chat-saved-transcript" value={selectedTranscript}
         disabled={running || restoringTranscript || !conversationId}
-        onChange={event => { void resumeTranscript(event.target.value); }}>
+        onChange={event => {
+          if (!event.target.value) setSelectedTranscript('');
+          else void resumeTranscript(event.target.value);
+        }}>
         <option value="">Choose saved transcript…</option>
         {savedTranscripts.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
       </select>
@@ -615,7 +618,7 @@ export default function ChatPage() {
       <button type="submit" form="brainstorm-human-form" className="chat-send" disabled={!canSend}>Send</button>
       {failedTurn && !running && <button type="button" className="chat-retry" aria-label={`Retry ${labels[failedTurn]}`} data-tooltip={`Retry the interrupted ${labels[failedTurn]} turn`} disabled={!conversationId} onClick={retryConversation}>Retry</button>}
       <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
-      <button type="button" className="chat-clear" disabled={running || !messages.length} onClick={clearConversation}>Clear</button>
+      <button type="button" className="chat-clear" disabled={running || restoringTranscript || !messages.length} onClick={clearConversation}>Clear</button>
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
       {timeoutStatus && <span className="chat-timeout-status" role="timer" aria-label="Brainstorm turn time limit">{timeoutStatus}</span>}
     </div>
