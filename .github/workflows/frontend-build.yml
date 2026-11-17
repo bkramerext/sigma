@@ -26,6 +26,9 @@ jobs:
       - name: Provider interruption guidance regression
         run: node --experimental-strip-types --test tests/provider-usage-guidance.test.mjs
         working-directory: frontend
+      - name: Markdown and paper publication regressions
+        run: npm run test:source-material
+        working-directory: frontend
       - name: TypeScript and Vite build
         run: npm run build
         working-directory: frontend

@@ -11,6 +11,7 @@ import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagno
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
+import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -3545,9 +3546,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         selectPaperRun(currentId);
       }
       const own = runs.find(run => run.run_id === currentId);
-      if (own?.paper_id) {
-        // Completed PDF lives in the published library, not as a second,
-        // failed-looking unfinished card.
+      if (own?.paper_id && (list.papers as PaperSummary[]).some(paper => paper.paper_id === own.paper_id)) {
+        // Retire the generating card only AFTER its saved-paper metadata is
+        // available. Publication precedes automatic Score by many seconds.
         selectPaperRun(null);
         setNewPaperRequested(false);
       }
@@ -4777,8 +4778,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // genuinely new work (the server reserves ownership before dispatch).
   const selectedRun = paperRuns.find(run => run.run_id === selectedRunId);
   const otherPaperRuns = paperRuns.filter(run =>
-    run.run_id !== selectedRunId && run.status !== 'complete' && !run.paper_id &&
-    !hiddenRemovalIds.has(run.run_id)
+    run.run_id !== selectedRunId && !hiddenRemovalIds.has(run.run_id) &&
+    (publicationAwaitingLibrary(run, papers) || (run.status !== 'complete' && !run.paper_id))
   );
   const unfinishedDraftPresent = continuationAvailable || Boolean(checkpointMismatch) ||
     Boolean(restartableCheckpoint) || (paperProgress != null && paperProgress.status !== 'complete');
@@ -4795,6 +4796,18 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const draftDisplayTitle = assignedPaperNumber !== null ? `Paper ${assignedPaperNumber}` : 'New paper';
   const orderedPapers = [...papers].filter(paper => !hiddenRemovalIds.has(paper.paper_id))
     .sort((a, b) => b.paper_version - a.paper_version);
+  // A published PDF is saved BEFORE automatic scoring finishes. The progress
+  // poll can receive its paper_id before the library refresh returns, but the
+  // card must never disappear during this transition.
+  const pendingPublicationIds = unlistedPublicationIds(
+    paperRuns, papers, hiddenRemovalIds,
+  );
+  const pendingPublicationKey = pendingPublicationIds.join('|');
+  const selectedPublicationPending = publicationAwaitingLibrary(selectedRun, papers);
+  const automaticScoringPaperIds = new Set(
+    paperRuns.filter(run => run.paper_id && run.status === 'active' &&
+      ['pdf_check', 'scoring', 'score_failed', 'finishing'].includes(run.progress?.stage ?? '')).map(run => run.paper_id),
+  );
   const paperProgressFailure = paperStepRestartBusy ? ''
     : paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? '' : '';
   // A durable published paper supersedes the failed authoring receipt. Errors
@@ -4817,9 +4830,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     + (paperNoticeCopy?.next?.length ?? 0);
   const paperNoticeSize = paperNoticeLength <= 90 ? 'short' : paperNoticeLength <= 190 ? 'medium' : 'long';
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
-  const showDraftPaper = !guest && !removingLegacyDraft && !selectedRun?.paper_id &&
+  const showDraftPaper = !guest && !removingLegacyDraft &&
+    (!selectedRun?.paper_id || selectedPublicationPending) &&
     !hiddenRemovalIds.has(selectedRunId ?? '') && (
-    newPaperRequested || generating || restartReady || continuationAvailable ||
+    selectedPublicationPending || newPaperRequested || generating || restartReady || continuationAvailable ||
     (paperProgress != null && paperProgress.status !== 'complete') ||
     (selectedRun != null && selectedRun.status !== 'complete')
   );
@@ -4860,6 +4874,38 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     paperProgress?.status, showDraftPaper, canResumeDraft, paperRuns,
     expandedOtherPaperRunIds, unfinishedStepOptions, unfinishedRestartBusy,
   ]);
+  // A paper is durably published before Score completes. Once progress
+  // announces its paper_id, fetch metadata independently of the long-lived
+  // generation SSE and without waiting for the scoring call. Keep its run card
+  // visible until the saved row arrives; retry if the listing races the write.
+  useEffect(() => {
+    if (guest || !expanded || !pendingPublicationKey) return;
+    const controller = new AbortController();
+    const pendingIds = new Set(pendingPublicationKey.split('|'));
+    let inFlight = false;
+    const reconcile = async () => {
+      if (controller.signal.aborted || inFlight) return;
+      inFlight = true;
+      try {
+        const response = await fetch(`/api/projects/papers?${new URLSearchParams({ path, include_runs: 'false' })}`, {
+          cache: 'no-store', signal: controller.signal,
+          headers: { 'X-Sigma-Error-Handled': 'true' },
+        });
+        if (!response.ok || controller.signal.aborted) return;
+        const listing = await response.json();
+        if (controller.signal.aborted || !Array.isArray(listing.papers)) return;
+        if (listing.papers.some((paper: PaperSummary) => pendingIds.has(paper.paper_id))) {
+          setPapers(listing.papers as PaperSummary[]);
+          if (typeof listing.next_paper_number === 'number') setNextPaperNumber(listing.next_paper_number);
+        }
+      } catch { /* Preserve the run card and retry after a transient error. */ }
+      finally { inFlight = false; }
+    };
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), 1500);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, [guest, expanded, path, pendingPublicationKey]);
+
   // Live collaborator statuses must refresh independently of revision
   // changes. Only lightweight progress sidecars are read, never saved PDFs.
   useEffect(() => {
@@ -5028,7 +5074,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-draft-restart" aria-label="Start over on paper generation" data-tooltip="Start over on paper generation" disabled={busy || loading || !binding} onClick={event => startOverPaperFromControl(event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 4h2v12H3zM16 4.25v11.5L7 10z"/></svg></button>
 
                 </span>}
-                {canRemoveDraft && (!generationRunning || canControlDraft) && <span className="paper-remove-anchor">
+                {!selectedRun?.paper_id && canRemoveDraft && (!generationRunning || canControlDraft) && <span className="paper-remove-anchor">
                   <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button" aria-label={assignedPaperNumber !== null ? `Remove unfinished Paper ${assignedPaperNumber}` : 'Remove unfinished paper'} data-tooltip="Remove unfinished paper" disabled={loading} onClick={event => { positionPaperPopup(event.currentTarget, 280, 180); setConfirmRestartDraft(false); setConfirmDiscardDraft(true); }}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
                   {confirmDiscardDraft && <div className="paper-remove-actions" style={paperPopupStyle}><div className="research-stop-confirm" role="group" aria-label="Confirm removal of unfinished paper">
                     <p>{generationRunning ? 'Stop and remove this paper?' : 'Remove this paper?'}</p>
@@ -5117,7 +5163,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 onClick={event => resumeOtherPaperRun(run, event.currentTarget)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
               </button>}
-              {!guest && run.can_remove && (run.can_control || !['active', 'queued'].includes(run.status)) && <span className="paper-remove-anchor">
+              {!guest && !run.paper_id && run.can_remove && (run.can_control || !['active', 'queued'].includes(run.status)) && <span className="paper-remove-anchor">
                 <button type="button" className="text-view-link text-view-icon workspace-icon-button paper-remove-button"
                   aria-label={`Remove unfinished Paper ${run.number}`} data-tooltip="Remove unfinished paper" data-paper-discard-trigger="true" disabled={loading}
                   onClick={event => showDiscardRunConfirmation(run.run_id, event.currentTarget)}>
@@ -5144,7 +5190,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   model: run.progress?.model || run.model,
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
-                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
+                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.paper_id && run.status === 'active' ? 'Scoring' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
                 {' · Elapsed '}{savedPaperElapsed(Math.max(0, run.progress?.elapsed_seconds ?? 0))}
@@ -5161,7 +5207,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             <div id={`paper-run-steps-${run.run_id}`} hidden={!expandedOtherPaperRunIds.has(run.run_id)}/>
           </div>
         </article>)}
-        {!loading && orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
+        {orderedPapers.map(paper => <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
           <div className="saved-paper-heading">
             <SavedPaperTitle title={`Paper ${paper.paper_version}`} itemLabel="paper" expanded={expandedPaperId === paper.paper_id} controls={`saved-paper-body-${paper.paper_id}`} onToggle={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }} copyName="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)} copyInTitle={false} badge={paper.score != null && paper.score.total >= HIGH_SCORING_PAPER_THRESHOLD ? <span className="recent-title-annotation recent-title-star paper-title-star" aria-label={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip={HIGH_SCORING_PAPER_TOOLTIP} data-tooltip-follow-cursor="true">★</span> : undefined} beforeCopy={paper.pdf_available ? <a className="paper-real-title paper-title-open-link" data-tooltip-follow-cursor="true" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer" onClick={event => openReusableTab(event, `sigma-paper:${path}:${paper.paper_id}`)} aria-label={`View paper: ${paper.title} in a browser tab`} data-tooltip="View paper in a new browser tab">{paper.title}</a> : <span className="paper-real-title">{paper.title}</span>}
@@ -5190,14 +5236,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   </div></div>}
                 </span>}
               </>}/>
-            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <>{' · '}<span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}{' · '}{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}{' · '}<button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id} disabled={!!scoringId} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
+            <PaperTimeline expanded={expandedPaperId === paper.paper_id} message={scoringId === paper.paper_id ? null : undefined} metadata={<><span>{dateLabel(paper.created_at)}</span>{typeof paper.generation.generation_elapsed_seconds === 'number' && Number.isFinite(paper.generation.generation_elapsed_seconds) && paper.generation.generation_elapsed_seconds >= 0 && <>{' · '}<span>Elapsed {savedPaperElapsed(paper.generation.generation_elapsed_seconds)}</span></>}{' · '}{(artifactAuthors?.[paper.paper_id] || paper.created_by) ? <span className="artifact-attribution">{formatRunAttribution({ kind: 'paper', creator: artifactAuthors?.[paper.paper_id] || paper.created_by, ...(() => { const last = latestPaperModel(paper.generation); return { model: last.model, thinking: last.thinking }; })() })}</span> : <span>{paperModelThinkingLabel(paper.generation)}</span>}{' · '}<button type="button" className="text-view-link paper-score-link paper-see-scoring-link paper-meta-score-action paper-inline-score" aria-busy={scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id)} disabled={!!scoringId || automaticScoringPaperIds.has(paper.paper_id)} onClick={() => guest && !paper.score ? setGuestScorePreview(true) : void scorePaper(paper)}>{scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id) ? 'Scoring…' : paper.score ? `Score ${paper.score.total}/100` : 'Score'}</button></>}
               progress={{
-                status: scoringId === paper.paper_id ? 'active' : paper.score ? 'complete' : 'interrupted',
-                stage: scoringId === paper.paper_id ? 'scoring' : paper.score ? 'complete' : 'score_failed',
+                status: scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id) ? 'active' : paper.score ? 'complete' : 'interrupted',
+                stage: scoringId === paper.paper_id || automaticScoringPaperIds.has(paper.paper_id) ? 'scoring' : paper.score ? 'complete' : 'score_failed',
                 current: null, total: null, started_at: paper.created_at,
                 elapsed_seconds: paper.generation.generation_elapsed_seconds ?? 0,
               }}
-              onSelectStep={!guest && !scoringId
+              onSelectStep={!guest && !scoringId && !automaticScoringPaperIds.has(paper.paper_id)
                 ? (step, anchor) => {
                   if (step === 8 && paper.pdf_available) void proposePaperStepRescore(paper, anchor);
                   else void proposePaperStepRestart(paper, publishedPaperTarget(step), anchor);
@@ -5234,7 +5280,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           {expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         {eli5Id === paper.paper_id && selected.eli5?.source_sha256 === selected.pdf_sha256
           ? <div className="ai-paper-eli5-output"><Suspense fallback={<p>{selected.eli5?.markdown ?? ""}</p>}><RenderedMarkdown body={selected.eli5?.markdown ?? ""} questionHeadingAction={<CopyToClipboardButton name="explaination" copied={copiedExplanationId === paper.paper_id} onCopy={() => void copyExplanation(paper.paper_id, selected.eli5?.markdown ?? '')}/>}/></Suspense></div>
-          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><span className="text-view-format-control sigma-unified-markdown-progress">{formattingPaperId === paper.paper_id ? <span className="sigma-unified-hourglass" aria-hidden="true"><ProjectOpeningHourglass/></span> : <button type="button" className={`sigma-render-toggle sigma-unified-markdown${renderedPaperId === paper.paper_id ? ' sigma-render-active' : ''}${formattingPaperId === paper.paper_id ? ' sigma-render-pending' : ''}`} aria-label={renderedPaperId === paper.paper_id ? 'Show plain paper' : 'Render paper as Markdown'} aria-pressed={renderedPaperId === paper.paper_id || formattingPaperId === paper.paper_id} aria-busy={formattingPaperId === paper.paper_id} data-tooltip={formattingPaperId === paper.paper_id ? 'Formatting with AI…' : renderedPaperId === paper.paper_id ? 'Show plain text' : 'Convert to markdown'} disabled={!!formattingPaperId} onClick={() => void togglePaperMarkdown(paper.paper_id)}><MarkdownGlyph/></button>}{formattingPaperId === paper.paper_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>{paperFormatError && <p className="error" role="alert">{paperFormatError}</p>}<p className="paper-preview-abstract"><strong>Abstract.</strong> {selected.draft.abstract}</p>{renderedPaperId === paper.paper_id && formattedPaper?.id === paper.paper_id ? <div className="outcome-markdown paper-preview-markdown"><Suspense fallback={<p>Preparing paper preview…</p>}><RenderedMarkdown body={formattedPaper.markdown}/></Suspense></div> : <>
+          : <><h3 className="ai-paper-preview-title">{selected.draft.title}<span className="ai-paper-preview-title-copy"><span className="text-view-format-control sigma-unified-markdown-progress">{formattingPaperId === paper.paper_id ? <span className="sigma-unified-hourglass" aria-hidden="true"><ProjectOpeningHourglass/></span> : <button type="button" className={`sigma-render-toggle sigma-unified-markdown${renderedPaperId === paper.paper_id ? ' sigma-render-active' : ''}${formattingPaperId === paper.paper_id ? ' sigma-render-pending' : ''}`} aria-label={renderedPaperId === paper.paper_id ? 'Show plain paper' : 'Render paper as Markdown'} aria-pressed={renderedPaperId === paper.paper_id || formattingPaperId === paper.paper_id} aria-busy={formattingPaperId === paper.paper_id} data-tooltip={formattingPaperId === paper.paper_id ? 'Formatting with AI…' : renderedPaperId === paper.paper_id ? 'Show plain text' : 'Convert to markdown'} disabled={!!formattingPaperId} onClick={() => void togglePaperMarkdown(paper.paper_id)}><MarkdownGlyph/></button>}{formattingPaperId === paper.paper_id && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</span><CopyToClipboardButton name="paper text" copied={copiedPaperId === paper.paper_id} onCopy={() => void copyPaper(paper.paper_id)}/></span></h3>{paperFormatError && <p className="error" role="alert">{paperFormatError}</p>}{renderedPaperId === paper.paper_id && formattedPaper?.id === paper.paper_id
+            ? <div className="paper-preview-abstract paper-preview-abstract-rendered outcome-markdown"><Suspense fallback={<p><strong>Abstract.</strong> {selected.draft.abstract}</p>}><RenderedMarkdown body={`**Abstract.** ${selected.draft.abstract}`}/></Suspense></div>
+            : <p className="paper-preview-abstract"><strong>Abstract.</strong> {selected.draft.abstract}</p>}{renderedPaperId === paper.paper_id && formattedPaper?.id === paper.paper_id ? <div className="outcome-markdown paper-preview-markdown"><Suspense fallback={<p>Preparing paper preview…</p>}><RenderedMarkdown body={formattedPaper.markdown}/></Suspense></div> : <>
         {selected.generation.publication_status === 'needs_review' && !dismissedPaperReviewIds.has(paper.paper_id) && <div role="status" className="ai-paper-warning paper-preview-review-notice">
           <span><strong>{paperReviewLabel(selected.generation)}.</strong> {selected.generation.proofreading?.review_reason ?? 'Inspect the archived TeX and PDF diagnostics.'}</span>
           <DialogDismissButton label={`Dismiss Paper ${paper.paper_version} review notice`} onClick={() => setDismissedPaperReviewIds(current => new Set(current).add(paper.paper_id))}/>
