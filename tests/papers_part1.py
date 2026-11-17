@@ -3956,12 +3956,12 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             )
 
 
-def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
+def _assert_automatic_score_handoff_for_suffix(suffix: str) -> None:
     """The Score step and saved-paper metadata share one durable evaluation."""
     from sigma import paper_scores
 
     with TemporaryDirectory() as temporary:
-        path = Path(temporary) / "scoring-handoff.sigma"
+        path = Path(temporary) / ("scoring-handoff" + suffix)
         view = initialize_project(
             path,
             "Scoring handoff",
@@ -4054,6 +4054,13 @@ def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
             == durable
         )
         assert papers._load_work(str(path)) is None
+
+
+def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
+    # Both native directory projects and legacy JSON bundles are supported.
+    # The reported issue occurred in a .json workspace.
+    for suffix in (".sigma", ".json"):
+        _assert_automatic_score_handoff_for_suffix(suffix)
 
 
 def test_score_interruption_resumes_published_pdf_without_reauthoring() -> None:
