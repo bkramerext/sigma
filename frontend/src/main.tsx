@@ -15,6 +15,7 @@ import { sourceMaterialOverflowCopy } from './source-material-error';
 import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
 import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper, orderPaperRunsDescending } from './paper-completion-transition';
 import { activatePaperScoreStep } from './paper-score-action';
+import { paperGenerationFailureNotice } from './paper-generation-error';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -2913,6 +2914,12 @@ function paperErrorSummary(message: string): string {
   if (/Published Paper does not match its creator reservation/i.test(value)) {
     return 'The PDF was saved. Resume this paper to finish publication and scoring.';
   }
+  // Server-provided compiler categories are bounded and scrubbed of source
+  // text, so retain them instead of collapsing every distinct TeX failure
+  // into the same unhelpful error message.
+  if (/^PDF compilation failed\s*\(/i.test(value) ||
+      /^The safe visual fallback could not compile\s*\(/i.test(value))
+    return value.split(/\r?\n/, 1)[0].slice(0, 300);
   if (/Tectonic could not compile|No PDF was downloaded|PDF compilation failed/i.test(value)) {
     return 'PDF compilation failed. The paper draft is preserved; use Resume to retry without rewriting it.';
   }
@@ -4790,13 +4797,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         generationErrorRunId.current = runId;
         const message = errorMessage(cause);
         const disconnected = cause instanceof TypeError || message.includes('ended without a completed version');
-        setError(disconnected && requestDispatched
-          ? 'Connection interrupted. This paper may still be generating; check its status before trying again.'
-          : requestDispatched && providerCallsAttempted === 0
-            ? `${message} No provider request was made for this attempt. Paper versions and research evidence are unchanged; refresh the snapshot before retrying.`
-            : requestDispatched
-              ? `${message} Check My Work versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
-              : message);
+        setError(paperGenerationFailureNotice(message, {
+          disconnected, requestDispatched, providerCallsAttempted,
+        }));
       }
     } finally {
       if (deliberatePaperStop.current && !requestDispatched) {
@@ -4927,6 +4930,23 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     (paperProgress != null && paperProgress.status !== 'complete') ||
     (selectedRun != null && selectedRun.status !== 'complete')
   );
+  // Run-owned failures stay with their Paper card. Only an error without
+  // any visible owner falls back to the project-level notice.
+  const noticeRunId = generationErrorRunId.current || selectedRunId;
+  const runOwnedPaperNotice = !!generationErrorRunId.current || !!paperProgressFailure;
+  const paperNoticeOnSelectedCard = runOwnedPaperNotice && showDraftPaper &&
+    (!noticeRunId || selectedRunId === noticeRunId);
+  const paperNoticeOnOtherRunCard = runOwnedPaperNotice && !paperNoticeOnSelectedCard &&
+    otherPaperRuns.some(run => run.run_id === noticeRunId);
+  const paperNoticeElement = showPaperNotice ? <SessionNotice key={paperNoticeKey} number={draftVersion}
+      title={paperNoticeCopy?.title ?? 'Paper generation stopped'}
+      kind={`research-pause-guidance paper-contextual-error paper-contextual-error--${paperNoticeSize}`}
+      ariaLabel="Paper generation feedback"
+      dismissLabel="Dismiss paper generation notice"
+      onDismiss={() => { setDismissedPaperNoticeKey(paperNoticeKey); setError(''); generationErrorRunId.current = null; }}>
+      <p>{paperNoticeCopy ? paperNoticeCopy.description : paperErrorSummary(paperNoticeMessage)}</p>
+      {paperNoticeCopy && <p><strong>Next:</strong> {paperNoticeCopy.next}</p>}
+    </SessionNotice> : null;
   const allPapersRunning = paperRuns.some(run => run.status === 'active' && !hasPaperStopIntent(run.run_id))
     || generationRunning && paperProgress?.status !== 'queued';
   const allPapersQueued = !allPapersRunning && paperRuns.some(run => run.status === 'queued' && !hasPaperStopIntent(run.run_id));
@@ -5136,15 +5156,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     {guestScorePreview && <GuestFeatureDialog title="Score a research paper"
       message="With authorized SIGMA access and ChatGPT, SIGMA evaluates a PDF against its research, correctness, readability, evidence and visual-quality rubric. Scores are provisional and are not proof of scientific correctness."
       onClose={() => setGuestScorePreview(false)}/>}
-    {showPaperNotice && <SessionNotice key={paperNoticeKey} number={draftVersion}
-      title={paperNoticeCopy?.title ?? 'Paper generation stopped'}
-      kind={`research-pause-guidance paper-contextual-error paper-contextual-error--${paperNoticeSize}`}
-      ariaLabel="Paper generation feedback"
-      dismissLabel="Dismiss paper generation notice"
-      onDismiss={() => { setDismissedPaperNoticeKey(paperNoticeKey); setError(''); generationErrorRunId.current = null; }}>
-      <p>{paperNoticeCopy ? paperNoticeCopy.description : paperErrorSummary(paperNoticeMessage)}</p>
-      {paperNoticeCopy && <p><strong>Next:</strong> {paperNoticeCopy.next}</p>}
-    </SessionNotice>}
+    {showPaperNotice && !paperNoticeOnSelectedCard && !paperNoticeOnOtherRunCard && paperNoticeElement}
     <div id="papers-pane-content" hidden={!expanded} className="papers-pane-content">
       <div className="ai-paper-body">
       <>
@@ -5227,6 +5239,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 );
               } : undefined}
           />
+          {paperNoticeOnSelectedCard && paperNoticeElement}
           {paperRemovalErrors[selectedRunId ?? 'legacy'] && <div role="alert" className="ai-paper-warning paper-saved-removal-error">
                     <span>{paperUserMessage(paperRemovalErrors[selectedRunId ?? 'legacy'])}</span>
                     <DialogDismissButton label="Dismiss unfinished paper removal error" onClick={() => setPaperRemovalErrors(current => ({ ...current, [selectedRunId ?? 'legacy']: '' }))}/>
@@ -5305,6 +5318,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                     run.run_id, run.number, unfinishedPaperTarget(step), anchor,
                   ) : undefined}
             />
+            {showPaperNotice && paperNoticeOnOtherRunCard && noticeRunId === run.run_id && paperNoticeElement}
             {paperRemovalErrors[run.run_id] && <div role="alert" className="ai-paper-warning paper-saved-removal-error">
               <span>{paperUserMessage(paperRemovalErrors[run.run_id])}</span>
               <DialogDismissButton label={`Dismiss Paper ${run.number} removal error`} onClick={() => setPaperRemovalErrors(current => ({ ...current, [run.run_id]: '' }))}/>
