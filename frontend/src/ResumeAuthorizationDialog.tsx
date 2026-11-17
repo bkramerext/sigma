@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import DialogDismissButton from './DialogDismissButton';
-import { resumeAuthorizationPosition, type ResumeAnchorBounds } from './resume-authorization-position';
+import { resumeAuthorizationAnchor, resumeAuthorizationPosition, type ResumeAnchorBounds } from './resume-authorization-position';
 import './resume-authorization.css';
 
 export type ResumeAuthorization = {
@@ -30,7 +30,7 @@ export default function ResumeAuthorizationDialog({ request, anchor, anchorSnaps
       if (!panel.current) return;
       // Pending Resume replaces the Play control with Stop. A disconnected
       // button reports a zero rect, so use the original click-time bounds.
-      const bounds = anchor?.isConnected ? anchor.getBoundingClientRect() : anchorSnapshot;
+      const bounds = resumeAuthorizationAnchor(anchor, anchorSnapshot);
       if (!bounds) return;
       setPosition({
         ...resumeAuthorizationPosition(
