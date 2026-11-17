@@ -49,7 +49,10 @@ with sync_playwright() as playwright:
                         "supervisor_enabled": False,
                         "messages": [
                             {"speaker": "objective", "text": "Continue exploring theta kernels."},
-                            {"speaker": "supervisor", "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight."},
+                            {
+                                "speaker": "supervisor",
+                                "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight."},
+                            },
                             {"speaker": "human", "text": "Find a new approach."},
                             *[
                                 {
