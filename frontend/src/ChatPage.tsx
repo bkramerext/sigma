@@ -374,8 +374,10 @@ export default function ChatPage() {
       breakthrough: breakthroughLatched.current,
       ...(assessment.action !== 'continue' && recipient && guidance ? { recipient, guidance } : {}),
     };
-    addMessage(entry);
+    // The transcript is authoritative: do not display an assessment as
+    // recorded until its durable append has completed.
     await appendTranscriptMessage(sessionId, entry);
+    addMessage(entry);
     setProgressScore(score);
   }
 
