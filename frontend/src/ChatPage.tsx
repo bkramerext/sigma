@@ -6,7 +6,7 @@ import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
-type Speaker = 'human' | 'ai_1' | 'ai_2';
+type Speaker = 'human' | 'ai_1' | 'ai_2' | 'repeated';
 type ChatMessage = { speaker: Speaker; text: string };
 type ChatConfig = {
   available: boolean;
@@ -20,12 +20,32 @@ type ChatConfig = {
   max_messages: number;
 };
 
-const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2' };
+const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', repeated: 'Repeated instruction' };
 const thinkingLabels: Record<ChatConfig['reasoning_effort'], string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high',
 };
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
+
+function CopyReplyButton({ name, text }: { name: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button chat-copy-button"
+    aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`}
+    data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={!text} onClick={() => void copy()}>
+    {copied
+      ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg>
+      : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}
+  </button>;
+}
 
 function MarkdownReply({ body }: { body: string }) {
   return <div className="chat-markdown">
@@ -39,6 +59,7 @@ export default function ChatPage() {
   const [draft, setDraft] = useState('');
   const [repeatedText, setRepeatedText] = useState('');
   const repeatedTextRef = useRef('');
+  const recordedRepeatedRef = useRef('');
   const [running, setRunning] = useState(false);
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
@@ -109,6 +130,7 @@ export default function ChatPage() {
     }
     if (!signal?.aborted) {
       transcriptWrites.current = Promise.resolve();
+      recordedRepeatedRef.current = '';
       setConversationId(value.conversation_id);
       setTranscriptPath(value.transcript_path);
     }
@@ -130,6 +152,15 @@ export default function ChatPage() {
     });
     transcriptWrites.current = write;
     return write;
+  }
+
+  function recordRepeatedInstruction(id: string) {
+    const value = repeatedTextRef.current.trim();
+    if (!id || value === recordedRepeatedRef.current) return;
+    recordedRepeatedRef.current = value;
+    const message: ChatMessage = { speaker: 'repeated', text: value || '(cleared)' };
+    addMessage(message);
+    void appendTranscriptMessage(id, message).catch(cause => setError(errorText(cause)));
   }
 
   useEffect(() => {
@@ -166,7 +197,7 @@ export default function ChatPage() {
         conversation_id: conversationId,
         expected_binding: settings.binding,
         speaker: who,
-        messages: history.slice(-settings.max_messages),
+        messages: history.filter(item => item.speaker !== 'repeated').slice(-settings.max_messages),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
         repeated_text: repeatedTextRef.current,
@@ -203,6 +234,7 @@ export default function ChatPage() {
     let nextSpeaker: 'ai_1' | 'ai_2' = 'ai_1';
     try {
       while (runningRef.current && id === runId.current) {
+        recordRepeatedInstruction(conversationId);
         await transcriptWrites.current;
         if (!runningRef.current || id !== runId.current) return;
         const who: 'ai_1' | 'ai_2' = nextSpeaker;
@@ -238,6 +270,7 @@ export default function ChatPage() {
     const text = draft.trim();
     if (!text || !config?.available || !conversationId) return;
     const message = { speaker: 'human', text } as const;
+    recordRepeatedInstruction(conversationId);
     addMessage(message);
     void appendTranscriptMessage(conversationId, message).catch(cause => {
       if (runningRef.current) {
@@ -277,6 +310,7 @@ export default function ChatPage() {
     setConversationId('');
     setTranscriptPath('');
     transcriptWrites.current = Promise.resolve();
+    recordedRepeatedRef.current = '';
     setError('');
     setNotice('');
     try {
@@ -333,6 +367,7 @@ export default function ChatPage() {
         <label htmlFor="chat-repeated-text" data-tooltip="Prepended to every AI request; changes apply on the next turn.">Repeated:</label>
       </div>
       <textarea id="chat-repeated-text" rows={2} value={repeatedText}
+        onBlur={() => recordRepeatedInstruction(conversationId)}
         onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
         placeholder="Optional text prepended to every AI turn…"/>
     </section>
@@ -355,7 +390,7 @@ export default function ChatPage() {
       {(['ai_1', 'ai_2'] as const).map(who => <section key={who}
         className={`chat-box chat-agent${speaker === who ? ' is-speaking' : ''}`}
         aria-label={`${labels[who]} latest reply`}>
-        <h2>{labels[who]}{speaker === who ? ' · responding' : ''}</h2>
+        <div className="chat-reply-heading"><h2>{labels[who]}{speaker === who ? ' · responding' : ''}</h2><CopyReplyButton name={labels[who]} text={latest(who)}/></div>
         {latest(who)
           ? <MarkdownReply body={latest(who)}/>
           : <p className="chat-agent-placeholder">{labels[who]}’s reply will appear here.</p>}
@@ -363,7 +398,7 @@ export default function ChatPage() {
     </section>
     {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
       {messages.map((message, index) => <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
-        <strong>{labels[message.speaker]}</strong><MarkdownReply body={message.text}/>
+        <div className="chat-reply-heading"><strong>{labels[message.speaker]}</strong><CopyReplyButton name={labels[message.speaker]} text={message.text}/></div><MarkdownReply body={message.text}/>
       </li>)}
     </ol>}
   </main>
