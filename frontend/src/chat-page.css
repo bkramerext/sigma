@@ -324,3 +324,15 @@
 .brainstorm-workspace .chat-supervisor-meta {
   margin: 4px 0; color: #a5c7b7; font-size: .83rem;
 }
+
+/* The Project expansion tagline is omitted on Brainstorm; use the released
+   flex space for the three-line title block, not an invisible spacer. */
+@media (min-width: 1500px) {
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+    white-space: nowrap;
+  }
+}
