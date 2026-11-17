@@ -48,20 +48,22 @@ with sync_playwright() as playwright:
                         "next_speaker": "ai_2",
                         "supervisor_enabled": False,
                         "messages": [
-                            {"speaker": "objective", "text": "Continue exploring theta kernels."},
+                            {"speaker": "objective", "text": "Continue exploring theta kernels.", "timestamp": "2026-11-12T10:10:10Z"},
                             {
                                 "speaker": "supervisor",
                                 "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight.",
+                                "timestamp": "2026-11-12T10:10:11Z",
                             },
-                            {"speaker": "human", "text": "Find a new approach."},
+                            {"speaker": "human", "text": "Find a new approach.", "timestamp": "2026-11-12T10:10:12Z"},
                             *[
                                 {
                                     "speaker": "ai_2" if index % 2 else "ai_1",
                                     "text": f"Archived AI turn {index}",
+                                    "timestamp": f"2026-11-12T10:{10 + index // 60:02d}:{index % 60:02d}Z",
                                 }
                                 for index in range(502)
                             ],
-                            {"speaker": "ai_1", "text": "Consider the theta transformation."},
+                            {"speaker": "ai_1", "text": "Consider the theta transformation.", "timestamp": "2026-11-12T20:30:00Z"},
                         ],
                     }
                 ),
@@ -557,6 +559,19 @@ with sync_playwright() as playwright:
     assert history.locator("li").count() >= 4
     # AI transcript entries are collapsed by default; expand one before
     # inspecting its formatted content.
+    # Within a group the entries advance AI #1, AI #2, Supervisor; groups
+    # themselves are newest first. All restored records retain timestamps.
+    groups = history.locator(":scope > li.chat-transcript-group")
+    assert groups.count() >= 2
+    for group_index in range(groups.count()):
+        entries = groups.nth(group_index).locator(
+            ".chat-transcript-group-entries > .chat-history-entry"
+        )
+        observed = [entries.nth(i).get_attribute("class") for i in range(entries.count())]
+        speakers = [value.removeprefix("chat-history-entry chat-history-") for value in observed]
+        if len(speakers) > 1:
+            assert speakers in (["ai_1", "ai_2"], ["ai_1", "ai_2", "supervisor"]), speakers
+    expect(history.locator(".chat-entry-timestamp").first).to_be_visible()
     ai_2_entry = history.locator(".chat-history-ai_2").first
     ai_2_disclosure = ai_2_entry.locator("button.chat-disclosure-button")
     expect(ai_2_disclosure).to_have_attribute("aria-expanded", "false")
@@ -679,11 +694,22 @@ with sync_playwright() as playwright:
     # An archived Supervisor entry predating the old 500-message display
     # window must be restored and remain visible after live turns append.
     restored_history = page.get_by_role("list", name="Conversation history")
-    assert restored_history.locator("li").count() >= 506
+    expect(restored_history.locator(":scope > li.chat-transcript-group")).to_have_count(20)
+    hidden_footer = page.locator(".chat-history-pagination")
+    expect(hidden_footer).to_contain_text("complete record remains in the transcript file")
+    expect(restored_history.locator(".chat-history-supervisor")).to_have_count(0)
+    # Show older groups incrementally; pagination is presentation-only.
+    for _ in range(30):
+        if restored_history.locator(".chat-history-supervisor").count():
+            break
+        hidden_footer.get_by_role("button", name="Show").click()
     old_supervisor = restored_history.locator(".chat-history-supervisor").first
     expect(old_supervisor).to_contain_text("Early supervisor insight.")
     expect(old_supervisor.locator("button.chat-disclosure-button")).to_have_attribute(
         "aria-expanded", "true"
+    )
+    expect(old_supervisor.locator("time")).to_have_attribute(
+        "datetime", "2026-11-12T10:10:11Z"
     )
 
     deadline = time.monotonic() + 5
