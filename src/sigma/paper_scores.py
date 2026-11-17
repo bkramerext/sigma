@@ -9,7 +9,10 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import json
+import logging
 import os
+import stat
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Any, TypedDict
 
@@ -383,6 +386,39 @@ _tasks: dict[tuple[str, str, str, int], asyncio.Task[dict[str, Any]]] = {}
 _lock = asyncio.Lock()
 
 
+@asynccontextmanager
+async def _exclusive_scoring_lease(path: str, paper_id: str):
+    """One scoring evaluation across processes and tabs for this paper.
+
+    A per-paper flock serializes the provider call, not just the final record
+    write. Unlike _tasks, it works with multiple workers and after reconnect.
+    Never block the event loop while another process owns the lease.
+    """
+    from sigma import papers
+
+    directory = papers._paper_dir(path)
+    filename = directory / f".{papers._paper_id(paper_id)}.score.lock"
+    if filename.is_symlink():
+        raise ProjectError("Paper scoring lock must not be a symbolic link")
+    descriptor = os.open(filename, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise ProjectError("Paper scoring lock is unsafe")
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                await asyncio.sleep(0.2)
+        try:
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
+
+
 async def score_paper(
     path: str,
     paper_id: str,
@@ -390,11 +426,14 @@ async def score_paper(
     expected_project_id: str,
     *,
     force: bool = False,
+    origin: str = "manual",
 ) -> dict[str, Any]:
     from sigma import papers
     from sigma.openai_connection import auth_context
     from sigma.proposals import configuration
 
+    if origin == "manual" and papers._paper_run_id.get() is not None:
+        origin = "automatic"
     record = papers.get_paper(path, paper_id)
     if inspect_project(path).project.id != expected_project_id:
         raise ProjectError("Project identity changed; reopen and retry")
@@ -426,20 +465,46 @@ async def score_paper(
         if task is None or task.done():
 
             async def evaluate() -> dict[str, Any]:
-                payload = _context(record, papers.get_pdf(path, paper_id))
-                result, _ = await papers._provider_structured(
-                    payload,
-                    auth,
-                    config,
-                    instructions=INSTRUCTIONS,
-                    schema_name="sigma_paper_score_v3",
-                    response_model=PaperJudgment,
-                    max_input_bytes=180000,
-                    project_id=expected_project_id,
-                    project_path_value=path,
-                )
-                judgment = PaperJudgment.model_validate(result)
-                return _save_score(path, paper_id, _make_score(judgment, sha))
+                async with _exclusive_scoring_lease(path, paper_id):
+                    # Another process may have saved the score while we waited
+                    # on its provider call. The second caller must reuse it.
+                    latest = papers.get_paper(path, paper_id, include_tex=False)
+                    if latest["pdf_sha256"] != sha:
+                        raise ProjectError("Paper PDF changed while scoring")
+                    saved = cached_score(latest)
+                    if saved is not None and not force:
+                        logging.getLogger("sigma.lifecycle").info(
+                            "paper.score_reused paper_id=%s origin=%s",
+                            paper_id,
+                            origin,
+                        )
+                        return saved
+                    payload = _context(latest, papers.get_pdf(path, paper_id))
+                    logging.getLogger("sigma.lifecycle").info(
+                        "paper.score_evaluation_started paper_id=%s origin=%s",
+                        paper_id,
+                        origin,
+                    )
+                    result, _ = await papers._provider_structured(
+                        payload,
+                        auth,
+                        config,
+                        instructions=INSTRUCTIONS,
+                        schema_name="sigma_paper_score_v3",
+                        response_model=PaperJudgment,
+                        max_input_bytes=180000,
+                        project_id=expected_project_id,
+                        project_path_value=path,
+                    )
+                    judgment = PaperJudgment.model_validate(result)
+                    persisted = _save_score(path, paper_id, _make_score(judgment, sha))
+                    logging.getLogger("sigma.lifecycle").info(
+                        "paper.score_persisted paper_id=%s origin=%s total=%d",
+                        paper_id,
+                        origin,
+                        persisted["total"],
+                    )
+                    return persisted
 
             task = asyncio.create_task(evaluate())
             memory_guard.track_task(task)
