@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase, main
 from unittest.mock import patch
@@ -12,6 +13,20 @@ from sigma import cloud_auth, papers, personal_browser, personal_inference, proj
 
 
 class HostedPersonalHotfixTests(TestCase):
+    def test_disposable_chromium_does_not_disable_real_passkey_signin(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        boot = (root / "auth-poc/boot.sh").read_text(encoding="utf-8")
+        dockerfile = (root / "auth-poc/shared.Dockerfile").read_text(encoding="utf-8")
+        # The previous attempt to suppress a passkey helper unintentionally
+        # suppressed the actual conditional passkey sign-in experience.
+        self.assertNotIn("WebAuthenticationConditionalUI", boot)
+        self.assertNotIn("WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot)
+        self.assertNotIn("--disable-features=", boot)
+        self.assertNotIn("PasswordManagerPasskeysEnabled", dockerfile)
+        self.assertNotIn("PasswordManagerEnabled", dockerfile)
+        self.assertIn("--disable-save-password-bubble", boot)
+        self.assertIn("--user-data-dir=", boot)
+
     def test_hosted_personal_requires_complete_explicit_configuration(self) -> None:
         configuration = SimpleNamespace(enabled=True, local=False, error=None)
         settings = {

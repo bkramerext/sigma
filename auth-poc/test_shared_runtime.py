@@ -131,6 +131,11 @@ def memory_report(stage: str) -> None:
 
 def main() -> None:
     assert os.geteuid() == 10001, "Vault test must not run as root"
+    # Check the built production image, not only the source files. A managed
+    # Chromium passkey-disabling policy must never ship in the shared worker.
+    assert not Path("/etc/chromium/policies/managed/sigma-no-passkeys.json").exists()
+    boot = Path("/opt/sigma/auth-poc/boot.sh").read_text(encoding="utf-8")
+    assert "WebAuthenticationConditionalUI" not in boot
     memory_report("idle_before_login")
     asyncio.run(storage_check())
     assert call(A, "GET", "/v1/account", key_override="0"*64)[0] == 403

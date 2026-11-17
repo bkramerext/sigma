@@ -18,12 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin sigma-personal \
     && useradd --uid 11001 --no-create-home --shell /usr/sbin/nologin sigma-browser \
-    && mkdir -p /etc/chromium/policies/managed /var/lib/sigma-shared/records \
+    && mkdir -p /var/lib/sigma-shared/records \
        /var/lib/sigma-shared/workspaces /var/lib/sigma-shared-key \
     && chown -R 10001:10001 /var/lib/sigma-shared /var/lib/sigma-shared-key \
     && chmod 0700 /var/lib/sigma-shared/records /var/lib/sigma-shared/workspaces /var/lib/sigma-shared-key
-RUN printf '%s' '{"PasswordManagerPasskeysEnabled":false,"PasswordManagerEnabled":false}' \
-    > /etc/chromium/policies/managed/sigma-no-passkeys.json
 WORKDIR /opt/sigma
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
