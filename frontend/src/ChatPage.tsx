@@ -261,7 +261,8 @@ export default function ChatPage() {
     try {
       while (runningRef.current && id === runId.current) {
         recordRepeatedInstruction(conversationId);
-        await transcriptWrites.current;
+        // A previous transcript write error must not permanently poison Retry.
+        await transcriptWrites.current.catch(() => undefined);
         if (!runningRef.current || id !== runId.current) return;
         const who: 'ai_1' | 'ai_2' = nextSpeaker;
         const controller = new AbortController();
