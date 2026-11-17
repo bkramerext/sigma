@@ -11115,9 +11115,7 @@ async def _generate_impl(
             # A score is owned by the canonical on-disk paper record, not
             # the in-memory snapshot used to publish its PDF. Always consult
             # the durable record when crossing the Score -> Finish boundary.
-            durable_score = paper_scores.cached_score(
-                get_paper(path, paper_id, include_tex=False)
-            )
+            durable_score = paper_scores.cached_score(get_paper(path, paper_id, include_tex=False))
             if durable_score is None:
                 await report("scoring", None, None)
                 try:
