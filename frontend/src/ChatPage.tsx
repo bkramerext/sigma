@@ -39,7 +39,8 @@ type ChatConfig = {
 };
 
 const labels: Record<TranscriptSpeaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor', supervisor_setting: 'Supervisor setting' };
-const MAX_LOCAL_MESSAGES = 500;
+// The UI retains the entire saved transcript. Limits on model input are applied
+// separately when building each inference request.
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
 function CopyReplyButton({ name, text }: { name: string; text: string }) {
@@ -250,13 +251,10 @@ export default function ChatPage() {
   }, [running, speaker]);
 
   const addMessage = useCallback((message: ChatMessage) => {
-    const overflow = Math.max(0, messagesRef.current.length + 1 - MAX_LOCAL_MESSAGES);
-    const next = [...messagesRef.current, message].slice(-MAX_LOCAL_MESSAGES);
+    // Keep all history visible, including early Supervisor assessments.
+    // Inference requests are separately bounded by settings.max_messages.
+    const next = [...messagesRef.current, message];
     messagesRef.current = next;
-    if (overflow) setExpandedEntries(previous => Object.fromEntries(
-      Object.entries(previous).filter(([index]) => Number(index) >= overflow)
-        .map(([index, expanded]) => [Number(index) - overflow, expanded]),
-    ));
     setMessages(next);
   }, []);
 
@@ -439,7 +437,7 @@ export default function ChatPage() {
       pendingHumanRef.current = null;
       skipNextSupervisorAssessmentRef.current = false;
       transcriptWrites.current = Promise.resolve();
-      const restored = saved.messages.slice(-MAX_LOCAL_MESSAGES);
+      const restored = saved.messages;
       messagesRef.current = restored;
       setMessages(restored);
       setExpandedEntries({});
