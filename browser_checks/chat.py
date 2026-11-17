@@ -38,19 +38,21 @@ with sync_playwright() as playwright:
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body=json.dumps({
-                    "conversation_id": "4b1657d0-d9a4-467d-bc8b-29d48111e124",
-                    "transcript_name": "20261112_101010.md",
-                    "transcript_path": "/tmp/sigma-state/chat-transcripts/20261112_101010.md",
-                    "research_objective": "Continue exploring theta kernels.",
-                    "next_speaker": "ai_2",
-                    "has_supervisor": False,
-                    "messages": [
-                        {"speaker": "objective", "text": "Continue exploring theta kernels."},
-                        {"speaker": "human", "text": "Find a new approach."},
-                        {"speaker": "ai_1", "text": "Consider the theta transformation."},
-                    ],
-                }),
+                body=json.dumps(
+                    {
+                        "conversation_id": "4b1657d0-d9a4-467d-bc8b-29d48111e124",
+                        "transcript_name": "20261112_101010.md",
+                        "transcript_path": "/tmp/sigma-state/chat-transcripts/20261112_101010.md",
+                        "research_objective": "Continue exploring theta kernels.",
+                        "next_speaker": "ai_2",
+                        "has_supervisor": False,
+                        "messages": [
+                            {"speaker": "objective", "text": "Continue exploring theta kernels."},
+                            {"speaker": "human", "text": "Find a new approach."},
+                            {"speaker": "ai_1", "text": "Consider the theta transformation."},
+                        ],
+                    }
+                ),
             )
             return
         if url.endswith("/api/chat/transcripts"):
@@ -596,9 +598,13 @@ with sync_playwright() as playwright:
     assert resumed["conversation_id"] == "4b1657d0-d9a4-467d-bc8b-29d48111e124"
     assert resumed["speaker"] == "ai_2"
     assert resumed["research_objective"] == "Continue exploring theta kernels."
-    assert any(message["text"] == "Consider the theta transformation." for message in resumed["messages"])
+    assert any(
+        message["text"] == "Consider the theta transformation." for message in resumed["messages"]
+    )
     assert not any(message["text"] == "Find a new approach." for message in transcript_messages)
-    assert not any(message["text"] == "Continue exploring theta kernels." for message in transcript_messages)
+    assert not any(
+        message["text"] == "Continue exploring theta kernels." for message in transcript_messages
+    )
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
     # A new normal page load must not inherit the earlier local opt-in.
