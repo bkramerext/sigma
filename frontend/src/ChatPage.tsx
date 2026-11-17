@@ -64,6 +64,7 @@ export default function ChatPage() {
   const [running, setRunning] = useState(false);
   const [turnElapsedSeconds, setTurnElapsedSeconds] = useState(0);
   const [turnTimedOut, setTurnTimedOut] = useState(false);
+  const [failedTurn, setFailedTurn] = useState<'ai_1' | 'ai_2' | null>(null);
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -78,6 +79,9 @@ export default function ChatPage() {
   const abort = useRef<AbortController | null>(null);
   const turnStartedAtRef = useRef<number | null>(null);
   const transcriptWrites = useRef<Promise<void>>(Promise.resolve());
+  // If the provider completed but saving the response failed, Retry must
+  // save that exact response rather than generate and bill for a duplicate.
+  const pendingReplyRef = useRef<ChatMessage | null>(null);
 
   useEffect(() => { configRef.current = config; }, [config]);
 
@@ -148,7 +152,7 @@ export default function ChatPage() {
   }, []);
 
   function appendTranscriptMessage(id: string, message: ChatMessage): Promise<void> {
-    const write = transcriptWrites.current.then(async () => {
+    const write = transcriptWrites.current.catch(() => undefined).then(async () => {
       const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -252,8 +256,8 @@ export default function ChatPage() {
     throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
-  async function runConversation(id: number) {
-    let nextSpeaker: 'ai_1' | 'ai_2' = 'ai_1';
+  async function runConversation(id: number, initialSpeaker: 'ai_1' | 'ai_2' = 'ai_1') {
+    let nextSpeaker: 'ai_1' | 'ai_2' = initialSpeaker;
     try {
       while (runningRef.current && id === runId.current) {
         recordRepeatedInstruction(conversationId);
@@ -266,15 +270,22 @@ export default function ChatPage() {
         setTurnElapsedSeconds(0);
         setTurnTimedOut(false);
         setSpeaker(who);
-        // Snapshot current selection for this turn. Changes made during an
-        // in-flight request take effect at the next turn, without interrupting it.
-        const settings = configRef.current;
-        if (!settings?.available) throw new Error('The selected AI account is unavailable.');
-        const result = await requestTurn(who, messagesRef.current, controller, settings);
-        if (!runningRef.current || id !== runId.current) return;
-        const reply = { speaker: who, text: result } as const;
-        addMessage(reply);
+        // Snapshot the selected model/thinking on each new provider request.
+        // If a response was generated but its transcript write failed, resume
+        // that write instead of making another potentially billable request.
+        if (!pendingReplyRef.current) {
+          const settings = configRef.current;
+          if (!settings?.available) throw new Error('The selected AI account is unavailable.');
+          const result = await requestTurn(who, messagesRef.current, controller, settings);
+          if (!runningRef.current || id !== runId.current) return;
+          const reply: ChatMessage = { speaker: who, text: result };
+          pendingReplyRef.current = reply;
+          addMessage(reply);
+        }
+        const reply = pendingReplyRef.current;
+        if (!reply || reply.speaker !== who) throw new Error('The pending AI reply does not match the retry turn.');
         await appendTranscriptMessage(conversationId, reply);
+        pendingReplyRef.current = null;
         turnStartedAtRef.current = null;
         setTurnElapsedSeconds(0);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
@@ -286,8 +297,9 @@ export default function ChatPage() {
         const message = errorText(cause);
         const timedOut = /timed out|timeout/i.test(message);
         setTurnTimedOut(timedOut);
+        setFailedTurn(nextSpeaker);
         setError(message);
-        setNotice(timedOut ? 'Timed out' : 'The exchange stopped. Check the message above before starting again.');
+        setNotice(timedOut ? 'Timed out. Retry the failed turn when ready.' : 'The exchange stopped. Retry the failed turn when ready.');
       }
     } finally {
       if (id === runId.current) {
@@ -321,11 +333,26 @@ export default function ChatPage() {
     setError('');
     setNotice('');
     setTurnTimedOut(false);
+    setFailedTurn(null);
+    pendingReplyRef.current = null;
     if (runningRef.current) return;
     runId.current += 1;
     runningRef.current = true;
     setRunning(true);
     void runConversation(runId.current);
+  }
+
+  function retryConversation() {
+    if (runningRef.current || !failedTurn || !conversationId) return;
+    const who = failedTurn;
+    setError('');
+    setNotice('');
+    setTurnTimedOut(false);
+    setFailedTurn(null);
+    runId.current += 1;
+    runningRef.current = true;
+    setRunning(true);
+    void runConversation(runId.current, who);
   }
 
   function stopConversation() {
@@ -336,6 +363,8 @@ export default function ChatPage() {
     abort.current = null;
     turnStartedAtRef.current = null;
     setTurnTimedOut(false);
+    setFailedTurn(null);
+    pendingReplyRef.current = null;
     setRunning(false);
     setSpeaker(null);
     setNotice('Stopped. A provider request in progress may have completed and used account allowance.');
@@ -352,6 +381,8 @@ export default function ChatPage() {
     setError('');
     setNotice('');
     setTurnTimedOut(false);
+    setFailedTurn(null);
+    pendingReplyRef.current = null;
     try {
       await openTranscript();
     } catch (cause) {
@@ -422,6 +453,7 @@ export default function ChatPage() {
     </form>
     <div className="chat-controls" role="region" aria-label="Brainstorm exchange controls">
       <button type="submit" form="brainstorm-human-form" className="chat-send" disabled={!canSend}>Send</button>
+      {failedTurn && !running && <button type="button" className="chat-retry" disabled={!conversationId} onClick={retryConversation}>Retry {labels[failedTurn]}</button>}
       <button type="button" className="chat-stop" disabled={!running} onClick={stopConversation}>Stop exchange</button>
       <button type="button" className="chat-clear" disabled={running || !messages.length} onClick={clearConversation}>Clear</button>
       <span role="status" aria-live="polite">{running ? `${labels[speaker ?? 'ai_1']} is responding…` : notice}</span>
