@@ -19,6 +19,7 @@ active_fixture_binding = "fixture-account"
 session_calls = 0
 transcript_messages: list[dict] = []
 fail_next_turn = False
+fail_decode_attempts = 0
 fail_next_supervisor = False
 selected_settings = {
     "limits": {},
@@ -34,7 +35,7 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def respond(route):
-        global config_calls, session_calls, fail_next_turn, fail_next_supervisor
+        global config_calls, session_calls, fail_next_turn, fail_decode_attempts, fail_next_supervisor
         url = route.request.url
         if url.endswith("/api/chat/transcripts/20261112_101010.md"):
             route.fulfill(
@@ -226,6 +227,14 @@ with sync_playwright() as playwright:
         if url.endswith("/api/chat/turn"):
             body = route.request.post_data_json
             turns.append(body)
+            if fail_decode_attempts > 0:
+                fail_decode_attempts -= 1
+                route.fulfill(
+                    status=200,
+                    content_type="text/event-stream",
+                    body='data: {"type":"error","error":"The provider response could not be decoded."}\\n\\n',
+                )
+                return
             if fail_next_turn:
                 fail_next_turn = False
                 route.fulfill(
@@ -725,6 +734,22 @@ with sync_playwright() as playwright:
         page.wait_for_timeout(50)
     assert len(turns) > skipped_at, "Skip turn did not resume the exchange"
     assert turns[skipped_at]["speaker"] == "ai_2"
+    page.get_by_role("button", name="Stop exchange", exact=True).click()
+
+    # Bad provider frame decoding is retried automatically with the same
+    # speaker/history, rather than asking the human to repair provider output.
+    before_recovery = len(turns)
+    fail_decode_attempts = 2
+    human.fill("Continue research despite transient malformed provider responses.")
+    page.get_by_role("button", name="Send", exact=True).click()
+    deadline = time.monotonic() + 7
+    while time.monotonic() < deadline and len(turns) < before_recovery + 3:
+        page.wait_for_timeout(50)
+    assert len(turns) >= before_recovery + 3
+    recovered = turns[before_recovery : before_recovery + 3]
+    assert [turn["speaker"] for turn in recovered] == ["ai_1"] * 3
+    assert all(turn["messages"] == recovered[0]["messages"] for turn in recovered)
+    expect(page.get_by_role("button", name="Retry AI #1", exact=True)).to_have_count(0)
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
     page.get_by_role("button", name="Clear", exact=True).click()
