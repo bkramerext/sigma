@@ -49,7 +49,13 @@ with sync_playwright() as playwright:
                         "supervisor_enabled": False,
                         "messages": [
                             {"speaker": "objective", "text": "Continue exploring theta kernels."},
+                            {"speaker": "supervisor", "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight."},
                             {"speaker": "human", "text": "Find a new approach."},
+                            *[
+                                {"speaker": "ai_2" if index % 2 else "ai_1",
+                                 "text": f"Archived AI turn {index}"}
+                                for index in range(502)
+                            ],
                             {"speaker": "ai_1", "text": "Consider the theta transformation."},
                         ],
                     }
@@ -665,6 +671,16 @@ with sync_playwright() as playwright:
     page.locator("#chat-saved-transcript").select_option("20261112_101010.md")
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261112_101010.md")
     expect(repeated).to_have_value("Continue exploring theta kernels.")
+    # An archived Supervisor entry predating the old 500-message display
+    # window must be restored and remain visible after live turns append.
+    restored_history = page.get_by_role("list", name="Conversation history")
+    expect(restored_history.locator("li")).to_have_count(506)
+    old_supervisor = restored_history.locator(".chat-history-supervisor").first
+    expect(old_supervisor).to_contain_text("Early supervisor insight.")
+    expect(old_supervisor.locator("button.chat-disclosure-button")).to_have_attribute(
+        "aria-expanded", "true"
+    )
+
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline and len(turns) <= turns_before_resume:
         page.wait_for_timeout(50)
@@ -672,6 +688,8 @@ with sync_playwright() as playwright:
     resumed = turns[turns_before_resume]
     assert resumed["conversation_id"] == "4b1657d0-d9a4-467d-bc8b-29d48111e124"
     assert resumed["speaker"] == "ai_2"
+    expect(old_supervisor).to_contain_text("Early supervisor insight.")
+
     assert "expected_binding" not in resumed
     assert resumed["research_objective"] == "Continue exploring theta kernels."
     assert any(
