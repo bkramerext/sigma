@@ -22,6 +22,7 @@ SPEAKER_LABELS = {
     "ai_2": "AI #2",
     "objective": "Research Objective",
     "supervisor": "Supervisor",
+    "supervisor_setting": "Supervisor setting",
 }
 TRANSCRIPT_FILENAME = re.compile(r"^\d{8}_\d{6}(?:_\d+)?\.md$")
 
@@ -147,7 +148,7 @@ def append_message(conversation_id: str, speaker: str, text: str) -> None:
 
 # Only SIGMA-owned files in the private transcript directory may be resumed.
 _RECORD = re.compile(
-    r"^## (Human|AI #1|AI #2|Research Objective|Supervisor) · "
+    r"^## (Human|AI #1|AI #2|Research Objective|Supervisor|Supervisor setting) · "
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\n]*$",
     re.MULTILINE,
 )
@@ -236,6 +237,13 @@ def load_transcript(name: str) -> dict[str, Any]:
         messages.append(message)
 
     objective = ""
+    supervisor_enabled: bool | None = None
+    for message in messages:
+        if message["speaker"] == "supervisor_setting":
+            if message["text"] not in {"enabled", "disabled"}:
+                raise ProjectError("The chat transcript contains an invalid Supervisor setting.")
+            supervisor_enabled = message["text"] == "enabled"
+    messages = [message for message in messages if message["speaker"] != "supervisor_setting"]
     for message in messages:
         if message["speaker"] == "objective":
             objective = "" if message["text"] == "(cleared)" else message["text"]
@@ -250,5 +258,6 @@ def load_transcript(name: str) -> dict[str, Any]:
         "messages": messages,
         "research_objective": objective,
         "next_speaker": next_speaker,
-        "has_supervisor": any(m["speaker"] == "supervisor" for m in messages),
+        "supervisor_enabled": (supervisor_enabled if supervisor_enabled is not None
+                               else any(m["speaker"] == "supervisor" for m in messages)),
     }
