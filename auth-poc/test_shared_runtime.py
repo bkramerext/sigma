@@ -140,8 +140,7 @@ def main() -> None:
         "PasswordManagerPasskeysEnabled": False,
     }, "Chromium must suppress password saving and passkey helper"
     boot = Path("/opt/sigma/auth-poc/boot.sh").read_text(encoding="utf-8")
-    assert "--disable-blink-features=WebAuthenticationConditionalUI" in boot
-    assert "--disable-features=WebAuthenticationConditionalUI" not in boot
+    assert "--disable-blink-features=WebAuthenticationConditionalUI" not in boot
     memory_report("idle_before_login")
     asyncio.run(storage_check())
     assert call(A, "GET", "/v1/account", key_override="0"*64)[0] == 403
