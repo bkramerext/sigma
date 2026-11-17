@@ -484,6 +484,12 @@ with sync_playwright() as playwright:
     before_repeated_edit = len(turns)
     page.get_by_label("Enable Supervisor").check()
     expect(page.get_by_label("Enable Supervisor")).to_be_checked()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "enabled"
+        for item in transcript_messages
+    ):
+        page.wait_for_timeout(50)
     assert any(
         item["speaker"] == "supervisor_setting" and item["text"] == "enabled"
         for item in transcript_messages
@@ -567,6 +573,12 @@ with sync_playwright() as playwright:
     # Toggling Supervisor off mid-exchange persists without stopping the AIs.
     page.get_by_label("Enable Supervisor").uncheck()
     expect(page.get_by_label("Enable Supervisor")).not_to_be_checked()
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "disabled"
+        for item in transcript_messages
+    ):
+        page.wait_for_timeout(50)
     assert any(
         item["speaker"] == "supervisor_setting" and item["text"] == "disabled"
         for item in transcript_messages
