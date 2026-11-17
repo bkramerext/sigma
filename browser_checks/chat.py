@@ -257,8 +257,10 @@ with sync_playwright() as playwright:
     # entire header 365px tall and cropped the wordmark in the user smoke test.
     assert artwork_box["width"] <= 340, artwork_box
     assert artwork_box["height"] <= 245, artwork_box
-    # The reference Project header is 166px at this viewport.
-    assert abs(header_box["height"] - 166) <= 2, header_box
+    # A fixed 166px Brainstorm header left a large unused bottom strip.
+    # Let the title/artwork/stack determine its compact height instead.
+    assert 108 <= header_box["height"] <= 145, header_box
+    assert abs(artwork_box["width"] / artwork_box["height"] - 25 / 8) < 0.05
     assert artwork_box["x"] + artwork_box["width"] <= heading_box["x"] + 2
     assert description_box["x"] + description_box["width"] <= google_box["x"] - 4
     assert eyebrow_box["y"] + eyebrow_box["height"] <= title_box["y"] + 3
@@ -290,7 +292,7 @@ with sync_playwright() as playwright:
     )
     assert 12 <= top_gap <= 35, (header_box, account_stack_box)
     assert abs(top_gap - bottom_gap) <= 5, (top_gap, bottom_gap)
-    assert abs(top_gap - right_gap) <= 18, (top_gap, right_gap)
+    assert abs(top_gap - right_gap) <= 8, (top_gap, right_gap)
     page.set_viewport_size({"width": 1360, "height": 900})
     human = page.get_by_label("Human", exact=True)
     first = page.get_by_role("region", name="AI #1 latest reply")
