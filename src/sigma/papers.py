@@ -3524,7 +3524,11 @@ def _visible_invalid_tex_controls(tex: str) -> tuple[str, list[str]]:
     text. A control byte has no safe mathematical interpretation, so the PDF
     identifies it for review instead of silently guessing a TeX command.
     """
-    codes = sorted({ord(char) for char in tex if ord(char) < 32 and char not in "\n\r\t"})
+    # XeTeX also rejects DEL (U+007F) and other C1 control characters.
+    # Retain structural whitespace; leave the archived authored draft intact.
+    codes = sorted(
+        {ord(char) for char in tex if unicodedata.category(char) == "Cc" and char not in "\n\r\t"}
+    )
     if not codes:
         return tex, []
     return (
@@ -10015,6 +10019,29 @@ def _repair_tex_layout(tex: str, warnings: list[str]) -> tuple[str, str] | None:
     return (repaired, " ".join(actions)) if actions else None
 
 
+def _paper_pdf_compiler_hint(diagnostics: list[str], error: RuntimeError) -> str | None:
+    """Expose only controlled compiler classifications, never authored TeX."""
+    from_diagnostics = next(
+        (
+            entry.removeprefix("SIGMA compiler category: ")
+            for entry in diagnostics
+            if entry.startswith("SIGMA compiler category: ")
+        ),
+        None,
+    )
+    if from_diagnostics:
+        return from_diagnostics
+    message = str(error)
+    known_causes = (
+        ("PDF export requires Tectonic", "Tectonic is not installed or is not on PATH"),
+        ("PDF compiler could not start", "Tectonic executable could not start"),
+        ("PDF compilation exceeded", "Tectonic compilation timed out"),
+        ("Research report is too large to typeset", "TeX source exceeded size limit"),
+        ("PDF compiler output was invalid", "Tectonic produced an invalid or oversized PDF"),
+    )
+    return next((label for fragment, label in known_causes if fragment in message), None)
+
+
 def _diagram_compile_failure_is_identified(diagnostics: list[str], error: RuntimeError) -> bool:
     """Return true only when compiler output connects an error to TikZ/PGF."""
     output = "\n".join([*diagnostics, str(error)])
@@ -11085,7 +11112,11 @@ async def _generate_impl(
             score_failure_detail: str | None = None
             from sigma import paper_scores
 
-            if paper_scores.cached_score(saved_record) is None:
+            # A score is owned by the canonical on-disk paper record, not
+            # the in-memory snapshot used to publish its PDF. Always consult
+            # the durable record when crossing the Score -> Finish boundary.
+            durable_score = paper_scores.cached_score(get_paper(path, paper_id, include_tex=False))
+            if durable_score is None:
                 await report("scoring", None, None)
                 try:
                     if not expected_binding or not expected_project_id:
@@ -11093,6 +11124,15 @@ async def _generate_impl(
                     await paper_scores.score_paper(
                         path, paper_id, initial_auth["identity"], expected_project_id
                     )
+                    # A returned judgment is insufficient: success requires a
+                    # valid score actually persisted on this paper's PDF hash.
+                    durable_score = paper_scores.cached_score(
+                        get_paper(path, paper_id, include_tex=False)
+                    )
+                    if durable_score is None:
+                        raise ProjectError(
+                            "Automatic scoring finished without persisting a valid score"
+                        )
                 except Exception as exc:  # noqa: BLE001 - never invalidate a published PDF
                     logging.getLogger("sigma.lifecycle").warning(
                         "paper.score_failed project_id=%s paper_id=%s error_type=%s",
@@ -11104,6 +11144,9 @@ async def _generate_impl(
                         "PDF generated; scoring did not finish. Use Score paper to retry."
                     )
                     await report("score_failed", None, None, "active", detail=score_failure_detail)
+            # The final SSE response and the saved-paper metadata must agree
+            # about whether automatic scoring has already succeeded.
+            saved_record["score"] = durable_score
             await report("finishing", None, None, detail=score_failure_detail)
             _schedule_progress_email(path, "paper_finished", paper_id)
             await report("complete", None, None, "complete", detail=score_failure_detail)
@@ -11127,7 +11170,10 @@ async def _generate_impl(
                     "author_review_warnings",
                     "generation",
                 )
-            } | {"title": saved_record["draft"]["title"]}
+            } | {
+                "title": saved_record["draft"]["title"],
+                "score": durable_score,
+            }
 
         # Recover old, already-published scoring interruptions even when the
         # previous build cleared its generation checkpoint too early.
@@ -11902,6 +11948,30 @@ async def _generate_impl(
                 work.pop("pdf_checkpoint", None)
                 _save_work(path, work)
                 _abort_stopping_generation()
+            # Older completed proofreading checkpoints can contain control
+            # characters that earlier sanitizers missed (notably DEL, ^^?).
+            # Repair the cached TeX locally without invoking proofreading or
+            # authors again. Keep the original authored draft unchanged.
+            tex, cached_invalid_codes = _visible_invalid_tex_controls(tex)
+            if cached_invalid_codes:
+                invalid_control_codes = sorted(
+                    set(invalid_control_codes) | set(cached_invalid_codes)
+                )
+                warning = (
+                    "Needs review: The authored source contained unreadable control characters "
+                    f"({', '.join(invalid_control_codes)}). The PDF marks each position; "
+                    "the exact saved draft remains available for correction."
+                )
+                if warning not in warnings:
+                    warnings.append(warning)
+                _record_paper_generation_issue(work, warning)
+                ready = work.get("proofread_ready")
+                if isinstance(ready, dict):
+                    ready["tex"] = tex
+                    ready["warnings"] = list(warnings)
+                    ready["invalid_control_codes"] = list(invalid_control_codes)
+                work.pop("pdf_checkpoint", None)
+                _save_work(path, work)
             record["generation"]["proofreading"] = {
                 "attempted": True,
                 "ai_performed": proofreading.get("ai_performed", False),
@@ -12005,15 +12075,12 @@ async def _generate_impl(
                         and _diagram_compile_failure_is_identified(pass_diagnostics, compile_error)
                     )
                     recovered_authored_tex = False
-                    if (
-                        pass_number == 1
-                        and not diagnosed_diagram_error
-                        and proofreading.get("corrections")
-                    ):
-                        # The mechanical AI proofreader may produce syntactically
-                        # invalid but semantically unchanged TeX. Before throwing
-                        # away authored content or visuals, retry the unmodified
-                        # validated draft without making any new provider calls.
+                    if pass_number == 1 and not diagnosed_diagram_error:
+                        # The proofreader may change TeX without emitting a
+                        # correction record (including review-note insertion).
+                        # Even then, attempt the canonical, validated author's
+                        # TeX before failing PDF generation. Retry only when
+                        # source bytes actually differ; no AI call is replayed.
                         authored_tex = _tex(draft, warnings, snapshot_hash, **tex_options)
                         authored_tex, _ = _restore_escaped_math_in_tex(authored_tex)
                         authored_tex, _ = _visible_invalid_tex_controls(authored_tex)
@@ -12119,6 +12186,9 @@ async def _generate_impl(
                             _record_paper_generation_issue(work, warning)
                             tex = _tex(draft, warnings, snapshot_hash, **tex_options)
                             tex, restored = _restore_escaped_math_in_tex(tex)
+                            # A fallback render may recreate control bytes
+                            # from the saved draft; never hand them to XeTeX.
+                            tex, _ = _visible_invalid_tex_controls(tex)
                             work["static_math_restorations"] = (
                                 int(work.get("static_math_restorations", 0)) + restored
                             )
@@ -12130,8 +12200,12 @@ async def _generate_impl(
                                 "The PDF used an unproofread text-only fallback rendering."
                             )
                         else:
+                            # The compiler's raw output stays in logs. Only
+                            # its safe category and source line reach the UI.
+                            hint = _paper_pdf_compiler_hint(pass_diagnostics, compile_error)
+                            detail = f" ({hint})" if hint else ""
                             raise ProjectError(
-                                "PDF compilation failed. The paper draft is preserved; "
+                                f"PDF compilation failed{detail}. The paper draft is preserved; "
                                 "use Resume to retry without rewriting it."
                             ) from compile_error
                         pass_diagnostics = []
@@ -12145,8 +12219,11 @@ async def _generate_impl(
                                 diagnostics=pass_diagnostics,
                             )
                         except RuntimeError as fallback_error:
+                            hint = _paper_pdf_compiler_hint(pass_diagnostics, fallback_error)
+                            detail = f" ({hint})" if hint else ""
                             raise ProjectError(
-                                "The safe visual fallback could not compile; the authored TeX remains available."
+                                "The safe visual fallback could not compile"
+                                f"{detail}; the authored TeX remains available."
                             ) from fallback_error
                 compile_diagnostics = list(pass_diagnostics)
                 await report(
