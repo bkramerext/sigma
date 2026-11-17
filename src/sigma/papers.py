@@ -4780,7 +4780,9 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
                     "paper_id": published_id,
                     "can_control": False,
                     "can_resume": False,
-                    "can_remove": viewer is None or viewer == row["creator_email"],
+                    # Owners may manage saved project papers, including
+                    # publications authored by invited collaborators.
+                    "can_remove": viewer is None or viewer == row["creator_email"] or project_owner,
                 }
             )
             continue
