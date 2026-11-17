@@ -1042,6 +1042,28 @@ def discard_execution_run(
         db.commit()
 
 
+def tombstone_deleted_paper_run(path: str, paper_id: str) -> None:
+    """Keep a deleted published PDF's reservation from reappearing as a run.
+
+    Only call this after the paper-delete route authorizes the caller and
+    successfully removes the saved artifact. The reserved number is not reused.
+    """
+    from sigma.projects import project_path
+
+    if cloud_workspaces.current() is None or cloud_auth.current_principal() is None:
+        return
+    path = str(project_path(path))
+    with _db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        _membership(db, path)
+        db.execute(
+            """UPDATE shared_run_reservations SET status='discarded'
+               WHERE path=? AND kind='paper' AND artifact_id=?""",
+            (path, paper_id),
+        )
+        db.commit()
+
+
 def note_execution_artifact_author(path: str, kind: str, run_id: str, artifact_id: str) -> None:
     """Attribute publication to the *reserved creator*, not the current viewer."""
     if not artifact_id or kind not in {"paper", "session"}:
