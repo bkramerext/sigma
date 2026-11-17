@@ -300,7 +300,7 @@ function strategyLiveStatusLines(session: ResearchSession): { id: string; label:
     return [{
       id: supplied ? 'supplied-evidence-compilation' : 'reference-compilation',
       label: supplied ? 'Compiling source material' : compilation?.status === 'pending' ? 'Preparing research standards' : 'Compiling research standards',
-      detail: supplied ? session.message : 'Preparing shared guidance for all strategies…',
+      detail: supplied ? session.message : 'The same research standards will guide every strategy.',
     }];
   }
   if (!['running', 'queued'].includes(session.status) || !session.strategy_runs || session.strategy_runs.length <= 1) return [];
@@ -2365,7 +2365,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
                   ? 'Stopping · findings remain available'
                   : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings recorded · {sessionEstimatedCostLabel(item)}</>}</small>
-                {!pendingAction && strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
+                {!pendingAction && strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id} className={line.id === 'reference-compilation' ? 'session-standards-guidance' : undefined}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
                 {!pendingAction && strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
             </div>
@@ -3183,6 +3183,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const [paperRuns, setPaperRuns] = useState<PaperRun[]>(() => initialPaperListing.current?.runs ?? []);
   const selectedRunIdRef = useRef<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  // Retain the server-reserved number across a momentarily missing progress
+  // sidecar. Never replace a numbered finishing Paper with a new unnumbered one.
+  const [reservedPaperNumber, setReservedPaperNumber] = useState<{ runId: string; number: number } | null>(null);
   useEffect(() => {
     const reveal = (event: Event) => {
       const id = (event as CustomEvent<string>).detail;
@@ -3510,8 +3513,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     const actionEpoch = paperActionEpoch.current;
     const refreshSerial = ++paperRefreshSerial.current;
     const obsolete = () => actionEpoch !== paperActionEpoch.current || refreshSerial !== paperRefreshSerial.current;
-    // Preserve the open paper cards during a Start over refresh.
-    if (!silent) setLoading(true);
+    // Only an empty initial library needs a visible loading message. A
+    // publication refresh is an in-place paper handoff, not a new page load.
+    if (!silent && papers.length === 0 && paperRuns.length === 0 && !newPaperRequested) setLoading(true);
     try {
       const query = new URLSearchParams({ path });
       // The library is independent of provider configuration, progress and
@@ -3539,6 +3543,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       const runs = (Array.isArray(savedProgress?.runs) ? savedProgress.runs
         : Array.isArray(list.runs) ? list.runs : []) as PaperRun[];
       setPaperRuns(runs);
+      const currentReserved = runs.find(run => run.run_id === selectedRunIdRef.current);
+      if (currentReserved?.number) setReservedPaperNumber({ runId: currentReserved.run_id, number: currentReserved.number });
       let currentId = selectedRunIdRef.current;
       const selectable = runs.filter(run => run.can_control && run.status !== 'complete' && !run.paper_id);
       if (!currentId && !newPaperRequested && selectable.length > 0) {
@@ -4689,8 +4695,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       }
       if (actionEpoch !== paperActionEpoch.current || hasPaperStopIntent(runId)) return;
       if (!result) throw new Error('Paper generation ended without a completed version. No version was published.');
-      await refresh(result.paper_id);
-      setNewPaperRequested(false);
+      // Publication is a quiet in-place state transition. The saved row
+      // replaces the numbered run only after the API confirms its presence.
+      // Keep the run visible if metadata briefly lags behind the SSE receipt.
+      await refresh(result.paper_id, true);
       // Successful publication is already visible in the saved Paper list.
       // Avoid a redundant completion message; actionable review warnings stay
       // on the Paper itself.
@@ -4777,6 +4785,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // Existing unfinished work remains creator-only; any collaborator may start
   // genuinely new work (the server reserves ownership before dispatch).
   const selectedRun = paperRuns.find(run => run.run_id === selectedRunId);
+  useEffect(() => {
+    if (selectedRun?.number && selectedRunId)
+      setReservedPaperNumber(previous => previous?.runId === selectedRunId &&
+        previous.number === selectedRun.number ? previous : { runId: selectedRunId, number: selectedRun.number });
+  }, [selectedRun?.number, selectedRunId]);
   const otherPaperRuns = paperRuns.filter(run =>
     run.run_id !== selectedRunId && !hiddenRemovalIds.has(run.run_id) &&
     (publicationAwaitingLibrary(run, papers) || (run.status !== 'complete' && !run.paper_id))
@@ -4792,7 +4805,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const draftVersion = selectedRun?.number ?? nextPaperNumber ?? (Math.max(0, ...papers.map(paper => paper.paper_version)) + 1);
   // The unreserved next number can race other collaborators. Display a number
   // only once the server has allocated this run's authoritative number.
-  const assignedPaperNumber = selectedRun?.number ?? null;
+  const assignedPaperNumber = selectedRun?.number ??
+    (reservedPaperNumber?.runId === selectedRunId ? reservedPaperNumber.number : null);
   const draftDisplayTitle = assignedPaperNumber !== null ? `Paper ${assignedPaperNumber}` : 'New paper';
   const orderedPapers = [...papers].filter(paper => !hiddenRemovalIds.has(paper.paper_id))
     .sort((a, b) => b.paper_version - a.paper_version);
@@ -4830,7 +4844,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     + (paperNoticeCopy?.next?.length ?? 0);
   const paperNoticeSize = paperNoticeLength <= 90 ? 'short' : paperNoticeLength <= 190 ? 'medium' : 'long';
   const showPaperNotice = Boolean(paperNoticeMessage) && dismissedPaperNoticeKey !== paperNoticeKey && !generating;
-  const showDraftPaper = !guest && !removingLegacyDraft &&
+  // A completed selected run can be cleared while its SSE stream is still
+  // closing. Do not let stale busy/progress state fabricate a "New paper".
+  const hasDraftIdentity = !!selectedRunId || continuationAvailable ||
+    !!checkpointMismatch || !!restartableCheckpoint || restartReady;
+  const showDraftPaper = !guest && !removingLegacyDraft && hasDraftIdentity &&
     (!selectedRun?.paper_id || selectedPublicationPending) &&
     !hiddenRemovalIds.has(selectedRunId ?? '') && (
     selectedPublicationPending || newPaperRequested || generating || restartReady || continuationAvailable ||
@@ -5052,7 +5070,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       <>
 
       {scoreError && <p role="alert" className="error paper-score-error-card">{scoreError} <DialogDismissButton label="Dismiss paper score error" onClick={() => setScoreError('')}/></p>}
-      {loading && <p>Loading papers…</p>}
+      {loading && !papers.length && !paperRuns.length && !newPaperRequested && <p>Loading papers…</p>}
 
       {(showDraftPaper || otherPaperRuns.length > 0 || (!loading && papers.length > 0)) && <section className="saved-paper-library" aria-label="Papers">
         {showDraftPaper && <article className="saved-paper-card paper-draft-card" aria-label={draftDisplayTitle} data-paper-version={assignedPaperNumber ?? undefined}>
