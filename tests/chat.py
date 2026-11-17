@@ -205,17 +205,22 @@ def check_response_recovery() -> None:
         "output_text": "Recovered adapter text.",
     }
     assert chat._response_text(completed, "gpt-6.1-sol") == "Recovered adapter text."
-    assert chat._response_text(
-        {**completed, "output": [{"type": "message", "content": [
-            {"type": "output_text", "text": "Canonical text."},
-        ]}]},
-        "gpt-6.1-sol",
-    ) == "Canonical text."
+    canonical = {
+        **completed,
+        "output": [
+            {"type": "message", "content": [{"type": "output_text", "text": "Canonical text."}]}
+        ],
+    }
+    assert chat._response_text(canonical, "gpt-6.1-sol") == "Canonical text."
+    refused = {
+        **completed,
+        "output": [
+            {"type": "message", "content": [{"type": "refusal", "refusal": "No."}]}
+        ],
+    }
     for bad in (
         {**completed, "status": "incomplete"},
-        {**completed, "output": [{"type": "message", "content": [
-            {"type": "refusal", "refusal": "No."},
-        ]}]},
+        refused,
         {**completed, "output": [], "output_text": ""},
     ):
         try:
