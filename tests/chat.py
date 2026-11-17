@@ -440,7 +440,7 @@ def check_transcripts() -> None:
             assert restored["messages"][0] == {"speaker": "human", "text": messages[0][1]}
             assert restored["messages"][2] == {"speaker": "ai_2", "text": messages[2][1]}
             assert restored["messages"][-1]["text"] == long_entry
-            assert not restored["has_supervisor"]
+            assert not restored["supervisor_enabled"]
             with TestClient(app) as client:
                 listed = client.get("/api/chat/transcripts")
                 selected = client.get("/api/chat/transcripts/" + session["transcript_name"])
@@ -457,9 +457,21 @@ def check_transcripts() -> None:
                 "Research progress: 4.5 / 10.0\\n\\nTo AI #2: Clarify the assumption.",
             )
             resumed_guidance = chat_transcripts.load_transcript(session["transcript_name"])
-            assert resumed_guidance["has_supervisor"]
+            assert resumed_guidance["supervisor_enabled"]
             assert resumed_guidance["messages"][-1]["recipient"] == "ai_2"
             assert resumed_guidance["messages"][-1]["guidance"] == "Clarify the assumption."
+
+            chat_transcripts.append_message(
+                session["conversation_id"], "supervisor_setting", "disabled"
+            )
+            disabled = chat_transcripts.load_transcript(session["transcript_name"])
+            assert disabled["supervisor_enabled"] is False
+            assert all(message["speaker"] != "supervisor_setting" for message in disabled["messages"])
+            chat_transcripts.append_message(
+                session["conversation_id"], "supervisor_setting", "enabled"
+            )
+            reenabled = chat_transcripts.load_transcript(session["transcript_name"])
+            assert reenabled["supervisor_enabled"] is True
 
             original = path.read_bytes()
             backup = directory / "transcript-backup.md"
