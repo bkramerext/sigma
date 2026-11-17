@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from sigma import paper_scores, papers
@@ -250,6 +251,79 @@ def test_scoring_is_single_flight_and_cache_hit_avoids_provider() -> None:
     asyncio.run(scenario())
 
 
+def test_stale_scoring_request_rechecks_cache_after_authentication_wait() -> None:
+    async def scenario() -> None:
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "score-stale-reader.sigma"
+            view = initialize_project(path, "Scoring race", "Avoid a duplicate score call.")
+            paper_id = "e" * 32
+            papers._save(
+                str(path),
+                {
+                    "schema_version": 1,
+                    "paper_id": paper_id,
+                    "project_id": view.project.id,
+                    "created_at": "2026-11-01T00:00:00+00:00",
+                    "snapshot_sha256": "b" * 64,
+                    "draft": {"title": "Scored paper"},
+                    "generation": {},
+                    "validation_warnings": [],
+                },
+                b"%PDF-fixture",
+            )
+            auth = {"identity": "test-binding", "mode": "api_key", "token": "test-token"}
+            calls = 0
+            auth_calls = 0
+            score_saved = asyncio.Event()
+
+            async def delayed_second_auth():
+                nonlocal auth_calls
+                auth_calls += 1
+                if auth_calls == 2:
+                    await score_saved.wait()
+                return auth
+
+            async def provider(*args: object, **kwargs: object):
+                nonlocal calls
+                calls += 1
+                return judgment(), "mock"
+
+            save_score = paper_scores._save_score
+
+            def save_and_signal(
+                score_path: str, saved_paper_id: str, score: dict[str, Any]
+            ) -> dict[str, Any]:
+                saved = save_score(score_path, saved_paper_id, score)
+                score_saved.set()
+                return saved
+
+            with (
+                patch("sigma.openai_connection.auth_context", new=delayed_second_auth),
+                patch(
+                    "sigma.proposals.configuration",
+                    new=AsyncMock(
+                        return_value={
+                            "available": True,
+                            "model": "test",
+                            "reasoning_effort": "medium",
+                        }
+                    ),
+                ),
+                patch.object(paper_scores, "_context", return_value={"pdf": "fixture"}),
+                patch.object(paper_scores, "_save_score", new=save_and_signal),
+                patch.object(papers, "_provider_structured", new=provider),
+            ):
+                first, stale_reader = await asyncio.gather(
+                    paper_scores.score_paper(str(path), paper_id, "test-binding", view.project.id),
+                    paper_scores.score_paper(str(path), paper_id, "test-binding", view.project.id),
+                )
+            assert first == stale_reader
+            assert calls == 1
+            assert papers.list_papers(str(path))[0]["score"] == first
+
+    asyncio.run(scenario())
+
+
 def test_rubric_omits_stale_scores() -> None:
     sha = hashlib.sha256(b"paper").hexdigest()
     score = paper_scores._make_score(judgment(), sha)
@@ -303,6 +377,7 @@ def main() -> None:
     test_score_bounds_and_best_known_only()
     test_score_persists_per_version_and_deleted_highest_falls_back()
     test_scoring_is_single_flight_and_cache_hit_avoids_provider()
+    test_stale_scoring_request_rechecks_cache_after_authentication_wait()
     test_rubric_omits_stale_scores()
     test_score_write_preserves_archived_paper_snapshot()
     print("PASS paper scoring weights, cache, persistence, concurrent evaluation, and invalidation")
