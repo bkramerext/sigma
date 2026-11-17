@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
     identifiers = ["a" * 32, "b" * 32]
     for index, paper_id in enumerate(identifiers):
         hostile = (
-            "<script>window.__paperXss = true</script>" if index == 0 else "A second saved paper."
+            "<script>window.__paperXss = true</script>" if index == 0 else "For $n$ lines, the maximum is $1+n(n+1)/2$. **Sharp** bound."
         )
         papers._save(
             str(project_path),
@@ -290,6 +290,46 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             )
             expect(second_row.get_by_role("link", name="Download text file")).to_be_visible()
             expect(second_row.get_by_role("link", name="Open PDF in browser")).to_be_visible()
+
+            # The first Abstract paragraph belongs to the Markdown view, not
+            # an unformatted plaintext element outside the converted body.
+            # Stub only the formatting request: no provider is contacted.
+            def markdown_config(route):
+                if "purpose=markdown" in route.request.url:
+                    route.fulfill(
+                        status=200,
+                        content_type="application/json",
+                        body=json.dumps({
+                            "available": True, "binding": "fixture-binding",
+                            "model": "fixture-model", "reasoning_effort": "medium",
+                        }),
+                    )
+                else:
+                    route.continue_()
+
+            page.route("**/api/projects/proposals/config**", markdown_config)
+            page.route(
+                "**/api/projects/papers/*/markdown-preview",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps({"markdown": "## Saved section\\nBody math: $n(n+1)/2$."}),
+                ),
+            )
+            second_row.locator("button.saved-paper-expand").click()
+            abstract = second_row.locator(".paper-preview-abstract")
+            expect(abstract).to_contain_text("$1+n(n+1)/2$")
+            expect(abstract.locator(".katex")).to_have_count(0)
+            second_row.get_by_role("button", name="Render paper as Markdown").click()
+            expect(abstract.locator(".katex")).not_to_have_count(0)
+            expect(abstract.locator("strong")).to_have_text("Abstract.")
+            expect(abstract).to_contain_text("Sharp")
+            expect(abstract.locator("strong")).to_have_count(2)
+            expect(second_row.locator(".paper-preview-markdown .katex")).not_to_have_count(0)
+            second_row.get_by_role("button", name="Show plain paper").click()
+            expect(abstract.locator(".katex")).to_have_count(0)
+            expect(abstract).to_contain_text("$1+n(n+1)/2$")
+
             expect(
                 dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
             ).to_have_count(0)
