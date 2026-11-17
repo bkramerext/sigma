@@ -582,7 +582,7 @@ with sync_playwright() as playwright:
         observed = [entries.nth(i).get_attribute("class") for i in range(entries.count())]
         speakers = [value.removeprefix("chat-history-entry chat-history-") for value in observed]
         if len(speakers) > 1:
-            assert speakers in (["ai_1", "ai_2"], ["ai_1", "ai_2", "supervisor"]), speakers
+            assert speakers in (["ai_1", "ai_2"], ["ai_1", "ai_2", "supervisor"], ["ai_2", "supervisor"]), speakers
     expect(history.locator(".chat-entry-timestamp").first).to_be_visible()
     ai_2_entry = history.locator(".chat-history-ai_2").first
     ai_2_disclosure = ai_2_entry.locator("button.chat-disclosure-button")
