@@ -1,5 +1,14 @@
 # SIGMA status
 
+## SIGMA 0.4.3 production acceptance (2026-11-17)
+
+Production runs merged `main` SHA `613b14156adf8b0a0856ce2eda3cac2cf89d9b07`
+(PR #886) at version 0.4.3. The guarded deployment and post-deploy health
+checks passed. The operator confirmed the bounded production Session → Stop
+acceptance and paper workflow passed; 0.4.3 is accepted. See
+[Deployment History](DEPLOYMENT_HISTORY.md) and [Release Notes](RELEASE_NOTES.md).
+Any subsequent hotfix is separate from this accepted release.
+
 ## Repeated prompt text in two-agent chat (2026-11-14)
 
 Added a top-of-page **Repeated** field and tip to `./sigma chat`. Its optional
