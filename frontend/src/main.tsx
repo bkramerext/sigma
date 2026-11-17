@@ -13,6 +13,7 @@ import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
 import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
 import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper } from './paper-completion-transition';
+import { activatePaperScoreStep } from './paper-score-action';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -2767,8 +2768,9 @@ const paperScoreCategories: { key: keyof PaperScore['categories']; title: string
   { key: 'visuals', title: 'Useful visuals', standard: 'Accurate figures or tables clarify difficult relationships, with clear captions and provenance.' },
 ];
 
-function PaperScoreDialog({ score, error, onClose }: { score: PaperScore; error: string; onClose: () => void }) {
+function PaperScoreDialog({ score, error, onClose, onRescore }: { score: PaperScore; error: string; onClose: () => void; onRescore: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
+  const [confirmRescore, setConfirmRescore] = useState(false);
   useEffect(() => { element.current?.showModal(); }, []);
   return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
     onCancel={event => { event.preventDefault(); onClose(); }}>
@@ -2777,7 +2779,7 @@ function PaperScoreDialog({ score, error, onClose }: { score: PaperScore; error:
       <div className="settings-actions"><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
     </header>
     <div className="settings-body paper-score-body">
-      <p className="settings-hint paper-score-rescore-instructions">To rescore, click the Scored step in the paper's progress sequence.</p>
+      <p className="settings-hint paper-score-rescore-instructions">This saved score is reused unless you explicitly choose to rescore.</p>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
         <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
@@ -2794,6 +2796,11 @@ function PaperScoreDialog({ score, error, onClose }: { score: PaperScore; error:
             <p className="paper-score-assessment"><strong>Assessment:</strong> {score.categories[key].explanation}</p>
           </div>
         </details>)}
+      </div>
+      <div className="settings-actions">
+        {confirmRescore
+          ? <><button type="button" className="text-view-link" onClick={onRescore}>Confirm rescore</button><button type="button" className="text-view-link" onClick={() => setConfirmRescore(false)}>Cancel</button></>
+          : <button type="button" className="text-view-link" onClick={() => setConfirmRescore(true)}>Rescore paper</button>}
       </div>
     </div>
   </dialog>;
@@ -2959,7 +2966,7 @@ function PaperActivityLine({ progress }: { progress: PaperProgress }) {
   return <span className="paper-activity-line">{paperActivityLabel(progress, now)}</span>;
 }
 
-type SavedPaperRestartStage = 'started' | 'writing' | 'validation' | 'typesetting' | 'scoring';
+type SavedPaperRestartStage = 'started' | 'writing' | 'validation' | 'typesetting';
 type UnfinishedPaperRestartStage = 'started' | 'review' | 'evidence' | 'planning' | 'writing' | 'validation' | 'typesetting' | 'pdf';
 type UnfinishedPaperRestartOptions = { snapshot_sha256: string; stages: UnfinishedPaperRestartStage[]; resume_stage: PaperProgress['stage']; published_paper_id?: string };
 const PAPER_UNFINISHED_STAGES: readonly (UnfinishedPaperRestartStage | null)[] = [
@@ -2980,12 +2987,12 @@ function rewindProgressStage(stage: SavedPaperRestartStage): PaperProgress['stag
   return stage === 'started' ? 'queued'
     : stage === 'writing' ? 'writing'
     : stage === 'validation' ? 'validation'
-    : stage === 'scoring' ? 'scoring' : 'proofreading';
+    : 'proofreading';
 }
 function paperRestartStepName(stage: SavedPaperRestartStage): string {
   return stage === 'started' ? 'Started' : stage === 'writing' ? 'Write sections'
     : stage === 'validation' ? 'Validate'
-    : stage === 'scoring' ? 'Score' : 'Proofread';
+    : 'Proofread';
 }
 const paperUnfinishedCheckpointForStep = (
   step: number, available: readonly UnfinishedPaperRestartStage[],
@@ -3018,7 +3025,7 @@ function PaperStageSteps({ progress, onSelectStep }: {
         {interactive
           ? <button type="button" className="paper-step-restart"
               aria-label={step === 8 && progress.status === 'complete'
-                ? 'Rescore paper'
+                ? 'View paper score'
                 : `Restart paper at step ${step === 0 ? 'Started' : group.label}`}
               onClick={event => onSelectStep?.(step, event.currentTarget)}>
               <strong>{paperStageLabel(step, index, display)}</strong>
@@ -3871,7 +3878,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (!published) throw new Error('Saved paper is unavailable; refresh this project.');
         setUnfinishedStepRestart(null);
         setUnfinishedStepChecking(null);
-        if (requestedStep === 8 && published.pdf_available) proposePaperStepRescore(published, anchor);
+        if (requestedStep === 8 && published.pdf_available) {
+          activatePaperScoreStep(!!published.score,
+            () => published.score && setScoreDialog({ paperId: published.paper_id, score: published.score }),
+            () => void scorePaper(published));
+        }
         else void proposePaperStepRestart(published, publishedPaperTarget(requestedStep), anchor);
         void refresh(undefined, true);
         return;
@@ -4049,33 +4060,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       }
     }
   }
-  function proposePaperStepRescore(paper: PaperSummary, anchor: HTMLButtonElement) {
-    if (guest || scoringRef.current || paperStepRestartBusy || paperStepChecking) return;
-    paperStepRestartAnchor.current = anchor;
-    setPaperStepCheckError(null);
-    // Scoring already validates the persisted PDF at execution time. Opening
-    // the confirmation never requires a separate paper-list round trip.
-    setPaperStepRestart({
-      paper, stage: 'scoring',
-      options: paper.pdf_available && paper.pdf_sha256 ? {
-        source_pdf_sha256: paper.pdf_sha256,
-        snapshot_sha256: paper.snapshot_sha256,
-        include_diagrams: true,
-      } : null,
-      checking: false,
-      error: paper.pdf_available && paper.pdf_sha256 ? '' : 'The saved PDF is unavailable. Reopen the paper before rescoring.',
-    });
-  }
   async function confirmPaperStepRestart() {
     const proposed = paperStepRestart;
     if (!proposed?.options || paperStepRestartBusy) return;
     paperActionEpoch.current++;
-    if (proposed.stage === 'scoring') {
-      setPaperStepRestart(null);
-      setPaperStepCheckError(null);
-      void scorePaper(proposed.paper, true);
-      return;
-    }
     if (!binding) {
       setPaperStepCheckError({ id: proposed.paper.paper_id, message: 'Connect an AI provider before restarting this paper.' });
       setPaperStepRestart(null);
@@ -5361,7 +5349,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               }}
               onSelectStep={!guest && !scoringId && !automaticScoringPaperIds.has(paper.paper_id)
                 ? (step, anchor) => {
-                  if (step === 8 && paper.pdf_available) void proposePaperStepRescore(paper, anchor);
+                  if (step === 8 && paper.pdf_available) activatePaperScoreStep(!!paper.score,
+                    () => paper.score && setScoreDialog({ paperId: paper.paper_id, score: paper.score }),
+                    () => void scorePaper(paper));
                   else void proposePaperStepRestart(paper, publishedPaperTarget(step), anchor);
                 } : undefined}/>
             {paperRemovalErrors[paper.paper_id] && <div role="alert" className="ai-paper-warning paper-saved-removal-error">
@@ -5384,14 +5374,12 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
               style={paperStepRestartPlacement
                 ? { left: paperStepRestartPlacement.left, top: paperStepRestartPlacement.top }
                 : { left: 12, top: 12, visibility: 'hidden' }}>
-              <p>{paperStepRestart.stage === 'scoring'
-                ? `Rescore paper ${paper.paper_version}?`
-                : paperStepRestart.stage === 'started'
-                  ? 'Restart paper from beginning?'
-                  : `Restart paper ${paper.paper_version} at ${paperRestartStepName(paperStepRestart.stage)}?`}</p>
+              <p>{paperStepRestart.stage === 'started'
+                ? 'Restart paper from beginning?'
+                : `Restart paper ${paper.paper_version} at ${paperRestartStepName(paperStepRestart.stage)}?`}</p>
               {paperStepRestart.error && <p role="alert" className="ai-paper-warning">{paperUserMessage(paperStepRestart.error)}</p>}
               <div className="session-remove-confirm-actions">
-                <button type="button" className="text-view-link" disabled={!paperStepRestart.options || paperStepRestartBusy || (!binding && paperStepRestart.stage !== 'scoring')} onClick={() => void confirmPaperStepRestart()}>Confirm</button>
+                <button type="button" className="text-view-link" disabled={!paperStepRestart.options || paperStepRestartBusy || !binding} onClick={() => void confirmPaperStepRestart()}>Confirm</button>
                 <button type="button" className="text-view-link" onClick={dismissPaperStepRestart}>Cancel</button>
               </div>
             </div>, document.body
@@ -5508,7 +5496,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           </div>
         </div>, document.body
       )}
-      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} error={scoreError}/>} 
+      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={() => {
+        const paper = papers.find(item => item.paper_id === scoreDialog.paperId);
+        setScoreDialog(null);
+        if (paper) void scorePaper(paper, true);
+      }} error={scoreError}/>}
       </div>
     </div>
   </section>;
