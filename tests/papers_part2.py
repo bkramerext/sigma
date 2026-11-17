@@ -622,8 +622,13 @@ def test_del_and_c1_controls_are_visible_and_idempotent() -> None:
     # XeTeX reports DEL as ^^?; the prior sanitizer only handled codepoints < 32.
     source = (
         "\\documentclass{article}\\begin{document}"
-        r"\$1,2," + "\x7f" + r"\textbackslash{}ldots,n\$ "
-        + "\x85" + "\n" + "\t" + "\\end{document}"
+        r"\$1,2,"
+        + "\x7f"
+        + r"\textbackslash{}ldots,n\$ "
+        + "\x85"
+        + "\n"
+        + "\t"
+        + "\\end{document}"
     )
     repaired, codes = papers._visible_invalid_tex_controls(source)
     assert codes == ["U+007F", "U+0085"]
