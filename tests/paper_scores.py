@@ -6,6 +6,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import multiprocessing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -324,6 +325,104 @@ def test_stale_scoring_request_rechecks_cache_after_authentication_wait() -> Non
     asyncio.run(scenario())
 
 
+def _score_in_separate_worker(
+    path: str,
+    paper_id: str,
+    project_id: str,
+    start: Any,
+    calls: Any,
+    results: Any,
+) -> None:
+    """Separate process: real score_paper() route with a fake billable provider."""
+    auth = {"identity": "test-binding", "mode": "api_key", "token": "test-token"}
+
+    async def provider(*_args: object, **_kwargs: object):
+        with calls.get_lock():
+            calls.value += 1
+        # Force the other process to contend on the same persisted paper.
+        await asyncio.sleep(0.35)
+        return judgment(), "mock"
+
+    try:
+        assert start.wait(timeout=10)
+        with (
+            patch("sigma.openai_connection.auth_context", new=AsyncMock(return_value=auth)),
+            patch(
+                "sigma.proposals.configuration",
+                new=AsyncMock(
+                    return_value={
+                        "available": True,
+                        "model": "test",
+                        "reasoning_effort": "medium",
+                    }
+                ),
+            ),
+            patch.object(paper_scores, "_context", return_value={"pdf": "fixture"}),
+            patch.object(papers, "_provider_structured", new=provider),
+        ):
+            scored = asyncio.run(
+                paper_scores.score_paper(path, paper_id, "test-binding", project_id)
+            )
+        results.put(("ok", scored["total"]))
+    except Exception as exc:  # noqa: BLE001 - report worker failure to the parent process
+        results.put(("error", repr(exc)))
+
+
+def test_scoring_is_single_flight_across_processes_and_legacy_json() -> None:
+    """Two independent workers must never send two paid scoring requests."""
+    context = multiprocessing.get_context("fork")
+    for suffix in (".sigma", ".json"):
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / ("score-workers" + suffix)
+            view = initialize_project(path, "Scoring workers", "Evaluate the same paper once.")
+            paper_id = "1" * 32
+            papers._save(
+                str(path),
+                {
+                    "schema_version": 1,
+                    "paper_id": paper_id,
+                    "project_id": view.project.id,
+                    "created_at": "2026-11-01T00:00:00+00:00",
+                    "snapshot_sha256": "c" * 64,
+                    "draft": {"title": "One PDF, one score"},
+                    "generation": {},
+                    "validation_warnings": [],
+                },
+                b"%PDF-fixture",
+            )
+            start = context.Event()
+            calls = context.Value("i", 0)
+            results = context.Queue()
+            workers = [
+                context.Process(
+                    target=_score_in_separate_worker,
+                    args=(str(path), paper_id, view.project.id, start, calls, results),
+                )
+                for _ in range(2)
+            ]
+            try:
+                for worker in workers:
+                    worker.start()
+                start.set()
+                for worker in workers:
+                    worker.join(timeout=20)
+                assert all(worker.exitcode == 0 for worker in workers)
+                assert [results.get(timeout=3) for _ in workers] == [
+                    ("ok", 76),
+                    ("ok", 76),
+                ]
+                assert calls.value == 1, "both workers dispatched scoring evaluation"
+                saved = papers.get_paper(str(path), paper_id, include_tex=False)
+                durable = paper_scores.cached_score(saved)
+                assert durable is not None and durable["total"] == 76
+            finally:
+                for worker in workers:
+                    if worker.is_alive():
+                        worker.terminate()
+                    worker.join(timeout=2)
+                results.close()
+
+
 def test_rubric_omits_stale_scores() -> None:
     sha = hashlib.sha256(b"paper").hexdigest()
     score = paper_scores._make_score(judgment(), sha)
@@ -378,6 +477,7 @@ def main() -> None:
     test_score_persists_per_version_and_deleted_highest_falls_back()
     test_scoring_is_single_flight_and_cache_hit_avoids_provider()
     test_stale_scoring_request_rechecks_cache_after_authentication_wait()
+    test_scoring_is_single_flight_across_processes_and_legacy_json()
     test_rubric_omits_stale_scores()
     test_score_write_preserves_archived_paper_snapshot()
     print("PASS paper scoring weights, cache, persistence, concurrent evaluation, and invalidation")
