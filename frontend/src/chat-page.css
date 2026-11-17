@@ -207,3 +207,97 @@
 .brainstorm-workspace .chat-history .chat-reply-heading .chat-copy-button { margin: 0; }
 .brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
 .brainstorm-workspace .chat-history-repeated { border-left-color: #a891bf !important; }
+
+/* Brainstorm uses the same Google, ChatGPT, and persisted Model/Thinking
+   controls as Home. Keep all three interactive and reserve a real middle
+   column for the conversation title rather than overlaying account pills. */
+.workspace-page.brainstorm-workspace .chat-site-header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: clamp(16px, 2vw, 32px);
+  min-width: 0;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  gap: clamp(12px, 1.5vw, 24px);
+}
+.workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+  flex: 0 0 auto;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+  flex: 1 1 330px;
+  min-width: 0;
+  max-width: 600px;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-eyebrow {
+  margin: 0 0 3px; color: #c99a66; font-size: .78rem;
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy h1 {
+  margin: 0; font-size: clamp(1.45rem, 2vw, 2.1rem);
+  color: #f0e6d7; line-height: 1.2;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+  margin: 5px 0 0; color: #c4b9aa;
+  font-size: .88rem; line-height: 1.45;
+  overflow-wrap: break-word;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .header-controls {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  width: auto;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "identity model-column";
+  align-items: center;
+  justify-content: end;
+  column-gap: var(--identity-pill-gap);
+  margin-left: auto;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-pill-stack {
+  grid-area: identity;
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: max-content max-content;
+  row-gap: var(--sigma-project-pill-row-gap);
+  align-items: start;
+  justify-items: end;
+  min-width: 0;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-model-column {
+  grid-area: model-column;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  pointer-events: auto;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-model-column .global-model-pill-position {
+  position: static; display: inline-flex; margin: 0;
+}
+@media (max-width: 1230px) {
+  .workspace-page.brainstorm-workspace .chat-site-header { flex-wrap: wrap; }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block { flex: 1 1 100%; }
+  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
+    align-self: center; justify-self: end; margin-left: auto;
+  }
+}
+@media (max-width: 700px) {
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    flex-direction: row; align-items: center; gap: 12px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    width: min(34vw, 175px); margin-left: -20px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    flex: 1 1 180px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
+    width: 100%; grid-template-columns: max-content max-content;
+    justify-content: end; gap: var(--identity-pill-gap);
+  }
+}
