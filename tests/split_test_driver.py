@@ -28,7 +28,9 @@ _EXPECTED_FAULT_LOGS = {
         "session.recovered": 12,
     },
     "papers": {
-        "paper.exception": 4,
+        # Includes the deliberate legacy DEL compile failure exercised
+        # before verifying Resume repairs the cached TeX without AI replay.
+        "paper.exception": 5,
         "paper.score_failed": 22,
         "paper.section_failed": 6,
         "paper.validation_recovered": 1,
