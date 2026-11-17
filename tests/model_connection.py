@@ -408,9 +408,10 @@ async def credential_isolation_checks():
         transient = await connection.models(context=sponsor)
         assert transient["connection"]["status"] == "connected"
         assert transient["connection"]["cached_catalog"] is True
-        assert next(
+        available_model = next(
             model for model in transient["models"] if model["id"] == "gpt-6-luna"
-        )["availability"] == "available"
+        )
+        assert available_model["availability"] == "available"
         verified_state.checked_at -= connection.TTL + 1
         limited = await connection.models(context=sponsor)
         assert limited["connection"]["status"] == "limited"
