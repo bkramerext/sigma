@@ -5038,6 +5038,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     let pending = false;
     let pendingCompletedScoreRefresh = false;
     let previouslyScoring = activeScoringPaperIds(paperRuns);
+    const observedFinishing = new Set<string>();
     const pollRuns = async () => {
       if (pending || controller.signal.aborted) return;
       pending = true;
@@ -5051,6 +5052,15 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         if (!controller.signal.aborted && Array.isArray(data.runs)) {
           const finishedIds = completedScoringPaperIds(previouslyScoring, data.runs);
           previouslyScoring = activeScoringPaperIds(data.runs);
+          // A collaborator may first observe a run already in Finishing,
+          // after the previous Score state was missed. Reconcile it once too.
+          for (const run of data.runs) {
+            if (run.paper_id && run.status === 'active' &&
+                run.progress?.stage === 'finishing' && !observedFinishing.has(run.paper_id)) {
+              observedFinishing.add(run.paper_id);
+              pendingCompletedScoreRefresh = true;
+            }
+          }
           setPaperRuns(data.runs);
           if (finishedIds.length) pendingCompletedScoreRefresh = true;
           if (pendingCompletedScoreRefresh) {
