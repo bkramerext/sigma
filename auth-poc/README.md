@@ -58,6 +58,10 @@ Use the reviewed production deployment files:
 Hosted Personal is **disabled by default** in SIGMA's backend until the
 operator sets `SIGMA_PERSONAL_HOSTED_ENABLED=true` and provisions the
 protected HMAC seed, stable checkout ID and attested shared-worker image.
+The GCE backend overlay sets `SIGMA_PERSONAL_BROWSER_ENABLED=1` (the
+production flag), not the local `SIGMA_PERSONAL_BROWSER_LAB_ENABLED`.
+The legacy lab flag remains available for existing `./sigma start --prod`
+workflows, but is not consulted for hosted Personal authorization.
 The existing sponsored model remains available while Personal is disabled.
 Enabling the feature must never imply provider entitlement or successful
 sign-in: verify a real hosted account and complete a real inference request

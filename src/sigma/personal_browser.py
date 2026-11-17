@@ -31,12 +31,17 @@ class PersonalBrowserUnavailable(RuntimeError):
 
 def enabled() -> bool:
     cfg = cloud_auth.config()
-    return (
-        os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
-        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
-        and cfg.enabled
-        and (cfg.local or cloud_auth.hosted_personal_enabled())
-    )
+    if not cfg.enabled:
+        return False
+    if cfg.local:
+        # Keep the already-working --prod local preview gated as before.
+        return (
+            os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
+            and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
+        )
+    # Hosted real Personal has its own explicit production feature flag,
+    # independent of local testing and synthetic auth laboratory switches.
+    return cloud_auth.hosted_personal_enabled()
 
 
 def _socket() -> str:

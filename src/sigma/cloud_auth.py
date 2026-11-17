@@ -705,7 +705,7 @@ def hosted_personal_enabled() -> bool:
         and not cfg.error
         and os.environ.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
         and os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1"
-        and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1"
+        and os.environ.get("SIGMA_PERSONAL_BROWSER_ENABLED") == "1"
         and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET"))
         and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT"))
         and re.fullmatch(r"[0-9a-f]{64}", os.environ.get("SIGMA_AUTH_POC_RPC_SEED", "")) is not None
@@ -754,9 +754,11 @@ def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
             model_access,
         )
         if (
-            (cfg.local or hosted_personal_enabled())
-            and sponsorship_eligible
-            and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1"
+            sponsorship_eligible
+            and (
+                (cfg.local and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1")
+                or hosted_personal_enabled()
+            )
         ):
             # The local --prod worker can outlive a cancelled/failed sign-in.
             # An old Personal selection without a completed, subject-bound
@@ -1876,10 +1878,15 @@ def status(request: Request):
     personal_browser_lab_configured = (
         cfg.enabled
         and not cfg.error
-        and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
         and bool(os.environ.get("SIGMA_PERSONAL_BROWSER_BROKER_SOCKET", ""))
-        and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
-        and (cfg.local or hosted_personal_enabled())
+        and (
+            (
+                cfg.local
+                and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED", "") == "1"
+                and os.environ.get("SIGMA_AUTH_POC_REAL_SIGNIN") != "1"
+            )
+            or hosted_personal_enabled()
+        )
     )
     local_setup_missing = []
     if not cfg.enabled or cfg.local:

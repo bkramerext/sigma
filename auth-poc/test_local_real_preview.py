@@ -420,6 +420,7 @@ async def main() -> None:
                 begin.assert_awaited_once()
                 saved.assert_not_awaited()
 
+            server._ATTEMPT_ID = None
             missing_origin = await client.post("/begin")
             assert missing_origin.status_code == 403
             with (

@@ -17,7 +17,7 @@ class HostedPersonalHotfixTests(TestCase):
         settings = {
             "SIGMA_PERSONAL_HOSTED_ENABLED": "1",
             "SIGMA_PERSONAL_SHARED_MODE": "1",
-            "SIGMA_PERSONAL_BROWSER_LAB_ENABLED": "1",
+            "SIGMA_PERSONAL_BROWSER_ENABLED": "1",
             "SIGMA_PERSONAL_BROWSER_BROKER_SOCKET": "/run/sigma-personal-broker/broker.sock",
             "SIGMA_PERSONAL_BROWSER_GATEWAY_ROOT": "/run/sigma-personal-gateways",
             "SIGMA_AUTH_POC_RPC_SEED": "a" * 64,

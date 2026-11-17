@@ -831,6 +831,7 @@ class Preflight:
                     not hosted_personal
                     or (
                         backend["environment"].get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
+                        and backend["environment"].get("SIGMA_PERSONAL_BROWSER_ENABLED") == "1"
                         and backend["environment"].get("SIGMA_PERSONAL_SHARED_MODE") == "1"
                         and backend["environment"].get("SIGMA_AUTH_POC_RPC_SEED")
                         == self.values["SIGMA_AUTH_POC_RPC_SEED"]
