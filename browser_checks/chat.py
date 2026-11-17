@@ -322,8 +322,10 @@ with sync_playwright() as playwright:
     assert checkbox_label_bounds["width"] < 240, checkbox_label_bounds
     assert abs(checkbox_bounds["x"] - (panel_bounds["x"] + 15)) < 4
     assert checkbox_label_bounds["x"] <= panel_bounds["x"] + 20
-    objective_copy = page.get_by_role("button", name="Copy Research Objective")
-    human_copy = page.get_by_role("button", name="Copy Human")
+    objective_copy = page.get_by_role("region", name="Research objective").get_by_role(
+        "button", name="Copy Research Objective"
+    )
+    human_copy = page.locator(".chat-human-form").get_by_role("button", name="Copy Human")
     objective_label = page.locator(".chat-repeated-prompt .chat-field-heading label").bounding_box()
     human_label = page.locator(".chat-human-form .chat-field-heading label").bounding_box()
     objective_icon = objective_copy.bounding_box()
