@@ -219,7 +219,11 @@ def load_transcript(name: str) -> dict[str, Any]:
         body = body.removesuffix("\n\n")
         if not body.strip():
             raise ProjectError("The chat transcript contains an empty entry.")
-        message: dict[str, Any] = {"speaker": _LABEL_SPEAKERS[match.group(1)], "text": body}
+        message: dict[str, Any] = {
+            "speaker": _LABEL_SPEAKERS[match.group(1)],
+            "text": body,
+            "timestamp": match.group(0).split(" · ", 1)[1],
+        }
         # Older transcript records stored the complete human-readable supervisor
         # assessment but not its structured routing metadata. Recover only its
         # final, explicitly addressed process guidance for the resumed AIs.
