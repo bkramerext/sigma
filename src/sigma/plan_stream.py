@@ -578,7 +578,7 @@ async def completed(
             for content in item.get("content", [])
             if isinstance(content, dict) and content.get("type") == "output_text"
         ]
-        if texts and texts != [deltas]:
+        if texts and "".join(texts) != deltas:
             raise ValueError(
                 f"plan_stream:delta_text_mismatch(len_texts={len(texts)},len_delta={len(deltas)})"
             )
