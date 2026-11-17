@@ -4806,7 +4806,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const selectedPublicationPending = publicationAwaitingLibrary(selectedRun, papers);
   const automaticScoringPaperIds = new Set(
     paperRuns.filter(run => run.paper_id && run.status === 'active' &&
-      ['scoring', 'finishing'].includes(run.progress?.stage ?? '')).map(run => run.paper_id),
+      ['pdf_check', 'scoring', 'score_failed', 'finishing'].includes(run.progress?.stage ?? '')).map(run => run.paper_id),
   );
   const paperProgressFailure = paperStepRestartBusy ? ''
     : paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? '' : '';
@@ -4879,7 +4879,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // generation SSE and without waiting for the scoring call. Keep its run card
   // visible until the saved row arrives; retry if the listing races the write.
   useEffect(() => {
-    if (guest || !pendingPublicationKey) return;
+    if (guest || !expanded || !pendingPublicationKey) return;
     const controller = new AbortController();
     const pendingIds = new Set(pendingPublicationKey.split('|'));
     let inFlight = false;
@@ -4904,7 +4904,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     void reconcile();
     const timer = window.setInterval(() => void reconcile(), 1500);
     return () => { controller.abort(); window.clearInterval(timer); };
-  }, [guest, path, pendingPublicationKey]);
+  }, [guest, expanded, path, pendingPublicationKey]);
 
   // Live collaborator statuses must refresh independently of revision
   // changes. Only lightweight progress sidecars are read, never saved PDFs.
