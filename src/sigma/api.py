@@ -3401,7 +3401,7 @@ class ApiKeyRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    speaker: Literal["human", "ai_1", "ai_2"]
+    speaker: Literal["human", "ai_1", "ai_2", "repeated"]
     text: str = Field(min_length=1)
 
 
