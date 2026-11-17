@@ -191,3 +191,15 @@
   .brainstorm-workspace .chat-controls { gap: 8px; }
   .brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear) { padding-inline: 12px; }
 }
+
+/* Shared project copy icon beside each brainstorm participant heading. */
+.brainstorm-workspace .chat-reply-heading {
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px; min-width: 0;
+}
+.brainstorm-workspace .chat-reply-heading h2 { margin: 0 0 10px; }
+.brainstorm-workspace .chat-reply-heading .chat-copy-button {
+  flex: 0 0 auto; width: 26px; height: 26px; padding: 3px; margin: 0 0 10px;
+}
+.brainstorm-workspace .chat-history .chat-reply-heading .chat-copy-button { margin: 0; }
+.brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
+.brainstorm-workspace .chat-history-repeated { border-left-color: #a891bf !important; }
