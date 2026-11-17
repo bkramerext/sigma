@@ -35,7 +35,13 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def respond(route):
-        global config_calls, session_calls, fail_next_turn, fail_decode_attempts, fail_next_supervisor
+        global (
+            config_calls,
+            session_calls,
+            fail_next_turn,
+            fail_decode_attempts,
+            fail_next_supervisor,
+        )
         url = route.request.url
         if url.endswith("/api/chat/transcripts/20261112_101010.md"):
             route.fulfill(
