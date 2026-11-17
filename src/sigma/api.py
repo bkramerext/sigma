@@ -3442,6 +3442,9 @@ async def chat_configuration_view():
     return JSONResponse(await chat.configuration(), headers={"Cache-Control": "no-store"})
 
 
+CHAT_HEARTBEAT_SECONDS = 15
+
+
 @app.post("/api/chat/turn")
 async def chat_turn_view(body: ChatTurnRequest):
     """Stream one of the two ephemeral chat participants' completed turns."""
@@ -3475,7 +3478,7 @@ async def chat_turn_view(body: ChatTurnRequest):
             # Keep the SSE connection active through long model reasoning. SSE
             # comments are ignored by the browser and don't change turn state.
             while not turn.done():
-                done, _ = await asyncio.wait({turn}, timeout=15)
+                done, _ = await asyncio.wait({turn}, timeout=CHAT_HEARTBEAT_SECONDS)
                 if not done:
                     yield ": keepalive\n\n"
             result = await turn
