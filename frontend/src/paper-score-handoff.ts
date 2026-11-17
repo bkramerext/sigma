@@ -58,7 +58,7 @@ export type SavedPaperScoreDisplay = {
   label: string;
   busy: boolean;
   status: 'active' | 'complete' | 'interrupted';
-  stage: 'scoring' | 'complete' | 'score_failed';
+  stage: 'scoring' | 'finishing' | 'complete' | 'score_failed';
 };
 
 export function savedPaperScoreDisplay(
@@ -74,6 +74,6 @@ export function savedPaperScoreDisplay(
   if (autoPhase === 'scoring')
     return { label: 'Scoring…', busy: true, status: 'active', stage: 'scoring' };
   if (autoPhase === 'finishing')
-    return { label: 'Finalizing…', busy: true, status: 'active', stage: 'scoring' };
+    return { label: 'Finalizing…', busy: true, status: 'active', stage: 'finishing' };
   return { label: 'Score', busy: false, status: 'interrupted', stage: 'score_failed' };
 }
