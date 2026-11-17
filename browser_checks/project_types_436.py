@@ -1560,10 +1560,11 @@ with sync_playwright() as playwright:
 
     score_link.click()
     score_dialog = page.get_by_role("dialog", name="Paper Score")
-    expect(score_dialog).to_contain_text(
+    expect(score_dialog).not_to_contain_text(
         "This saved score is reused unless you explicitly choose to rescore."
     )
-    expect(score_dialog.get_by_role("button", name="Rescore paper")).to_be_visible()
+    expect(score_dialog.get_by_role("button", name="Rescore paper")).to_have_count(0)
+    expect(score_dialog.get_by_role("button", name="Confirm rescore")).to_have_count(0)
     score_dialog.get_by_role("button", name="Close paper score").click()
 
     # The outer Paper chevron controls both the progress bar and summary.

@@ -2779,9 +2779,8 @@ const paperScoreCategories: { key: keyof PaperScore['categories']; title: string
   { key: 'visuals', title: 'Useful visuals', standard: 'Accurate figures or tables clarify difficult relationships, with clear captions and provenance.' },
 ];
 
-function PaperScoreDialog({ score, error, onClose, onRescore }: { score: PaperScore; error: string; onClose: () => void; onRescore?: () => void }) {
+function PaperScoreDialog({ score, error, onClose }: { score: PaperScore; error: string; onClose: () => void }) {
   const element = useRef<HTMLDialogElement>(null);
-  const [confirmRescore, setConfirmRescore] = useState(false);
   useEffect(() => { element.current?.showModal(); }, []);
   return <dialog ref={element} className="project-settings-dialog paper-score-dialog" aria-labelledby="paper-score-title"
     onCancel={event => { event.preventDefault(); onClose(); }}>
@@ -2790,7 +2789,6 @@ function PaperScoreDialog({ score, error, onClose, onRescore }: { score: PaperSc
       <div className="settings-actions"><DialogDismissButton label="Close paper score" onClick={onClose}/></div>
     </header>
     <div className="settings-body paper-score-body">
-      <p className="settings-hint paper-score-rescore-instructions">This saved score is reused unless you explicitly choose to rescore.</p>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="paper-score-overall" aria-label={`Weighted paper score ${score.total} out of 100`}>
         <strong>Weighted score</strong><strong className="paper-score-points">{score.total}/100</strong>
@@ -2808,11 +2806,6 @@ function PaperScoreDialog({ score, error, onClose, onRescore }: { score: PaperSc
           </div>
         </details>)}
       </div>
-      {onRescore && <div className="settings-actions">
-        {confirmRescore
-          ? <><button type="button" className="text-view-link" onClick={onRescore}>Confirm rescore</button><button type="button" className="text-view-link" onClick={() => setConfirmRescore(false)}>Cancel</button></>
-          : <button type="button" className="text-view-link" onClick={() => setConfirmRescore(true)}>Rescore paper</button>}
-      </div>}
     </div>
   </dialog>;
 }
@@ -5589,11 +5582,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
           </div>
         </div>, document.body
       )}
-      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} onRescore={guest ? undefined : () => {
-        const paper = papers.find(item => item.paper_id === scoreDialog.paperId);
-        setScoreDialog(null);
-        if (paper) void scorePaper(paper, true);
-      }} error={scoreError}/>}
+      {scoreDialog && <PaperScoreDialog score={scoreDialog.score} onClose={() => { setScoreDialog(null); setScoreError(""); }} error={scoreError}/>}
       </div>
     </div>
   </section>;
