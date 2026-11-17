@@ -555,6 +555,38 @@ with sync_playwright() as playwright:
         "formatted"
     )
     expect(history.locator(".chat-history-ai_2 .katex").first).to_be_visible()
+    # Transcript header is a canonical reset, never a bulk toggle.
+    header_reset = page.get_by_role("button", name="Transcript", exact=True)
+    ai_1_disclosure = history.locator(".chat-history-ai_1").first.locator(
+        "button.chat-disclosure-button"
+    )
+    human_disclosure = history.locator(".chat-history-human").first.locator(
+        "button.chat-disclosure-button"
+    )
+    objective_disclosure = history.locator(".chat-history-objective").first.locator(
+        "button.chat-disclosure-button"
+    )
+    supervisor_disclosure = history.locator(".chat-history-supervisor").first.locator(
+        "button.chat-disclosure-button"
+    )
+    # Any individual choice persists until the user explicitly resets.
+    human_disclosure.click()
+    expect(human_disclosure).to_have_attribute("aria-expanded", "false")
+    expect(ai_2_disclosure).to_have_attribute("aria-expanded", "true")
+    header_reset.click()
+    for collapsed in (ai_1_disclosure, ai_2_disclosure):
+        expect(collapsed).to_have_attribute("aria-expanded", "false")
+    for expanded in (objective_disclosure, human_disclosure, supervisor_disclosure):
+        expect(expanded).to_have_attribute("aria-expanded", "true")
+    # Repeating the header click leaves exactly the canonical state.
+    header_reset.click()
+    expect(ai_2_disclosure).to_have_attribute("aria-expanded", "false")
+    expect(human_disclosure).to_have_attribute("aria-expanded", "true")
+    # A later manual change is not overridden by any automatic bulk behavior.
+    ai_1_disclosure.click()
+    expect(ai_1_disclosure).to_have_attribute("aria-expanded", "true")
+    header_reset.click()
+    expect(ai_1_disclosure).to_have_attribute("aria-expanded", "false")
     assert any(
         message["speaker"] == "human" and message["text"] == "Start the two-agent exchange."
         for message in transcript_messages
