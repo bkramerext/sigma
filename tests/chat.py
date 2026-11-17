@@ -437,19 +437,13 @@ def check_transcripts() -> None:
             assert restored["transcript_path"] == session["transcript_path"]
             assert restored["research_objective"] == ""
             assert restored["next_speaker"] == "ai_1"
-            assert restored["messages"][0] == {
-                "speaker": "human", "text": messages[0][1]
-            }
-            assert restored["messages"][2] == {
-                "speaker": "ai_2", "text": messages[2][1]
-            }
+            assert restored["messages"][0] == {"speaker": "human", "text": messages[0][1]}
+            assert restored["messages"][2] == {"speaker": "ai_2", "text": messages[2][1]}
             assert restored["messages"][-1]["text"] == long_entry
             assert not restored["has_supervisor"]
             with TestClient(app) as client:
                 listed = client.get("/api/chat/transcripts")
-                selected = client.get(
-                    "/api/chat/transcripts/" + session["transcript_name"]
-                )
+                selected = client.get("/api/chat/transcripts/" + session["transcript_name"])
                 traversal = client.get("/api/chat/transcripts/not-a-transcript.md")
             assert listed.status_code == 200
             assert listed.json() == options
