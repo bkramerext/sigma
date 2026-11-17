@@ -118,10 +118,21 @@ with sync_playwright() as playwright:
     page.route("**/api/**", respond)
     page.goto(ORIGIN + "/", wait_until="networkidle")
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
-    # A stale direct-route tab from a previous launch must return to Home.
-    page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
-    expect(page).to_have_url(ORIGIN + "/")
-    expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
+    # Direct URL must work without --brainstorm, and unlock the Home pill
+    # when returning via in-app navigation. This also covers a hard URL load.
+    direct = browser.new_page()
+    direct.route("**/api/**", respond)
+    direct.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
+    expect(direct).to_have_url(ORIGIN + "/brainstorm")
+    expect(direct.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    direct.locator(".project-art-header .project-header-art").click()
+    expect(direct).to_have_url(ORIGIN + "/")
+    expect(direct.get_by_role("button", name="Brainstorm", exact=True)).to_be_visible()
+    direct.get_by_role("button", name="Brainstorm", exact=True).click()
+    expect(direct.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    direct.close()
+
+    # The CLI flag remains a convenient way to start with the Home pill.
     page.goto(ORIGIN + "/?brainstorm=1", wait_until="networkidle")
     expect(page).to_have_url(ORIGIN + "/")
     page.get_by_role("button", name="Brainstorm", exact=True).click()
