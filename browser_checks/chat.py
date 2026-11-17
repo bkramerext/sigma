@@ -48,13 +48,21 @@ with sync_playwright() as playwright:
                         "next_speaker": "ai_2",
                         "supervisor_enabled": False,
                         "messages": [
-                            {"speaker": "objective", "text": "Continue exploring theta kernels.", "timestamp": "2026-11-12T10:10:10Z"},
+                            {
+                                "speaker": "objective",
+                                "text": "Continue exploring theta kernels.",
+                                "timestamp": "2026-11-12T10:10:10Z",
+                            },
                             {
                                 "speaker": "supervisor",
                                 "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight.",
                                 "timestamp": "2026-11-12T10:10:11Z",
                             },
-                            {"speaker": "human", "text": "Find a new approach.", "timestamp": "2026-11-12T10:10:12Z"},
+                            {
+                                "speaker": "human",
+                                "text": "Find a new approach.",
+                                "timestamp": "2026-11-12T10:10:12Z",
+                            },
                             *[
                                 {
                                     "speaker": "ai_2" if index % 2 else "ai_1",
@@ -63,7 +71,11 @@ with sync_playwright() as playwright:
                                 }
                                 for index in range(502)
                             ],
-                            {"speaker": "ai_1", "text": "Consider the theta transformation.", "timestamp": "2026-11-12T20:30:00Z"},
+                            {
+                                "speaker": "ai_1",
+                                "text": "Consider the theta transformation.",
+                                "timestamp": "2026-11-12T20:30:00Z",
+                            },
                         ],
                     }
                 ),
@@ -708,9 +720,7 @@ with sync_playwright() as playwright:
     expect(old_supervisor.locator("button.chat-disclosure-button")).to_have_attribute(
         "aria-expanded", "true"
     )
-    expect(old_supervisor.locator("time")).to_have_attribute(
-        "datetime", "2026-11-12T10:10:11Z"
-    )
+    expect(old_supervisor.locator("time")).to_have_attribute("datetime", "2026-11-12T10:10:11Z")
 
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline and len(turns) <= turns_before_resume:
