@@ -222,7 +222,7 @@ def load_transcript(name: str) -> dict[str, Any]:
         # final, explicitly addressed process guidance for the resumed AIs.
         if message["speaker"] == "supervisor":
             addressed = re.search(
-                r"(?:^|\\n)To (AI #1 and AI #2|AI #1|AI #2): (.+)\\Z",
+                r"(?:^|\n)To (AI #1 and AI #2|AI #1|AI #2): (.+)\Z",
                 body,
                 re.DOTALL,
             )
