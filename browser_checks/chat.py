@@ -45,7 +45,7 @@ with sync_playwright() as playwright:
                         "transcript_path": "/tmp/sigma-state/chat-transcripts/20261112_101010.md",
                         "research_objective": "Continue exploring theta kernels.",
                         "next_speaker": "ai_2",
-                        "has_supervisor": False,
+                        "supervisor_enabled": False,
                         "messages": [
                             {"speaker": "objective", "text": "Continue exploring theta kernels."},
                             {"speaker": "human", "text": "Find a new approach."},
@@ -483,6 +483,11 @@ with sync_playwright() as playwright:
 
     before_repeated_edit = len(turns)
     page.get_by_label("Enable Supervisor").check()
+    expect(page.get_by_label("Enable Supervisor")).to_be_checked()
+    assert any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "enabled"
+        for item in transcript_messages
+    ), "Enabling Supervisor must be persisted during the active exchange"
     human_messages_before = sum(message["speaker"] == "human" for message in transcript_messages)
     repeated.fill("New objective applies without a Human message.")
     deadline = time.monotonic() + 5
@@ -558,6 +563,14 @@ with sync_playwright() as playwright:
     assert supervisor_calls, "Supervisor should assess at least one completed AI pair"
     assert any(item["speaker"] == "supervisor" for item in transcript_messages)
     assert any(item["speaker"] == "objective" for item in transcript_messages)
+
+    # Toggling Supervisor off mid-exchange persists without stopping the AIs.
+    page.get_by_label("Enable Supervisor").uncheck()
+    expect(page.get_by_label("Enable Supervisor")).not_to_be_checked()
+    assert any(
+        item["speaker"] == "supervisor_setting" and item["text"] == "disabled"
+        for item in transcript_messages
+    ), "Disabling Supervisor must be persisted without clearing history"
 
     # A failed AI turn must expose Retry and resume the same speaker, without
     # appending a second Human prompt or restarting at AI #1 arbitrarily.
