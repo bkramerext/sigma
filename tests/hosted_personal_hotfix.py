@@ -22,8 +22,9 @@ class HostedPersonalHotfixTests(TestCase):
         self.assertNotIn("WebAuthenticationConditionalUI", boot)
         self.assertNotIn("WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot)
         self.assertNotIn("--disable-features=", boot)
-        self.assertNotIn("PasswordManagerPasskeysEnabled", dockerfile)
-        self.assertNotIn("PasswordManagerEnabled", dockerfile)
+        self.assertNotIn('"PasswordManagerPasskeysEnabled"', dockerfile)
+        self.assertIn("'{\"PasswordManagerEnabled\":false}'", dockerfile)
+        self.assertIn("sigma-no-password-saving.json", dockerfile)
         self.assertIn("--disable-save-password-bubble", boot)
         self.assertIn("--user-data-dir=", boot)
 

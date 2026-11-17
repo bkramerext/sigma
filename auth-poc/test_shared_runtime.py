@@ -133,7 +133,13 @@ def main() -> None:
     assert os.geteuid() == 10001, "Vault test must not run as root"
     # Check the built production image, not only the source files. A managed
     # Chromium passkey-disabling policy must never ship in the shared worker.
+    import json
+
     assert not Path("/etc/chromium/policies/managed/sigma-no-passkeys.json").exists()
+    policy_file = Path("/etc/chromium/policies/managed/sigma-no-password-saving.json")
+    assert json.loads(policy_file.read_text(encoding="utf-8")) == {
+        "PasswordManagerEnabled": False
+    }, "Chromium must never offer to save login passwords"
     boot = Path("/opt/sigma/auth-poc/boot.sh").read_text(encoding="utf-8")
     assert "WebAuthenticationConditionalUI" not in boot
     memory_report("idle_before_login")
