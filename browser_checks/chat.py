@@ -255,16 +255,19 @@ with sync_playwright() as playwright:
     # entire header 365px tall and cropped the wordmark in the user smoke test.
     assert artwork_box["width"] <= 340, artwork_box
     assert artwork_box["height"] <= 245, artwork_box
-    assert header_box["height"] <= 265, header_box
+    assert 160 <= header_box["height"] <= 170, header_box
     assert artwork_box["x"] + artwork_box["width"] <= heading_box["x"] + 2
     assert description_box["x"] + description_box["width"] <= google_box["x"] - 4
     assert eyebrow_box["y"] + eyebrow_box["height"] <= title_box["y"] + 3
     assert title_box["y"] + title_box["height"] <= description_box["y"] + 3
     assert description_box["height"] < 28, "Description should occupy exactly one line"
-    assert model_box["x"] >= google_box["x"] + google_box["width"] + 4
+    assert model_box["x"] + model_box["width"] <= google_box["x"] - 4
     assert abs(google_box["y"] - model_box["y"]) < 4
     assert chatgpt_box["y"] >= google_box["y"] + google_box["height"] + 8
-    assert 10 <= 2048 - (model_box["x"] + model_box["width"]) <= 28
+    assert 10 <= 2048 - max(
+        google_box["x"] + google_box["width"],
+        chatgpt_box["x"] + chatgpt_box["width"],
+    ) <= 28
     assert 10 <= google_box["y"] - header_box["y"] <= 28
     page.set_viewport_size({"width": 1360, "height": 900})
     human = page.get_by_label("Human", exact=True)
@@ -299,6 +302,22 @@ with sync_playwright() as playwright:
     assert checkbox_label_bounds["width"] < 240, checkbox_label_bounds
     assert abs(checkbox_bounds["x"] - (panel_bounds["x"] + 15)) < 4
     assert checkbox_label_bounds["x"] <= panel_bounds["x"] + 20
+    objective_copy = page.get_by_role("button", name="Copy Research Objective")
+    human_copy = page.get_by_role("button", name="Copy Human")
+    objective_label = page.locator(".chat-repeated-prompt .chat-field-heading label").bounding_box()
+    human_label = page.locator(".chat-human-form .chat-field-heading label").bounding_box()
+    objective_icon = objective_copy.bounding_box()
+    human_icon = human_copy.bounding_box()
+    assert objective_label and human_label and objective_icon and human_icon
+    for label_box, icon_box in ((objective_label, objective_icon), (human_label, human_icon)):
+        gap = icon_box["x"] - (label_box["x"] + label_box["width"])
+        assert 0 <= gap <= 12, (label_box, icon_box)
+        assert abs(
+            (label_box["y"] + label_box["height"] / 2)
+            - (icon_box["y"] + icon_box["height"] / 2)
+        ) <= 9, (label_box, icon_box)
+    expect(objective_copy).to_be_disabled()
+    expect(human_copy).to_be_disabled()
     repeated = page.get_by_label("Research Objective:", exact=True)
     repeated_bounds = repeated.bounding_box()
     human_bounds = human.bounding_box()
@@ -350,10 +369,13 @@ with sync_playwright() as playwright:
     assert len(repeated.input_value()) == 8100
     human.fill("H" * 8100)
     assert len(human.input_value()) == 8100
+    expect(human_copy).to_be_enabled()
     human.fill("")
+    expect(human_copy).to_be_disabled()
     repeated.fill("A")
     narrow_bounds = repeated.bounding_box()
     repeated.fill("Find a new mathematical breakthrough.")
+    expect(objective_copy).to_be_enabled()
     filled_bounds = repeated.bounding_box()
     assert narrow_bounds is not None and filled_bounds is not None
     assert abs(narrow_bounds["width"] - filled_bounds["width"]) < 1
@@ -375,7 +397,7 @@ with sync_playwright() as playwright:
     connection_bounds = connection.locator("summary").bounding_box()
     model_bounds = model_pill.bounding_box()
     assert connection_bounds and model_bounds
-    assert connection_bounds["x"] + connection_bounds["width"] < model_bounds["x"] + 5
+    assert model_bounds["x"] + model_bounds["width"] < connection_bounds["x"] + 5
     title_right = title_bounds["x"] + title_bounds["width"]
     pill_left = min(connection_bounds["x"], model_bounds["x"])
     assert title_right <= pill_left + 5, (title_bounds, connection_bounds, model_bounds)
