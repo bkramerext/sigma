@@ -224,7 +224,9 @@ def check_streamed_multisegment_completion() -> None:
 
     class FakeStream:
         status_code = 200
-        headers = {"content-type": "text/event-stream"}
+
+        def __init__(self):
+            self.headers = {"content-type": "text/event-stream"}
 
         async def aiter_bytes(self):
             for event in events:
