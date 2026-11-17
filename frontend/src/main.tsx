@@ -5,6 +5,7 @@ import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
 import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
+import type { ResumeAnchorBounds } from './resume-authorization-position';
 import { friendlyProviderError, isOpenAIProjectSpendLimit, openAIProjectSpendLimitCopy, providerInterruptionCopy, providerUsageLimitCopy, setSponsoredUsageConnection, type SponsoredInferenceProvider } from './provider-usage-guidance';
 import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
@@ -1650,6 +1651,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [resumeAuthorization, setResumeAuthorization] = useState<ResumeAuthorization | null>(null);
   const resumeApprovalResolver = useRef<((approved: boolean) => void) | null>(null);
   const resumePlayAnchor = useRef<HTMLButtonElement | null>(null);
+  const resumePlayAnchorSnapshot = useRef<ResumeAnchorBounds | null>(null);
   useEffect(() => () => {
     const resolve = resumeApprovalResolver.current;
     resumeApprovalResolver.current = null;
@@ -2124,6 +2126,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   function requestResume(target: ResearchSession, playButton: HTMLButtonElement) {
     // Anchor any explicit authorization prompt to the Play button that initiated it.
     resumePlayAnchor.current = playButton;
+    resumePlayAnchorSnapshot.current = playButton.getBoundingClientRect();
     void control('resume', target);
   }
 
@@ -2292,7 +2295,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     kind: 'session', creator: viewerEmail, model: config?.model, thinking: config?.reasoning_effort,
   });
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
-    <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
+    <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} anchorSnapshot={resumePlayAnchorSnapshot.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
       <div className="sigma-dialog-heading"><h2 id="missing-type-heading">Project type unavailable</h2><DialogDismissButton label="Cancel project type selection" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}/></div>
       {safeSavedTypeSettings
