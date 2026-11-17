@@ -6464,7 +6464,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
         : onIdleProjectTitleClick
           ? <button type="button" ref={idleTitleRef} className="project-header-title project-header-title-idle-action" data-tooltip-follow-cursor="true" aria-label="Toggle all project sections" onClick={onIdleProjectTitleClick}>{projectTitle}</button>
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
-        : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
+        : chatPage ? null : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
       {chatPage && <div className="brainstorm-header-copy">
         <p className="chat-eyebrow">Open conversation</p>
         <h1>Brainstorm</h1>
