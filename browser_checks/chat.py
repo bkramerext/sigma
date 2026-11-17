@@ -51,7 +51,7 @@ with sync_playwright() as playwright:
                             {"speaker": "objective", "text": "Continue exploring theta kernels."},
                             {
                                 "speaker": "supervisor",
-                                "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight."},
+                                "text": "Research progress: 5.0 / 10.0\\n\\nEarly supervisor insight.",
                             },
                             {"speaker": "human", "text": "Find a new approach."},
                             *[
