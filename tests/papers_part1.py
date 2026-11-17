@@ -3945,6 +3945,99 @@ def _run_publication_checkpoint_recovery_scenario(interrupt_at: str) -> None:
             )
 
 
+def test_automatic_score_persists_once_and_handoff_reuses_saved_score() -> None:
+    """The Score step and saved-paper metadata share one durable evaluation."""
+    from sigma import paper_scores
+
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "scoring-handoff.sigma"
+        view = initialize_project(
+            path, "Scoring handoff", "One completed paper score is enough.",
+            research_mode="mathematical",
+        )
+        credential = {"identity": "fixture:scoring", "mode": "api_key", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "fixture-model",
+            "reasoning_effort": "low",
+        }
+        author_calls = 0
+        score_calls = 0
+        stages: list[str] = []
+
+        async def author(package, *_args):
+            nonlocal author_calls
+            author_calls += 1
+            source_id = next(item["id"] for item in package["sources"] if item["kind"] == "project")
+            return draft(source_id), config["model"]
+
+        async def proofread(tex, *_args, **_kwargs):
+            return tex, {
+                "status": "complete",
+                "corrections": [],
+                "diagnostics": [],
+                "provider_calls_attempted": 0,
+                "ai_performed": True,
+                "elapsed_seconds": 0,
+            }
+
+        async def collect(event: papers.PaperProgressEvent) -> None:
+            stages.append(event["stage"])
+
+        async def persist_score(path_value, paper_id, *_args, **_kwargs):
+            nonlocal score_calls
+            score_calls += 1
+            record = papers.get_paper(path_value, paper_id, include_tex=False)
+            judgment = paper_scores.PaperJudgment.model_validate({
+                category: {"earned": 80, "explanation": "Fixture evaluation is sufficient."}
+                for category in paper_scores.WEIGHTS
+            })
+            score = paper_scores._make_score(judgment, record["pdf_sha256"])
+            assert paper_scores.cached_score(record) is None
+            return paper_scores._save_score(path_value, paper_id, score)
+
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=author),
+            patch.object(papers, "_proofread_tex", new=proofread),
+            patch.object(papers, "_compile_pdf", return_value=b"%PDF-fixture"),
+            patch.object(
+                papers.paper_writing_sources,
+                "select",
+                new=lambda *_args, **_kwargs: asyncio.sleep(0, result=([], "unavailable")),
+            ),
+            patch("sigma.paper_scores.score_paper", new=persist_score),
+            mock_pdf_inspection(),
+        ):
+            finished = asyncio.run(
+                papers.generate(
+                    str(path), credential["identity"], view.project.id, progress=collect
+                )
+            )
+
+        paper_id = finished["paper_id"]
+        saved = papers.get_paper(str(path), paper_id, include_tex=False)
+        durable = paper_scores.cached_score(saved)
+        assert durable is not None
+        assert finished["score"] == durable
+        assert papers.list_papers(str(path))[0]["score"] == durable
+        assert score_calls == 1 and author_calls == 1
+        assert stages.count("scoring") == 1
+        assert stages.index("scoring") < stages.index("finishing") < stages.index("complete")
+        # Loading the completed paper through the scoring endpoint must not
+        # perform another paid evaluation when force is false.
+        assert asyncio.run(
+            paper_scores.score_paper(
+                str(path), paper_id, credential["identity"], view.project.id
+            )
+        ) == durable
+        assert papers._load_work(str(path)) is None
+
+
 def test_score_interruption_resumes_published_pdf_without_reauthoring() -> None:
     _run_publication_checkpoint_recovery_scenario("score")
 
