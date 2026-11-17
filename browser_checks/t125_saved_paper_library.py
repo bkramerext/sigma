@@ -297,13 +297,16 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             # Stub only the formatting request: no provider is contacted.
             def markdown_config(route):
                 if "purpose=markdown" in route.request.url:
+                    settings = {
+                        "available": True,
+                        "binding": "fixture-binding",
+                        "model": "fixture-model",
+                        "reasoning_effort": "medium",
+                    }
                     route.fulfill(
                         status=200,
                         content_type="application/json",
-                        body=json.dumps({
-                            "available": True, "binding": "fixture-binding",
-                            "model": "fixture-model", "reasoning_effort": "medium",
-                        }),
+                        body=json.dumps(settings),
                     )
                 else:
                     route.continue_()
