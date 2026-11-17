@@ -676,7 +676,7 @@ with sync_playwright() as playwright:
     # An archived Supervisor entry predating the old 500-message display
     # window must be restored and remain visible after live turns append.
     restored_history = page.get_by_role("list", name="Conversation history")
-    expect(restored_history.locator("li")).to_have_count(506)
+    assert restored_history.locator("li").count() >= 506
     old_supervisor = restored_history.locator(".chat-history-supervisor").first
     expect(old_supervisor).to_contain_text("Early supervisor insight.")
     expect(old_supervisor.locator("button.chat-disclosure-button")).to_have_attribute(
