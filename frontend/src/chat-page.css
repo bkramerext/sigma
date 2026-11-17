@@ -336,3 +336,11 @@
     white-space: nowrap;
   }
 }
+
+@media (min-width: 1231px) {
+  /* The artwork's decorative wave extends beyond the original 330px
+     clickable image box. Reserve its real visual width before the title. */
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    width: min(29vw, 600px);
+  }
+}
