@@ -2252,6 +2252,77 @@ async def test_chatgpt_usage_limit_recovers_only_after_explicit_resume(path: Pat
     assert [step["role"] for step in finished["steps"][2:]] == ["investigator", "skeptic"]
 
 
+def test_completed_provider_reply_distinguishes_validation_from_internal_errors() -> None:
+    assert (
+        research_sessions._completed_response_failure_kind(
+            ProjectError("Unsupported response evidence ID")
+        )
+        == "response_invalid"
+    )
+    assert (
+        research_sessions._completed_response_failure_kind(
+            RuntimeError("Unexpected SIGMA processing failure")
+        )
+        == "internal_processing_failure"
+    )
+
+
+def test_schema_validation_diagnosis_contains_no_model_generated_values() -> None:
+    from pydantic import ValidationError
+
+    sentinel = "private-response-string-that-must-not-enter-the-notice"
+    try:
+        research_sessions.Investigator.model_validate({"claim": [sentinel]})
+    except ValidationError as exc:
+        explanation = research_sessions._research_schema_validation_reason(exc)
+    else:
+        raise AssertionError("Expected an invalid research schema")
+
+    assert "claim (string_type)" in explanation
+    assert "method (missing)" in explanation
+    assert sentinel not in explanation
+    assert "input_value" not in explanation
+
+
+async def test_invalid_json_provider_completion_settles_attempt_as_known(path: Path):
+    """A completed provider envelope is not a network/dispatch uncertainty."""
+    view, strategy, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2}
+    research_sessions.save_limits(str(path), limits)
+
+    async def handler(request):
+        response = provider_response(investigation(1))
+        response["id"] = "response-malformed-json"
+        response["output"][0]["content"][0]["text"] = "{invalid-json"
+        return httpx.Response(200, json=response)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "_portfolio_call_concurrency", return_value=1),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    step = finished["steps"][0]
+    assert finished["calls_used"] == 1
+    assert step["status"] == "failed"
+    assert step["failure_kind"] == "response_invalid"
+    assert step["provider_input_audit"]["status"] == "provider_response_invalid"
+    assert step["provider_input_audit"]["provider_response_id"] == "response-malformed-json"
+    assert step["token_usage_status"] == "reported"
+    assert step["token_usage"]["input_tokens"] == 120
+    assert "not valid JSON" in finished["strategy_runs"][0]["reason"]
+
+
 async def test_invalid_completed_response_is_not_marked_dispatch_unknown(path: Path):
     view, strategy, credential, config = await setup(path)
     limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 2}

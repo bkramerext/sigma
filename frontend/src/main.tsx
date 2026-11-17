@@ -3,6 +3,7 @@ import { createPortal, flushSync } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
+import { sessionValidationDetail } from './session-validation-diagnostics';
 import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
 import type { ResumeAnchorBounds } from './resume-authorization-position';
@@ -455,6 +456,7 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
     </SessionNotice>;
   }
   const guidance = stoppedSessionGuidance(session);
+  const validationDetail = sessionValidationDetail(session.steps, session.strategy_runs ?? []);
   // Only the second Source Material mention (in the Next instruction) links
   // to the editable project sources; the cause remains plain explanation.
   const sourceLinkAt = guidance.cause.startsWith('Too much Source Material.')
@@ -472,7 +474,11 @@ function StoppedSessionNotice({ session, dismissed, onDismiss }: {
     Object.keys(artifact.investigator_output).length > 0 && Object.keys(artifact.skeptic_output).length > 0);
   const title = session.status === 'failed' ? 'Session failed' : 'Stopped';
   return <SessionNotice number={session.session_number} onDismiss={onDismiss} title={title} kind="stopped-session-guidance" ariaLabel={`Why session ${session.session_number} stopped and what to do next`}>
-    <p><strong>Why it stopped:</strong> {guidance.cause}</p><p><strong>Next:</strong> {nextGuidance}</p>
+    <p><strong>Why it stopped:</strong> {guidance.cause}</p>
+    {validationDetail && <p><strong>Validation detail:</strong> {validationDetail}</p>}
+    <p><strong>Next:</strong> {validationDetail
+      ? 'Review the failed provider attempt in the Session log before another Resume. The same validation rule may reject a repeated response.'
+      : nextGuidance}</p>
     {!hasCompleteFinding && <p>The session is stopped and has not completed an Investigator/Skeptic finding. No answer to the project question is established yet.</p>}
   </SessionNotice>;
 }
