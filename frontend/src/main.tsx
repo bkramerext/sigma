@@ -5243,7 +5243,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                 current: null, total: null, started_at: paper.created_at,
                 elapsed_seconds: paper.generation.generation_elapsed_seconds ?? 0,
               }}
-              onSelectStep={!guest && !scoringId
+              onSelectStep={!guest && !scoringId && !automaticScoringPaperIds.has(paper.paper_id)
                 ? (step, anchor) => {
                   if (step === 8 && paper.pdf_available) void proposePaperStepRescore(paper, anchor);
                   else void proposePaperStepRestart(paper, publishedPaperTarget(step), anchor);
