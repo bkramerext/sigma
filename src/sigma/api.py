@@ -1411,6 +1411,7 @@ def paper_tex_view(paper_id: str, path: str):
 def paper_delete_view(paper_id: str, path: str):
     project_collaboration.require_artifact_manager(path, "paper", paper_id)
     papers.delete_paper(path, paper_id)
+    project_collaboration.tombstone_deleted_paper_run(path, paper_id)
     return {"deleted": paper_id}
 
 
