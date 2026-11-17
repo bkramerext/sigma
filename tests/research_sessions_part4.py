@@ -2990,6 +2990,115 @@ def test_terminal_protocol_completion_allows_known_invalid_response_replacement(
     assert plan["required_calls"] - (record["call_limit"] - record["calls_used"]) == 2
 
 
+def test_first_investigator_connection_failure_has_explicit_recovery_plan() -> None:
+    """The attempted round is one ahead of the last accepted round."""
+    attempt = {
+        "id": "disconnected-call",
+        "strategy_id": "strategy-a",
+        "role": "investigator",
+        "cycle": 1,
+        "status": "failed",
+        "failure_kind": "transport_interrupted",
+        "attempt_status": "unknown",
+        "provider_input_audit": {"status": "call_failed_dispatch_unknown"},
+    }
+    record = {
+        "status": "failed",
+        "cycle_limit": 3,
+        "call_limit": 18,
+        "calls_used": 1,
+        "steps": [attempt],
+        "strategy_runs": [
+            {
+                "strategy_id": "strategy-a",
+                "status": "failed",
+                "cycle": 0,
+                "pending_investigation": None,
+            }
+        ],
+    }
+    plan, error = research_sessions._protocol_completion_recovery_plan(record)
+    assert error is None and plan is not None
+    assert plan["completed_turns"] == 0
+    assert plan["required_calls"] == 6
+    assert plan["branches"][0]["role"] == "investigator"
+    assert plan["branches"][0]["cycle"] == 1
+    assert plan["branches"][0]["recovery_context"]["prior_attempt_ids"] == [
+        "disconnected-call"
+    ]
+    assert plan["branches"][0]["recovery_context"]["new_request"] is True
+    assert attempt["status"] == "failed" and attempt["attempt_status"] == "unknown"
+
+    # A failure claimed against a future, unstarted round is not recoverable.
+    inconsistent = deepcopy(record)
+    inconsistent["steps"][0]["cycle"] = 3
+    plan, error = research_sessions._protocol_completion_recovery_plan(inconsistent)
+    assert plan is None and error is not None
+
+
+async def test_resume_after_first_investigator_connection_failure(path: Path) -> None:
+    """Resume preserves unknown billing and dispatches a distinct role request."""
+    view, strategy, credential, config = await setup(path)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=AsyncMock()),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.sleep(0)
+        record = research_sessions._read(str(path), started["id"])
+        call_id = str(uuid4())
+        ledger = new_ledger(
+            call_limit=3,
+            input_token_limit=400_000,
+            output_tokens_per_call=4_000,
+            cost_limit_usd=100.0,
+            input_price_per_million=1.0,
+            output_price_per_million=2.0,
+        )
+        reserve_before_dispatch(ledger, call_id=call_id, request_body=b"prior attempt")
+        mark_unknown(ledger, call_id=call_id)
+        record.update(
+            {
+                "status": "failed",
+                "cycle_limit": 1,
+                "call_limit": 3,
+                "calls_used": 1,
+                "stopped_at": datetime.now(UTC).isoformat(),
+                "hard_budget_ledger": ledger,
+                "steps": [
+                    {
+                        "id": call_id,
+                        "strategy_id": strategy.id,
+                        "role": "investigator",
+                        "cycle": 1,
+                        "status": "failed",
+                        "failure_kind": "transport_interrupted",
+                        "attempt_status": "unknown",
+                        "provider_input_audit": {"status": "call_failed_dispatch_unknown"},
+                    }
+                ],
+            }
+        )
+        record["strategy_runs"][0].update(
+            {"status": "failed", "cycle": 0, "pending_investigation": None}
+        )
+        research_sessions._save(str(path), record)
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        saved = research_sessions._read(str(path), started["id"])
+        assert saved["steps"][0]["id"] == call_id
+        assert saved["steps"][0]["attempt_status"] == "unknown"
+        assert saved["hard_budget_ledger"]["calls"][0]["status"] == "unknown"
+        assert saved["hard_budget_ledger"]["blocked_reason"] is None
+        assert saved["strategy_runs"][0]["protocol_completion_recovery"]["new_request"] is True
+        assert saved["strategy_runs"][0]["protocol_completion_recovery"]["prior_attempt_ids"] == [
+            call_id
+        ]
+
+
 async def test_provider_limit_unsafe_fallback_cannot_resume(path: Path) -> None:
     """Both recovery planners can reject; neither failure authorizes dispatch."""
     view, strategy, credential, config = await setup(path)

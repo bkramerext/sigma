@@ -7419,9 +7419,17 @@ async def control_session(
                     )
                     or (
                         record.get("status") in {"paused", "stopped"}
-                        and isinstance(record.get("hard_budget_ledger"), dict)
-                        and record["hard_budget_ledger"].get("blocked_reason")
-                        == "Provider call outcome or usage is unknown"
+                        and (
+                            any(
+                                branch.get("status") == "failed"
+                                for branch in record.get("strategy_runs", [])
+                            )
+                            or (
+                                isinstance(record.get("hard_budget_ledger"), dict)
+                                and record["hard_budget_ledger"].get("blocked_reason")
+                                == "Provider call outcome or usage is unknown"
+                            )
+                        )
                     )
                 )
                 and not _public(record).get("recoverable_clipped_response")
@@ -13659,15 +13667,22 @@ def _protocol_completion_recovery_plan(
             and step.get("attempt_status") != "not_dispatched"
             and audit_status != "prepared_before_dispatch"
             and strategy_id in strategy_by_id
-            and strategy_by_id[strategy_id].get("cycle") == cycle
+            and type(cycle) is int
+            and cycle in target_cycles
             and (
                 (
                     role == "skeptic"
+                    and strategy_by_id[strategy_id].get("cycle") == cycle
                     and strategy_by_id[strategy_id].get("pending_investigation") is not None
                 )
                 or (
                     role == "investigator"
                     and strategy_by_id[strategy_id].get("pending_investigation") is None
+                    # A failed Investigator for round N leaves branch.cycle at
+                    # N-1 because that round was never accepted. Older saved
+                    # checkpoints sometimes advanced the cursor to N before
+                    # the failure; accept either, never an unrelated round.
+                    and strategy_by_id[strategy_id].get("cycle") in {cycle - 1, cycle}
                 )
             )
             and (strategy_id, role, cycle) not in completed
