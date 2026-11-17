@@ -17,7 +17,7 @@ from sigma.projects import ProjectError
 MAX_MESSAGES = 80
 MAX_CONTEXT_CHARS = 48000
 MAX_OUTPUT_TOKENS = 1200
-TIMEOUT_SECONDS = 60
+TIMEOUT_SECONDS = 300  # Slow/high-thinking brainstorm turns need more than one minute.
 MAX_RESPONSE_BYTES = 1_000_000
 Speaker = Literal["ai_1", "ai_2"]
 
