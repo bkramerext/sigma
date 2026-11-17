@@ -1561,9 +1561,9 @@ with sync_playwright() as playwright:
     score_link.click()
     score_dialog = page.get_by_role("dialog", name="Paper Score")
     expect(score_dialog).to_contain_text(
-        "To rescore, click the Scored step in the paper's progress sequence."
+        "This saved score is reused unless you explicitly choose to rescore."
     )
-    expect(score_dialog.get_by_role("button", name="Rescore", exact=True)).to_have_count(0)
+    expect(score_dialog.get_by_role("button", name="Rescore paper")).to_be_visible()
     score_dialog.get_by_role("button", name="Close paper score").click()
 
     # The outer Paper chevron controls both the progress bar and summary.
@@ -1630,7 +1630,11 @@ with sync_playwright() as playwright:
     expect(paper_row.locator(".paper-unified-timeline .paper-stage-list")).to_be_visible()
     start_button = paper_row.get_by_role("button", name="Restart paper at step Started")
     expect(start_button).to_be_visible()
-    expect(paper_row.get_by_role("button", name="Rescore paper")).to_be_visible()
+    score_step = paper_row.get_by_role("button", name="View paper score")
+    expect(score_step).to_be_visible()
+    score_step.click()
+    expect(page.get_by_role("dialog", name="Paper Score")).to_be_visible()
+    page.get_by_role("dialog", name="Paper Score").get_by_role("button", name="Close paper score").click()
     for step in (
         "Review publication standards",
         "Extract evidence",

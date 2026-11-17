@@ -3025,7 +3025,7 @@ function PaperStageSteps({ progress, onSelectStep }: {
         {interactive
           ? <button type="button" className="paper-step-restart"
               aria-label={step === 8 && progress.status === 'complete'
-                ? 'Rescore paper'
+                ? 'View paper score'
                 : `Restart paper at step ${step === 0 ? 'Started' : group.label}`}
               onClick={event => onSelectStep?.(step, event.currentTarget)}>
               <strong>{paperStageLabel(step, index, display)}</strong>
