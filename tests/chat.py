@@ -143,7 +143,7 @@ def check_service() -> None:
     assert captured["payload"]["instructions"] == chat.INSTRUCTIONS["ai_1"]
     assert "Human:\nQuestion for the pair." in captured["payload"]["input"][0]["content"]
     assert captured["payload"]["input"][0]["content"].startswith(
-        "Always challenge the assumptions.\n\nHuman:"
+        "Research Objective:\nAlways challenge the assumptions.\n\nHuman:"
     )
 
     # Chat omits the optional Responses text format. Sponsored billing must
@@ -362,23 +362,27 @@ def check_supervisor() -> None:
     assert "Clarify the question" not in chat._transcript(conversation, "ai_1")
     assert "Clarify the question" in chat._transcript(conversation, "ai_2")
     candidate = chat_supervisor.parse_assessment(
-        json.dumps({
-            **example,
-            "action": "continue",
-            "recipient": None,
-            "guidance": "",
-            "breakthrough_candidate": True,
-        })
+        json.dumps(
+            {
+                **example,
+                "action": "continue",
+                "recipient": None,
+                "guidance": "",
+                "breakthrough_candidate": True,
+            }
+        )
     )
     assert candidate["score"] == 10.0
     invalidation = chat_supervisor.parse_assessment(
-        json.dumps({
-            **example,
-            "action": "continue",
-            "recipient": None,
-            "guidance": "",
-            "breakthrough_invalidated": True,
-        })
+        json.dumps(
+            {
+                **example,
+                "action": "continue",
+                "recipient": None,
+                "guidance": "",
+                "breakthrough_invalidated": True,
+            }
+        )
     )
     assert invalidation["breakthrough_invalidated"] is True
     assert invalidation["score"] == 4.9

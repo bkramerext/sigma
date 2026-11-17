@@ -212,8 +212,7 @@ async def respond(
         raise ProjectError("Supervisor requires the research objective.")
     if speaker == "supervisor":
         transcript = (
-            f"Previous breakthrough milestone active: {supervisor_latched}.\n\n"
-            + transcript
+            f"Previous breakthrough milestone active: {supervisor_latched}.\n\n" + transcript
         )
     payload: dict[str, Any] = {
         "model": model,

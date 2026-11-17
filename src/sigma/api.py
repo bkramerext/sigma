@@ -3517,7 +3517,6 @@ async def chat_turn_view(body: ChatTurnRequest):
     )
 
 
-
 @app.post("/api/chat/supervisor")
 async def chat_supervisor_view(body: ChatSupervisorRequest):
     """Assess a completed pair without contributing subject-matter ideas."""
@@ -3546,6 +3545,7 @@ async def chat_supervisor_view(body: ChatSupervisorRequest):
     return JSONResponse(
         chat_supervisor.parse_assessment(raw), headers={"Cache-Control": "no-store"}
     )
+
 
 @app.post("/api/ai/auth/begin")
 async def auth_begin(body: AuthBeginRequest):
