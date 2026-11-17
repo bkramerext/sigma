@@ -279,8 +279,10 @@ with sync_playwright() as playwright:
     # Like the Project header, vertically center the two account pills,
     # leaving balanced top and bottom insets, while keeping their right inset.
     top_gap = account_stack_box["y"] - header_box["y"]
-    bottom_gap = header_box["y"] + header_box["height"] - (
-        account_stack_box["y"] + account_stack_box["height"]
+    bottom_gap = (
+        header_box["y"]
+        + header_box["height"]
+        - (account_stack_box["y"] + account_stack_box["height"])
     )
     right_gap = 2048 - max(
         google_box["x"] + google_box["width"],
