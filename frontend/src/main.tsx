@@ -3205,6 +3205,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const request = useRef<AbortController | null>(null);
   const paperSubmissionDispatched = useRef(false);
   const paperPublishedHandoff = useRef<{ runId: string; paperId: string } | null>(null);
+  // A completed SSE stream outranks a stale active progress poll even *after*
+  // the short handoff ref is cleared. Otherwise the saved paper may disappear
+  // or show a second "Scoring…" while its score metadata is refreshing.
+  const terminalGenerationPaperIds = useRef<Set<string>>(new Set());
   const deliberatePaperStop = useRef(false);
   const paperStopPending = useRef(false);
   const paperStopAwaitingCheckpoint = useRef<{ runId: string | null } | null>(null);
@@ -3612,7 +3616,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         selectPaperRun(currentId);
       }
       const own = runs.find(run => run.run_id === currentId);
-      if (publishedRunReadyForHandoff(own, list.papers as PaperSummary[], paperPublishedHandoff.current?.paperId)) {
+      if (publishedRunReadyForHandoff(
+        own, list.papers as PaperSummary[],
+        own?.paper_id && terminalGenerationPaperIds.current.has(own.paper_id) ? own.paper_id : null,
+      )) {
         // A saved PDF is not a finished paper: Score and Finish must complete
         // before replacing the generating card. Otherwise the same in-flight
         // evaluation appears to run twice, once in each card.
@@ -4762,6 +4769,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             const durableScore = result?.score;
             if (publishedId) {
               paperPublishedHandoff.current = { runId, paperId: publishedId };
+              terminalGenerationPaperIds.current.add(publishedId);
               // The terminal result is sent only after scoring was persisted.
               // Show the same score on the saved card without dispatching a
               // second evaluator request or waiting for another progress poll.
@@ -4885,7 +4893,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     // single AI Score step until the generation run reaches Finish.
     (publicationAwaitingLibrary(run, papers) ||
       (publishedRunStillFinishing(run) &&
-        !(paperPublishedHandoff.current?.paperId === run.paper_id &&
+        !(terminalGenerationPaperIds.current.has(run.paper_id ?? '') &&
           papers.some(paper => paper.paper_id === run.paper_id))) ||
       (run.status !== 'complete' && !run.paper_id))
   ));
@@ -4907,7 +4915,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
     // The canonical PDF exists before automatic scoring returns. Preload its
     // metadata but do not display the saved row while the original job runs.
     !savedPaperAwaitingGenerationFinish(
-      paper.paper_id, paperRuns, paperPublishedHandoff.current?.paperId,
+      paper.paper_id, paperRuns,
+      terminalGenerationPaperIds.current.has(paper.paper_id) ? paper.paper_id : null,
     )
   ).sort((a, b) => b.paper_version - a.paper_version);
   // A published PDF is saved BEFORE automatic scoring finishes. The progress
@@ -4922,7 +4931,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   const pendingPublicationKey = [...new Set(pendingPublicationIds)].sort().join('|');
   const selectedPublicationPending = publicationAwaitingLibrary(selectedRun, papers) ||
     (publishedRunStillFinishing(selectedRun) &&
-      paperPublishedHandoff.current?.runId !== selectedRun?.run_id);
+      !terminalGenerationPaperIds.current.has(selectedRun?.paper_id ?? ''));
   const paperProgressFailure = paperStepRestartBusy ? ''
     : paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? '' : '';
   // A durable published paper supersedes the failed authoring receipt. Errors
@@ -5392,7 +5401,8 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         const scoreState = savedPaperScoreDisplay(
           paper.score?.total,
           scoringId === paper.paper_id,
-          automaticScorePhase(paperRuns, paper.paper_id),
+          terminalGenerationPaperIds.current.has(paper.paper_id)
+            ? null : automaticScorePhase(paperRuns, paper.paper_id),
         );
         return <article className="saved-paper-card" key={paper.paper_id} data-paper-id={paper.paper_id}>
         <div className="saved-paper-row">
