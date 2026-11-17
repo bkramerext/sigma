@@ -658,7 +658,7 @@ export function ConnectionStatus({ projectHeader = false, cloudFunding, zeroAllo
         : adminSponsored || cloudFunding?.budget?.remaining_usd === null
           ? 'SIGMA covers ChatGPT requests. Your allowance is unlimited.'
           : typeof cloudFunding?.budget?.remaining_usd === 'number'
-            ? `SIGMA covers ChatGPT requests. ${Math.max(0, cloudFunding.budget.remaining_usd).toFixed(2)} remaining.`
+            ? `SIGMA covers ChatGPT requests. $${Math.max(0, cloudFunding.budget.remaining_usd).toFixed(2)} remaining.`
             : 'SIGMA covers ChatGPT requests.';
   const sponsorProvisioningGuidance = cloudFunding?.provider?.provider === 'api_key'
     ? 'Hosted inference is currently routed to Sponsored OpenAI API key billing. SIGMA does not fall back between providers. To use the designated ChatGPT sponsor, set SIGMA_CLOUD_INFERENCE_PROVIDER=chatgpt and provision the sponsor registration using the supported local sign-in and protected VM import flow.'
