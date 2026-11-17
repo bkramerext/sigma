@@ -174,6 +174,7 @@ def _response_text(raw: Any, model: str) -> str:
         raise ProjectError("The AI returned an oversized message.")
     return result
 
+
 async def respond(
     *,
     speaker: Speaker,
