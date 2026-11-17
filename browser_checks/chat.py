@@ -507,7 +507,7 @@ with sync_playwright() as playwright:
     # AI transcript entries are collapsed by default; expand one before
     # inspecting its formatted content.
     ai_2_entry = history.locator(".chat-history-ai_2").first
-    ai_2_disclosure = ai_2_entry.get_by_role("button", name="AI #2")
+    ai_2_disclosure = ai_2_entry.locator("button.chat-disclosure-button")
     expect(ai_2_disclosure).to_have_attribute("aria-expanded", "false")
     ai_2_disclosure.click()
     expect(ai_2_disclosure).to_have_attribute("aria-expanded", "true")
