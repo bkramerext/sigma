@@ -112,18 +112,37 @@ export default function ChatPage() {
   // Brainstorm. Read it immediately before every new inference request, not
   // once when the alternating conversation starts.
   async function currentTurnSettings(): Promise<ChatConfig> {
-    const selected = configRef.current;
-    if (!selected?.available) throw new Error('The selected AI account is unavailable.');
-    const response = await fetch('/api/user-preferences/research-settings', {
-      cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
-    });
-    if (!response.ok) throw new Error('Could not load the current Model/Thinking selection. Retry the turn.');
-    const settings = await response.json() as { ai_model?: string; reasoning_effort?: string };
-    const available = selected.models.find(item => item.id === settings.ai_model);
-    if (!available || !settings.reasoning_effort || !available.efforts.includes(settings.reasoning_effort as ChatConfig['reasoning_effort'])) {
-      throw new Error('The selected Model/Thinking is unavailable for Brainstorm. Choose another setting and Retry.');
-    }
-    return { ...selected, model: available.id, reasoning_effort: settings.reasoning_effort as ChatConfig['reasoning_effort'] };
+    // Read the live connection for every inference, rather than retaining a
+    // connection that was selected before this conversation (or even one turn)
+    // began. Changing accounts is not a conversation-state change.
+    const [connectionResponse, preferencesResponse] = await Promise.all([
+      fetch('/api/chat/config', {
+        cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+      }),
+      fetch('/api/user-preferences/research-settings', {
+        cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
+      }),
+    ]);
+    if (!connectionResponse.ok) throw new Error('Could not read the selected AI connection. Retry this turn.');
+    const current = await connectionResponse.json() as ChatConfig;
+    configRef.current = current;
+    setConfig(current);
+    if (!current.available) throw new Error(current.message || 'Connect an AI account before continuing.');
+    if (!preferencesResponse.ok) throw new Error('Could not load the current Model/Thinking selection. Retry the turn.');
+    const preferences = await preferencesResponse.json() as { ai_model?: string; reasoning_effort?: string };
+    // The new connection may offer a different model catalog. Keep explicit
+    // user-selected settings if available; otherwise use that connection's
+    // verified default. This does not switch the funding/connection mode.
+    const choice = current.models.find(item => item.id === preferences.ai_model)
+      ?? current.models.find(item => item.id === current.model);
+    if (!choice) throw new Error('The selected AI connection has no available Brainstorm model.');
+    const effort = choice.efforts.includes(preferences.reasoning_effort as ChatConfig['reasoning_effort'])
+      ? preferences.reasoning_effort as ChatConfig['reasoning_effort']
+      : choice.efforts.includes(current.reasoning_effort)
+        ? current.reasoning_effort
+        : choice.efforts[0];
+    if (!effort) throw new Error('The selected AI connection has no available Thinking setting.');
+    return { ...current, model: choice.id, reasoning_effort: effort };
   }
 
   const refreshTranscripts = useCallback(async (signal?: AbortSignal) => {
@@ -249,8 +268,7 @@ export default function ChatPage() {
       signal: controller.signal,
       body: JSON.stringify({
         conversation_id: sessionId,
-        expected_binding: settings.binding,
-        speaker: who,
+                speaker: who,
         messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting').slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
@@ -293,8 +311,7 @@ export default function ChatPage() {
       method: 'POST', cache: 'no-store', signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        conversation_id: sessionId, expected_binding: settings.binding,
-        messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting')
+        conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting')
           .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model, reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
