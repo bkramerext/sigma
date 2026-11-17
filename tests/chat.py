@@ -252,9 +252,7 @@ def check_response_recovery() -> None:
     assert chat._response_text(canonical, "gpt-6.1-sol") == "Canonical text."
     refused = {
         **completed,
-        "output": [
-            {"type": "message", "content": [{"type": "refusal", "refusal": "No."}]}
-        ],
+        "output": [{"type": "message", "content": [{"type": "refusal", "refusal": "No."}]}],
     }
     for bad in (
         {**completed, "status": "incomplete"},
