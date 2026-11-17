@@ -13604,7 +13604,7 @@ def _uncredited_transient_failures(record: dict[str, Any]) -> int:
         and step.get("role") in {"investigator", "skeptic"}
         and step.get("status") == "failed"
         and step.get("failure_kind") in transient_kinds
-        and step.get("attempt_status") != "not_dispatched"
+        and step.get("attempt_status") in {"unknown", "usage_estimated"}
         for step in record.get("steps", [])
     )
     already_extended = sum(
