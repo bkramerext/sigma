@@ -109,7 +109,7 @@ def append_message(conversation_id: str, speaker: str, text: str) -> None:
     if not isinstance(text, str) or not text.strip():
         raise ProjectError("A chat message must contain nonempty text.")
     if speaker == "supervisor_setting" and text not in {"enabled", "disabled"}:
-        raise ProjectError("Invalid Supervisor setting.");
+        raise ProjectError("Invalid Supervisor setting.")
 
     directory = _directory()
     matches = []
