@@ -1,5 +1,52 @@
 # SIGMA Deployment History (archived)
 
+## 2026-11-17 — SIGMA 0.4.3 production release accepted
+
+PR #885 supplied the hosted Personal ChatGPT worker and automatic Paper Score
+changes. Production acceptance exposed a remaining Personal-session admission
+defect: the hosted research gate required the deployment Sponsor credential for
+every ChatGPT-mode session, including sessions bound to a user's isolated
+Personal worker. PR #886 fixed the funding identity and admission checks while
+preserving the hosted usage ledger, reviewed model-price requirement, and
+existing Sponsored/API-key paths. Exact merged `main` SHA:
+`613b14156adf8b0a0856ce2eda3cac2cf89d9b07` (version 0.4.3).
+
+All exact-SHA checks passed: Ruff, eight SIGMA test parts, three browser
+acceptance shards, integration, main parity, and two-creator PDF acceptance.
+The focused `tests/cloud_research.py` regression passed with a provider-mocked
+Personal session; Ruff and Pyright passed. No provider call was made by Red.
+
+Before cutover, production was healthy on
+`af013331c38f5c1a9b3cb931ceaa295ab8c0a1d3`. The guarded helper deployed the
+exact merged SHA with `--backup-verified --schema-compatible`. A fresh
+root-only, application-consistent copy was made on the existing boot disk at
+`/var/backups/sigma-state-hotpatch-pre-613b1415-20261117T0317Z/state`. The copy
+is root-owned mode 0700; a checksum/metadata comparison while SIGMA writers
+were stopped was clean. The full copy retains four zero-byte mode-0600 files
+under `auth/workspaces/provider-slots`; the read-only restore-verifier view
+excluded only that lock-only directory. Verification passed three SQLite
+integrity checks, 3 identities/workspaces, 23 projects, 59 research assets,
+one matching TeX/PDF pair, and 68 accounting calls ($6.483116 recorded or
+reserved; 17 reserved or unknown outcomes). Existing job and liability records
+were preserved.
+
+After deployment, the release pin and backend/frontend image labels matched
+the merged SHA. `sigma.service`, `sigma-personal-broker.service`, and Caddy were
+active; all three containers were healthy. Backend deployment readiness and
+the private broker socket passed. Effective inference provider remains
+`chatgpt`; hosted Personal and Sponsored access remain enabled independently,
+and the intended sponsor email still matches production configuration. No
+provider credentials, billing limits, SIGMA allowances, administrator
+identity, or infrastructure were changed. Public HTTPS returned 200, hosted
+authentication reported ready, and a fresh Google login-start returned the
+expected redirect to Google's account chooser. Saved job/call counts were
+unchanged immediately after deployment.
+
+**Human acceptance:** On November 17, the operator confirmed the bounded
+production Session → Stop passed and the production paper workflow worked.
+This explicit approval completes 0.4.3 acceptance. The follow-up acceptance
+remediation remains in PR #886; any later hotfix is separate from this release.
+
 ## 2026-11-14 — v0.4.2 hosted Brainstorm fence hotpatch
 
 PR #868 added a hosted-only fence for the local-only Brainstorm feature; PR

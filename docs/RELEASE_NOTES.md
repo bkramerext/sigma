@@ -382,9 +382,9 @@ SIGMA remains experimental: research conclusions, citations, generated papers, a
 ---
 
 ## Version 0.4.3 — Reliable Research and Lower-Memory Hosting
-*Release candidate · November 16, 2026 · Production acceptance pending*
+*Production release accepted · November 17, 2026 · Build `613b14156adf8b0a0856ce2eda3cac2cf89d9b07`*
 
-**More dependable research and paper recovery, lower-memory hosted serving, and a private Personal ChatGPT connection for local `--prod` use.** This candidate includes the changes merged to `main` through `5fa2aa293e36c816b146967bff654dee2c69801e` (PRs #881–#883), in addition to the earlier 0.4.3 draft scope.
+**More dependable research and paper recovery, lower-memory hosted serving, and isolated Personal ChatGPT for hosted users.** The accepted release includes the changes from PRs #881–#886. Its production build is merged `main` SHA `613b14156adf8b0a0856ce2eda3cac2cf89d9b07`.
 
 ### Brainstorm: explore ideas with two AI agents
 
@@ -393,12 +393,13 @@ SIGMA remains experimental: research conclusions, citations, generated papers, a
 - **Deliberate access.** Brainstorm is a local-only feature. `./sigma start --brainstorm` opens Home with the Brainstorm entry enabled; ordinary and hosted production entry points remain unavailable.
 - **Request validation repaired.** Brainstorm no longer rejects an otherwise valid sponsored-model request merely because an optional response-format field is absent.
 
-### Personal ChatGPT: isolated local connection
+### Personal ChatGPT: isolated local and hosted connections
 
-- **A single local launch path.** `./sigma start --prod` integrates the Personal ChatGPT sign-in preview into SIGMA's regular connection dialog. No separate companion application, manual Docker launch, or VNC password is needed for this local experience.
-- **Private browser and worker.** An isolated Chromium container presents OpenAI's account chooser; a separate credential worker keeps tokens outside the SIGMA browser page. A completed browser login alone never changes the provider: the worker must verify the authorized account first.
-- **Consistent connection controls.** The standard SIGMA dialog supports preparation, retry, cancellation, and connection status. Normal local SIGMA keeps its system-browser authorization flow; `--prod` uses the isolated browser.
-- **Provider isolation throughout the application.** The Personal worker transport is integrated with research agents, reference preparation, paper-writing stages, proofreading, Research Q&A, text formatting, proposals, and Brainstorm. Personal requests must not silently fall back to Sponsored credentials or its spending ledger. Long paper requests have bounded timeouts.
+- **User-selected accounts.** Personal ChatGPT uses the account each signed-in user authorizes. SIGMA verifies the selected account before making it available for inference.
+- **Private shared worker.** Hosted sign-in uses one isolated browser/worker container with encrypted per-user credential records and workspace-scoped access. Personal credentials stay separate from the deployment's Sponsored credentials.
+- **Distinct funding paths.** Personal and Sponsored choices remain separate through research admission and dispatch. A Personal session does not require the Sponsor credential and never silently falls back to Sponsored or API-key inference. Hosted session limits, reviewed model prices, concurrency, and usage safeguards remain in force.
+- **Consistent local controls.** `./sigma start --prod` offers the same SIGMA connection dialog with an isolated browser and worker; normal local SIGMA retains its system-browser authorization flow.
+- **Provider isolation throughout the application.** The Personal worker transport is integrated with research agents, reference preparation, paper-writing stages, proofreading, Research Q&A, text formatting, proposals, and Brainstorm. Long paper requests have bounded timeouts.
 - **Better startup and recovery diagnostics.** Local Docker readiness, browser health, background image preparation, cleanup after abnormal exits, and reconnect paths have additional safeguards and tests.
 
 ### Lower-memory hosted serving and recovery
@@ -418,8 +419,8 @@ SIGMA remains experimental: research conclusions, citations, generated papers, a
 
 ### Release scope and known limitations
 
-The isolated Personal ChatGPT connection described here is **a local `--prod` implementation, not an accepted hosted production feature**. Hosted multi-user sign-in and plan-based inference are not enabled by this candidate; local account credentials are not transferred to GCE. The production candidate must preserve Sponsored service and its accounting. Hosted Personal access must not be represented as available until provider eligibility, security, real operation, and user acceptance are independently verified. See [production issue #854](https://github.com/bkramerext/sigma/issues/854).
+The hosted Personal connection was exercised by the operator on the real production site. Its availability still depends on OpenAI account eligibility. SIGMA keeps Sponsored ChatGPT available as a separate choice and does not change provider billing limits or authorization requirements. The operator reported successful production Session → Stop and paper acceptance for this release.
 
 SIGMA remains experimental. Research findings, generated citations and papers, and editorial scores require independent review.
 
-**Candidate boundary:** Version metadata is 0.4.3. The source cutoff is `main` SHA `5fa2aa293e36c816b146967bff654dee2c69801e` (through PR #883). This remains a **production release candidate**, not a final release declaration or tag. Production deployment and the operator's browser acceptance are pending; hosted Personal ChatGPT remains unavailable unless separately authorized and verified.
+**Release boundary:** Version metadata is 0.4.3. The accepted production build is merged `main` SHA `613b14156adf8b0a0856ce2eda3cac2cf89d9b07` (PR #886, including #885). The operator approved production acceptance on November 17, 2026. See [Deployment History](DEPLOYMENT_HISTORY.md) for the guarded cutover and health checks.
