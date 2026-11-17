@@ -148,7 +148,7 @@ def append_message(conversation_id: str, speaker: str, text: str) -> None:
 # Only SIGMA-owned files in the private transcript directory may be resumed.
 _RECORD = re.compile(
     r"^## (Human|AI #1|AI #2|Research Objective|Supervisor) · "
-    r"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[^\\n]*$",
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\n]*$",
     re.MULTILINE,
 )
 _LABEL_SPEAKERS = {label: speaker for speaker, label in SPEAKER_LABELS.items()}
@@ -212,9 +212,9 @@ def load_transcript(name: str) -> dict[str, Any]:
         start = match.end() + 1
         end = entries[index + 1].start() if index + 1 < len(entries) else len(content)
         body = content[start:end]
-        if body.startswith("\\n"):
+        if body.startswith("\n"):
             body = body[1:]
-        body = body.removesuffix("\\n\\n")
+        body = body.removesuffix("\n\n")
         if not body.strip():
             raise ProjectError("The chat transcript contains an empty entry.")
         messages.append({"speaker": _LABEL_SPEAKERS[match.group(1)], "text": body})
