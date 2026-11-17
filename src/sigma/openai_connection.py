@@ -650,7 +650,8 @@ async def connection(
             guidance = "Using a recently verified sponsored model catalog while SIGMA retries its connection check. Inference access is checked by each model request."
         elif state["status"] != "connected":
             guidance = sponsor_guidance.get(
-                state["status"], "Sponsored ChatGPT access could not be verified. Saved research is intact."
+                state["status"],
+                "Sponsored ChatGPT access could not be verified. Saved research is intact.",
             )
     return {
         **state,
