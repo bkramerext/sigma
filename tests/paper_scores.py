@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from sigma import paper_scores, papers
@@ -289,8 +290,10 @@ def test_stale_scoring_request_rechecks_cache_after_authentication_wait() -> Non
 
             save_score = paper_scores._save_score
 
-            def save_and_signal(*args: object, **kwargs: object):
-                saved = save_score(*args, **kwargs)
+            def save_and_signal(
+                score_path: str, saved_paper_id: str, score: dict[str, Any]
+            ) -> dict[str, Any]:
+                saved = save_score(score_path, saved_paper_id, score)
                 score_saved.set()
                 return saved
 
