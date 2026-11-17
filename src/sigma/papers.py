@@ -11112,7 +11112,13 @@ async def _generate_impl(
             score_failure_detail: str | None = None
             from sigma import paper_scores
 
-            if paper_scores.cached_score(saved_record) is None:
+            # A score is owned by the canonical on-disk paper record, not
+            # the in-memory snapshot used to publish its PDF. Always consult
+            # the durable record when crossing the Score -> Finish boundary.
+            durable_score = paper_scores.cached_score(
+                get_paper(path, paper_id, include_tex=False)
+            )
+            if durable_score is None:
                 await report("scoring", None, None)
                 try:
                     if not expected_binding or not expected_project_id:
@@ -11120,6 +11126,15 @@ async def _generate_impl(
                     await paper_scores.score_paper(
                         path, paper_id, initial_auth["identity"], expected_project_id
                     )
+                    # A returned judgment is insufficient: success requires a
+                    # valid score actually persisted on this paper's PDF hash.
+                    durable_score = paper_scores.cached_score(
+                        get_paper(path, paper_id, include_tex=False)
+                    )
+                    if durable_score is None:
+                        raise ProjectError(
+                            "Automatic scoring finished without persisting a valid score"
+                        )
                 except Exception as exc:  # noqa: BLE001 - never invalidate a published PDF
                     logging.getLogger("sigma.lifecycle").warning(
                         "paper.score_failed project_id=%s paper_id=%s error_type=%s",
@@ -11131,6 +11146,9 @@ async def _generate_impl(
                         "PDF generated; scoring did not finish. Use Score paper to retry."
                     )
                     await report("score_failed", None, None, "active", detail=score_failure_detail)
+            # The final SSE response and the saved-paper metadata must agree
+            # about whether automatic scoring has already succeeded.
+            saved_record["score"] = durable_score
             await report("finishing", None, None, detail=score_failure_detail)
             _schedule_progress_email(path, "paper_finished", paper_id)
             await report("complete", None, None, "complete", detail=score_failure_detail)
@@ -11154,7 +11172,10 @@ async def _generate_impl(
                     "author_review_warnings",
                     "generation",
                 )
-            } | {"title": saved_record["draft"]["title"]}
+            } | {
+                "title": saved_record["draft"]["title"],
+                "score": durable_score,
+            }
 
         # Recover old, already-published scoring interruptions even when the
         # previous build cleared its generation checkpoint too early.
