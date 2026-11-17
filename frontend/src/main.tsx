@@ -9827,9 +9827,9 @@ function App() {
     recentProjectViewCache.get(projectViewCacheKey(cacheScope, path)), [cacheScope]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const route = new URL(location, window.location.origin);
-  // Hosted: visiting the hidden route reveals the pill in this account's tab.
-  // Local: only this launch's --brainstorm flag (or an explicit ?brainstorm=1
-  // visit) reveals it. Never restore a prior local launch from sessionStorage.
+  // Brainstorm routes are always reachable. --brainstorm only initially shows
+  // the Home pill; a direct route visit also reveals it on return to Home.
+  // Local discoverability is not persisted across fresh app launches.
   const localBrainstormLaunched = import.meta.env.VITE_SIGMA_LOCAL_BRAINSTORM === 'true';
   const [localBrainstormRevealed, setLocalBrainstormRevealed] = useState(false);
   const [brainstormUnlockedFor, setBrainstormUnlockedFor] = useState<string | null>(() => {
@@ -9853,8 +9853,12 @@ function App() {
       setLocation('/');
       return;
     }
-    if (!brainstormScope || brainstormScope === 'local') return;
     if (!['/brainstorm', '/chat'].includes(route.pathname)) return;
+    if (brainstormScope === 'local') {
+      setLocalBrainstormRevealed(true);
+      return;
+    }
+    if (!brainstormScope) return;
     try { window.sessionStorage.setItem('sigma.brainstorm.unlockedFor', brainstormScope); }
     catch { /* Keep this navigation's discoverability in memory. */ }
     setBrainstormUnlockedFor(brainstormScope);
@@ -9862,14 +9866,6 @@ function App() {
   const showBrainstorm = brainstormScope === 'local'
     ? localBrainstormLaunched || localBrainstormRevealed
     : !!brainstormScope && brainstormUnlockedFor === brainstormScope;
-  const unexpectedLocalBrainstormRoute = brainstormScope === 'local' && !showBrainstorm
-    && ['/brainstorm', '/chat'].includes(route.pathname);
-  useEffect(() => {
-    // Old /brainstorm tabs cannot reopen Brainstorm after a normal restart.
-    if (!unexpectedLocalBrainstormRoute) return;
-    window.history.replaceState(window.history.state, '', '/');
-    setLocation('/');
-  }, [unexpectedLocalBrainstormRoute]);
   useEffect(() => {
     if (route.pathname !== '/project') return;
     let cancelled = false;
@@ -10006,9 +10002,6 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   if (url.pathname === '/brainstorm' || url.pathname === '/chat') {
-    if (unexpectedLocalBrainstormRoute) {
-      return <main className="home-page"><p role="status">Opening SIGMA Home…</p></main>;
-    }
     if (cloud?.enabled && cloud.target === 'hosted' && !hostedBrainstormMember) {
       return <main className="workspace-page"><p role="status">Brainstorm requires a signed-in SIGMA member account.</p><a href="/api/cloud-auth/login?return_to=%2Fbrainstorm">Sign in with Google</a><a href="/">Return to SIGMA</a></main>;
     }
