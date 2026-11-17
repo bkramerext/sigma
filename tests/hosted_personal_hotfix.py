@@ -19,6 +19,8 @@ class HostedPersonalHotfixTests(TestCase):
         dockerfile = (root / "auth-poc/shared.Dockerfile").read_text(encoding="utf-8")
         # Preserve the earlier helper suppression and no-password-saving policy.
         self.assertIn("WebAuthenticationConditionalUI", boot)
+        self.assertIn("PasswordManagerShowSuggestionsOnAutofocus", boot)
+        self.assertIn("PasswordManagerShowWebauthnSuggestionsOnAutofocus", boot)
         self.assertIn("WebAuthnUsePasskeyFromAnotherDeviceInContextMenu", boot)
         self.assertIn("--disable-features=", boot)
         self.assertIn('"PasswordManagerPasskeysEnabled":false', dockerfile)
