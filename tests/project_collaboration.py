@@ -176,9 +176,11 @@ class CollaborationTests(TestCase):
             patch.object(papers, "progress_status", return_value={"status": "complete"}),
         ):
             self.assertEqual(shared.require_unreadable_paper_manager(self.path, paper_id), run_id)
-            with patch.object(papers, "progress_status", return_value={"status": "active"}):
-                with self.assertRaisesRegex(ProjectError, "Stop this paper"):
-                    shared.require_unreadable_paper_manager(self.path, paper_id)
+            with (
+                patch.object(papers, "progress_status", return_value={"status": "active"}),
+                self.assertRaisesRegex(ProjectError, "Stop this paper"),
+            ):
+                shared.require_unreadable_paper_manager(self.path, paper_id)
             with self.assertRaisesRegex(ProjectError, "no completed publication reservation"):
                 shared.require_unreadable_paper_manager(self.path, uuid4().hex)
             colleague = Workspace(
@@ -197,9 +199,9 @@ class CollaborationTests(TestCase):
                     "sigma.project_collaboration.cloud_auth.current_principal",
                     return_value=self.other,
                 ),
+                self.assertRaisesRegex(ProjectError, "Only the paper creator"),
             ):
-                with self.assertRaisesRegex(ProjectError, "Only the paper creator"):
-                    shared.require_unreadable_paper_manager(self.path, paper_id)
+                shared.require_unreadable_paper_manager(self.path, paper_id)
 
     def test_collaboration_reads_do_not_wait_for_sqlite_writer(self) -> None:
         """Schema DDL cannot run during ordinary read/poll requests."""

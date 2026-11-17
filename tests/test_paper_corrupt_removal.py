@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import fcntl
 import os
-from tempfile import TemporaryDirectory
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -58,23 +58,25 @@ class CorruptPaperRemovalTests(TestCase):
     def test_healthy_record_and_live_worker_are_not_deleted(self) -> None:
         target = self.directory / f"{self.paper_id}.json"
         target.write_text("saved", encoding="utf-8")
-        common = (
+        with (
             patch.object(papers, "_paper_version_lock", side_effect=self.acquire_lock),
             patch.object(papers, "project_path", return_value=self.project_path),
             patch.object(papers, "_paper_dir", return_value=self.directory),
-        )
-        with (*common, patch.object(papers, "get_paper", return_value={"paper_id": self.paper_id})):
-            with self.assertRaisesRegex(ProjectError, "readable"):
-                papers.delete_unreadable_paper(str(self.project_path), self.paper_id, self.run_id)
+            patch.object(papers, "get_paper", return_value={"paper_id": self.paper_id}),
+            self.assertRaisesRegex(ProjectError, "readable"),
+        ):
+            papers.delete_unreadable_paper(str(self.project_path), self.paper_id, self.run_id)
         self.assertTrue(target.exists())
 
         with (
-            *common,
+            patch.object(papers, "_paper_version_lock", side_effect=self.acquire_lock),
+            patch.object(papers, "project_path", return_value=self.project_path),
+            patch.object(papers, "_paper_dir", return_value=self.directory),
             patch.object(
                 papers, "get_paper", side_effect=ProjectError("Paper record is unreadable")
             ),
             patch.object(papers, "progress_status", return_value={"status": "active"}),
+            self.assertRaisesRegex(ProjectError, "Stop this paper"),
         ):
-            with self.assertRaisesRegex(ProjectError, "Stop this paper"):
-                papers.delete_unreadable_paper(str(self.project_path), self.paper_id, self.run_id)
+            papers.delete_unreadable_paper(str(self.project_path), self.paper_id, self.run_id)
         self.assertTrue(target.exists())
