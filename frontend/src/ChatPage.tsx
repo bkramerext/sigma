@@ -45,6 +45,8 @@ function MarkdownReply({ body }: { body: string }) {
 
 export default function ChatPage() {
   const [config, setConfig] = useState<ChatConfig | null>(null);
+  // The running exchange reads this at each request boundary, not just at launch.
+  const configRef = useRef<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [supervisorEnabled, setSupervisorEnabled] = useState(false);
@@ -72,16 +74,15 @@ export default function ChatPage() {
       const response = await fetch('/api/chat/config', { cache: 'no-store', signal });
       const value = await response.json() as ChatConfig;
       if (!response.ok) throw new Error((value as unknown as { error?: string }).error ?? 'Brainstorm settings are unavailable.');
-      setConfig(previous => {
-        if (!previous) return value;
-        const retainedModel = value.models.some(item => item.id === previous.model)
-          ? previous.model : value.model;
-        const selected = value.models.find(item => item.id === retainedModel);
-        const effort = selected?.efforts.includes(previous.reasoning_effort)
-          ? previous.reasoning_effort
-          : value.reasoning_effort;
-        return { ...value, model: retainedModel, reasoning_effort: effort };
-      });
+      const previous = configRef.current;
+      const retainedModel = previous && value.models.some(item => item.id === previous.model)
+        ? previous.model : value.model;
+      const selected = value.models.find(item => item.id === retainedModel);
+      const effort = previous && selected?.efforts.includes(previous.reasoning_effort)
+        ? previous.reasoning_effort : value.reasoning_effort;
+      const nextConfig = { ...value, model: retainedModel, reasoning_effort: effort };
+      configRef.current = nextConfig;
+      setConfig(nextConfig);
       setError('');
     } catch (cause) {
       if (!signal?.aborted) setError(errorText(cause));
@@ -89,23 +90,30 @@ export default function ChatPage() {
   }, []);
 
   function cycleModel() {
-    if (!config || running) return;
-    const available = config.models;
-    const index = available.findIndex(item => item.id === config.model);
+    const current = configRef.current;
+    if (!current?.available) return;
+    const available = current.models;
+    const index = available.findIndex(item => item.id === current.model);
     const next = available[(index + 1 + available.length) % available.length];
     if (!next) return;
-    setConfig({ ...config, model: next.id,
-      reasoning_effort: next.efforts.includes(config.reasoning_effort) ? config.reasoning_effort : next.efforts[0] });
+    const selected = { ...current, model: next.id,
+      reasoning_effort: next.efforts.includes(current.reasoning_effort)
+        ? current.reasoning_effort : next.efforts[0] };
+    configRef.current = selected;
+    setConfig(selected);
     setModelCycleRevision(revision => revision + 1);
   }
 
   function cycleThinking() {
-    if (!config || running) return;
-    const efforts = config.models.find(item => item.id === config.model)?.efforts ?? [];
-    const index = efforts.indexOf(config.reasoning_effort);
+    const current = configRef.current;
+    if (!current?.available) return;
+    const efforts = current.models.find(item => item.id === current.model)?.efforts ?? [];
+    const index = efforts.indexOf(current.reasoning_effort);
     const next = efforts[(index + 1 + efforts.length) % efforts.length];
     if (next) {
-      setConfig({ ...config, reasoning_effort: next });
+      const selected = { ...current, reasoning_effort: next };
+      configRef.current = selected;
+      setConfig(selected);
       setThinkingCycleRevision(revision => revision + 1);
     }
   }
@@ -291,14 +299,14 @@ export default function ChatPage() {
         const controller = new AbortController();
         abort.current = controller;
         setSpeaker(who);
-        const result = await requestTurn(who, messagesRef.current, controller, settings);
+        const result = await requestTurn(who, messagesRef.current, controller, configRef.current ?? settings);
         if (!runningRef.current || id !== runId.current) return;
         const reply = { speaker: who, text: result } as const;
         addMessage(reply);
         await appendTranscriptMessage(conversationId, reply);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
         if (who === 'ai_2' && supervisorEnabledRef.current && researchObjectiveRef.current) {
-          await assessPair(id, settings);
+          await assessPair(id, configRef.current ?? settings);
           if (!runningRef.current || id !== runId.current) return;
         }
         setSpeaker(nextSpeaker);
@@ -381,23 +389,19 @@ export default function ChatPage() {
     ? error || 'Brainstorm settings are loading.'
     : !config.available
       ? config.message || 'Connect an AI account to enable model selection.'
-      : running
-        ? 'Stop the exchange before changing the model.'
-        : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle through models available to this account.`;
+      : `${config.model} · ${config.models.find(item => item.id === config.model)?.label ?? 'Selected model'}. Click to cycle. Changes take effect on the next AI request.`;
   const thinkingControlHint = !config
     ? error || 'Brainstorm settings are loading.'
     : !config.available
       ? config.message || 'Connect an AI account to enable Thinking selection.'
-      : running
-        ? 'Stop the exchange before changing the Thinking level.'
-        : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle through levels supported by this model.`;
+      : `Thinking is ${thinkingLabels[config.reasoning_effort]}. Click to cycle. Changes take effect on the next AI request.`;
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
 
   const selectedModel = config?.models.find(item => item.id === config.model);
   const displayedModel = selectedModel ? modelDisplayLabel(selectedModel) : config?.model ?? 'Loading';
   const displayedThinking = thinkingLabels[config?.reasoning_effort ?? 'low'];
-  const selectionDisabled = !config?.available || !config.models.length || running;
+  const selectionDisabled = !config?.available || !config.models.length;
   const modelThinkingControls = <div className="sigma-header-model-column chat-header-model-controls" aria-label="Brainstorm model and thinking controls">
     <span className="global-model-pill-position">
       <ModelThinkingPillButton label={displayedModel} thinkingLabel={`Thinking · ${displayedThinking}`}

@@ -213,3 +213,42 @@
   color: #c7cbd0; font-size: .83rem; margin: 4px 0;
 }
 .brainstorm-workspace .chat-supervisor-breakthrough .chat-supervisor-meta { color: #f6d48d; font-weight: 700; }
+
+
+/* Brainstorm scrolls inside its own workspace; keep both account pills
+   reachable as the conversation grows without changing the shared header. */
+.workspace-page.brainstorm-workspace > .chat-site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #03090f;
+}
+
+/* Mathematical output and long unbroken text must not expand the implicit grid
+   track beyond the viewport. Scroll wide math/code locally; wrap prose. */
+.brainstorm-workspace .chat-history {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+.brainstorm-workspace .chat-history > li,
+.brainstorm-workspace .chat-markdown {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.brainstorm-workspace .chat-markdown :is(.katex-display, pre) {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.brainstorm-workspace .chat-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.brainstorm-workspace .chat-markdown :is(code, a) {
+  overflow-wrap: anywhere;
+}
