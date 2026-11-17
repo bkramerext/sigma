@@ -132,7 +132,7 @@ def check_service() -> None:
                 expected_binding="api_key",
                 model="gpt-6.1-sol",
                 reasoning_effort="low",
-                repeated_text="Always challenge the assumptions.",
+                research_objective="Always challenge the assumptions.",
             )
         )
     assert result == "A deterministic reply."
@@ -247,15 +247,20 @@ def check_api() -> None:
                 "text": long_text,
             },
         )
-        repeated_record = client.post("/api/chat/message", json={
-            "conversation_id": body["conversation_id"], "speaker": "repeated", "text": "Check sources.",
-        })
+        repeated_record = client.post(
+            "/api/chat/message",
+            json={
+                "conversation_id": body["conversation_id"],
+                "speaker": "objective",
+                "text": "Check sources.",
+            },
+        )
         long_turn = client.post(
             "/api/chat/turn",
             json={
                 **body,
                 "messages": [{"speaker": "human", "text": long_text}],
-                "repeated_text": long_repeated,
+                "research_objective": long_repeated,
             },
         )
         mismatch = client.post("/api/chat/turn", json={**body, "expected_binding": "other"})
@@ -286,7 +291,6 @@ def check_api() -> None:
     assert selected.status_code == 200
     assert unsupported.status_code == 422
     print("PASS chat API model/thinking validation, SSE completion and participant validation")
-
 
 
 def check_slow_turn_heartbeat() -> None:
@@ -347,13 +351,15 @@ def check_transcripts() -> None:
             ]
             for speaker, text in messages:
                 chat_transcripts.append_message(session["conversation_id"], speaker, text)
-            chat_transcripts.append_message(session["conversation_id"], "repeated", "Challenge the assumptions.")
-            chat_transcripts.append_message(session["conversation_id"], "repeated", "(cleared)")
+            chat_transcripts.append_message(
+                session["conversation_id"], "objective", "Challenge the assumptions."
+            )
+            chat_transcripts.append_message(session["conversation_id"], "objective", "(cleared)")
             long_entry = "Detailed workbench evidence. " * 320
             assert len(long_entry) > 8000
             chat_transcripts.append_message(session["conversation_id"], "human", long_entry)
             content = path.read_text(encoding="utf-8")
-            assert "## Repeated instruction ·" in content
+            assert "## Research Objective ·" in content
             assert "Challenge the assumptions." in content
             assert "(cleared)" in content
             assert long_entry in content
