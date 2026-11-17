@@ -15,7 +15,13 @@ from sigma.recents import state_directory
 from sigma.ui_instance import private_directory
 
 MAX_TRANSCRIPT_BYTES = 64 * 1024 * 1024
-SPEAKER_LABELS = {"human": "Human", "ai_1": "AI #1", "ai_2": "AI #2", "objective": "Research Objective", "supervisor": "Supervisor"}
+SPEAKER_LABELS = {
+    "human": "Human",
+    "ai_1": "AI #1",
+    "ai_2": "AI #2",
+    "objective": "Research Objective",
+    "supervisor": "Supervisor",
+}
 TRANSCRIPT_FILENAME = re.compile(r"^\d{8}_\d{6}(?:_\d+)?\.md$")
 
 

@@ -97,13 +97,21 @@ def _transcript(messages: list[dict[str, Any]], recipient: Speaker | None = None
         if item["speaker"] == "supervisor" and recipient in {"ai_1", "ai_2"}:
             target = item.get("recipient")
             guidance = item.get("guidance", "")
-            if target not in {recipient, "both"} or not isinstance(guidance, str) or not guidance.strip():
+            if (
+                target not in {recipient, "both"}
+                or not isinstance(guidance, str)
+                or not guidance.strip()
+            ):
                 continue
             label = {"ai_1": "AI #1", "ai_2": "AI #2"}[recipient]
             rendered = f"Supervisor to {label}:\n{guidance}"
         else:
-            label = {"human": "Human", "ai_1": "AI #1", "ai_2": "AI #2",
-                     "supervisor": "Supervisor"}[item["speaker"]]
+            label = {
+                "human": "Human",
+                "ai_1": "AI #1",
+                "ai_2": "AI #2",
+                "supervisor": "Supervisor",
+            }[item["speaker"]]
             rendered = f"{label}:\n{item['text']}"
         rendered_items.append(rendered)
     recent: list[str] = []
@@ -158,6 +166,7 @@ async def respond(
     reasoning_effort: str,
     repeated_text: str = "",
     research_objective: str = "",
+    supervisor_latched: bool = False,
 ) -> str:
     """Generate one bounded agent turn and account hosted sponsored usage."""
     if len(messages) > MAX_MESSAGES or not messages:
@@ -201,6 +210,11 @@ async def respond(
         transcript = f"Research Objective:\n{research_objective.strip()}\n\n{transcript}"
     elif speaker == "supervisor":
         raise ProjectError("Supervisor requires the research objective.")
+    if speaker == "supervisor":
+        transcript = (
+            f"Previous breakthrough milestone active: {supervisor_latched}.\n\n"
+            + transcript
+        )
     payload: dict[str, Any] = {
         "model": model,
         "store": False,

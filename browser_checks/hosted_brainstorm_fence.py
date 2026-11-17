@@ -101,7 +101,7 @@ with sync_playwright() as playwright:
     page.goto(ORIGIN + "/", wait_until="domcontentloaded")
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
     page.goto(ORIGIN + "/brainstorm", wait_until="networkidle")
-    expect(page.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(page.locator(".brainstorm-header-copy h1")).to_have_text("Brainstorm")
     page.get_by_label("Human", exact=True).fill("Try a fresh approach.")
     page.get_by_role("button", name="Send", exact=True).click()
     expect(page.get_by_role("region", name="AI #1 latest reply")).to_contain_text(
@@ -114,7 +114,7 @@ with sync_playwright() as playwright:
     page.reload(wait_until="domcontentloaded")
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_be_visible()
     page.get_by_role("button", name="Brainstorm", exact=True).click()
-    expect(page.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(page.locator(".brainstorm-header-copy h1")).to_have_text("Brainstorm")
 
     # Unlock is tab/account scoped, not globally advertised to all users.
     second = browser.new_page()
@@ -122,7 +122,7 @@ with sync_playwright() as playwright:
     second.goto(ORIGIN + "/", wait_until="domcontentloaded")
     expect(second.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)
     second.goto(ORIGIN + "/chat", wait_until="networkidle")
-    expect(second.locator(".chat-page-header h1")).to_have_text("Brainstorm")
+    expect(second.locator(".brainstorm-header-copy h1")).to_have_text("Brainstorm")
     second.goto(ORIGIN + "/", wait_until="domcontentloaded")
     expect(second.get_by_role("button", name="Brainstorm", exact=True)).to_be_visible()
 

@@ -19,7 +19,9 @@ session_calls = 0
 transcript_messages: list[dict] = []
 fail_next_turn = False
 selected_settings = {
-    "limits": {}, "ai_model": "gpt-6.1-sol", "reasoning_effort": "low",
+    "limits": {},
+    "ai_model": "gpt-6.1-sol",
+    "reasoning_effort": "low",
     "show_advanced_outcome_details": False,
 }
 supervisor_calls: list[dict] = []
@@ -86,32 +88,77 @@ with sync_playwright() as playwright:
             )
             return
         if "/api/ai/connection" in url:
-            route.fulfill(status=200, content_type="application/json", body=json.dumps({
-                "mode": "chatgpt", "status": "connected", "label": "ChatGPT", "guidance": "Ready.",
-                "checked_at": None, "ttl_seconds": 300, "accounts": [],
-            }))
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "mode": "chatgpt",
+                        "status": "connected",
+                        "label": "ChatGPT",
+                        "guidance": "Ready.",
+                        "checked_at": None,
+                        "ttl_seconds": 300,
+                        "accounts": [],
+                    }
+                ),
+            )
             return
         if url.endswith("/api/user-preferences/research-settings"):
             if route.request.method == "PUT":
                 selected_settings.update(route.request.post_data_json)
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(selected_settings))
+            route.fulfill(
+                status=200, content_type="application/json", body=json.dumps(selected_settings)
+            )
             return
         if url.endswith("/api/ai/models"):
-            route.fulfill(status=200, content_type="application/json", body=json.dumps({
-                "models": [
-                    {"id": "gpt-6-luna", "label": "Luna · Economy ($)", "relative_cost": "$", "efforts": ["low", "medium", "high", "xhigh"]},
-                    {"id": "gpt-6.1-sol", "label": "Sol · Balanced ($)", "relative_cost": "$", "efforts": ["low", "medium", "high", "xhigh"]},
-                ],
-            }))
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "models": [
+                            {
+                                "id": "gpt-6-luna",
+                                "label": "Luna · Economy ($)",
+                                "relative_cost": "$",
+                                "efforts": ["low", "medium", "high", "xhigh"],
+                            },
+                            {
+                                "id": "gpt-6.1-sol",
+                                "label": "Sol · Balanced ($$)",
+                                "relative_cost": "$$",
+                                "efforts": ["low", "medium", "high", "xhigh"],
+                            },
+                        ],
+                    }
+                ),
+            )
             return
         if url.endswith("/api/chat/supervisor"):
             supervisor_calls.append(route.request.post_data_json)
-            route.fulfill(status=200, content_type="application/json", body=json.dumps({
-                "score": 3.4,
-                "rubric": {"alignment": 0.9, "originality": 0.6, "advancement": 0.7, "evidence": 0.8, "momentum": 0.4},
-                "assessment": "The pair is exploring constructively.",
-                "action": "continue", "recipient": None, "guidance": "", "breakthrough_candidate": False,
-            }))
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "score": 3.4,
+                        "rubric": {
+                            "alignment": 0.9,
+                            "originality": 0.6,
+                            "advancement": 0.7,
+                            "evidence": 0.8,
+                            "momentum": 0.4,
+                        },
+                        "assessment": "The pair is exploring constructively.",
+                        "action": "continue",
+                        "recipient": None,
+                        "guidance": "",
+                        "breakthrough_candidate": False,
+                        "breakthrough_invalidated": False,
+                    }
+                ),
+            )
             return
         if url.endswith("/api/chat/turn"):
             body = route.request.post_data_json
@@ -218,7 +265,8 @@ with sync_playwright() as playwright:
         )
     )
     assert (
-        title_bounds["y"] < metadata_bounds["y"]
+        title_bounds["y"]
+        < metadata_bounds["y"]
         < repeated_bounds["y"]
         < human_bounds["y"]
         < toolbar_bounds["y"]
@@ -357,7 +405,7 @@ with sync_playwright() as playwright:
         and message["text"] == "Human intervention: focus on the counterexample."
         for message in transcript_messages
     )
-    assert session_calls == 2
+    assert session_calls == 4
     assert supervisor_calls, "Supervisor should assess at least one completed AI pair"
     assert any(item["speaker"] == "supervisor" for item in transcript_messages)
     assert any(item["speaker"] == "objective" for item in transcript_messages)
@@ -387,7 +435,7 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Clear", exact=True).click()
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120003.md")
-    assert session_calls == 3
+    assert session_calls == 5
     # A new normal page load must not inherit the earlier local opt-in.
     page.goto(ORIGIN + "/", wait_until="networkidle")
     expect(page.get_by_role("button", name="Brainstorm", exact=True)).to_have_count(0)

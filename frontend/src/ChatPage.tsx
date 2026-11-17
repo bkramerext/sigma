@@ -14,6 +14,7 @@ type SupervisorAssessment = {
   recipient: Target | null;
   guidance: string;
   breakthrough_candidate: boolean;
+  breakthrough_invalidated?: boolean;
 };
 type ChatConfig = {
   available: boolean;
@@ -267,6 +268,7 @@ export default function ChatPage() {
           .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model, reasoning_effort: settings.reasoning_effort,
         research_objective: researchObjectiveRef.current,
+        milestone_latched: breakthroughLatched.current,
       }),
     });
     const assessment = await response.json() as SupervisorAssessment & { detail?: string; error?: string };
@@ -276,6 +278,7 @@ export default function ChatPage() {
       throw new Error('The supervisor returned an invalid assessment.');
     }
     if (!runningRef.current || id !== runId.current) return;
+    if (assessment.breakthrough_invalidated) breakthroughLatched.current = false;
     if (assessment.breakthrough_candidate) breakthroughLatched.current = true;
     const score = breakthroughLatched.current ? 10 : assessment.score;
     const guidance = assessment.guidance?.trim() ?? '';
@@ -285,7 +288,8 @@ export default function ChatPage() {
     const text = [
       `Research progress: ${score.toFixed(1)} / 10.0`,
       assessment.breakthrough_candidate ? 'POTENTIAL BREAKTHROUGH DETECTED — independent validation required.'
-        : breakthroughLatched.current ? 'Breakthrough candidate remains under validation.' : '',
+        : assessment.breakthrough_invalidated ? 'Previous breakthrough candidate invalidated; normal scoring resumed.'
+          : breakthroughLatched.current ? 'Breakthrough candidate remains under validation.' : '',
       summary ? `Rubric — ${summary}` : '',
       assessment.assessment,
       assessment.action !== 'continue' && recipient && guidance

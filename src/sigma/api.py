@@ -3436,6 +3436,7 @@ class ChatSupervisorRequest(BaseModel):
     model: str = Field(min_length=1, max_length=100)
     reasoning_effort: Literal["low", "medium", "high", "xhigh"]
     research_objective: str = Field(min_length=1, max_length=10000)
+    milestone_latched: bool = False
 
 
 @app.post("/api/chat/session")
@@ -3517,7 +3518,6 @@ async def chat_turn_view(body: ChatTurnRequest):
 
 
 
-
 @app.post("/api/chat/supervisor")
 async def chat_supervisor_view(body: ChatSupervisorRequest):
     """Assess a completed pair without contributing subject-matter ideas."""
@@ -3541,8 +3541,11 @@ async def chat_supervisor_view(body: ChatSupervisorRequest):
         model=body.model,
         reasoning_effort=body.reasoning_effort,
         research_objective=body.research_objective,
+        supervisor_latched=body.milestone_latched,
     )
-    return JSONResponse(chat_supervisor.parse_assessment(raw), headers={"Cache-Control": "no-store"})
+    return JSONResponse(
+        chat_supervisor.parse_assessment(raw), headers={"Cache-Control": "no-store"}
+    )
 
 @app.post("/api/ai/auth/begin")
 async def auth_begin(body: AuthBeginRequest):

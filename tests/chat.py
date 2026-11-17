@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from sigma import chat, chat_transcripts
+from sigma import chat, chat_supervisor, chat_transcripts
 from sigma.api import app
 from sigma.projects import ProjectError
 
@@ -327,6 +327,64 @@ def check_slow_turn_heartbeat() -> None:
     print("PASS brainstorm SSE heartbeat during slow reasoning and eventual completion")
 
 
+def check_supervisor() -> None:
+    assert "NEVER direct the AIs to stop the conversation" in chat_supervisor.INSTRUCTIONS
+    example = {
+        "rubric": {
+            "alignment": 1.2,
+            "originality": 0.8,
+            "advancement": 1.3,
+            "evidence": 1.0,
+            "momentum": 0.6,
+        },
+        "assessment": "Progress is constructive but validation is limited.",
+        "action": "nudge",
+        "recipient": "ai_2",
+        "guidance": "Clarify the question that remains unresolved.",
+        "breakthrough_candidate": False,
+        "breakthrough_invalidated": False,
+    }
+    result = chat_supervisor.parse_assessment(json.dumps(example))
+    assert result["score"] == 4.9
+    conversation = [
+        {"speaker": "human", "text": "Discover something new."},
+        {"speaker": "ai_1", "text": "An idea."},
+        {"speaker": "ai_2", "text": "An objection."},
+        {
+            "speaker": "supervisor",
+            "text": "Research progress: 4.9 / 10.0",
+            "recipient": result["recipient"],
+            "guidance": result["guidance"],
+        },
+    ]
+    assert "Research progress" not in chat._transcript(conversation, "ai_1")
+    assert "Research progress" not in chat._transcript(conversation, "ai_2")
+    assert "Clarify the question" not in chat._transcript(conversation, "ai_1")
+    assert "Clarify the question" in chat._transcript(conversation, "ai_2")
+    candidate = chat_supervisor.parse_assessment(
+        json.dumps({
+            **example,
+            "action": "continue",
+            "recipient": None,
+            "guidance": "",
+            "breakthrough_candidate": True,
+        })
+    )
+    assert candidate["score"] == 10.0
+    invalidation = chat_supervisor.parse_assessment(
+        json.dumps({
+            **example,
+            "action": "continue",
+            "recipient": None,
+            "guidance": "",
+            "breakthrough_invalidated": True,
+        })
+    )
+    assert invalidation["breakthrough_invalidated"] is True
+    assert invalidation["score"] == 4.9
+    print("PASS supervisor scoring, invalidation, and recipient-isolated guidance")
+
+
 def check_transcripts() -> None:
     with TemporaryDirectory() as temp:
         state = Path(temp)
@@ -391,6 +449,7 @@ def main() -> None:
     check_service()
     check_api()
     check_slow_turn_heartbeat()
+    check_supervisor()
     check_transcripts()
 
 
