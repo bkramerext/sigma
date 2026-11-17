@@ -194,7 +194,11 @@ with sync_playwright() as playwright:
             supervisor_calls.append(route.request.post_data_json)
             if fail_next_supervisor:
                 fail_next_supervisor = False
-                route.fulfill(status=503, content_type="application/json", body='{"detail":"Assessment provider unavailable"}')
+                route.fulfill(
+                    status=503,
+                    content_type="application/json",
+                    body='{"detail":"Assessment provider unavailable"}',
+                )
                 return
             route.fulfill(
                 status=200,
@@ -656,8 +660,7 @@ with sync_playwright() as playwright:
         for item in transcript_messages
     ), "Failed Supervisor assessments must be recorded in the transcript"
     assert any(
-        item["speaker"] == "supervisor"
-        and "Research progress:" in item["text"]
+        item["speaker"] == "supervisor" and "Research progress:" in item["text"]
         for item in transcript_messages
     ), "A later successful Supervisor assessment must still be recorded"
     assert all(
