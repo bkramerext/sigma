@@ -146,6 +146,61 @@ class CollaborationTests(TestCase):
         )
         self.assertEqual((other["number"], other["status"]), (16, "complete"))
 
+    def test_unreadable_paper_recovery_requires_completed_authorized_reservation(self) -> None:
+        """Corruption cannot bypass creator, project owner or active-worker gates."""
+        from sigma import papers
+
+        paper_id, run_id = uuid4().hex, uuid4().hex
+        with shared._db() as db:
+            db.execute(
+                """INSERT INTO shared_run_reservations
+                   (path, kind, run_id, number, creator_hash, creator_email,
+                    model, thinking, created_at, status, artifact_id)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    self.path,
+                    "paper",
+                    run_id,
+                    19,
+                    self.workspace.subject_hash,
+                    self.owner.email,
+                    "fixture-model",
+                    "medium",
+                    self.clock[0],
+                    "complete",
+                    paper_id,
+                ),
+            )
+        with (
+            patch("sigma.projects.project_path", return_value=Path(self.path)),
+            patch.object(papers, "progress_status", return_value={"status": "complete"}),
+        ):
+            self.assertEqual(shared.require_unreadable_paper_manager(self.path, paper_id), run_id)
+            with patch.object(papers, "progress_status", return_value={"status": "active"}):
+                with self.assertRaisesRegex(ProjectError, "Stop this paper"):
+                    shared.require_unreadable_paper_manager(self.path, paper_id)
+            with self.assertRaisesRegex(ProjectError, "no completed publication reservation"):
+                shared.require_unreadable_paper_manager(self.path, uuid4().hex)
+            colleague = Workspace(
+                workspace_id="other-workspace",
+                subject_hash="other-hash",
+                path=self.root,
+                email=self.other.email,
+                verified_subject=self.other.subject,
+            )
+            with (
+                patch(
+                    "sigma.project_collaboration.cloud_workspaces.current",
+                    return_value=colleague,
+                ),
+                patch(
+                    "sigma.project_collaboration.cloud_auth.current_principal",
+                    return_value=self.other,
+                ),
+            ):
+                with self.assertRaisesRegex(ProjectError, "Only the paper creator"):
+                    shared.require_unreadable_paper_manager(self.path, paper_id)
+
     def test_collaboration_reads_do_not_wait_for_sqlite_writer(self) -> None:
         """Schema DDL cannot run during ordinary read/poll requests."""
         with shared._db() as db:

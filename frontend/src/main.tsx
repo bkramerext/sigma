@@ -2233,6 +2233,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       setSessions(current => current.some(item => item.id === target.id) ? current : [...current, target]);
       setError(`Session ${target.session_number} could not be removed: ${message}`);
       void recordClientError(message, 'session_delete');
+      void load().catch(reportReadFailure);
     } finally {
       deletingSessionIds.current.delete(target.id);
       setBusy(false);
