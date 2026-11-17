@@ -238,8 +238,24 @@ with sync_playwright() as playwright:
     chatgpt_box = header.locator(".api-connection > summary").bounding_box()
     model_box = header.locator(".brainstorm-header-model-column .global-model-pill").bounding_box()
     header_box = header.bounding_box()
-    assert all((artwork_box, heading_box, eyebrow_box, title_box, description_box,
-                google_box, chatgpt_box, model_box, header_box))
+    assert all(
+        (
+            artwork_box,
+            heading_box,
+            eyebrow_box,
+            title_box,
+            description_box,
+            google_box,
+            chatgpt_box,
+            model_box,
+            header_box,
+        )
+    )
+    # Rendering, not just column positions: the oversized artwork made the
+    # entire header 365px tall and cropped the wordmark in the user smoke test.
+    assert artwork_box["width"] <= 340, artwork_box
+    assert artwork_box["height"] <= 245, artwork_box
+    assert header_box["height"] <= 265, header_box
     assert artwork_box["x"] + artwork_box["width"] <= heading_box["x"] + 2
     assert description_box["x"] + description_box["width"] <= google_box["x"] - 4
     assert eyebrow_box["y"] + eyebrow_box["height"] <= title_box["y"] + 3
@@ -270,6 +286,19 @@ with sync_playwright() as playwright:
     assert "Messages are appended" not in metadata.inner_text()
     title_bounds = page.locator(".chat-site-header .brainstorm-header-copy").bounding_box()
     metadata_bounds = metadata.bounding_box()
+    supervisor_panel = page.get_by_role("region", name="Brainstorm supervisor")
+    # A global input width:100% rule previously stretched this checkbox
+    # nearly the entire panel and pushed the label to its far edge.
+    supervisor_checkbox = page.get_by_label("Enable Supervisor")
+    checkbox_bounds = supervisor_checkbox.bounding_box()
+    checkbox_label_bounds = supervisor_panel.locator("label").bounding_box()
+    panel_bounds = supervisor_panel.bounding_box()
+    assert checkbox_bounds and checkbox_label_bounds and panel_bounds
+    assert 15 <= checkbox_bounds["width"] <= 20, checkbox_bounds
+    assert 15 <= checkbox_bounds["height"] <= 20, checkbox_bounds
+    assert checkbox_label_bounds["width"] < 240, checkbox_label_bounds
+    assert abs(checkbox_bounds["x"] - (panel_bounds["x"] + 15)) < 4
+    assert checkbox_label_bounds["x"] <= panel_bounds["x"] + 20
     repeated = page.get_by_label("Research Objective:", exact=True)
     repeated_bounds = repeated.bounding_box()
     human_bounds = human.bounding_box()
