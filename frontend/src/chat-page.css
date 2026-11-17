@@ -211,7 +211,9 @@
   grid-template-areas: "model-column identity";
   column-gap: calc(var(--identity-pill-gap) * 1.2);
   align-items: start;
-  align-self: start;
+  /* Match Project: center the complete two-row pill group vertically, so
+     the top and bottom insets are balanced within the 166px artwork header. */
+  align-self: center;
   justify-self: end;
   flex: 0 0 auto;
   width: max-content;
