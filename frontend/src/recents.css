@@ -103,7 +103,9 @@
 .home-page .catalog-tabs { display: flex; width: max-content; max-width: 100%; gap: 2px; padding: 3px; background: #07111eea; border: 1px solid #80503e; border-radius: 7px; }
 .home-page .catalog-tabs button { min-height: 38px; padding: 8px 15px; border: 1px solid transparent; border-radius: 4px; background: #0b1725; box-shadow: none; color: #bfc5cb; font-size: 12px; text-shadow: none; }
 .home-page .catalog-tabs button:hover:not([aria-selected="true"]) { background: #182432; color: var(--sigma-copper-foreground); }
-.home-page .catalog-tabs button[aria-selected="true"] { background: var(--copper-gradient); border-color: #ac7054; color: #fff2e9; text-shadow: 0 1px 1px #24120d; }
+/* Keep the selected/focused tab outline above its adjacent tab instead of hiding its right edge. */
+.home-page .catalog-tabs button[aria-selected="true"] { position: relative; z-index: 1; background: var(--copper-gradient); border-color: #ac7054; color: #fff2e9; text-shadow: 0 1px 1px #24120d; }
+.home-page .catalog-tabs button:focus-visible { position: relative; z-index: 2; }
 .home-page .catalog-tabs button:disabled { cursor: default; opacity: .5; color: #9099a1; }
 .home-page .home-catalog .home-empty { margin: 0; padding: 14px 0 20px; border: 0; max-width: none; }
 .home-page .home-samples li { border-color: #a965483d; }
@@ -542,7 +544,8 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .home-page .home-recents .recent-flat-group > summary { display: none; }
 .home-page .home-recents .recent-flat-group > ul { margin-left: 0; }
 
-/* Keep project-type headings compact and pulses alongside their counts. */
+/* Keep Samples and My Work category rows at the same compact height. */
+.home-page .home-samples .sample-type-group > summary,
 .home-page .home-recents .recent-type-group > summary { min-height: 0; padding-block: 6px; }
 .home-page .home-recents .recent-type-group > summary small { display: inline-flex; align-items: center; gap: 4px; }
 .home-page .home-recents .recent-type-group > ul { margin-top: 2px; }
