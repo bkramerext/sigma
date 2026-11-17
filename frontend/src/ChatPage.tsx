@@ -608,10 +608,10 @@ export default function ChatPage() {
   const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
   const isEntryExpanded = (message: ChatMessage, index: number) =>
     expandedEntries[index] ?? (message.speaker !== 'ai_1' && message.speaker !== 'ai_2');
-  const anyEntryExpanded = messages.some(isEntryExpanded);
-  const toggleAllEntries = () => {
-    const expanded = !anyEntryExpanded;
-    setExpandedEntries(Object.fromEntries(messages.map((_, index) => [index, expanded])));
+  const resetTranscriptExpansion = () => {
+    // Restore the canonical state; individual disclosure choices remain free
+    // until the user explicitly resets them again.
+    setExpandedEntries({});
   };
   const canSend = !!config?.available && !!conversationId
     && !error.startsWith('The chat contains too many messages') && !!draft.trim();
@@ -686,10 +686,10 @@ export default function ChatPage() {
     </section>
     {!!messages.length && <section className="chat-transcript" aria-label="Transcript">
       <h2 className="chat-transcript-heading">
-        <button type="button" className="chat-disclosure-button" aria-expanded={anyEntryExpanded}
-          aria-controls="chat-transcript-history" onClick={toggleAllEntries}
-          data-tooltip={anyEntryExpanded ? 'Collapse all transcript entries' : 'Expand all transcript entries'}>
-          <svg aria-hidden="true" className={`disclosure-chevron${anyEntryExpanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
+        <button type="button" className="chat-disclosure-button"
+          aria-controls="chat-transcript-history" onClick={resetTranscriptExpansion}
+          data-tooltip="Restore default transcript expansion">
+          <svg aria-hidden="true" className="disclosure-chevron is-expanded" viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
           Transcript
         </button>
       </h2>
