@@ -400,16 +400,10 @@ async def _exclusive_scoring_lease(path: str, paper_id: str):
     filename = directory / f".{papers._paper_id(paper_id)}.score.lock"
     if filename.is_symlink():
         raise ProjectError("Paper scoring lock must not be a symbolic link")
-    descriptor = os.open(
-        filename, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
-    )
+    descriptor = os.open(filename, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         info = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.getuid()
-            or info.st_mode & 0o077
-        ):
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
             raise ProjectError("Paper scoring lock is unsafe")
         while True:
             try:
