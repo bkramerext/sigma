@@ -403,7 +403,25 @@ export default function ChatPage() {
         // that write instead of making another potentially billable request.
         if (!pendingReplyRef.current) {
           const settings = await currentTurnSettings();
-          const result = await requestTurn(who, messagesRef.current, controller, settings, sessionId);
+          let result = '';
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try {
+              result = await requestTurn(who, messagesRef.current, controller, settings, sessionId);
+              break;
+            } catch (cause) {
+              const detail = errorText(cause);
+              const transient = /could not be decoded|timed out|connection was interrupted|ended before the AI completed|invalid response|completed without usable text/i.test(detail);
+              if (!transient || attempt === 2 || !runningRef.current || id !== runId.current || controller.signal.aborted) {
+                throw new Error(transient && attempt === 2
+                  ? `AI reply could not be recovered after 3 automatic attempts. Retry or Skip turn. (${detail})`
+                  : detail);
+              }
+              // Retry the same speaker with unchanged history. A response is
+              // appended only after we receive a complete, usable reply.
+              await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+              if (!runningRef.current || id !== runId.current || controller.signal.aborted) return;
+            }
+          }
           if (!runningRef.current || id !== runId.current) return;
           const reply: ChatMessage = { speaker: who, text: result };
           pendingReplyRef.current = reply;
