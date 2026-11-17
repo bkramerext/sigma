@@ -12,7 +12,7 @@ import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
 import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
-import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun } from './paper-completion-transition';
+import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper } from './paper-completion-transition';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -3565,7 +3565,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
       if (currentReserved?.number) setReservedPaperNumber({ runId: currentReserved.run_id, number: currentReserved.number });
       let currentId = selectedRunIdRef.current;
       const selectable = runs.filter(run => run.can_control && run.status !== 'complete' && !run.paper_id);
-      if (!currentId && !newPaperRequested && selectable.length > 0) {
+      const justPublished = publishedFinished || paperPublishedHandoff.current !== null ||
+        Boolean(keepId && (list.papers as PaperSummary[]).some(paper => paper.paper_id === keepId));
+      if (shouldAutoSelectUnfinishedPaper(currentId, newPaperRequested, selectable.length, justPublished)) {
         currentId = selectable[selectable.length - 1].run_id;
         selectPaperRun(currentId);
       }

@@ -53,3 +53,13 @@ export function canRemoveDisplayedPaperRun(run: RemovableRun): boolean {
   if (run.paper_id) return run.status === 'complete';
   return Boolean(run.can_control || !['active', 'queued'].includes(run.status));
 }
+
+/** Do not redirect a just-finished Paper into a different abandoned run. */
+export function shouldAutoSelectUnfinishedPaper(
+  currentRunId: string | null,
+  newPaperRequested: boolean,
+  eligibleRunCount: number,
+  justPublished: boolean,
+): boolean {
+  return !currentRunId && !newPaperRequested && eligibleRunCount > 0 && !justPublished;
+}

@@ -5,6 +5,7 @@ import {
   hasActualDraftIdentity,
   shouldShowPaperLoading,
   canRemoveDisplayedPaperRun,
+  shouldAutoSelectUnfinishedPaper,
 } from '../src/paper-completion-transition.ts';
 
 test('Paper 15 keeps its reserved identity while progress and publication metadata change', () => {
@@ -74,4 +75,11 @@ test('finished Paper never becomes unnumbered due to stale busy or restart state
   assert.equal(hasActualDraftIdentity(null, true, true, true, true, true, 'active', true), false);
   assert.equal(hasActualDraftIdentity(null, true, true, true, true, false, 'complete', false), false);
   assert.equal(hasActualDraftIdentity(null, true, true, true, true, false, 'active', true), false);
+});
+
+test('a just-finished Paper 15 does not jump to one of four old unfinished Papers', () => {
+  assert.equal(shouldAutoSelectUnfinishedPaper(null, false, 4, true), false);
+  assert.equal(shouldAutoSelectUnfinishedPaper(null, false, 4, false), true);
+  assert.equal(shouldAutoSelectUnfinishedPaper('paper-15-run', false, 4, false), false);
+  assert.equal(shouldAutoSelectUnfinishedPaper(null, true, 4, false), false);
 });
