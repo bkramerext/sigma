@@ -323,7 +323,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             expect(abstract.locator(".katex")).to_have_count(0)
             second_row.get_by_role("button", name="Render paper as Markdown").click()
             expect(abstract.locator(".katex")).not_to_have_count(0)
-            expect(abstract.locator("strong")).to_have_text("Abstract.")
+            expect(abstract.locator("strong").first).to_have_text("Abstract.")
             expect(abstract).to_contain_text("Sharp")
             expect(abstract.locator("strong")).to_have_count(2)
             expect(second_row.locator(".paper-preview-markdown .katex")).not_to_have_count(0)
