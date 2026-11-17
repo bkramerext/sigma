@@ -32,8 +32,6 @@ def resolve_commit(repository: Path, requested: str) -> str:
 
 
 def build(
-    repository: Path, requested: str, runner=_run, *,
-    auth_poc: bool = False, personal_shared: bool = False,
 ) -> None:
     commit = resolve_commit(repository, requested)
     with tempfile.TemporaryDirectory(prefix="sigma-release-") as directory:
@@ -103,7 +101,12 @@ def record(
     mandatory = {"backend", "frontend"}
     synthetic = {"auth-poc", "auth-browser-poc"}
     personal = {"shared-personal"}
-    permitted = (mandatory, mandatory | synthetic, mandatory | personal, mandatory | synthetic | personal)
+    permitted = (
+        mandatory,
+        mandatory | synthetic,
+        mandatory | personal,
+        mandatory | synthetic | personal,
+    )
     if set(containers) not in permitted or any(not value for value in containers.values()):
         raise ValueError(
             "recording requires backend/frontend and both optional auth POC "
@@ -138,8 +141,11 @@ def record(
 
 
 def verify(
-    requested: str, runner=_run, *,
-    auth_poc: bool = False, personal_shared: bool = False,
+    requested: str,
+    runner=_run,
+    *,
+    auth_poc: bool = False,
+    personal_shared: bool = False,
 ) -> dict[str, Any]:
     if not SHA_RE.fullmatch(requested):
         raise ValueError("requested release must be a full lowercase 40-character Git SHA")
@@ -173,8 +179,12 @@ def main() -> None:
     verify_parser.add_argument("--personal-shared", action="store_true")
     args = parser.parse_args()
     if args.command == "build":
-        build(args.repository.resolve(), args.sha, auth_poc=args.auth_poc,
-              personal_shared=args.personal_shared)
+        build(
+            args.repository.resolve(),
+            args.sha,
+            auth_poc=args.auth_poc,
+            personal_shared=args.personal_shared,
+        )
         print(f"PASS: built release images from {args.sha}")
     elif args.command == "record":
         containers = {"backend": args.backend_container, "frontend": args.frontend_container}
@@ -192,8 +202,7 @@ def main() -> None:
         path = record(args.sha, args.directory, containers)
         print(f"PASS: verified image source labels and recorded image IDs at {path}")
     else:
-        verify(args.sha, auth_poc=args.auth_poc,
-               personal_shared=args.personal_shared)
+        verify(args.sha, auth_poc=args.auth_poc, personal_shared=args.personal_shared)
         print(f"PASS: release images match source {args.sha}")
 
 

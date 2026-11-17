@@ -4756,7 +4756,7 @@ def run_progress_list(path: str) -> list[dict[str, Any]]:
             projected_status = "active" if scoring_live else "complete"
             finished_progress = (
                 {**live_progress, "status": "active", "paper_id": published_id}
-                if scoring_live
+                if scoring_live and live_progress is not None
                 else {
                     "status": "complete",
                     "stage": "complete",

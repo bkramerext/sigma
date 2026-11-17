@@ -700,7 +700,6 @@ def hosted_personal_enabled() -> bool:
     """The hosted Personal path must be a deliberate, fully configured opt-in."""
     cfg = config()
     return (
-        cfg.enabled and not cfg.local and not cfg.error
         and os.environ.get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
         and os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1"
         and os.environ.get("SIGMA_PERSONAL_BROWSER_LAB_ENABLED") == "1"
@@ -1378,19 +1377,27 @@ async def middleware(request: Request, call_next):
     # Only the explicitly configured shared worker may serve a hosted Personal
     # browser. The legacy OAuth routes never become hosted user endpoints.
     hosted_personal_route = hosted_personal_enabled() and (
-        (request.method == "GET" and path in {
-            "/api/ai/personal-browser/status",
-            "/api/ai/personal-browser/account",
-            "/api/ai/personal-browser/preview-state",
-            "/api/ai/personal-browser/test-account",
-            "/api/ai/personal-browser/view",
-        })
+        (
+            request.method == "GET"
+            and path
+            in {
+                "/api/ai/personal-browser/status",
+                "/api/ai/personal-browser/account",
+                "/api/ai/personal-browser/preview-state",
+                "/api/ai/personal-browser/test-account",
+                "/api/ai/personal-browser/view",
+            }
+        )
         or (request.method == "GET" and path.startswith("/api/ai/personal-browser/window/"))
-        or (request.method == "POST" and path in {
-            "/api/ai/personal-browser/start",
-            "/api/ai/personal-browser/stop",
-            "/api/ai/personal-browser/disconnect",
-        })
+        or (
+            request.method == "POST"
+            and path
+            in {
+                "/api/ai/personal-browser/start",
+                "/api/ai/personal-browser/stop",
+                "/api/ai/personal-browser/disconnect",
+            }
+        )
     )
     if (
         path.startswith("/api/ai/")

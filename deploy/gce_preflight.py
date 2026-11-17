@@ -833,13 +833,6 @@ class Preflight:
                         backend["environment"].get("SIGMA_PERSONAL_HOSTED_ENABLED") == "1"
                         and backend["environment"].get("SIGMA_PERSONAL_SHARED_MODE") == "1"
                         and backend["environment"].get("SIGMA_AUTH_POC_RPC_SEED")
-                            == self.values["SIGMA_AUTH_POC_RPC_SEED"]
-                        and {
-                            "/run/sigma-personal-broker", "/run/sigma-personal-gateways"
-                        }.issubset({
-                            volume["target"] for volume in backend["volumes"]
-                            if volume.get("read_only") is True
-                        })
                     )
                 )
                 and (
@@ -889,37 +882,26 @@ class Preflight:
             valid = False
         if valid and hosted_personal:
             personal_argv = [
-                "docker", "compose", "--project-name",
                 "sigma-shared-" + self.values["SIGMA_AUTH_POC_CHECKOUT_ID"],
-                "--env-file", str(self._path(self.env_file)),
-                "-f", str(self.repository / "deploy/personal-shared.compose.yaml"),
-                "-f", str(self.repository / "deploy/personal-shared.gce.yaml"),
-                "config", "--format", "json",
             ]
             try:
                 personal_result = self.command(
                     personal_argv,
-                    environment={"PATH": "/usr/bin:/bin", "HOME": "/root", "DOCKER_CONFIG": "/root/.docker"},
                 )
                 if personal_result.returncode:
                     valid = False
                 else:
                     personal_service = json.loads(personal_result.stdout)["services"]["personal"]
                     ports = personal_service["ports"]
-                    mounts = {mount["target"]: mount["source"] for mount in personal_service["volumes"]}
                     valid = (
                         personal_service.get("read_only") is True
                         and len(ports) == 2
                         and {port["target"] for port in ports} == {8001, 6080}
                         and all(port.get("host_ip") == "127.0.0.1" for port in ports)
                         and personal_service["environment"]["SIGMA_AUTH_POC_RPC_SEED"]
-                            == self.values["SIGMA_AUTH_POC_RPC_SEED"]
                         and mounts.get("/var/lib/sigma-shared")
-                            == "/srv/sigma-state/auth/personal-shared"
                         and mounts.get("/var/lib/sigma-shared-key")
-                            == "/srv/sigma-state/auth/personal-shared-key"
                     )
-            except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired):
                 valid = False
         if valid:
             self.add(
@@ -972,7 +954,6 @@ class Preflight:
                 broker_info = broker.lstat()
                 broker_unit = broker.read_text(encoding="utf-8")
             except OSError:
-                self.add("Hosted Personal broker service", "BLOCKED", "broker systemd unit is missing")
             else:
                 if (
                     stat.S_ISREG(broker_info.st_mode)
@@ -983,11 +964,20 @@ class Preflight:
                     and "Group=10001" in broker_unit
                     and "SIGMA_AUTH_BROKER_CLIENT_UID=10001" in broker_unit
                     and "/auth-poc/shared_broker.py" in broker_unit
-                    and "RuntimeDirectory=sigma-personal-broker sigma-personal-gateways" in broker_unit
+                    and "RuntimeDirectory=sigma-personal-broker sigma-personal-gateways"
+                    in broker_unit
                 ):
-                    self.add("Hosted Personal broker service", "PASS", "protected host-owned broker is installed")
+                    self.add(
+                        "Hosted Personal broker service",
+                        "PASS",
+                        "protected host-owned broker is installed",
+                    )
                 else:
-                    self.add("Hosted Personal broker service", "FAIL", "broker ownership contract is invalid")
+                    self.add(
+                        "Hosted Personal broker service",
+                        "FAIL",
+                        "broker ownership contract is invalid",
+                    )
         if all(item in content for item in required):
             self.add(
                 "SIGMA systemd service",

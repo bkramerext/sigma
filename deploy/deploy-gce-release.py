@@ -164,8 +164,15 @@ class Deployment:
             _call(
                 self.runner,
                 [
-                    "install", "-o", "root", "-g", "root", "-m", "0644",
-                    str(broker), "/etc/systemd/system/sigma-personal-broker.service",
+                    "install",
+                    "-o",
+                    "root",
+                    "-g",
+                    "root",
+                    "-m",
+                    "0644",
+                    str(broker),
+                    "/etc/systemd/system/sigma-personal-broker.service",
                 ],
             )
         _call(self.runner, ["systemctl", "daemon-reload"])
@@ -339,7 +346,10 @@ class Deployment:
                 # Personal container before the main systemd unit became active.
                 # Stop that candidate before restoring the prior release.
                 if self.personal_enabled() and (service_stopped or candidate_started):
-                    _call(self.runner, ["sh", str(self.repository / "deploy/compose-personal-gce.sh"), "stop"])
+                    _call(
+                        self.runner,
+                        ["sh", str(self.repository / "deploy/compose-personal-gce.sh"), "stop"],
+                    )
                     _call(self.runner, ["systemctl", "stop", "sigma-personal-broker.service"])
                 _replace_release(self.env_file, self.env_file.read_bytes(), previous, owner)
                 _call(
@@ -383,7 +393,11 @@ class Deployment:
             lines = self.env_file.read_text(encoding="utf-8").splitlines()
         except OSError as exc:
             raise DeployFailure("cannot read hosted Personal project identity") from exc
-        matches = [line.partition("=")[2] for line in lines if line.startswith("SIGMA_AUTH_POC_CHECKOUT_ID=")]
+        matches = [
+            line.partition("=")[2]
+            for line in lines
+            if line.startswith("SIGMA_AUTH_POC_CHECKOUT_ID=")
+        ]
         if len(matches) != 1 or re.fullmatch(r"[0-9a-f]{32}", matches[0]) is None:
             raise DeployFailure("hosted Personal project identity is invalid")
         return matches[0]
@@ -472,24 +486,43 @@ class Deployment:
                         )
             if not waiting_for and self.personal_enabled():
                 personal = [
-                    "docker", "compose", "--project-name",
+                    "docker",
+                    "compose",
+                    "--project-name",
                     "sigma-shared-" + self.personal_checkout_id(),
-                    "--env-file", str(self.env_file),
-                    "-f", str(self.repository / "deploy/personal-shared.compose.yaml"),
-                    "-f", str(self.repository / "deploy/personal-shared.gce.yaml"),
+                    "--env-file",
+                    str(self.env_file),
+                    "-f",
+                    str(self.repository / "deploy/personal-shared.compose.yaml"),
+                    "-f",
+                    str(self.repository / "deploy/personal-shared.gce.yaml"),
                 ]
                 container = _call(self.runner, personal + ["ps", "-q", "personal"])
                 if not container:
                     waiting_for.append("personal")
                 else:
-                    state = _call(self.runner, ["docker", "inspect", "--format", "{{.State.Health.Status}}", container])
-                    image = _call(self.runner, ["docker", "inspect", "--format", "{{.Config.Image}}", container])
-                    source = _call(self.runner, [
-                        "docker", "inspect", "--format",
-                        '{{ index .Config.Labels "org.opencontainers.image.revision" }}', container,
-                    ])
+                    state = _call(
+                        self.runner,
+                        ["docker", "inspect", "--format", "{{.State.Health.Status}}", container],
+                    )
+                    image = _call(
+                        self.runner,
+                        ["docker", "inspect", "--format", "{{.Config.Image}}", container],
+                    )
+                    source = _call(
+                        self.runner,
+                        [
+                            "docker",
+                            "inspect",
+                            "--format",
+                            '{{ index .Config.Labels "org.opencontainers.image.revision" }}',
+                            container,
+                        ],
+                    )
                     if image != f"sigma-shared-personal:{sha}" or source != sha:
-                        raise DeployFailure("Personal worker image does not match the selected release")
+                        raise DeployFailure(
+                            "Personal worker image does not match the selected release"
+                        )
                     if state != "healthy":
                         waiting_for.append("personal")
             if not waiting_for:

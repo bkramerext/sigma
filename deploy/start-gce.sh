@@ -57,14 +57,21 @@ if grep -qx 'SIGMA_PERSONAL_HOSTED_ENABLED=true' "$env_file"; then
   # an ephemeral image layer. Do not follow symlinks or adopt foreign records.
   for name in personal-shared personal-shared-key; do
     directory="$disk/auth/$name"
+    mode=700
+    if [ "$name" = personal-shared ]; then
+      # The cap-dropped root supervisor needs execute-only traversal of the
+      # mount root to inspect records/workspaces ownership, but no listing.
+      # The actual record directories remain 0700 and worker-UID-only.
+      mode=711
+    fi
     if [ -e "$directory" ] || [ -L "$directory" ]; then
       if [ -L "$directory" ] || [ ! -d "$directory" ] ||
-         [ "$(stat -c '%u:%g:%a' "$directory")" != "10001:10001:700" ]; then
+         [ "$(stat -c '%u:%g:%a' "$directory")" != "10001:10001:$mode" ]; then
         echo "Unsafe hosted Personal credential directory." >&2
         exit 1
       fi
     else
-      install -d -o 10001 -g 10001 -m 0700 "$directory"
+      install -d -o 10001 -g 10001 -m "0$mode" "$directory"
     fi
   done
   # Bind mounting an empty persistent directory hides the secure directories

@@ -3634,21 +3634,34 @@ async def auth_mode(body: AuthModeRequest, request: Request):
         if body.mode == "sponsored" and not cloud_auth.sponsored_access_enabled():
             raise HTTPException(403, "Sponsored access is disabled.")
         if body.mode == "personal":
-            if not cloud_auth.hosted_personal_enabled() or not personal_browser.sign_in_preview_enabled():
+            if cloud_auth.hosted_personal_enabled():
+                if not personal_browser.sign_in_preview_enabled():
+                    raise HTTPException(403, "Hosted Personal ChatGPT is not enabled.")
+                try:
+                    account = await personal_inference.account(principal)
+                    if account["status"] != "verified":
+                        raise HTTPException(
+                            403, "Connect and verify ChatGPT before selecting Personal."
+                        )
+                    await run_in_threadpool(
+                        cloud_auth.record_personal_authorization, principal.subject
+                    )
+                except personal_inference.PersonalInferenceUnavailable as exc:
+                    raise HTTPException(
+                        403, "Connect and verify ChatGPT before selecting Personal."
+                    ) from exc
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise HTTPException(503, "Personal authorization could not be saved.") from exc
+            elif cloud_auth.sponsored_access_enabled():
+                # Preserve existing hosted behavior when sponsorship is off:
+                # Personal may remain selected but no worker/provider is usable.
                 raise HTTPException(403, "Hosted Personal ChatGPT is not enabled.")
-            try:
-                account = await personal_inference.account(principal)
-                if account["status"] != "verified":
-                    raise HTTPException(403, "Connect and verify ChatGPT before selecting Personal.")
-                await run_in_threadpool(cloud_auth.record_personal_authorization, principal.subject)
-            except personal_inference.PersonalInferenceUnavailable as exc:
-                raise HTTPException(403, "Connect and verify ChatGPT before selecting Personal.") from exc
-            except (OSError, RuntimeError, ValueError) as exc:
-                raise HTTPException(503, "Personal authorization could not be saved.") from exc
         try:
             cloud_auth.set_model_access(principal.subject, body.mode)
         except PermissionError as exc:
-            raise HTTPException(403, "This account cannot select the requested connection.") from exc
+            raise HTTPException(
+                403, "This account cannot select the requested connection."
+            ) from exc
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(503, "Connection choice could not be saved.") from exc
         return connection_view_state(await connection(refresh=True), request)

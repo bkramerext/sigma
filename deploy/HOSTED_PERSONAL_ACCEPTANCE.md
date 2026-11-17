@@ -19,12 +19,26 @@ a workspace-scoped HMAC and keeps credentials sealed under its own UID.
 2. Set `SIGMA_AUTH_POC_CHECKOUT_ID` to a stable random 32-lowercase-hex ID;
    do not change it between deployments, or the Docker project identity changes.
 3. Retain `SIGMA_CLOUD_SPONSORED_ENABLED=true` and its working production
-   sponsor. Set `SIGMA_PERSONAL_HOSTED_ENABLED=true` only when Red is ready to
-   perform the hosted sign-in acceptance test and has verified provider
-   eligibility. Otherwise leave the flag `false`; the existing fallback remains.
-4. Deploy a pinned SHA via the normal GCE release manager. It validates the
-   standalone worker image, persistent credential mount, broker configuration,
-   service health, and the primary application image identities.
+   sponsor. A user cannot select Personal while
+   `SIGMA_CLOUD_FORCE_SPONSORED_MODE=true`; keep that policy disabled for
+   the acceptance account. Set `SIGMA_PERSONAL_HOSTED_ENABLED=true` only
+   after verifying provider eligibility; otherwise keep the existing fallback.
+4. **Stage safely across old/new deploy.env contracts:** deploy the new
+   reviewed SHA with `SIGMA_PERSONAL_HOSTED_ENABLED=false` first, while the
+   existing sponsored baseline is still healthy. The release manager installs
+   the new host broker unit and preflight. From that exact pinned checkout,
+   build the attested shared image without touching the running services:
+   `python3 deploy/release_image.py build /opt/sigma/current SHA --personal-shared`
+   (replace SHA with the full deployed release SHA). This builds the normal
+   backend/frontend images as well, but leaves existing containers running.
+5. Add the protected seed and stable checkout ID to `/etc/sigma/deploy.env`,
+   set `SIGMA_PERSONAL_HOSTED_ENABLED=true`, validate the new preflight, and
+   `systemctl restart sigma.service`. It prepares safe persistent mounts,
+   validates the shared image, starts the container and host broker, then
+   starts the normal backend/frontend and records all image identities.
+   Do not edit `SIGMA_RELEASE` manually. On failure, restore the previous
+   protected env file with the hosted setting disabled and restart the known
+   healthy sponsored service. The old build does not understand new settings.
 
 ## Required acceptance
 

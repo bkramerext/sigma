@@ -35,7 +35,7 @@ class HostedPersonalHotfixTests(TestCase):
             self.assertFalse(cloud_auth.hosted_personal_enabled())
 
     def test_completed_paper_does_not_hide_failed_scoring(self) -> None:
-        path = "/tmp/sigma-hosted-personal-score-test"
+        path = "/tmp/sigma-hosted-personal-score-test.sigma"
         run_id = "f" * 32
         paper_id = "d" * 32
         row = {
@@ -102,7 +102,6 @@ class HostedPersonalHotfixTests(TestCase):
         self.assertEqual(result[0]["status"], "active")
         self.assertEqual(result[0]["progress"]["stage"], "scoring")
         self.assertEqual(result[0]["progress"]["paper_id"], paper_id)
-
 
 
 if __name__ == "__main__":

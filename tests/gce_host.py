@@ -315,9 +315,7 @@ class GceHostToolingTests(unittest.TestCase):
             path = Path(directory) / "deploy.env"
 
             def parse(settings):
-                path.write_text(
-                    "".join(f"{key}={value}\n" for key, value in settings.items())
-                )
+                path.write_text("".join(f"{key}={value}\n" for key, value in settings.items()))
                 return gce_preflight._parse_env(path)
 
             result, detail = parse(values)
