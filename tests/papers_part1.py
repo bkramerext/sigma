@@ -4058,9 +4058,7 @@ def test_resume_repairs_legacy_del_in_saved_proofreading_without_ai_calls() -> N
         async def author(package, *_args):
             nonlocal author_calls
             author_calls += 1
-            source_id = next(
-                item["id"] for item in package["sources"] if item["kind"] == "project"
-            )
+            source_id = next(item["id"] for item in package["sources"] if item["kind"] == "project")
             return draft(source_id), config["model"]
 
         async def proofread(tex, *_args, **_kwargs):
