@@ -933,6 +933,44 @@ def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
     return "\n".join(output) + "\n"
 
 
+def _safe_tectonic_failure_summary(output: str, exit_status: int) -> str:
+    """A bounded category and location, never compiler stdout or authored TeX.
+
+    Tectonic may echo source text after line markers. Keep this private to
+    backend logs rather than repeating it in project-visible metadata.
+    """
+    causes = (
+        (r"text line contains an invalid character", "invalid TeX control character"),
+        (r"undefined control sequence", "undefined LaTeX command"),
+        (r"missing \$ inserted", "missing math-mode delimiter"),
+        (r"extra }, or forgotten|missing } inserted|too many }'s", "unbalanced TeX braces"),
+        (r"runaway argument|paragraph ended before", "unterminated TeX command argument"),
+        (r"environment .+ undefined", "unknown LaTeX environment"),
+        (
+            r"file .+ not found|cannot find file|failed to find .*\.sty",
+            "missing TeX file or package",
+        ),
+        (r"metric \(tfm\) file or installed font not found|font .*not found", "missing TeX font"),
+        (
+            r"not valid utf-8|invalid utf-8|unicode character .*not set up",
+            "unsupported text encoding",
+        ),
+        (r"capacity exceeded|tex capacity exceeded", "TeX memory limit"),
+        (r"permission denied|no space left on device|failed to write", "compiler storage failure"),
+        (r"failed to download|network error|connection refused", "TeX package download failure"),
+    )
+    kind = next(
+        (label for pattern, label in causes if re.search(pattern, output, flags=re.IGNORECASE)),
+        "unclassified Tectonic error",
+    )
+    # Only the integer line location is included: never raw compiler messages.
+    source_line = re.search(r"(?:\breport\.tex:|\bl\.)(\d{1,7})\b", output)
+    location = f" near TeX line {int(source_line.group(1))}" if source_line else ""
+    if kind == "unclassified Tectonic error":
+        return f"{kind} (exit {exit_status}){location}"
+    return f"{kind}{location}"
+
+
 def _compile_pdf(
     tex: str,
     *,
@@ -1044,9 +1082,12 @@ def _compile_pdf(
                     for line in output.splitlines()
                     if re.search(r"^(?:!|l\.\d+|fatal error:)", line.strip(), re.IGNORECASE)
                 )
+            cause = _safe_tectonic_failure_summary(output, result.returncode)
+            if diagnostics is not None:
+                diagnostics.append(f"SIGMA compiler category: {cause}")
             raise RuntimeError(
-                "Tectonic could not compile this report. No PDF was downloaded. "
-                "Review the backend compiler diagnostics."
+                f"Tectonic could not compile this report ({cause}). "
+                "No PDF was downloaded. See the backend compiler diagnostics."
             )
         with open(pdf_path, "rb") as file:
             pdf = file.read(max_pdf_bytes + 1)
