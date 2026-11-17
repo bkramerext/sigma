@@ -13,7 +13,7 @@ import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagno
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
 import { sourceMaterialOverflowCopy } from './source-material-error';
-import { publicationAwaitingLibrary, unlistedPublicationIds } from './paper-publication-handoff';
+import { publicationAwaitingLibrary, publishedRunReadyForHandoff, publishedRunStillFinishing, savedPaperAwaitingGenerationFinish, unlistedPublicationIds } from './paper-publication-handoff';
 import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper, orderPaperRunsDescending } from './paper-completion-transition';
 import { activatePaperScoreStep } from './paper-score-action';
 import { activeScoringPaperIds, automaticScorePhase, completedScoringPaperIds, savedPaperScoreDisplay } from './paper-score-handoff';
@@ -3612,9 +3612,10 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
         selectPaperRun(currentId);
       }
       const own = runs.find(run => run.run_id === currentId);
-      if (own?.paper_id && (list.papers as PaperSummary[]).some(paper => paper.paper_id === own.paper_id)) {
-        // Retire the generating card only AFTER its saved-paper metadata is
-        // available. Publication precedes automatic Score by many seconds.
+      if (publishedRunReadyForHandoff(own, list.papers as PaperSummary[], paperPublishedHandoff.current?.paperId)) {
+        // A saved PDF is not a finished paper: Score and Finish must complete
+        // before replacing the generating card. Otherwise the same in-flight
+        // evaluation appears to run twice, once in each card.
         setPublishedFinished(true);
         selectPaperRun(null);
         setNewPaperRequested(false);
@@ -4880,7 +4881,13 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   }, [selectedRun?.number, selectedRunId]);
   const otherPaperRuns = orderPaperRunsDescending(paperRuns.filter(run =>
     run.run_id !== selectedRunId && !hiddenRemovalIds.has(run.run_id) &&
-    (publicationAwaitingLibrary(run, papers) || (run.status !== 'complete' && !run.paper_id))
+    // Keep the original in-progress card after PDF publication. It owns the
+    // single AI Score step until the generation run reaches Finish.
+    (publicationAwaitingLibrary(run, papers) ||
+      (publishedRunStillFinishing(run) &&
+        !(paperPublishedHandoff.current?.paperId === run.paper_id &&
+          papers.some(paper => paper.paper_id === run.paper_id))) ||
+      (run.status !== 'complete' && !run.paper_id))
   ));
   const unfinishedDraftPresent = continuationAvailable || Boolean(checkpointMismatch) ||
     Boolean(restartableCheckpoint) || (paperProgress != null && paperProgress.status !== 'complete');
@@ -4895,8 +4902,14 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   // only once the server has allocated this run's authoritative number.
   const assignedPaperNumber = displayedPaperNumber(selectedRun, reservedPaperNumber, selectedRunId);
   const draftDisplayTitle = assignedPaperNumber !== null ? `Paper ${assignedPaperNumber}` : 'New paper';
-  const orderedPapers = [...papers].filter(paper => !hiddenRemovalIds.has(paper.paper_id))
-    .sort((a, b) => b.paper_version - a.paper_version);
+  const orderedPapers = [...papers].filter(paper =>
+    !hiddenRemovalIds.has(paper.paper_id) &&
+    // The canonical PDF exists before automatic scoring returns. Preload its
+    // metadata but do not display the saved row while the original job runs.
+    !savedPaperAwaitingGenerationFinish(
+      paper.paper_id, paperRuns, paperPublishedHandoff.current?.paperId,
+    )
+  ).sort((a, b) => b.paper_version - a.paper_version);
   // A published PDF is saved BEFORE automatic scoring finishes. The progress
   // poll can receive its paper_id before the library refresh returns, but the
   // card must never disappear during this transition.
@@ -4907,7 +4920,9 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
   if (handoff && !papers.some(paper => paper.paper_id === handoff.paperId))
     pendingPublicationIds.push(handoff.paperId);
   const pendingPublicationKey = [...new Set(pendingPublicationIds)].sort().join('|');
-  const selectedPublicationPending = publicationAwaitingLibrary(selectedRun, papers);
+  const selectedPublicationPending = publicationAwaitingLibrary(selectedRun, papers) ||
+    (publishedRunStillFinishing(selectedRun) &&
+      paperPublishedHandoff.current?.runId !== selectedRun?.run_id);
   const paperProgressFailure = paperStepRestartBusy ? ''
     : paperProgress?.status === 'failed' ? paperProgress.failure_reason ?? '' : '';
   // A durable published paper supersedes the failed authoring receipt. Errors
@@ -5351,7 +5366,11 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
                   model: run.progress?.model || run.model,
                   thinking: run.progress?.reasoning_effort || run.thinking,
                 }) || 'Paper metadata unavailable'}
-                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.paper_id && run.status === 'active' ? 'Scoring' : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
+                {' · '}{hasPaperStopIntent(run.run_id) ? 'Stopping' : run.paper_id && run.status === 'active'
+                  ? run.progress?.stage === 'scoring' ? 'Scoring'
+                    : run.progress?.stage === 'finishing' || run.progress?.stage === 'score_failed' ? 'Finishing'
+                    : 'Preparing'
+                  : run.status === 'active' ? 'Generating' : run.status === 'queued' ? 'Queued'
                   : run.status === 'interrupted' ? 'Interrupted'
                   : run.status === 'cancelled' ? 'Stopped' : run.status === 'failed' ? 'Failed' : 'Saved'}
                 {' · Elapsed '}{savedPaperElapsed(Math.max(0, run.progress?.elapsed_seconds ?? 0))}
