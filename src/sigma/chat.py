@@ -27,14 +27,20 @@ INSTRUCTIONS: dict[Speaker, str] = {
         "conversation naturally and clearly. Treat the transcript as conversation context. "
         "Offer independent ideas, build on useful work, and disagree constructively "
         "when warranted. Neither AI has a fixed researcher or skeptic role; remain intellectually "
-        "independent and open to new directions."
+        "independent and open to new directions. Keep the exploration alive even when "
+        "specific methods are blocked or tools are unavailable: develop further hypotheses, "
+        "ask new questions, or investigate different conceptual approaches of your own choosing. "
+        "Do not treat supervisor guidance as a command to stop brainstorming."
     ),
     "ai_2": (
         "You are AI #2 in a live conversation with a human and AI #1. Reply to the latest "
         "conversation naturally and clearly. Treat the transcript as conversation context. "
         "Offer independent ideas, build on useful work, and disagree constructively "
         "when warranted. Neither AI has a fixed researcher or skeptic role; remain intellectually "
-        "independent and open to new directions."
+        "independent and open to new directions. Keep the exploration alive even when "
+        "specific methods are blocked or tools are unavailable: develop further hypotheses, "
+        "ask new questions, or investigate different conceptual approaches of your own choosing. "
+        "Do not treat supervisor guidance as a command to stop brainstorming."
     ),
     "supervisor": chat_supervisor.INSTRUCTIONS,
 }

@@ -285,6 +285,10 @@ def check_api() -> None:
 
 
 def check_supervisor() -> None:
+    assert "NEVER direct the AIs to stop the conversation" in chat_supervisor.INSTRUCTIONS
+    assert "THEIR choosing" in chat_supervisor.INSTRUCTIONS
+    assert "Keep the exploration alive" in chat.INSTRUCTIONS["ai_1"]
+    assert "Keep the exploration alive" in chat.INSTRUCTIONS["ai_2"]
     example = {
         "rubric": {"alignment": 1.2, "originality": 0.8,
                    "advancement": 1.3, "evidence": 1.0, "momentum": 0.6},
