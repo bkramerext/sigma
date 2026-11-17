@@ -509,8 +509,7 @@ def exercise(origin: str) -> None:
         dismiss_sponsor_welcome(page)
         fallback_pill = page.locator(".api-connection > summary")
         expect(fallback_pill).to_have_attribute(
-            "aria-label",
-            re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
+            "aria-label", re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
         )
         page.goto(origin + "/", wait_until="domcontentloaded")
         dismiss_sponsor_welcome(page)
@@ -533,9 +532,7 @@ def exercise(origin: str) -> None:
         pill.hover()
         allowance_text = page.locator(".sponsored-allowance-tooltip")
         expect(allowance_text).to_be_visible()
-        expect(allowance_text).to_contain_text(
-            "SIGMA covers ChatGPT requests. $1.50 remaining."
-        )
+        expect(allowance_text).to_contain_text("SIGMA covers ChatGPT requests. $1.50 remaining.")
         expect(allowance_text).not_to_contain_text("admin@example.test")
         funding.update(remaining_usd=1.25, estimated_usage_usd=0.50)
         page.evaluate("window.dispatchEvent(new Event('sigma-sponsored-budget-refresh'))")
@@ -570,7 +567,7 @@ def exercise(origin: str) -> None:
             "aria-label",
             re.compile(
                 r"^ChatGPT Sponsored; sponsored mode required; connected; Allocation: \d+\.\d{2}$"
-            )
+            ),
         )
         forced_pill.hover()
         assert forced_pill.get_attribute("data-tooltip") is None
@@ -1031,15 +1028,13 @@ def exercise(origin: str) -> None:
             sponsored_summary.click()
         assert disconnect_request.value.method == "POST"
         expect(sponsored_summary).to_have_attribute(
-            "aria-label",
-            re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
+            "aria-label", re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
         )
         assert any(
             path.endswith("/api/ai/mode") and body == {"mode": "sponsored"} for path, body in posts
         ), posts
         expect(sponsored_summary).to_have_attribute(
-            "aria-label",
-            re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
+            "aria-label", re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
         )
 
         for personal_status in ("disconnected", "reauth_required", "unavailable"):
@@ -1096,16 +1091,13 @@ def exercise(origin: str) -> None:
         page.reload(wait_until="domcontentloaded")
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary).to_have_attribute(
-            "aria-label",
-            re.compile(r"^ChatGPT Sponsored; Allocation: \d+\.\d{2}$")
+            "aria-label", re.compile(r"^ChatGPT Sponsored; Allocation: \d+\.\d{2}$")
         )
         assert sponsored_summary.get_attribute("data-tooltip") is None
         details = sponsored_summary.locator(".sponsored-allowance-inline")
         expect(sponsored_summary.locator("button")).to_have_count(0)
         sponsored_summary.hover()
-        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text(
-            "$0.75 remaining."
-        )
+        expect(page.locator(".sponsored-allowance-tooltip")).to_contain_text("$0.75 remaining.")
         posts.clear()
         local_connect_succeeds["value"] = True
         with page.expect_request("**/api/ai/auth/begin"):
@@ -1189,8 +1181,7 @@ def exercise(origin: str) -> None:
         expect(sponsored_summary.locator("button")).to_have_count(0)
         allowance.click()
         expect(sponsored_summary).to_have_attribute(
-            "aria-label",
-            re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
+            "aria-label", re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
         )
         expect(sponsored_summary.locator(".connection-dot")).to_have_css(
             "background-color", "rgb(198, 160, 100)"
@@ -1198,8 +1189,7 @@ def exercise(origin: str) -> None:
         page.reload(wait_until="domcontentloaded")
         sponsored_summary = page.locator(".api-connection > summary")
         expect(sponsored_summary).to_have_attribute(
-            "aria-label",
-            re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
+            "aria-label", re.compile(r"^ChatGPT Sponsored; connected; Allocation: \d+\.\d{2}$")
         )
         expect(page.get_by_text("MOCK AUTH · LOCAL ONLY")).to_be_visible()
         browser.close()
