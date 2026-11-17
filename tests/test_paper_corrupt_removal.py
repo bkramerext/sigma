@@ -70,7 +70,9 @@ class CorruptPaperRemovalTests(TestCase):
 
         with (
             *common,
-            patch.object(papers, "get_paper", side_effect=ProjectError("Paper record is unreadable")),
+            patch.object(
+                papers, "get_paper", side_effect=ProjectError("Paper record is unreadable")
+            ),
             patch.object(papers, "progress_status", return_value={"status": "active"}),
         ):
             with self.assertRaisesRegex(ProjectError, "Stop this paper"):

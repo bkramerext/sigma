@@ -5317,7 +5317,7 @@ function PapersPane({ collaborationRevision, artifactAuthors, viewerEmail, proje
             {paperRemovalErrors[run.run_id] && <div role="alert" className="ai-paper-warning paper-saved-removal-error">
               <span>{paperUserMessage(paperRemovalErrors[run.run_id])}</span>
               <DialogDismissButton label={`Dismiss Paper ${run.number} removal error`} onClick={() => setPaperRemovalErrors(current => ({ ...current, [run.run_id]: '' }))}/>
-            </div>
+            </div>}
               {unfinishedStepCheckError?.key === run.run_id &&
                 <PaperStepFeedback message={unfinishedStepCheckError.message} onDismiss={() => setUnfinishedStepCheckError(null)}/>}
             <div id={`paper-run-steps-${run.run_id}`} hidden={!expandedOtherPaperRunIds.has(run.run_id)}/>
