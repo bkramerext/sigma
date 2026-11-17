@@ -673,12 +673,17 @@ def prepare_job(record: dict[str, Any]) -> None:
 
     auxiliary = record.get("job_kind") == "auxiliary"
     provider = inference_provider()
-    if record.get("mode") != provider or provider not in {"api_key", "chatgpt"}:
+    personal_worker = record.get("funding_source") == "personal_chatgpt"
+    if (
+        provider not in {"api_key", "chatgpt"}
+        or (personal_worker and record.get("mode") != "chatgpt")
+        or (not personal_worker and record.get("mode") != provider)
+    ):
         raise CloudResearchUnavailable(
-            "Cloud research requires the explicitly configured sponsor provider."
+            "Cloud research requires the selected account's configured provider."
         )
     if record.get("cost_status") != "available":
-        raise CloudResearchUnavailable("Sponsored research requires a model with a reviewed price.")
+        raise CloudResearchUnavailable("Cloud research requires a model with a reviewed price.")
     global_ceiling_units = _ceiling_units(_spend_ceiling_decimal())
     # An explicit account allowance is sufficient. Require the configured
     # default only when resolving an account that has no specific allowance.

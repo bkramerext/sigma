@@ -1925,6 +1925,64 @@ def test_json_project_session_playback(
             from sigma.project_bundle import read_bundle
 
             assert f"research-sessions/{played['id']}.json" in read_bundle(project.path)["files"]
+
+            # Personal hosted inference has its own user-bound worker and does
+            # not require the deployment's Sponsored credential. Hosted cost
+            # accounting and reviewed-model-price admission still apply.
+            personal = {
+                "mode": "chatgpt",
+                "identity": f"cloud_personal_worker:{member.subject_hash}:test-binding",
+                "token": "",
+                "status": "connected",
+                "transport": "personal_worker",
+                "worker_binding": "test-binding",
+            }
+
+            async def run_personal() -> dict[str, Any]:
+                with (
+                    patch.object(
+                        research_sessions,
+                        "auth_context",
+                        new=AsyncMock(return_value=personal),
+                    ),
+                    patch.object(
+                        research_sessions,
+                        "configuration",
+                        new=AsyncMock(return_value=configuration),
+                    ),
+                    patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                    patch.object(
+                        research_sessions, "_call", new=AsyncMock(side_effect=provider)
+                    ) as personal_calls,
+                ):
+                    personal_started = await research_sessions.start_session(
+                        project.path,
+                        strategy.id,
+                        str(uuid4()),
+                        project.project.id,
+                        personal["identity"],
+                        limits,
+                    )
+                    for _ in range(500):
+                        personal_finished = research_sessions.get_session(
+                            project.path, personal_started["id"]
+                        )
+                        if personal_finished["status"] in {"ended", "failed", "paused"}:
+                            break
+                        await asyncio.sleep(0.01)
+                    else:
+                        raise AssertionError("Personal hosted session never finished")
+                    assert personal_calls.await_count == 2, (
+                        personal_finished["status"],
+                        personal_finished["message"],
+                    )
+                    return personal_finished
+
+            personal_finished = asyncio.run(run_personal())
+            assert personal_finished["status"] == "ended"
+            assert personal_finished["mode"] == "chatgpt"
+            assert personal_finished["cloud_sponsored"] is False
+            assert personal_finished["funding_source"] == "personal_chatgpt"
         finally:
             cloud_workspaces._CURRENT.reset(binding)
 

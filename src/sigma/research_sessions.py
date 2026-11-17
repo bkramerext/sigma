@@ -4215,8 +4215,12 @@ def _call_cost_reservation(
     """Estimate sponsored calls even when the project has no optional cost cap."""
     if isinstance(hard_ledger, dict):
         return None
-    if record.get("cloud_sponsored") is True or (
-        record.get("mode") == "api_key" and record.get("maximum_estimated_cost_usd") is not None
+    if (
+        record.get("cloud_sponsored") is True
+        or (record.get("funding_source") == "personal_chatgpt" and cloud_research.billing_enabled())
+        or (
+            record.get("mode") == "api_key" and record.get("maximum_estimated_cost_usd") is not None
+        )
     ):
         return _reserve_cost(record, context, role, estimate=True)
     return None
@@ -6161,12 +6165,12 @@ def _rebind_provider_transport(
         record,
         next_model=str(config["model"]),
         next_mode=str(credential["mode"]),
-        next_sponsored=cloud_research.billing_enabled(),
+        next_sponsored=_is_sponsored_credential(credential),
     )
     prior_mode = record["mode"]
     prior_model = record["model"]
     prior_identity = record.get("identity_hash")
-    sponsored = cloud_research.billing_enabled()
+    sponsored = _is_sponsored_credential(credential)
     if _sponsored_chatgpt_retirement(
         record, next_mode=str(credential["mode"]), next_sponsored=sponsored
     ):
@@ -6234,7 +6238,8 @@ def _rebind_provider_transport(
             "interrupted",
         }:
             old_compiler.setdefault("funding_provenance", "personal_chatgpt_unmetered")
-    paid = credential["mode"] == "api_key" or sponsored
+    personal_worker = credential.get("transport") == "personal_worker"
+    paid = credential["mode"] == "api_key" or sponsored or personal_worker
     if paid and str(config["model"]) not in TOKEN_PRICES_PER_MILLION:
         raise ProjectError("No reviewed price is available for the recipient's provider model.")
     ledger = record.get("hard_budget_ledger")
@@ -6248,6 +6253,7 @@ def _rebind_provider_transport(
     record["model"] = config["model"]
     record["reasoning_effort"] = config["reasoning_effort"]
     record["identity_hash"] = _digest(credential["identity"])
+    record["funding_source"] = _funding_source_for(credential)
     record["cloud_sponsored"] = sponsored
     if paid:
         record["estimated_cost_usd"] = float(record.get("estimated_cost_usd") or 0.0)
@@ -6646,6 +6652,19 @@ def _require_current_local_backend() -> None:
         )
 
 
+def _is_sponsored_credential(credential: Mapping[str, Any]) -> bool:
+    """Hosted Personal workers use their owner's plan, never sponsor funding."""
+    from sigma import cloud_research, model_dispatch
+
+    return cloud_research.billing_enabled() and not model_dispatch.uses_personal_worker(credential)
+
+
+def _funding_source_for(credential: Mapping[str, Any]) -> str:
+    if credential.get("mode") == "api_key":
+        return "api_key"
+    return "sponsored_chatgpt" if _is_sponsored_credential(credential) else "personal_chatgpt"
+
+
 async def start_session(
     path: str,
     strategy_id: str,
@@ -6809,14 +6828,18 @@ async def start_session(
                 raise ProjectError(
                     "No reviewed published price is available for this model; a cost-limited session cannot start"
                 )
+            from sigma.model_dispatch import uses_personal_worker
             from sigma.openai_connection import cloud_credential
 
-            if cloud_research.billing_enabled() and (
-                not cloud_credential(credential) or config["model"] not in TOKEN_PRICES_PER_MILLION
+            personal_worker = uses_personal_worker(credential)
+            if (
+                cloud_research.billing_enabled()
+                and not personal_worker
+                and not cloud_credential(credential)
             ):
-                raise ProjectError(
-                    "Sponsored research requires the configured sponsor credential and a model with a reviewed price."
-                )
+                raise ProjectError("Sponsored research requires the configured sponsor credential.")
+            if cloud_research.billing_enabled() and config["model"] not in TOKEN_PRICES_PER_MILLION:
+                raise ProjectError("Hosted research requires a model with a reviewed price.")
             if limits.get("maximum_input_tokens_per_session") is not None and (
                 (credential["mode"] != "api_key" and not cloud_research.billing_enabled())
                 or limits.get("maximum_estimated_cost_usd") is None
@@ -6979,7 +7002,8 @@ async def start_session(
                 "token_usage_status": "pending",
                 "tokens_reserved": 0,
                 "maximum_estimated_cost_usd": limits["maximum_estimated_cost_usd"],
-                "cloud_sponsored": cloud_research.billing_enabled(),
+                "funding_source": _funding_source_for(credential),
+                "cloud_sponsored": cloud_research.billing_enabled() and not personal_worker,
                 "estimated_cost_usd": 0.0
                 if credential["mode"] == "api_key" or cloud_research.billing_enabled()
                 else None,
@@ -7795,7 +7819,7 @@ async def control_session(
     switch_transport = (
         credential["mode"] != record["mode"]
         or record.get("identity_hash") != _digest(credential["identity"])
-        or record.get("cloud_sponsored") is not cloud_research.billing_enabled()
+        or record.get("cloud_sponsored") is not _is_sponsored_credential(credential)
         or record.get("imported_via_bundle") is True
     )
     config = await configuration(view=view, context=credential)
@@ -7806,7 +7830,7 @@ async def control_session(
             record,
             next_model=str(config.get("model", "")),
             next_mode=str(credential["mode"]),
-            next_sponsored=cloud_research.billing_enabled(),
+            next_sponsored=_is_sponsored_credential(credential),
         )
     if not config["available"]:
         record["message"] = config.get(
@@ -11932,7 +11956,12 @@ async def _portfolio_role_call(
                 _save(path, record)
                 return False
             if (
-                record.get("mode") == "api_key" or record.get("cloud_sponsored") is True
+                record.get("mode") == "api_key"
+                or record.get("cloud_sponsored") is True
+                or (
+                    record.get("funding_source") == "personal_chatgpt"
+                    and cloud_research.billing_enabled()
+                )
             ) and record.get("maximum_estimated_cost_usd") is not None:
                 current_cost = record.get("estimated_cost_usd")
                 reserved_cost = float(record.get("estimated_cost_reserved_usd", 0.0))
