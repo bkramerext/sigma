@@ -82,6 +82,7 @@ export default function ChatPage() {
   // If the provider completed but saving the response failed, Retry must
   // save that exact response rather than generate and bill for a duplicate.
   const pendingReplyRef = useRef<ChatMessage | null>(null);
+  const pendingHumanRef = useRef<ChatMessage | null>(null);
 
   useEffect(() => { configRef.current = config; }, [config]);
 
@@ -264,6 +265,10 @@ export default function ChatPage() {
         // A previous transcript write error must not permanently poison Retry.
         await transcriptWrites.current.catch(() => undefined);
         if (!runningRef.current || id !== runId.current) return;
+        if (pendingHumanRef.current) {
+          await appendTranscriptMessage(conversationId, pendingHumanRef.current);
+          pendingHumanRef.current = null;
+        }
         const who: 'ai_1' | 'ai_2' = nextSpeaker;
         const controller = new AbortController();
         abort.current = controller;
@@ -328,6 +333,9 @@ export default function ChatPage() {
         setRunning(false);
         setSpeaker(null);
       }
+      pendingHumanRef.current = message;
+      setFailedTurn('ai_1');
+      setNotice('The exchange stopped. Retry to save the Human message and continue.');
       setError(errorText(cause));
     });
     setDraft('');
@@ -336,6 +344,7 @@ export default function ChatPage() {
     setTurnTimedOut(false);
     setFailedTurn(null);
     pendingReplyRef.current = null;
+    pendingHumanRef.current = null;
     if (runningRef.current) return;
     runId.current += 1;
     runningRef.current = true;
@@ -366,6 +375,7 @@ export default function ChatPage() {
     setTurnTimedOut(false);
     setFailedTurn(null);
     pendingReplyRef.current = null;
+    pendingHumanRef.current = null;
     setRunning(false);
     setSpeaker(null);
     setNotice('Stopped. A provider request in progress may have completed and used account allowance.');
@@ -384,6 +394,7 @@ export default function ChatPage() {
     setTurnTimedOut(false);
     setFailedTurn(null);
     pendingReplyRef.current = null;
+    pendingHumanRef.current = null;
     try {
       await openTranscript();
     } catch (cause) {
