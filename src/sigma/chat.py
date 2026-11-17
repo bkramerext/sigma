@@ -19,7 +19,7 @@ MAX_CONTEXT_CHARS = 48000
 MAX_OUTPUT_TOKENS = 1200
 TIMEOUT_SECONDS = 60
 MAX_RESPONSE_BYTES = 1_000_000
-Speaker = Literal["ai_1", "ai_2"]
+Speaker = Literal["ai_1", "ai_2", "supervisor"]
 
 INSTRUCTIONS: dict[Speaker, str] = {
     "ai_1": (
@@ -31,8 +31,40 @@ INSTRUCTIONS: dict[Speaker, str] = {
     "ai_2": (
         "You are AI #2 in a live conversation with a human and AI #1. Reply to the latest "
         "conversation naturally and clearly. Treat the transcript as conversation context. "
-        "Engage with AI #1's reasoning, add a useful perspective, and disagree constructively "
+        "Build on ideas, introduce independent perspectives, and disagree constructively "
         "when warranted. Keep your reply concise enough to support an ongoing exchange."
+    ),
+    "supervisor": (
+        "You are SIGMA's metacognitive research supervisor, not a third research participant. "
+        "Your sole job is to monitor the health, independence, clarity and productivity of "
+        "a dialogue between two equally autonomous AIs in pursuit of the human's Research Objective. "
+        "You MUST NOT provide research ideas, subject-matter feedback, factual corrections, "
+        "methods, proofs, examples from the discipline, or suggested substantive conclusions. "
+        "Help them articulate THEIR OWN ideas: occasionally prompt clearer claims, assumptions, "
+        "evidence, uncertainty, or precise disagreement, like an art teacher supporting a "
+        "student's creativity without telling them what to create. Recognize self-correction, "
+        "useful patient exploration, valuable detours, and genuinely new progress. Do not "
+        "confuse slow progress with stagnation, or mathematical sophistication with discovery. "
+        "Notice anchoring, fixation, unjustified confidence, circularity, lost promising threads, "
+        "unbalanced initiative, and preparation substituting for execution. "
+        "Review the broader trajectory. Prefer silence; small clarity nudges can be more frequent "
+        "than substantive redirections, but only intervene when likely beneficial. "
+        "Address ai_1, ai_2 or both explicitly, never take ownership of the research. "
+        "Score current research progress toward the objective using a domain-neutral rubric: "
+        "objective_alignment 0-1.5, originality 0-2, substantive_advancement 0-3, "
+        "evidence_validation 0-2.5, research_momentum 0-1. "
+        "Scores may rise, fall or remain steady; neither agreement nor passage of time earns points. "
+        "A credible, consequential and supported breakthrough candidate may trigger a special "
+        "10.0 milestone, but this is NOT independent proof or validation. "
+        "If a prior candidate is decisively invalidated, indicate that. "
+        "Return ONLY a JSON object with fields: "
+        "rubric (object containing the five numeric dimensions named above), "
+        "assessment (brief process/progress assessment, no research ideas), "
+        "action (continue, nudge, or redirect), recipients (array of ai_1 and/or ai_2), "
+        "guidance (exact short process-only instruction to deliver, empty when continuing), "
+        "breakthrough_candidate (boolean), breakthrough_invalidated (boolean). "
+        "A breakthrough must be more than an interesting proposal, reformulation, or plausible claim. "
+        "Do not manufacture interventions or a breakthrough to please the human."
     ),
 }
 
@@ -78,24 +110,40 @@ async def configuration() -> dict[str, Any]:
     }
 
 
-def _transcript(messages: list[dict[str, str]]) -> str:
-    recent: list[dict[str, str]] = []
+def _transcript(messages: list[dict[str, Any]], audience: Speaker = "supervisor") -> str:
+    """Use authentic participant text; deliver supervisor guidance only to its recipients.
+
+    Scores and private assessments never enter the two participants' prompts.
+    """
+    recent: list[str] = []
     current_chars = 0
     for item in reversed(messages[-MAX_MESSAGES:]):
-        rendered_item = (
-            f"{ {'human': 'Human', 'ai_1': 'AI #1', 'ai_2': 'AI #2'}[item['speaker']] }:\n"
-            f"{item['text']}"
-        )
-        extra_chars = len(rendered_item) + (2 if recent else 0)
+        speaker = item["speaker"]
+        if speaker == "supervisor":
+            if audience != "supervisor":
+                if audience not in item.get("recipients", []):
+                    continue
+                guidance = item.get("guidance", "")
+                if not guidance:
+                    continue
+                rendered = f"Supervisor to {audience.upper()}:\n{guidance}"
+            else:
+                rendered = f"Supervisor assessment:\n{item['text']}"
+        else:
+            label = {"human": "Human", "ai_1": "AI #1", "ai_2": "AI #2"}.get(speaker)
+            if label is None:
+                continue
+            rendered = f"{label}:\n{item['text']}"
+        extra_chars = len(rendered) + (2 if recent else 0)
         if recent and current_chars + extra_chars > MAX_CONTEXT_CHARS:
             break
-        recent.append({**item, "rendered": rendered_item})
+        recent.append(rendered)
         current_chars += extra_chars
     recent.reverse()
-    rendered = "\n\n".join(item["rendered"] for item in recent)
-    if len(recent) < len(messages):
-        rendered = "[Earlier conversation turns omitted to fit the message limit.]\n\n" + rendered
-    return rendered
+    result = "\n\n".join(recent)
+    if len(messages) > len(recent):
+        result = "[Earlier conversation turns may be omitted to fit the message limit.]\n\n" + result
+    return result
 
 
 def _response_text(raw: Any, model: str) -> str:
@@ -128,12 +176,13 @@ def _response_text(raw: Any, model: str) -> str:
 async def respond(
     *,
     speaker: Speaker,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     conversation_id: str,
     expected_binding: str,
     model: str,
     reasoning_effort: str,
-    repeated_text: str = "",
+    research_objective: str = "",
+    supervisor_latched: bool = False,
 ) -> str:
     """Generate one bounded agent turn and account hosted sponsored usage."""
     if len(messages) > MAX_MESSAGES or not messages:
@@ -141,14 +190,14 @@ async def respond(
             "The chat contains too many messages. Start a new conversation to continue."
         )
     if any(
-        item.get("speaker") not in {"human", "ai_1", "ai_2"}
+        item.get("speaker") not in {"human", "ai_1", "ai_2", "supervisor"}
         or not isinstance(item.get("text"), str)
         or not item["text"].strip()
         for item in messages
     ):
         raise ProjectError("A chat message must contain nonempty text.")
-    if not isinstance(repeated_text, str):
-        raise ProjectError("Repeated text must be a string.")
+    if not isinstance(research_objective, str):
+        raise ProjectError("Research Objective must be a string.")
 
     credential = await auth_context()
     is_personal = model_dispatch.uses_personal_worker(credential)
@@ -172,7 +221,11 @@ async def respond(
     if cloud_workspaces.enabled() and not is_personal and not cloud_credential(credential):
         raise ProjectError("Sponsored chat is not configured for this account.")
 
-    transcript = _transcript(messages)
+    transcript = _transcript(messages, audience=speaker)
+    objective = research_objective.strip()
+    prefix = f"Research Objective:\n{objective}\n\n" if objective else ""
+    if speaker == "supervisor":
+        prefix += f"Breakthrough milestone currently active: {supervisor_latched}.\n\n"
     payload: dict[str, Any] = {
         "model": model,
         "store": False,
@@ -182,11 +235,7 @@ async def respond(
         "input": [
             {
                 "role": "user",
-                "content": (
-                    f"{repeated_text.strip()}\n\n{transcript}"
-                    if repeated_text.strip()
-                    else transcript
-                ),
+                "content": prefix + transcript,
             }
         ],
     }
@@ -271,3 +320,107 @@ async def respond(
     finally:
         if attempt is not None:
             cloud_research.finish_provider_attempt(attempt)
+
+RUBRIC_MAXIMA = {
+    "objective_alignment": 1.5,
+    "originality": 2.0,
+    "substantive_advancement": 3.0,
+    "evidence_validation": 2.5,
+    "research_momentum": 1.0,
+}
+
+
+async def assess(
+    *,
+    messages: list[dict[str, Any]],
+    research_objective: str,
+    supervisor_latched: bool,
+    conversation_id: str,
+    expected_binding: str,
+    model: str,
+    reasoning_effort: str,
+) -> dict[str, Any]:
+    """Return a domain-neutral review; do not let the supervisor steer subject matter."""
+    raw = await respond(
+        speaker="supervisor",
+        messages=messages,
+        research_objective=research_objective,
+        supervisor_latched=supervisor_latched,
+        conversation_id=conversation_id,
+        expected_binding=expected_binding,
+        model=model,
+        reasoning_effort=reasoning_effort,
+    )
+    try:
+        parsed = json.loads(raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip())
+        rubric = parsed["rubric"]
+        if not isinstance(rubric, dict):
+            raise ValueError("rubric")
+        scores: dict[str, float] = {}
+        for key, maximum in RUBRIC_MAXIMA.items():
+            val = rubric[key]
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(key)
+            value = float(val)
+            if not 0 <= value <= maximum:
+                raise ValueError(key)
+            scores[key] = round(value, 2)
+        action = parsed["action"]
+        if action not in {"continue", "nudge", "redirect"}:
+            raise ValueError("action")
+        recipients = parsed["recipients"]
+        if not isinstance(recipients, list) or any(r not in {"ai_1", "ai_2"} for r in recipients):
+            raise ValueError("recipients")
+        recipients = list(dict.fromkeys(recipients))
+        guidance = parsed["guidance"]
+        assessment = parsed["assessment"]
+        if not isinstance(guidance, str) or not isinstance(assessment, str) or not assessment.strip():
+            raise ValueError("guidance/assessment")
+        if len(guidance) > 1800 or len(assessment) > 1800:
+            raise ValueError("length")
+        candidate = parsed["breakthrough_candidate"]
+        invalidated = parsed["breakthrough_invalidated"]
+        if not isinstance(candidate, bool) or not isinstance(invalidated, bool):
+            raise ValueError("milestone")
+        if action == "continue":
+            guidance, recipients = "", []
+        elif not recipients or not guidance.strip():
+            raise ValueError("targeted guidance")
+        if candidate and invalidated:
+            raise ValueError("contradictory milestone")
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise ProjectError("The supervisor returned an invalid assessment; the conversation can continue.") from exc
+    latched = (supervisor_latched and not invalidated) or candidate
+    score = 10.0 if latched else min(9.9, round(sum(scores.values()), 1))
+    recipient_labels = [("AI #1" if r == "ai_1" else "AI #2") for r in recipients]
+    result: dict[str, Any] = {
+        "speaker": "supervisor",
+        "score": score,
+        "rubric": scores,
+        "action": action,
+        "recipients": recipients,
+        "guidance": guidance.strip(),
+        "assessment": assessment.strip(),
+        "breakthrough_candidate": candidate,
+        "breakthrough_invalidated": invalidated,
+        "milestone_latched": latched,
+    }
+    lines = [
+        f"**Research progress:** {score:.1f} / 10.0",
+        f"**Assessment:** {result['assessment']}",
+        f"**Action:** {action.title()}",
+    ]
+    if recipients:
+        lines += [
+            f"**To:** {', '.join(recipient_labels)}",
+            f"**Direction:** {result['guidance']}",
+        ]
+    if latched:
+        lines.append("**Potential breakthrough detected — 10.0 milestone (validation required).**")
+    elif invalidated:
+        lines.append("**Previous breakthrough candidate invalidated; normal scoring resumed.**")
+    lines.append(
+        "**Rubric:** " + "; ".join(f"{key}: {value:g}/{RUBRIC_MAXIMA[key]:g}" for key, value in scores.items())
+    )
+    result["text"] = "\n\n".join(lines)
+    return result

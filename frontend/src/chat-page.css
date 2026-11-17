@@ -191,3 +191,63 @@
   .brainstorm-workspace .chat-controls { gap: 8px; }
   .brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear) { padding-inline: 12px; }
 }
+
+/* Metacognitive supervisor: calm by default, clearly visible when intervening. */
+.brainstorm-workspace .chat-supervisor-settings {
+  margin: 0 0 16px;
+  padding: 11px 13px;
+  border: 1px solid #66513d;
+  border-radius: 8px;
+  background: #171918;
+}
+.brainstorm-workspace .chat-supervisor-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #f2c48d;
+  font-weight: 700;
+  cursor: pointer;
+}
+.brainstorm-workspace .chat-supervisor-toggle input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #bd8246;
+}
+.brainstorm-workspace .chat-supervisor-settings > p {
+  color: #c4b9aa;
+  font-size: .86rem;
+  line-height: 1.5;
+  margin: 7px 0 0;
+  max-width: 85ch;
+}
+.brainstorm-workspace .chat-supervisor-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 11px;
+  color: #dbcdb9;
+  font-size: .85rem;
+}
+.brainstorm-workspace .chat-supervisor-progress strong {
+  color: #f2c48d;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.02rem;
+}
+.brainstorm-workspace .chat-supervisor-milestone {
+  color: #f5d58a;
+  font-weight: 700;
+}
+.brainstorm-workspace .chat-history li.chat-history-supervisor {
+  border-left-color: #b6a1cb;
+  background: #211e27;
+}
+.brainstorm-workspace .chat-history li.chat-history-supervisor strong {
+  color: #d3b8ed;
+}
+.brainstorm-workspace .chat-history li.chat-history-supervisor.is-breakthrough {
+  border-left: 4px solid #e1b85c;
+  outline: 1px solid #8e7132;
+  background: #302818;
+}

@@ -6,8 +6,19 @@ import './chat-page.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
-type Speaker = 'human' | 'ai_1' | 'ai_2';
-type ChatMessage = { speaker: Speaker; text: string };
+type Speaker = 'human' | 'ai_1' | 'ai_2' | 'supervisor';
+type Participant = 'ai_1' | 'ai_2';
+type ChatMessage = {
+  speaker: Speaker;
+  text: string;
+  recipients?: Participant[];
+  guidance?: string;
+  score?: number;
+  action?: 'continue' | 'nudge' | 'redirect';
+  breakthrough_candidate?: boolean;
+  breakthrough_invalidated?: boolean;
+  milestone_latched?: boolean;
+};
 type ChatConfig = {
   available: boolean;
   mode: string;
@@ -20,12 +31,19 @@ type ChatConfig = {
   max_messages: number;
 };
 
-const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2' };
+const labels: Record<Speaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', supervisor: 'Supervisor' };
 const thinkingLabels: Record<ChatConfig['reasoning_effort'], string> = {
   low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high',
 };
 const MAX_LOCAL_MESSAGES = 500;
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
+
+function promptHistory(messages: ChatMessage[], limit: number) {
+  return messages.slice(-limit).map(({ speaker, text, recipients, guidance }) => ({
+    speaker, text,
+    ...(speaker === 'supervisor' ? { recipients: recipients ?? [], guidance: guidance ?? '' } : {}),
+  }));
+}
 
 function MarkdownReply({ body }: { body: string }) {
   return <div className="chat-markdown">
@@ -37,8 +55,13 @@ export default function ChatPage() {
   const [config, setConfig] = useState<ChatConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [repeatedText, setRepeatedText] = useState('');
-  const repeatedTextRef = useRef('');
+  const [researchObjective, setResearchObjective] = useState('');
+  const researchObjectiveRef = useRef('');
+  const recordedObjectiveRef = useRef('');
+  const [supervisorEnabled, setSupervisorEnabled] = useState(false);
+  const supervisorEnabledRef = useRef(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const milestoneLatchedRef = useRef(false);
   const [running, setRunning] = useState(false);
   const [speaker, setSpeaker] = useState<Speaker | null>(null);
   const [error, setError] = useState('');
@@ -115,7 +138,7 @@ export default function ChatPage() {
     return value.conversation_id;
   }, []);
 
-  function appendTranscriptMessage(id: string, message: ChatMessage): Promise<void> {
+  function appendTranscriptMessage(id: string, message: { speaker: 'human' | Participant | 'objective'; text: string }): Promise<void> {
     const write = transcriptWrites.current.then(async () => {
       const response = await fetch('/api/chat/message', {
         method: 'POST',
@@ -166,10 +189,10 @@ export default function ChatPage() {
         conversation_id: conversationId,
         expected_binding: settings.binding,
         speaker: who,
-        messages: history.slice(-settings.max_messages),
+        messages: promptHistory(history, settings.max_messages),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
-        repeated_text: repeatedTextRef.current,
+        research_objective: researchObjectiveRef.current,
       }),
     });
     if (!response.ok) {
@@ -199,8 +222,33 @@ export default function ChatPage() {
     throw new Error('The Brainstorm exchange ended before the AI completed its turn.');
   }
 
+  async function requestSupervisorReview(history: ChatMessage[], settings: ChatConfig, controller: AbortController): Promise<ChatMessage> {
+    const response = await fetch('/api/chat/supervise', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      signal: controller.signal,
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        expected_binding: settings.binding,
+        messages: promptHistory(history, settings.max_messages),
+        model: settings.model,
+        reasoning_effort: settings.reasoning_effort,
+        research_objective: researchObjectiveRef.current,
+        milestone_latched: milestoneLatchedRef.current,
+      }),
+    });
+    const assessment = await response.json() as ChatMessage & { error?: string; detail?: string };
+    if (!response.ok) throw new Error(assessment.error ?? assessment.detail ?? 'Supervisor assessment failed.');
+    if (assessment.speaker !== 'supervisor' || typeof assessment.score !== 'number') {
+      throw new Error('Supervisor returned an invalid assessment.');
+    }
+    return assessment;
+  }
+
   async function runConversation(id: number, settings: ChatConfig) {
-    let nextSpeaker: 'ai_1' | 'ai_2' = 'ai_1';
+    let nextSpeaker: Participant = 'ai_1';
+    let turnsSinceReview = 0;
     try {
       while (runningRef.current && id === runId.current) {
         await transcriptWrites.current;
@@ -215,6 +263,27 @@ export default function ChatPage() {
         addMessage(reply);
         await appendTranscriptMessage(conversationId, reply);
         nextSpeaker = who === 'ai_1' ? 'ai_2' : 'ai_1';
+        turnsSinceReview += 1;
+        if (supervisorEnabledRef.current && turnsSinceReview >= 4) {
+          turnsSinceReview = 0;
+          const reviewController = new AbortController();
+          abort.current = reviewController;
+          setSpeaker('supervisor');
+          try {
+            const assessment = await requestSupervisorReview(messagesRef.current, settings, reviewController);
+            if (!runningRef.current || id !== runId.current) return;
+            // The supervisor endpoint already wrote this assessment into the transcript.
+            addMessage(assessment);
+            setProgress(assessment.score ?? null);
+            milestoneLatchedRef.current = !!assessment.milestone_latched;
+            setNotice('');
+          } catch (cause) {
+            if (!runningRef.current || id !== runId.current) return;
+            // A metacognitive review failure must never stop the two participants.
+            setNotice('Supervisor review unavailable; the exchange continues.');
+            console.warn('Brainstorm supervisor review unavailable', cause);
+          }
+        }
         setSpeaker(nextSpeaker);
         await new Promise(resolve => window.setTimeout(resolve, 500));
       }
@@ -277,6 +346,9 @@ export default function ChatPage() {
     setConversationId('');
     setTranscriptPath('');
     transcriptWrites.current = Promise.resolve();
+    recordedObjectiveRef.current = '';
+    milestoneLatchedRef.current = false;
+    setProgress(null);
     setError('');
     setNotice('');
     try {
@@ -286,7 +358,16 @@ export default function ChatPage() {
     }
   }
 
-  const latest = (who: 'ai_1' | 'ai_2') => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
+  function recordResearchObjective() {
+    const text = researchObjectiveRef.current.trim();
+    if (!conversationId || text === recordedObjectiveRef.current) return;
+    recordedObjectiveRef.current = text;
+    void appendTranscriptMessage(conversationId, {
+      speaker: 'objective', text: text || '(cleared)',
+    }).catch(cause => setError(errorText(cause)));
+  }
+
+  const latest = (who: Participant) => [...messages].reverse().find(message => message.speaker === who)?.text ?? '';
   const modelControlHint = !config
     ? error || 'Brainstorm settings are loading.'
     : !config.available
@@ -328,13 +409,30 @@ export default function ChatPage() {
     <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
-    <section className="chat-repeated-prompt" aria-label="Repeated text">
+    <section className="chat-repeated-prompt" aria-label="Research objective">
       <div className="chat-field-heading">
-        <label htmlFor="chat-repeated-text" data-tooltip="Prepended to every AI request; changes apply on the next turn.">Repeated:</label>
+        <label htmlFor="chat-research-objective">Research Objective:</label>
       </div>
-      <textarea id="chat-repeated-text" rows={2} value={repeatedText}
-        onChange={event => { repeatedTextRef.current = event.target.value; setRepeatedText(event.target.value); }}
-        placeholder="Optional text prepended to every AI turn…"/>
+      <textarea id="chat-research-objective" rows={2} value={researchObjective}
+        onChange={event => { researchObjectiveRef.current = event.target.value; setResearchObjective(event.target.value); }}
+        onBlur={recordResearchObjective}
+        placeholder="What discovery or understanding should this research pursue?"/>
+    </section>
+    <section className="chat-supervisor-settings" aria-label="Supervisor settings">
+      <label className="chat-supervisor-toggle">
+        <input type="checkbox" checked={supervisorEnabled}
+          onChange={event => { supervisorEnabledRef.current = event.target.checked; setSupervisorEnabled(event.target.checked); }}/>
+        <span>Enable Supervisor</span>
+      </label>
+      <p>Optional metacognitive guidance: periodically assesses progress toward your Research Objective,
+        gives gentle clarity and productivity nudges to AI #1, AI #2, or both when useful,
+        and records each assessment and any direction in the transcript. It does not contribute research ideas.
+        Reviews use additional AI requests.</p>
+      {supervisorEnabled && <div className="chat-supervisor-progress" role="status" aria-live="polite">
+        <span>Research Progress</span>
+        <strong>{progress === null ? '—' : progress.toFixed(1)} / 10.0</strong>
+        {milestoneLatchedRef.current && <span className="chat-supervisor-milestone">Potential breakthrough · verification required</span>}
+      </div>}
     </section>
     <form id="brainstorm-human-form" className="chat-human-form" onSubmit={sendHuman}>
       <div className="chat-field-heading">
@@ -362,7 +460,8 @@ export default function ChatPage() {
       </section>)}
     </section>
     {!!messages.length && <ol className="chat-history" aria-label="Conversation history">
-      {messages.map((message, index) => <li key={`${message.speaker}-${index}`} className={`chat-history-${message.speaker}`}>
+      {messages.map((message, index) => <li key={`${message.speaker}-${index}`}
+        className={`chat-history-${message.speaker}${message.speaker === 'supervisor' && message.milestone_latched ? ' is-breakthrough' : ''}`}>
         <strong>{labels[message.speaker]}</strong><MarkdownReply body={message.text}/>
       </li>)}
     </ol>}

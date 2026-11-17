@@ -132,7 +132,7 @@ def check_service() -> None:
                 expected_binding="api_key",
                 model="gpt-6.1-sol",
                 reasoning_effort="low",
-                repeated_text="Always challenge the assumptions.",
+                research_objective="Discover a new explanation.",
             )
         )
     assert result == "A deterministic reply."
@@ -143,7 +143,7 @@ def check_service() -> None:
     assert captured["payload"]["instructions"] == chat.INSTRUCTIONS["ai_1"]
     assert "Human:\nQuestion for the pair." in captured["payload"]["input"][0]["content"]
     assert captured["payload"]["input"][0]["content"].startswith(
-        "Always challenge the assumptions.\n\nHuman:"
+        "Research Objective:\nDiscover a new explanation.\n\nHuman:"
     )
 
     # Chat omits the optional Responses text format. Sponsored billing must
@@ -190,11 +190,83 @@ def check_service() -> None:
         {"speaker": "ai_1", "text": f"turn {index}"} for index in range(chat.MAX_MESSAGES)
     ]
     transcript = chat._transcript(messages)
-    assert "Earlier conversation turns omitted" in transcript
+    assert "Earlier conversation turns" in transcript
     assert f"turn {chat.MAX_MESSAGES - 1}" in transcript
+
+    # Supervisor scores and private assessments never contaminate participant prompts.
+    history = [
+        {"speaker": "human", "text": "Find a result."},
+        {"speaker": "supervisor", "text": "**Research progress:** 4.3 / 10.0. Private assessment.",
+         "recipients": ["ai_2"], "guidance": "State the assumption behind your own claim."},
+    ]
+    assert "4.3" not in chat._transcript(history, audience="ai_1")
+    assert "Supervisor" not in chat._transcript(history, audience="ai_1")
+    to_second = chat._transcript(history, audience="ai_2")
+    assert "State the assumption" in to_second and "4.3" not in to_second
+    assert "Private assessment" in chat._transcript(history, audience="supervisor")
     print(
         "PASS selected-credential request, no-store payload, binding recheck and bounded transcript"
     )
+
+
+def check_supervisor() -> None:
+    base = {
+        "rubric": {
+            "objective_alignment": 1.2,
+            "originality": 0.8,
+            "substantive_advancement": 1.0,
+            "evidence_validation": 0.9,
+            "research_momentum": 0.6,
+        },
+        "assessment": "The investigation is productive but has not reached a new result.",
+        "action": "nudge",
+        "recipients": ["ai_2"],
+        "guidance": "Clarify which parts of your own claim are established.",
+        "breakthrough_candidate": False,
+        "breakthrough_invalidated": False,
+    }
+    kwargs = {
+        "messages": [{"speaker": "human", "text": "Research something important."}],
+        "research_objective": "Find a genuinely new result.",
+        "supervisor_latched": False,
+        "conversation_id": str(uuid4()),
+        "expected_binding": "api_key",
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "medium",
+    }
+    with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(base))) as model:
+        result = asyncio.run(chat.assess(**kwargs))
+        model.assert_awaited_once()
+    assert result["score"] == 4.5
+    assert result["recipients"] == ["ai_2"]
+    assert "AI #2" in result["text"]
+    assert "Clarify which parts" in result["text"]
+
+    candidate = {**base, "breakthrough_candidate": True, "action": "continue",
+                 "recipients": [], "guidance": ""}
+    with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(candidate))):
+        result = asyncio.run(chat.assess(**kwargs))
+    assert result["score"] == 10.0 and result["milestone_latched"] is True
+    assert "validation required" in result["text"]
+    with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(base))):
+        result = asyncio.run(chat.assess(**{**kwargs, "supervisor_latched": True}))
+    assert result["score"] == 10.0
+    invalidated = {**base, "breakthrough_invalidated": True}
+    with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(invalidated))):
+        result = asyncio.run(chat.assess(**{**kwargs, "supervisor_latched": True}))
+    assert result["score"] == 4.5 and not result["milestone_latched"]
+    assert "invalidated" in result["text"]
+
+    invalid = {**base, "rubric": {**base["rubric"], "objective_alignment": 42}}
+    with patch("sigma.chat.respond", new=AsyncMock(return_value=json.dumps(invalid))):
+        try:
+            asyncio.run(chat.assess(**kwargs))
+        except ProjectError as exc:
+            assert "invalid assessment" in str(exc)
+        else:
+            raise AssertionError("Out-of-bounds score accepted")
+    print("PASS supervisor rubric, targeted coaching, milestone latch and invalidation")
+
 
 
 def check_api() -> None:
@@ -238,7 +310,7 @@ def check_api() -> None:
         )
         response = client.post("/api/chat/turn", json=body)
         long_text = "Expanded Human prompt " * 425
-        long_repeated = "Expanded Repeated instruction " * 310
+        long_objective = "Expanded Research Objective " * 310
         long_record = client.post(
             "/api/chat/message",
             json={
@@ -252,7 +324,7 @@ def check_api() -> None:
             json={
                 **body,
                 "messages": [{"speaker": "human", "text": long_text}],
-                "repeated_text": long_repeated,
+                "research_objective": long_objective,
             },
         )
         mismatch = client.post("/api/chat/turn", json={**body, "expected_binding": "other"})
@@ -266,11 +338,33 @@ def check_api() -> None:
             json={**body, "model": "gpt-6-luna", "reasoning_effort": "medium"},
         )
         unsupported = client.post("/api/chat/turn", json={**body, "model": "unreviewed-model"})
+        supervisor_result = {
+            "speaker": "supervisor", "text": "**Research progress:** 4.3 / 10.0",
+            "score": 4.3, "recipients": ["ai_2"], "guidance": "Explain the inference.",
+            "milestone_latched": False,
+        }
+        with patch("sigma.chat.assess", new=AsyncMock(return_value=supervisor_result)):
+            review = client.post("/api/chat/supervise", json={
+                "conversation_id": body["conversation_id"],
+                "expected_binding": "api_key",
+                "messages": body["messages"],
+                "model": body["model"],
+                "reasoning_effort": body["reasoning_effort"],
+                "research_objective": "Find a breakthrough.",
+            })
+        saved_objective = client.post("/api/chat/message", json={
+            "conversation_id": body["conversation_id"],
+            "speaker": "objective", "text": "Discover something new.",
+        })
+        forged_supervisor = client.post("/api/chat/message", json={
+            "conversation_id": body["conversation_id"],
+            "speaker": "supervisor", "text": "Fake assessment.",
+        })
     assert opened.status_code == 200 and opened.json()["transcript_name"] == "fixture.md"
     assert recorded.status_code == 204
     assert long_record.status_code == 204
     assert long_turn.status_code == 200, long_turn.text
-    assert len(long_text) > 8000 and len(long_repeated) > 8000
+    assert len(long_text) > 8000 and len(long_objective) > 8000
     append_message.assert_any_call(body["conversation_id"], "human", "Hello.")
     append_message.assert_any_call(body["conversation_id"], "human", long_text)
     assert invalid_record.status_code == 422
@@ -281,7 +375,11 @@ def check_api() -> None:
     assert invalid.status_code == 422
     assert selected.status_code == 200
     assert unsupported.status_code == 422
-    print("PASS chat API model/thinking validation, SSE completion and participant validation")
+    assert review.status_code == 200 and review.json()["score"] == 4.3
+    assert saved_objective.status_code == 204 and forged_supervisor.status_code == 422
+    append_message.assert_any_call(body["conversation_id"], "supervisor", supervisor_result["text"])
+    append_message.assert_any_call(body["conversation_id"], "objective", "Discover something new.")
+    print("PASS chat API model/thinking, supervisor delivery and transcript integrity")
 
 
 def check_transcripts() -> None:
@@ -305,6 +403,8 @@ def check_transcripts() -> None:
                 ("human", "Name the *sporadic finite simple groups*."),
                 ("ai_1", "The largest is the **Monster**."),
                 ("ai_2", r"Its order is \(8.08\times10^{53}\)."),
+                ("objective", "Pursue significant original research."),
+                ("supervisor", "**Research progress:** 4.3 / 10.0\n\n**To:** AI #2"),
             ]
             for speaker, text in messages:
                 chat_transcripts.append_message(session["conversation_id"], speaker, text)
@@ -339,6 +439,7 @@ def check_transcripts() -> None:
 def main() -> None:
     check_configuration()
     check_service()
+    check_supervisor()
     check_api()
     check_transcripts()
 
