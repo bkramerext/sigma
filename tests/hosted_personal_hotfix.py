@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from types import SimpleNamespace
 from unittest import TestCase, main
 from unittest.mock import patch
 
-from sigma import cloud_auth, papers, project_collaboration
+from sigma import cloud_auth, papers, personal_browser, personal_inference, project_collaboration
 
 
 class HostedPersonalHotfixTests(TestCase):
@@ -33,6 +34,20 @@ class HostedPersonalHotfixTests(TestCase):
                 self.assertFalse(cloud_auth.hosted_personal_enabled())
             configuration.local = True
             self.assertFalse(cloud_auth.hosted_personal_enabled())
+
+    def test_shared_verified_personal_is_not_synthetic_test_connection(self) -> None:
+        # A real ChatGPT account is verified through /account, not the
+        # synthetic /test-account endpoint. Confusing those signals made the
+        # Personal pill take a test-mode branch instead of opening Disconnect,
+        # preventing the switch back to Sponsored and a fresh connection.
+        with (
+            patch.dict(os.environ, {"SIGMA_PERSONAL_SHARED_MODE": "1"}),
+            patch.object(personal_browser, "sign_in_preview_enabled", return_value=True),
+            patch.object(personal_inference, "account") as account,
+        ):
+            verified = asyncio.run(personal_browser.test_account_verified(None))
+        self.assertFalse(verified)
+        account.assert_not_called()
 
     def test_completed_paper_does_not_hide_failed_scoring(self) -> None:
         path = "/tmp/sigma-hosted-personal-score-test.sigma"

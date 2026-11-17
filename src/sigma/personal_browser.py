@@ -290,14 +290,11 @@ async def test_account_verified(principal: cloud_auth.Principal | None) -> bool:
     if not sign_in_preview_enabled():
         return False
     if os.environ.get("SIGMA_PERSONAL_SHARED_MODE") == "1":
-        # Synthetic /v1/test-account is intentionally always false in the
-        # shared service; verify the real account with its own scoped RPC.
-        from sigma import personal_inference
-
-        try:
-            return (await personal_inference.account(principal))["status"] == "verified"
-        except personal_inference.PersonalInferenceUnavailable:
-            return False
+        # /v1/test-account is a synthetic test-only signal. Do not reinterpret
+        # a real verified shared-worker account as a synthetic test connection:
+        # the frontend treats that signal as a separate, disposable mode and
+        # would otherwise ignore a click to disconnect Personal.
+        return False
     try:
         path = await model_socket(principal)
         transport = httpx.AsyncHTTPTransport(uds=path)
