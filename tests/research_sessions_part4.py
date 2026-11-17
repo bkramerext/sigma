@@ -3044,8 +3044,51 @@ def test_first_investigator_connection_failure_has_explicit_recovery_plan() -> N
     assert plan is None and error is not None
 
 
+def test_transient_resume_credit_is_single_use_and_excludes_unrelated_failures() -> None:
+    record = {
+        "steps": [
+            {
+                "id": "connection-lost",
+                "role": "investigator",
+                "status": "failed",
+                "failure_kind": "transport_interrupted",
+                "attempt_status": "unknown",
+            },
+            {
+                "id": "not-dispatched",
+                "role": "investigator",
+                "status": "failed",
+                "failure_kind": "transport_interrupted",
+                "attempt_status": "not_dispatched",
+            },
+            {
+                "id": "bad-response",
+                "role": "skeptic",
+                "status": "failed",
+                "failure_kind": "response_invalid",
+                "attempt_status": "usage_estimated",
+            },
+        ],
+    }
+    assert research_sessions._uncredited_transient_failures(record) == 1
+    record["call_limit_adjustments"] = [
+        {"additional_calls": 1, "purpose": "replace transient provider failures"}
+    ]
+    assert research_sessions._uncredited_transient_failures(record) == 0
+    record["steps"].append(
+        {
+            "id": "second-connection-lost",
+            "role": "skeptic",
+            "status": "failed",
+            "failure_kind": "stream_incomplete",
+            "attempt_status": "usage_estimated",
+        }
+    )
+    assert research_sessions._uncredited_transient_failures(record) == 1
+
+
 async def test_resume_after_first_investigator_connection_failure(path: Path) -> None:
-    """Resume preserves unknown billing and dispatches a distinct role request."""
+    """One Play recovers a lost connection without extra confirmation or spend budget."""
     view, strategy, credential, config = await setup(path)
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
@@ -3059,7 +3102,7 @@ async def test_resume_after_first_investigator_connection_failure(path: Path) ->
         record = research_sessions._read(str(path), started["id"])
         call_id = str(uuid4())
         ledger = new_ledger(
-            call_limit=3,
+            call_limit=2,
             input_token_limit=400_000,
             output_tokens_per_call=4_000,
             cost_limit_usd=100.0,
@@ -3072,7 +3115,7 @@ async def test_resume_after_first_investigator_connection_failure(path: Path) ->
             {
                 "status": "failed",
                 "cycle_limit": 1,
-                "call_limit": 3,
+                "call_limit": 2,
                 "calls_used": 1,
                 "stopped_at": datetime.now(UTC).isoformat(),
                 "hard_budget_ledger": ledger,
@@ -3101,6 +3144,15 @@ async def test_resume_after_first_investigator_connection_failure(path: Path) ->
         assert saved["steps"][0]["attempt_status"] == "unknown"
         assert saved["hard_budget_ledger"]["calls"][0]["status"] == "unknown"
         assert saved["hard_budget_ledger"]["blocked_reason"] is None
+        # Resume itself is enough for a failed transient request. Only the
+        # internal paid-attempt ceiling changes; conservative unknown charges
+        # and the original monetary/token budgets do not.
+        assert saved["call_limit"] == 3
+        assert saved["hard_budget_ledger"]["call_limit"] == 3
+        assert saved["hard_budget_ledger"]["input_token_limit"] == 400_000
+        assert saved["hard_budget_ledger"]["cost_limit_usd"] == 100.0
+        assert saved["call_limit_adjustments"][-1]["implicit_transient_replacement"] is True
+        assert saved["call_limit_adjustments"][-1]["additional_calls"] == 1
         assert saved["strategy_runs"][0]["protocol_completion_recovery"]["new_request"] is True
         assert saved["strategy_runs"][0]["protocol_completion_recovery"]["prior_attempt_ids"] == [
             call_id
