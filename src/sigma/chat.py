@@ -180,7 +180,6 @@ async def respond(
     speaker: Speaker,
     messages: list[dict[str, Any]],
     conversation_id: str,
-    expected_binding: str,
     model: str,
     reasoning_effort: str,
     repeated_text: str = "",
@@ -206,8 +205,6 @@ async def respond(
     is_personal = model_dispatch.uses_personal_worker(credential)
     if (not credential["token"] and not is_personal) or credential["status"] != "connected":
         raise ProjectError("Connect ChatGPT or select API-key billing before starting a chat.")
-    if credential["identity"] != expected_binding:
-        raise ProjectError("The selected AI account changed. Review the connection and retry.")
     if model not in CATALOG:
         raise ProjectError("The selected chat model is unavailable.")
     try:
