@@ -1042,6 +1042,46 @@ def discard_execution_run(
         db.commit()
 
 
+def require_unreadable_paper_manager(path: str, paper_id: str) -> str | None:
+    """Prove creator/owner authorization without trusting damaged Paper JSON.
+
+    A completed, immutable publication reservation must identify the exact
+    paper ID; a live worker may never be deleted by this recovery path.
+    """
+    from sigma import papers
+    from sigma.projects import ProjectError, project_path
+
+    if re.fullmatch(r"[0-9a-f]{32}", paper_id) is None:
+        raise ProjectError("Invalid paper identifier")
+    workspace = cloud_workspaces.current()
+    if workspace is None:
+        return None  # Local single-user projects have no cloud run ledger.
+    principal = cloud_auth.current_principal()
+    if workspace.guest or principal is None or principal.role == "guest":
+        raise ProjectError("Member access is required to remove a paper.")
+    path = str(project_path(path))
+    with _db() as db:
+        project, _actor = _membership(db, path)
+        row = db.execute(
+            """SELECT run_id, status, creator_hash FROM shared_run_reservations
+               WHERE path=? AND kind='paper' AND artifact_id=?""",
+            (path, paper_id),
+        ).fetchone()
+        if row is None or row["status"] != "complete":
+            raise ProjectError("Unreadable paper has no completed publication reservation.")
+        if (
+            workspace.subject_hash != row["creator_hash"]
+            and workspace.subject_hash != project["owner_hash"]
+        ):
+            raise ProjectError("Only the paper creator or project owner can remove this paper.")
+        run_id = str(row["run_id"])
+    with papers.paper_run_scope(run_id):
+        progress = papers.progress_status(path)
+    if progress is not None and progress.get("status") in {"active", "queued"}:
+        raise ProjectError("Stop this paper before removing its saved record.")
+    return run_id
+
+
 def tombstone_deleted_paper_run(path: str, paper_id: str) -> None:
     """Keep a deleted published PDF's reservation from reappearing as a run.
 

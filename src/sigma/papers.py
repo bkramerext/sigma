@@ -13145,6 +13145,67 @@ def paper_tex(path: str, paper_id: str) -> str:
     return source
 
 
+_RECOVERABLE_PAPER_RECORD_ERRORS = frozenset(
+    {"Paper record is unreadable", "Paper record is missing or unsafe", "Paper record is invalid"}
+)
+
+
+def is_unreadable_saved_paper_error(error: BaseException) -> bool:
+    return isinstance(error, ProjectError) and str(error) in _RECOVERABLE_PAPER_RECORD_ERRORS
+
+
+def delete_unreadable_paper(path: str, paper_id: str, run_id: str | None) -> None:
+    """Delete only corrupt saved-Paper artifacts after independent ACL checks.
+
+    The record is rechecked under the version lock. A healthy/repaired record
+    cannot be deleted through this recovery path, and no invalid metadata is
+    deserialized to determine the artifact paths.
+    """
+    identifier = _paper_id(paper_id)
+    descriptor = _paper_version_lock(path)
+    try:
+        try:
+            get_paper(path, identifier, include_tex=False)
+        except ProjectError as exc:
+            if not is_unreadable_saved_paper_error(exc):
+                raise
+        else:
+            raise ProjectError("Paper record is readable; use normal paper removal.")
+
+        if run_id is not None:
+            with paper_run_scope(run_id):
+                progress = progress_status(path)
+            if progress is not None and progress.get("status") in {"active", "queued"}:
+                raise ProjectError("Stop this paper before removing its saved record.")
+
+        target = project_path(path)
+        if target.suffix == ".json":
+            from sigma.projects import save_project_artifacts
+
+            save_project_artifacts(
+                target,
+                {
+                    f"artifacts/papers/{identifier}.json": None,
+                    f"artifacts/papers/{identifier}.pdf": None,
+                    f"artifacts/papers/{identifier}.tex": None,
+                },
+            )
+        else:
+            directory = _paper_dir(path, create=False)
+            for suffix in (".json", ".pdf", ".tex"):
+                artifact = directory / f"{identifier}{suffix}"
+                if artifact.is_symlink() or artifact.is_file():
+                    artifact.unlink()
+        if run_id is not None:
+            with paper_run_scope(run_id):
+                _clear_published_paper_progress(path, identifier)
+        else:
+            _clear_published_paper_progress(path, identifier)
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
 def delete_paper(path: str, paper_id: str) -> None:
     record = get_paper(path, paper_id, include_tex=False)
     if record.get("project_id") != inspect_project(path).project.id:
