@@ -3526,10 +3526,9 @@ def _visible_invalid_tex_controls(tex: str) -> tuple[str, list[str]]:
     """
     # XeTeX also rejects DEL (U+007F) and other C1 control characters.
     # Retain structural whitespace; leave the archived authored draft intact.
-    codes = sorted({
-        ord(char) for char in tex
-        if unicodedata.category(char) == "Cc" and char not in "\n\r\t"
-    })
+    codes = sorted(
+        {ord(char) for char in tex if unicodedata.category(char) == "Cc" and char not in "\n\r\t"}
+    )
     if not codes:
         return tex, []
     return (
