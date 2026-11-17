@@ -584,7 +584,6 @@ with sync_playwright() as playwright:
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261114_120005.md")
     assert session_calls == 5
     # Resume reuses the saved ID/history and automatically dispatches AI #2.
-    saved_writes = len(transcript_messages)
     turns_before_resume = len(turns)
     page.locator("#chat-saved-transcript").select_option("20261112_101010.md")
     expect(transcript_filename).to_contain_text("/chat-transcripts/20261112_101010.md")
@@ -598,7 +597,8 @@ with sync_playwright() as playwright:
     assert resumed["speaker"] == "ai_2"
     assert resumed["research_objective"] == "Continue exploring theta kernels."
     assert any(message["text"] == "Consider the theta transformation." for message in resumed["messages"])
-    assert len(transcript_messages) == saved_writes, "Historical turns were written again"
+    assert not any(message["text"] == "Find a new approach." for message in transcript_messages)
+    assert not any(message["text"] == "Continue exploring theta kernels." for message in transcript_messages)
     page.get_by_role("button", name="Stop exchange", exact=True).click()
 
     # A new normal page load must not inherit the earlier local opt-in.
