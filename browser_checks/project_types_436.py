@@ -1634,7 +1634,9 @@ with sync_playwright() as playwright:
     expect(score_step).to_be_visible()
     score_step.click()
     expect(page.get_by_role("dialog", name="Paper Score")).to_be_visible()
-    page.get_by_role("dialog", name="Paper Score").get_by_role("button", name="Close paper score").click()
+    page.get_by_role("dialog", name="Paper Score").get_by_role(
+        "button", name="Close paper score"
+    ).click()
     for step in (
         "Review publication standards",
         "Extract evidence",
