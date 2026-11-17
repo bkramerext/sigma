@@ -59,9 +59,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
     pdf_bytes = papers._compile_pdf(tex_source)
     identifiers = ["a" * 32, "b" * 32]
     for index, paper_id in enumerate(identifiers):
-        hostile = (
-            "<script>window.__paperXss = true</script>" if index == 0 else "For $n$ lines, the maximum is $1+n(n+1)/2$. **Sharp** bound."
-        )
+        if index == 0:
+            hostile = "<script>window.__paperXss = true</script>"
+        else:
+            hostile = "For $n$ lines, the maximum is $1+n(n+1)/2$. **Sharp** bound."
         papers._save(
             str(project_path),
             {
