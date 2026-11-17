@@ -46,23 +46,27 @@
   display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap;
   gap: 12px; min-height: 42px; margin: 0 0 20px;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear) {
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) {
   box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
   min-height: 38px; padding: 7px 18px; border: 1px solid #bd8246;
   border-radius: 8px; color: #f0e6d7; background: #07111e;
   font: 500 .92rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer;
 }
+.brainstorm-workspace .chat-retry {
+  min-width: 108px; border-color: #e4b679; background: #80512c;
+  color: #fff5e8; font-weight: 700;
+}
 .brainstorm-workspace .chat-send {
   min-width: 92px; border-color: #e4b679; background: #80512c;
   color: #fff5e8; font-weight: 700;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear):hover:not(:disabled) {
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):hover:not(:disabled) {
   background: #6b4329; color: #fff2e9;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear):focus-visible {
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):focus-visible {
   outline: 2px solid #e5a785; outline-offset: 3px;
 }
-.brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear):disabled { opacity: .5; cursor: default; }
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):disabled { opacity: .5; cursor: default; }
 .brainstorm-workspace .chat-controls [role="status"] {
   color: #d1c5b7; font-size: .9rem; overflow-wrap: anywhere;
 }
@@ -189,7 +193,7 @@
   .brainstorm-workspace .chat-page { width: calc(100% - 28px); }
   .brainstorm-workspace .chat-page-header h1 { font-size: 1.55rem; }
   .brainstorm-workspace .chat-controls { gap: 8px; }
-  .brainstorm-workspace :is(.chat-send, .chat-stop, .chat-clear) { padding-inline: 12px; }
+  .brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) { padding-inline: 12px; }
 }
 
 /* Shared project copy icon beside each brainstorm participant heading. */
