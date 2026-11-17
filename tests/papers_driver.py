@@ -43,6 +43,7 @@ def main_part1() -> None:
     test_real_tadpole_onp_and_math_table_pdfs()
     test_table_cell_math_escaping_and_currency_regression()
     test_one_shot_and_long_form_both_proofread_before_compiling()
+    test_automatic_score_persists_once_and_handoff_reuses_saved_score()
     test_score_interruption_resumes_published_pdf_without_reauthoring()
     test_legacy_score_receipt_resumes_without_generation_checkpoint()
     test_pdf_pass_interruption_resumes_next_pass_without_reauthoring()
