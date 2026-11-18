@@ -46,12 +46,17 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
         const isMarkdown = markdown[entry.id] ?? false;
         return <section className="project-scratchpad-entry" key={entry.id}>
           <div className="project-scratchpad-entry-heading">
-            <button type="button" className="strategy-row-disclosure project-scratchpad-disclosure"
+            <button type="button" className="project-scratchpad-chevron"
+              aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} note ${index + 1}`}
               aria-expanded={!isCollapsed} aria-controls={`scratchpad-${entry.id}`}
               onClick={() => setCollapsed(previous => ({ ...previous, [entry.id]: !isCollapsed }))}>
               <svg aria-hidden="true" className={`disclosure-chevron${isCollapsed ? '' : ' is-expanded'}`}
                 viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
-              <span>Note {index + 1}</span>
+            </button>
+            <button type="button" className="project-scratchpad-title"
+              aria-expanded={!isCollapsed} aria-controls={`scratchpad-${entry.id}`}
+              onClick={() => setCollapsed(previous => ({ ...previous, [entry.id]: !isCollapsed }))}>
+              Note {index + 1}
             </button>
             <div className="project-scratchpad-actions">
               <button type="button" className={`sigma-render-toggle sigma-unified-markdown project-scratchpad-icon${isMarkdown ? ' sigma-render-active' : ''}`}
