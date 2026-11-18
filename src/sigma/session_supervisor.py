@@ -52,8 +52,12 @@ def parse_assessment(raw: str) -> dict[str, Any]:
     except (TypeError, ValueError) as exc:
         raise ProjectError("Session supervisor returned invalid JSON.") from exc
     if not isinstance(result, dict) or set(result) != {
-        "assessment", "action", "recipient", "guidance",
-        "breakthrough_candidate", "breakthrough_detail",
+        "assessment",
+        "action",
+        "recipient",
+        "guidance",
+        "breakthrough_candidate",
+        "breakthrough_detail",
     }:
         raise ProjectError("Session supervisor returned an invalid response shape.")
     action = result["action"]
@@ -64,10 +68,13 @@ def parse_assessment(raw: str) -> dict[str, Any]:
     candidate = result["breakthrough_candidate"]
     if (
         action not in {"continue", "nudge", "redirect"}
-        or type(assessment) is not str or not assessment.strip()
+        or type(assessment) is not str
+        or not assessment.strip()
         or len(assessment) > 1000
-        or type(guidance) is not str or len(guidance) > 700
-        or type(detail) is not str or len(detail) > 1200
+        or type(guidance) is not str
+        or len(guidance) > 700
+        or type(detail) is not str
+        or len(detail) > 1200
         or type(candidate) is not bool
     ):
         raise ProjectError("Session supervisor response failed validation.")
