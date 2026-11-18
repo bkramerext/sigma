@@ -78,6 +78,15 @@
   width: 12px;
   height: 12px;
   margin: 0;
+  fill: none;
+  stroke: var(--sigma-copper-foreground);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 150ms ease;
+}
+.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-chevron .disclosure-chevron.is-expanded {
+  transform: rotate(90deg);
 }
 .sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-title {
   appearance: none;
@@ -119,7 +128,7 @@ dialog.project-settings-dialog.sigma-global-settings .project-scratchpad-entry-h
   outline: 2px solid #edbc77;
   outline-offset: 3px;
 }
-.project-scratchpad-actions { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; }
+.project-scratchpad-actions { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; margin-left: 7px; }
 .sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon {
   appearance: none;
   box-sizing: border-box;
