@@ -2457,7 +2457,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                       minTurns: Math.max(0,
                         ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
                           .map(step => step.cycle),
-                        ...item.strategy_runs.map(branch => branch.cycle ?? 0),
+                        ...(item.strategy_runs ?? []).map(branch => branch.cycle ?? 0),
                       ),
                     })}>
                     <SlidersSettingsIcon/>
