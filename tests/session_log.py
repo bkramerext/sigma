@@ -714,7 +714,6 @@ def test_session_status_and_correlated_errors_match_export() -> None:
     assert "Unrelated pre-session failure" not in exported
 
 
-
 def test_flat_turn_settings_convert_legacy_rounds_without_relabeling() -> None:
     from sigma import research_sessions
 
