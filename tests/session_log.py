@@ -937,22 +937,28 @@ def test_supervisor_usage_is_authoritative_and_uncertain_cost_is_retained() -> N
 
     record = {
         "status": "running",
-        "steps": [{
-            "status": "completed",
-            "token_usage": {"input_tokens": 20, "output_tokens": 7},
-        }],
-        "supervisor_reviews": [{
-            "status": "completed",
-            "token_usage": {"input_tokens": 13, "output_tokens": 5},
-        }],
+        "steps": [
+            {
+                "status": "completed",
+                "token_usage": {"input_tokens": 20, "output_tokens": 7},
+            }
+        ],
+        "supervisor_reviews": [
+            {
+                "status": "completed",
+                "token_usage": {"input_tokens": 13, "output_tokens": 5},
+            }
+        ],
     }
     research_sessions._refresh_token_accounting(record)
     assert record["tokens_used"] == 45
     assert record["token_usage_status"] == "complete"
-    record["supervisor_reviews"].append({
-        "status": "interrupted",
-        "attempt_status": "unknown",
-    })
+    record["supervisor_reviews"].append(
+        {
+            "status": "interrupted",
+            "attempt_status": "unknown",
+        }
+    )
     research_sessions._refresh_token_accounting(record)
     assert record["tokens_used"] == 45
     assert record["token_usage_status"] == "partial"
@@ -963,9 +969,12 @@ def test_abandoned_supervisor_reservation_preserves_full_liability() -> None:
     from sigma.research_budget import BudgetExceeded
 
     ledger = research_budget.new_ledger(
-        call_limit=3, input_token_limit=30000,
-        output_tokens_per_call=100, cost_limit_usd=10.0,
-        input_price_per_million=1.0, output_price_per_million=10.0,
+        call_limit=3,
+        input_token_limit=30000,
+        output_tokens_per_call=100,
+        cost_limit_usd=10.0,
+        input_price_per_million=1.0,
+        output_price_per_million=10.0,
     )
     original = research_budget.reserve_before_dispatch(
         ledger, call_id="supervisor", request_body=b"process review"
@@ -973,9 +982,7 @@ def test_abandoned_supervisor_reservation_preserves_full_liability() -> None:
     original["purpose"] = "supervisor"
     research_budget.mark_unknown(ledger, call_id="supervisor")
     held_cost = original["cost_bound_usd"]
-    research_budget.authorize_supervisor_recovery_after_unknown(
-        ledger, call_id="supervisor"
-    )
+    research_budget.authorize_supervisor_recovery_after_unknown(ledger, call_id="supervisor")
     assert ledger["blocked_reason"] is None
     assert original["status"] == "unknown_supervisor_abandoned"
     assert original["cost_bound_usd"] == held_cost
@@ -986,9 +993,7 @@ def test_abandoned_supervisor_reservation_preserves_full_liability() -> None:
     research_budget.mark_unknown(ledger, call_id="research")
     assert second["status"] == "unknown"
     try:
-        research_budget.authorize_supervisor_recovery_after_unknown(
-            ledger, call_id="research"
-        )
+        research_budget.authorize_supervisor_recovery_after_unknown(ledger, call_id="research")
     except BudgetExceeded:
         pass
     else:
@@ -1011,10 +1016,12 @@ def test_pending_supervisor_reviews_only_run_once_after_resume() -> None:
 
     async def fake_supervisor(_session_id, _path, strategy_id, cycle, _lock):
         calls.append((strategy_id, cycle))
-        record["supervisor_reviews"].append({
-            "pair_key": f"{strategy_id}:{cycle}",
-            "status": "completed",
-        })
+        record["supervisor_reviews"].append(
+            {
+                "pair_key": f"{strategy_id}:{cycle}",
+                "status": "completed",
+            }
+        )
 
     async def run():
         with (
@@ -1034,7 +1041,8 @@ def test_transcript_conversion_uses_server_saved_event_only() -> None:
     from sigma.projects import ProjectError
 
     with patch.object(
-        session_log, "read",
+        session_log,
+        "read",
         return_value={
             "events": [
                 {
@@ -1045,9 +1053,10 @@ def test_transcript_conversion_uses_server_saved_event_only() -> None:
             ]
         },
     ):
-        assert text_conversion._saved_transcript_text(
-            "saved", "session", "event.5"
-        ) == "Claim: x_i is unverified."
+        assert (
+            text_conversion._saved_transcript_text("saved", "session", "event.5")
+            == "Claim: x_i is unverified."
+        )
         try:
             text_conversion._saved_transcript_text("saved", "session", "event.6")
         except ProjectError:
