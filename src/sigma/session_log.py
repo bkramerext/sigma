@@ -1105,10 +1105,11 @@ def transcript_markdown_export(
     session: dict[str, Any],
     title: str,
 ) -> str:
-    """Export complete readable dialogue from the existing durable records.
+    """Project durable provider and human records into a complete readable transcript.
 
-    The operational log remains authoritative and retains the low-level
-    request/response and diagnostic metadata. Nothing is rewritten here.
+    This is an export view, never a competing authoritative research record.
+    Preserve retention notices and show newest turns first; preserve author
+    order inside each paired turn.
     """
     requests = {
         str(event["request_id"]): event
@@ -1121,76 +1122,125 @@ def transcript_markdown_export(
         if event.get("type") in {"provider_response", "provider_failure"}
         and event.get("request_id")
     }
-    rows: list[tuple[str, int, str]] = []
+    rows: list[tuple[str, int, str | None, str, str]] = []
     for event in events:
         kind = event.get("type")
-        timestamp = str(event.get("timestamp") or "")
+        stamp = str(event.get("timestamp") or "")
         sequence = int(event.get("seq") or 0)
         if kind in {"provider_response", "provider_failure"}:
             request = requests.get(str(event.get("request_id") or ""), {})
             role = _event_role_label(request or event)
-            round_label = request.get("round", event.get("round", "—"))
+            turn = request.get("round", event.get("round", "—"))
             strategy = request.get("strategy_id", event.get("strategy_id"))
-            text = (
+            message = (
                 _readable_response(event.get("response"))
                 if kind == "provider_response"
-                else str(event.get("provider_error") or event.get("message") or "Provider call failed.")
+                else str(
+                    event.get("provider_error")
+                    or event.get("message")
+                    or "Provider call failed."
+                )
             )
-            heading = (
-                f"### {role} · Turn {round_label}"
-                + (f" · Strategy {strategy}" if strategy else "")
-            )
+            group_key = f"{strategy or 'session'}:{turn}"
+            group_label = f"Turn {turn}" + (f" · Strategy {strategy}" if strategy else "")
             rows.append(
-                (timestamp, sequence, heading + "\n\n"
-                 + f"*{timestamp}*\n\n"
-                 + _markdown_payload(text or "Response text unavailable in this historical log.", role))
+                (
+                    stamp,
+                    sequence,
+                    group_key,
+                    group_label,
+                    f"### {role}\n\n*{stamp}*\n\n"
+                    + _markdown_payload(message or "Historical reply text unavailable.", role),
+                )
             )
         elif kind == "provider_request":
             if str(event.get("request_id")) not in responded:
+                turn = event.get("round", "—")
+                strategy = event.get("strategy_id")
+                group_key = f"{strategy or 'session'}:{turn}"
+                group_label = f"Turn {turn}" + (f" · Strategy {strategy}" if strategy else "")
                 rows.append(
-                    (timestamp, sequence,
-                     f"### {_event_role_label(event)} · Request pending\n\n*{timestamp}*\n\nAwaiting response.")
+                    (
+                        stamp,
+                        sequence,
+                        group_key,
+                        group_label,
+                        f"### {_event_role_label(event)} · Request pending\n\n"
+                        f"*{stamp}*\n\nAwaiting response.",
+                    )
                 )
-        elif kind == "session_event":
-            if event.get("event_kind") == "intervention.accepted":
-                continue
-            message = str(event.get("message") or "")
-            rows.append(
-                (timestamp, sequence,
-                 f"### {event.get('event_kind') or 'Session event'!s}\n\n*{timestamp}*\n\n{message}")
-            )
+        elif kind == "session_event" and event.get("event_kind") == "intervention.accepted":
+            # The full Human text is projected from the Session below.
+            continue
         else:
-            # Keep retention markers and unusual operational events visible.
-            label = str(kind or "session event").replace("_", " ")
-            message = str(event.get("message") or event.get("reason") or event.get("status") or "")
+            label = str(event.get("event_kind") or kind or "Session event").replace("_", " ")
+            message = str(
+                event.get("message")
+                or event.get("reason")
+                or event.get("status")
+                or ""
+            )
             rows.append(
                 (
-                    timestamp,
+                    stamp,
                     sequence,
-                    f"### {label}\n\n*{timestamp}*\n\n{_markdown_payload(message, label)}",
+                    None,
+                    "Session activity",
+                    f"### {label}\n\n*{stamp}*\n\n{_markdown_payload(message, label)}",
                 )
             )
-    for offset, entry in enumerate(interventions):
-        if not isinstance(entry, dict) or not entry.get("submitted_at"):
+    for index, intervention in enumerate(interventions):
+        if not isinstance(intervention, dict) or not intervention.get("submitted_at"):
             continue
-        timestamp = str(entry["submitted_at"])
-        text = str(entry.get("text") or "")
+        stamp = str(intervention["submitted_at"])
+        label = str(intervention.get("kind") or "intervention")
+        message = str(intervention.get("text") or "")
         rows.append(
-            (timestamp, len(events) + offset + 1,
-             f"### Human · {entry.get('kind') or 'intervention'}\n\n*{timestamp}*\n\n"
-             + _markdown_payload(text, "Human"))
+            (
+                stamp,
+                len(events) + index + 1,
+                None,
+                "Human",
+                f"### Human · {label}\n\n*{stamp}*\n\n"
+                + _markdown_payload(message, "Human"),
+            )
         )
-    rows.sort(key=lambda row: (row[0], row[1]))
+    # A Human message between two agent pairs belongs with the preceding
+    # exchange. Other system events remain independently attributed.
+    groups: dict[str, dict[str, Any]] = {}
+    current_turn: str | None = None
+    for stamp, sequence, group_key, label, message in sorted(
+        rows, key=lambda item: (item[0], item[1])
+    ):
+        if group_key is not None:
+            current_turn = group_key
+        elif label == "Human":
+            group_key = current_turn
+        if group_key is None:
+            group_key = f"event:{sequence}"
+        group = groups.setdefault(
+            group_key, {"label": label, "entries": [], "latest": stamp}
+        )
+        group["entries"].append((stamp, sequence, message))
+        group["latest"] = max(group["latest"], stamp)
     output = [
         f"# {title}, Session {session.get('number', '—')} — Transcript",
         "",
-        "Chronological research messages from the saved Session and provider log.",
-        "Older missing content is not reconstructed.",
+        "Newest turns first, with entries chronological within each turn.",
+        "Unavailable historical content is never reconstructed.",
         "",
     ]
-    output.extend("\n\n".join(row[2] for row in rows).split("\n") if rows else ["No transcript entries are recorded."])
+    for group in sorted(
+        groups.values(), key=lambda item: item["latest"], reverse=True
+    ):
+        output.append(f"## {group['label']}")
+        output.append("")
+        for _stamp, _sequence, message in sorted(group["entries"]):
+            output.append(message)
+            output.append("")
+    if not groups:
+        output.append("No transcript entries are recorded.")
     return "\n".join(output).rstrip() + "\n"
-
 
 
 def _next_sequence(path: Path) -> int:
