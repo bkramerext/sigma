@@ -42,10 +42,80 @@
 }
 .project-scratchpad-entries { display: grid; gap: 12px; }
 .project-scratchpad-entry { border-bottom: 1px solid #35404a; padding-bottom: 12px; }
-.project-scratchpad-entry-heading { justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.project-scratchpad-entry-heading .strategy-row-disclosure { display: flex; align-items: center; gap: 6px; padding: 3px 0; background: transparent; border: 0; color: var(--sigma-copper-foreground); cursor: pointer; }
-.project-scratchpad-actions { gap: 4px; }
-.project-scratchpad-actions button { width: 27px; height: 27px; padding: 4px; }
+/* The title and its three tools form one continuous inline control group,
+   like a strategy title row; never right-justify tools or wrap "Note 1". */
+.sigma-global-settings .project-scratchpad-entry-heading {
+  justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-disclosure {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: max-content;
+  min-height: 28px;
+  gap: 7px;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #e4ebf3;
+  text-align: left;
+  font: 500 14px/1.6 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-disclosure svg {
+  display: block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+}
+.project-scratchpad-actions { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; }
+.sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  text-decoration: none;
+  cursor: pointer;
+}
+.sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon svg {
+  display: block;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+.sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon .markdown-logo {
+  width: 20px;
+  height: 18px;
+}
+.sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+}
+.sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon[aria-pressed="true"] {
+  color: #ffe5a6;
+}
 .project-scratchpad-entry textarea { box-sizing: border-box; display: block; width: 100%; min-height: 94px; resize: vertical; }
 .project-scratchpad-markdown { min-height: 94px; overflow-wrap: anywhere; }
 .project-scratchpad-entry [hidden] { display: none !important; }
