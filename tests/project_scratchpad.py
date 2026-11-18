@@ -1,4 +1,5 @@
 """Project Scratchpad portability and edit collision regression tests."""
+
 from __future__ import annotations
 
 import pytest
