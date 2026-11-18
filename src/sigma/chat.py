@@ -312,6 +312,7 @@ async def respond(
         payload["stream"] = True
     guard = hashlib.sha256((credential["mode"] + credential["token"]).encode()).hexdigest()
     attempt = None
+    text = ""
     response_data: Mapping[str, Any] | None = None
     try:
         if cloud_research.billing_enabled() and not is_personal and not external_session_billing:
