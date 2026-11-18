@@ -1098,7 +1098,6 @@ def markdown_export(
     return "\n".join(output).rstrip() + "\n"
 
 
-
 def transcript_markdown_export(
     events: list[dict[str, Any]],
     interventions: list[dict[str, Any]],
@@ -1229,6 +1228,7 @@ def transcript_markdown_export(
     if not groups:
         output.append("No transcript entries are recorded.")
     return "\n".join(output).rstrip() + "\n"
+
 
 def _next_sequence(path: Path) -> int:
     events, _ = _frames(path)
