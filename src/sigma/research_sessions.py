@@ -14344,6 +14344,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         return results
 
     while True:
+        # Complete any accepted research pairs awaiting a process review, including
+        # pairs saved immediately before a backend restart. No accepted role is replayed.
+        await _supervise_completed_pairs(session_id, path, state_lock)
         async with state_lock:
             record = _read(path, session_id)
             if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
@@ -14742,6 +14745,43 @@ def _supervisor_pair_input(record: dict[str, Any], strategy_id: str, cycle: int)
     ]
 
 
+async def _supervise_completed_pairs(
+    session_id: str, path: str, state_lock: asyncio.Lock
+) -> None:
+    """Drain saved, accepted pairs before the next research wave, including after Resume."""
+    async with state_lock:
+        record = _read(path, session_id)
+        settings = record.get("session_settings")
+        if (
+            record.get("status") not in {"running", "queued"}
+            or not isinstance(settings, dict)
+            or settings.get("supervisor_mode") not in {"light", "heavy"}
+        ):
+            return
+        reviews = {
+            item.get("pair_key")
+            for item in record.get("supervisor_reviews", [])
+            if isinstance(item, dict)
+        }
+        slots = {
+            (step.get("strategy_id"), step.get("cycle"))
+            for step in record.get("steps", [])
+            if isinstance(step, dict)
+            and step.get("status") == "completed"
+            and step.get("role") == "skeptic"
+            and type(step.get("cycle")) is int
+            and isinstance(step.get("strategy_id"), str)
+        }
+        pending = sorted(
+            (strategy_id, cycle)
+            for strategy_id, cycle in slots
+            if f"{strategy_id}:{cycle}" not in reviews
+            and _supervisor_pair_input(record, strategy_id, cycle) is not None
+        )
+    for strategy_id, cycle in pending:
+        await _portfolio_supervisor_call(session_id, path, strategy_id, cycle, state_lock)
+
+
 async def _portfolio_supervisor_call(
     session_id: str,
     path: str,
@@ -14947,27 +14987,17 @@ async def _portfolio_strategy_pipeline(
     role = "skeptic" if branch.get("pending_investigation") is not None else "investigator"
     try:
         if role == "skeptic":
-            completed = await _portfolio_role_call_with_recovery(
+            return await _portfolio_role_call_with_recovery(
                 session_id, path, strategy_id, role, cycle, semaphore, state_lock
             )
-            if completed:
-                await _portfolio_supervisor_call(
-                    session_id, path, strategy_id, cycle, state_lock
-                )
-            return completed
         if not await _portfolio_role_call_with_recovery(
             session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         ):
             return False
         role = "skeptic"
-        completed = await _portfolio_role_call_with_recovery(
+        return await _portfolio_role_call_with_recovery(
             session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         )
-        if completed:
-            await _portfolio_supervisor_call(
-                session_id, path, strategy_id, cycle + 1, state_lock
-            )
-        return completed
     except Exception as exc:  # noqa: BLE001 — preserve completed sibling outputs
         from sigma.production_observability import safe_exception_trace
 
