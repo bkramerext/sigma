@@ -3994,7 +3994,8 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         else ""
     )
     guidance = (
-        INVESTIGATOR_GUIDANCE if role == "investigator"
+        INVESTIGATOR_GUIDANCE
+        if role == "investigator"
         else SKEPTIC_GUIDANCE + brainstorm_peer_guidance
     )
     retry_guidance = (
