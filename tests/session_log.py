@@ -857,7 +857,7 @@ def test_extension_preserves_partial_pair_and_refuses_duplicate_accepted_steps()
     saved["steps"].append(_completed_pair_step("investigator", 2))
     rejected, reason = research_sessions._protocol_completion_recovery_plan(saved)
     assert rejected is None
-    assert "duplicate" in reason.lower()
+    assert isinstance(reason, str) and "duplicate" in reason.lower()
 
 
 def test_unlimited_turn_growth_does_not_extend_finished_branches() -> None:
