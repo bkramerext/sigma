@@ -899,7 +899,6 @@ def test_brainstorm_second_participant_has_constructive_guidance() -> None:
     assert "required evidence-review schema" in brainstorm
 
 
-
 def test_supervisor_response_validation_and_process_guidance() -> None:
     from sigma import research_sessions, session_supervisor
     from sigma.projects import ProjectError
