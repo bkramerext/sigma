@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { projectTranscript, readableTranscriptResponse, transcriptCategories } from '../src/session-transcript.ts';
+
+test('response entries use completion order and retain full provider-authored output', () => {
+  const entries = projectTranscript([
+    { seq: 1, timestamp: '2026-11-18T01:00:00Z', type: 'provider_request', request_id: 'a', role: 'investigator', round: 1, strategy_id: 'x' },
+    { seq: 2, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'b', role: 'skeptic', round: 1 },
+    { seq: 3, timestamp: '2026-11-18T01:00:03Z', type: 'provider_response', request_id: 'b', response: { output_text: 'Challenge and counterexample' } },
+    { seq: 4, timestamp: '2026-11-18T01:00:04Z', type: 'provider_response', request_id: 'a', response: { output: [{ content: [{ text: 'Long investigator response' }] }] } },
+  ]);
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries.map(entry => entry.role), ['skeptic', 'investigator']);
+  assert.equal(entries[1].text, 'Long investigator response');
+  assert.equal(entries[1].strategyId, 'x');
+});
+test('human intervention shows full text without a duplicate status entry', () => {
+  const entries = projectTranscript([
+    { seq: 1, type: 'session_event', timestamp: '2026-11-18T01:00:00Z', event_kind: 'intervention.accepted', message: 'Human objection accepted' },
+  ], [{ id: 'h1', text: 'Please test the boundary case.', kind: 'objection', submitted_at: '2026-11-18T01:00:00Z' }]);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].role, 'human');
+  assert.equal(entries[0].text, 'Please test the boundary case.');
+});
+test('raw JSON responses display readable headings without truncation', () => {
+  const text = readableTranscriptResponse({ output_text: JSON.stringify({ claim: 'A'.repeat(10000), objections: ['B'] }) });
+  assert.ok(text.includes('A'.repeat(10000)));
+  assert.match(text, /#### Claim/);
+  assert.match(text, /#### Objections/);
+});
+test('unanswered requests stay visible and filter categories are unique', () => {
+  assert.equal(projectTranscript([{ seq: 1, timestamp: '2026-11-18T01:00:00Z', type: 'provider_request', request_id: 'x', role: 'investigator' }])[0].pending, true);
+  assert.equal(new Set(transcriptCategories.map(item => item.value)).size, transcriptCategories.length);
+});
