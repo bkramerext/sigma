@@ -128,7 +128,7 @@ dialog.project-settings-dialog.sigma-global-settings .project-scratchpad-entry-h
   outline: 2px solid #edbc77;
   outline-offset: 3px;
 }
-.project-scratchpad-actions { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; margin-left: 7px; }
+.project-scratchpad-actions { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; margin-left: 17px; }
 .sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon {
   appearance: none;
   box-sizing: border-box;
