@@ -714,6 +714,77 @@ def test_session_status_and_correlated_errors_match_export() -> None:
     assert "Unrelated pre-session failure" not in exported
 
 
+
+def test_flat_turn_settings_convert_legacy_rounds_without_relabeling() -> None:
+    from sigma import research_sessions
+
+    legacy = research_sessions._session_configuration(
+        {"research_rounds": 3, "turns_per_round": 3}
+    )
+    assert legacy["turn_limit"] == 9
+    assert not legacy["unlimited_turns"]
+    assert research_sessions._session_configuration({"turn_limit": 17})["turn_limit"] == 17
+    assert research_sessions._session_configuration(
+        {"single_round_unlimited_turns": True, "research_rounds": 1, "turns_per_round": 4}
+    )["unlimited_turns"]
+    # Existing saved slot numbers remain the canonical history; a flat turn
+    # presentation does not alter the old schedule divisor.
+    saved = {"scheduler_version": 2, "turns_per_round": 3}
+    assert research_sessions._paired_round_position(saved, 7) == (3, 1)
+    assert research_sessions._paired_round_position(saved, 9) == (3, 3)
+
+
+def test_complete_transcript_export_groups_turns_newest_first() -> None:
+    events = [
+        {
+            "seq": 1,
+            "timestamp": "2026-11-18T01:00:00Z",
+            "type": "provider_request",
+            "request_id": "a",
+            "role": "investigator",
+            "round": 1,
+            "strategy_id": "alpha",
+        },
+        {
+            "seq": 2,
+            "timestamp": "2026-11-18T01:00:01Z",
+            "type": "provider_response",
+            "request_id": "a",
+            "response": {"output_text": "First argument"},
+        },
+        {
+            "seq": 3,
+            "timestamp": "2026-11-18T01:00:02Z",
+            "type": "provider_request",
+            "request_id": "b",
+            "role": "skeptic",
+            "round": 2,
+            "strategy_id": "alpha",
+        },
+        {
+            "seq": 4,
+            "timestamp": "2026-11-18T01:00:03Z",
+            "type": "provider_response",
+            "request_id": "b",
+            "response": {"output_text": "Second argument"},
+        },
+        {
+            "seq": 5,
+            "timestamp": "2026-11-18T01:00:04Z",
+            "type": "retention_limit",
+            "message": "Earlier diagnostics were omitted",
+        },
+    ]
+    exported = session_log.transcript_markdown_export(
+        events, [], {"number": 7}, "Research"
+    )
+    assert exported.index("## Turn 2") < exported.index("## Turn 1")
+    assert "Second argument" in exported
+    assert "First argument" in exported
+    assert "Earlier diagnostics were omitted" in exported
+
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
@@ -731,6 +802,8 @@ def main() -> None:
         test_saved_reference_diagnostics_and_markdown_export()
         test_session_log_download_route_content_and_name()
         test_session_status_and_correlated_errors_match_export()
+        test_flat_turn_settings_convert_legacy_rounds_without_relabeling()
+        test_complete_transcript_export_groups_turns_newest_first()
         from test_project_diagnostics import (
             test_client_report_and_copy_download_share_canonical_record,
             test_logging_failure_is_reported_without_breaking_admission,
