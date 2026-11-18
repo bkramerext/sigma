@@ -31,7 +31,7 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
   return <div className="project-scratchpad">
     <div className="project-scratchpad-heading">
       <h3>Scratchpad</h3>
-      <button type="button" className="text-view-link sigma-heading-icon-action"
+      <button type="button" className="pt-new-action"
         disabled={disabled || entries.length >= 100} aria-label="Add scratchpad entry"
         data-tooltip="Add scratchpad entry" onClick={add}>
         <svg className="sigma-action-glyph" aria-hidden="true" viewBox="0 0 24 24" fill="none"
