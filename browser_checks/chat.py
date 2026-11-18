@@ -117,13 +117,18 @@ with sync_playwright() as playwright:
                 route.fulfill(
                     status=422,
                     content_type="application/json",
-                    body=json.dumps({
-                        "detail": [
-                            {"type": "extra_forbidden", "loc": ["body", field],
-                             "msg": "Extra inputs are not permitted"}
-                            for field in extra
-                        ]
-                    }),
+                    body=json.dumps(
+                        {
+                            "detail": [
+                                {
+                                    "type": "extra_forbidden",
+                                    "loc": ["body", field],
+                                    "msg": "Extra inputs are not permitted",
+                                }
+                                for field in extra
+                            ]
+                        }
+                    ),
                 )
                 return
             transcript_messages.append(payload)
