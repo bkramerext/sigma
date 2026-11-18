@@ -904,9 +904,15 @@ def _session_configuration(
     """
     value = raw if isinstance(raw, dict) else {}
     allowed = {
-        "name", "brainstorm_mode", "supervisor_mode", "unlimited_turns",
-        "turn_limit", "single_round_unlimited_turns", "research_rounds",
-        "turns_per_round", "session_score",
+        "name",
+        "brainstorm_mode",
+        "supervisor_mode",
+        "unlimited_turns",
+        "turn_limit",
+        "single_round_unlimited_turns",
+        "research_rounds",
+        "turns_per_round",
+        "session_score",
     }
     if set(value) - allowed:
         raise ProjectError("Unsupported session configuration")
@@ -962,7 +968,10 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
         for branch in branches
         if isinstance(branch, dict) and branch.get("status") in {"queued", "running"}
     ]
-    if not active or max(int(branch.get("cycle", 0)) for branch in active) + 1 < record["cycle_limit"]:
+    if (
+        not active
+        or max(int(branch.get("cycle", 0)) for branch in active) + 1 < record["cycle_limit"]
+    ):
         return False
     next_limit = record["cycle_limit"] + 1
     # A prior decrease in configured turns never surrendered the conservative
@@ -5823,8 +5832,7 @@ async def update_session_configuration(
                 + [
                     int(branch.get("cycle", 0))
                     for branch in record.get("strategy_runs", [])
-                    if isinstance(branch, dict)
-                    and type(branch.get("cycle")) is int
+                    if isinstance(branch, dict) and type(branch.get("cycle")) is int
                 ]
             )
             if new_settings["turn_limit"] < executed_turns:
@@ -5847,9 +5855,7 @@ async def update_session_configuration(
             ledger = record.get("hard_budget_ledger")
             if added_calls and isinstance(ledger, dict):
                 try:
-                    increase_call_limit(
-                        ledger, int(ledger.get("call_limit", 0)) + added_calls
-                    )
+                    increase_call_limit(ledger, int(ledger.get("call_limit", 0)) + added_calls)
                 except BudgetExceeded as exc:
                     raise ProjectError(str(exc)) from exc
             if added_calls:
@@ -7165,7 +7171,11 @@ async def start_session(
             )
             record = {
                 "schema_version": 1,
-                **({"session_settings": frozen_session_settings} if session_settings is not None else {}),
+                **(
+                    {"session_settings": frozen_session_settings}
+                    if session_settings is not None
+                    else {}
+                ),
                 **(
                     {
                         "scheduler_version": 2,
