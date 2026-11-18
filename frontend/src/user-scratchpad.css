@@ -50,32 +50,74 @@
   margin-bottom: 8px;
   min-width: 0;
 }
-.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-disclosure {
+/* Paper's chevron and title are distinct, closely spaced targets. Only the
+   title gets an underline on hover; neither receives a copper fill. */
+.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-chevron {
   appearance: none;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
-  width: auto;
-  min-width: max-content;
-  min-height: 28px;
-  gap: 7px;
-  margin: 0;
-  padding: 2px 0;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 16px;
+  height: 22px;
+  min-height: 22px;
+  margin: 0 3px 0 -1px;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
   color: #e4ebf3;
-  text-align: left;
-  font: 500 14px/1.6 Inter, ui-sans-serif, system-ui, sans-serif;
-  white-space: nowrap;
   cursor: pointer;
 }
-.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-disclosure svg {
+.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-chevron .disclosure-chevron {
   display: block;
-  flex: 0 0 14px;
-  width: 14px;
-  height: 14px;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+}
+.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-title {
+  appearance: none;
+  display: inline;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  box-shadow: none;
+  color: #e4ebf3;
+  font: 600 14px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+/* Override the broad User Settings button hover rule specifically for
+   paper-style disclosure targets, preserving its original inline behavior. */
+dialog.project-settings-dialog.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-chevron:is(:hover, :focus-visible):not(:disabled),
+dialog.project-settings-dialog.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-title:is(:hover, :focus-visible):not(:disabled) {
+  color: var(--sigma-copper-foreground) !important;
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  border-radius: 0;
+  box-shadow: none !important;
+  filter: none;
+  text-shadow: none;
+}
+dialog.project-settings-dialog.sigma-global-settings .project-scratchpad-entry-heading > button.project-scratchpad-title:is(:hover, :focus-visible):not(:disabled) {
+  text-decoration: underline !important;
+  text-underline-offset: 3px;
+}
+.sigma-global-settings .project-scratchpad-entry-heading > button:is(.project-scratchpad-chevron, .project-scratchpad-title):focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
 }
 .project-scratchpad-actions { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 4px; }
 .sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon {
@@ -106,8 +148,12 @@
   height: 18px;
 }
 .sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon .markdown-logo {
-  width: 20px;
-  height: 18px;
+  width: 26px;
+  height: 20px;
+  flex: 0 0 26px;
+}
+.sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon:has(.markdown-logo) {
+  padding: 1px;
 }
 .sigma-global-settings .project-scratchpad-actions > button.project-scratchpad-icon:focus-visible {
   outline: 2px solid #edbc77;
