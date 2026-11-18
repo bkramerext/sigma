@@ -2304,8 +2304,9 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       brainstorm_mode: old?.brainstorm_mode ?? false,
       supervisor_mode: old?.supervisor_mode ?? 'none',
       unlimited_turns: old?.unlimited_turns ?? old?.single_round_unlimited_turns ?? false,
-      turn_limit: old?.turn_limit ?? (old?.research_rounds && old?.turns_per_round
-        ? old.research_rounds * old.turns_per_round : session.cycle_limit ?? baseline.turn_limit),
+      turn_limit: Math.max(1, session.cycle_limit ?? 0,
+        old?.turn_limit ?? (old?.research_rounds && old?.turns_per_round
+          ? old.research_rounds * old.turns_per_round : baseline.turn_limit)),
     };
   }
 
