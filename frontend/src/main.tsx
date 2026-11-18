@@ -2352,7 +2352,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         if (settingsDialog.mode === 'start') {
           setPendingStartSettings(next);
           setSettingsDialog(null);
-          void start(next);
+          setConfirmStart(true);
         } else if (settingsDialog.sessionId) {
           void saveSessionSettings(settingsDialog.sessionId, next);
         }
