@@ -667,6 +667,7 @@ class ResearchStartRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_limits: dict[str, Any] | None = None
+    session_settings: dict[str, Any] | None = None
     continue_using_saved_type_settings: bool = False
     browser_presence_required: bool = Field(default=False, strict=True)
 
@@ -2086,6 +2087,7 @@ async def research_start_view(body: ResearchStartRequest):
             body.strategy_ids,
             body.continue_using_saved_type_settings,
             body.browser_presence_required,
+            body.session_settings,
         )
     except ProjectError as exc:
         safe_message = project_diagnostics.sanitize(str(exc))
