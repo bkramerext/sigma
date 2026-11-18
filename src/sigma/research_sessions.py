@@ -903,6 +903,8 @@ def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
         "supervisor_mode",
         "single_round_unlimited_turns",
         "session_score",
+        "research_rounds",
+        "turns_per_round",
     }
     if set(value) - allowed:
         raise ProjectError("Unsupported session configuration")
@@ -915,12 +917,20 @@ def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
     for key in ("brainstorm_mode", "single_round_unlimited_turns", "session_score"):
         if type(value.get(key, False)) is not bool:
             raise ProjectError("Session configuration checkboxes must be boolean")
+    rounds = value.get("research_rounds", 3)
+    turns = value.get("turns_per_round", 3)
+    if type(rounds) is not int or not 1 <= rounds <= 60:
+        raise ProjectError("Research rounds must be between 1 and 60")
+    if type(turns) is not int or not 1 <= turns <= 20 or rounds * turns > 1200:
+        raise ProjectError("Turns per round must be between 1 and 20 within the configured call limit")
     return {
         "name": name.strip(),
         "brainstorm_mode": value.get("brainstorm_mode", False),
         "supervisor_mode": mode,
         "single_round_unlimited_turns": value.get("single_round_unlimited_turns", False),
         "session_score": value.get("session_score", False),
+        "research_rounds": rounds,
+        "turns_per_round": turns,
     }
 
 
@@ -6905,6 +6915,16 @@ async def start_session(
                     "Browser disconnected before research admission; no call was dispatched"
                 )
             limits = _session_start_limits(get_limits(view.path), expected_limits)
+            if limits.get("scheduler_version") == 2:
+                limits = _validate_limits(
+                    {
+                        **limits,
+                        "research_rounds": frozen_session_settings["research_rounds"],
+                        "turns_per_round": frozen_session_settings["turns_per_round"],
+                        "model_calls": 2 * frozen_session_settings["research_rounds"]
+                        * frozen_session_settings["turns_per_round"],
+                    }
+                )
             runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
