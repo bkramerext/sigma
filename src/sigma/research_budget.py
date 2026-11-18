@@ -54,9 +54,7 @@ def authorize_independent_review_after_unknown(
     ledger["blocked_reason"] = None
 
 
-def authorize_supervisor_recovery_after_unknown(
-    ledger: dict[str, Any], *, call_id: str
-) -> None:
+def authorize_supervisor_recovery_after_unknown(ledger: dict[str, Any], *, call_id: str) -> None:
     """Resume research after one uncertain optional supervisor, retaining its full liability.
 
     Unlike an Investigator/Skeptic attempt, an abandoned process observation
@@ -80,8 +78,7 @@ def authorize_supervisor_recovery_after_unknown(
         target.get("status") != "unknown"
         or ledger.get("blocked_reason") != "Provider call outcome or usage is unknown"
         or any(
-            item is not target and item.get("status") in {"reserved", "unknown"}
-            for item in calls
+            item is not target and item.get("status") in {"reserved", "unknown"} for item in calls
         )
     ):
         raise BudgetExceeded("Supervisor recovery cannot clear another unsettled provider call")
