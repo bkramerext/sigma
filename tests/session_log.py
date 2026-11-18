@@ -779,7 +779,6 @@ def test_complete_transcript_export_groups_turns_newest_first() -> None:
     assert "Earlier diagnostics were omitted" in exported
 
 
-
 def _completed_pair_step(role: str, cycle: int) -> dict:
     return {
         "id": f"{role}-{cycle}",
@@ -799,12 +798,14 @@ def _extended_session_record() -> dict:
         "cycle_limit": 2,
         "call_limit": 4,
         "calls_used": 2,
-        "strategy_runs": [{
-            "strategy_id": "strategy-a",
-            "status": "ended",
-            "cycle": 1,
-            "pending_investigation": None,
-        }],
+        "strategy_runs": [
+            {
+                "strategy_id": "strategy-a",
+                "status": "ended",
+                "cycle": 1,
+                "pending_investigation": None,
+            }
+        ],
         "steps": [
             _completed_pair_step("investigator", 1),
             _completed_pair_step("skeptic", 1),
@@ -821,15 +822,19 @@ def test_extended_completed_session_plans_new_slots_without_replaying_history() 
     assert plan is not None
     assert plan["completed_turns"] == 2
     assert plan["required_calls"] == 2
-    assert plan["branches"] == [{
-        "strategy_id": "strategy-a",
-        "role": "investigator",
-        "cycle": 2,
-        "recovery_context": plan["branches"][0]["recovery_context"],
-    }]
+    assert plan["branches"] == [
+        {
+            "strategy_id": "strategy-a",
+            "role": "investigator",
+            "cycle": 2,
+            "recovery_context": plan["branches"][0]["recovery_context"],
+        }
+    ]
     assert plan["branches"][0]["recovery_context"]["new_request"] is True
-    assert saved["steps"] == [_completed_pair_step("investigator", 1),
-                              _completed_pair_step("skeptic", 1)]
+    assert saved["steps"] == [
+        _completed_pair_step("investigator", 1),
+        _completed_pair_step("skeptic", 1),
+    ]
     # No extension marker means a completed Session must stay completed.
     saved["settings_extended"] = False
     rejected, reason = research_sessions._protocol_completion_recovery_plan(saved)
