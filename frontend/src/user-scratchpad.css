@@ -2,8 +2,44 @@
 .project-scratchpad-entry-heading,
 .project-scratchpad-actions { display: flex; align-items: center; }
 .project-scratchpad-heading { gap: 8px; margin-bottom: 14px; }
-.project-scratchpad-heading h3 { margin: 0; color: var(--sigma-copper-foreground); font-size: 15px; font-weight: 500; }
-.project-scratchpad-heading .sigma-heading-icon-action { width: 24px; height: 24px; padding: 2px; }
+/* Match the Project Types heading and New action, including its 28px icon slot. */
+.project-scratchpad-heading h3 {
+  margin: 0;
+  color: var(--sigma-copper-foreground);
+  font: 400 17px/1.35 Georgia, serif;
+}
+.sigma-global-settings .project-scratchpad-heading > button.pt-new-action {
+  appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 2px;
+  margin: 0;
+  line-height: 0;
+  color: var(--sigma-copper-foreground);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.sigma-global-settings .project-scratchpad-heading > button.pt-new-action .sigma-action-glyph {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+.sigma-global-settings .project-scratchpad-heading > button.pt-new-action:disabled {
+  opacity: .55;
+  cursor: default;
+}
 .project-scratchpad-entries { display: grid; gap: 12px; }
 .project-scratchpad-entry { border-bottom: 1px solid #35404a; padding-bottom: 12px; }
 .project-scratchpad-entry-heading { justify-content: space-between; gap: 8px; margin-bottom: 8px; }
