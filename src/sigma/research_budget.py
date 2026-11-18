@@ -75,7 +75,8 @@ def authorize_supervisor_recovery_after_unknown(ledger: dict[str, Any], *, call_
             raise BudgetExceeded("Another uncertain request blocks research")
         return
     if (
-        target.get("status") != "unknown"
+        target.get("purpose") != "supervisor"
+        or target.get("status") != "unknown"
         or ledger.get("blocked_reason") != "Provider call outcome or usage is unknown"
         or any(
             item is not target and item.get("status") in {"reserved", "unknown"} for item in calls
