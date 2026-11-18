@@ -672,6 +672,10 @@ class ResearchStartRequest(OpenRequest):
     browser_presence_required: bool = Field(default=False, strict=True)
 
 
+class SessionSettingsRequest(OpenRequest):
+    settings: dict[str, Any]
+
+
 class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
     additional_calls: int = Field(default=0, ge=0, le=12)
@@ -2125,6 +2129,16 @@ async def research_start_view(body: ResearchStartRequest):
         "session.start_ack duration_ms=%.1f", (perf_counter() - admission_started) * 1000
     )
     return result
+
+
+@app.put("/api/projects/research-sessions/{session_id}/settings")
+async def research_session_settings_view(session_id: str, body: SessionSettingsRequest):
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
+    )
+    return await research_sessions.update_session_configuration(
+        body.path, session_id, body.settings
+    )
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")
