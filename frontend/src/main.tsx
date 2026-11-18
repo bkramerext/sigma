@@ -1965,7 +1965,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }
 
   async function start(selectedSettings?: SessionSettings) {
-    const sessionSettings = selectedSettings ?? pendingStartSettings ?? defaultSessionSettings(limits);
+    const sessionSettings = selectedSettings ?? pendingStartSettings;
     if (guest) { setConfirmStart(false); setGuestSessionCard(true); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
@@ -1980,8 +1980,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
       const next = mockResearch
-        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current, session_settings: sessionSettings })
-        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, browser_presence_required: true, continue_using_saved_type_settings: continueWithSavedType.current, session_settings: sessionSettings });
+        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current, ...(sessionSettings ? { session_settings: sessionSettings } : {}) })
+        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, browser_presence_required: true, continue_using_saved_type_settings: continueWithSavedType.current, ...(sessionSettings ? { session_settings: sessionSettings } : {}) });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       // Start can be stopped before the first server response. Its identifier
