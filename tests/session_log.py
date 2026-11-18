@@ -718,9 +718,7 @@ def test_session_status_and_correlated_errors_match_export() -> None:
 def test_flat_turn_settings_convert_legacy_rounds_without_relabeling() -> None:
     from sigma import research_sessions
 
-    legacy = research_sessions._session_configuration(
-        {"research_rounds": 3, "turns_per_round": 3}
-    )
+    legacy = research_sessions._session_configuration({"research_rounds": 3, "turns_per_round": 3})
     assert legacy["turn_limit"] == 9
     assert not legacy["unlimited_turns"]
     assert research_sessions._session_configuration({"turn_limit": 17})["turn_limit"] == 17
@@ -775,14 +773,11 @@ def test_complete_transcript_export_groups_turns_newest_first() -> None:
             "message": "Earlier diagnostics were omitted",
         },
     ]
-    exported = session_log.transcript_markdown_export(
-        events, [], {"number": 7}, "Research"
-    )
+    exported = session_log.transcript_markdown_export(events, [], {"number": 7}, "Research")
     assert exported.index("## Turn 2") < exported.index("## Turn 1")
     assert "Second argument" in exported
     assert "First argument" in exported
     assert "Earlier diagnostics were omitted" in exported
-
 
 
 def main() -> None:
