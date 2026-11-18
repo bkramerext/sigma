@@ -89,7 +89,10 @@ def main() -> None:
         assert (
             abs((settings_box["x"] + settings_box["width"]) - (model_box["x"] + model_box["width"]))
             <= 1
-        ), "Settings right edge must align with Model pill"
+        ), (
+            "Settings right edge must align with Model pill: "
+            f"settings={settings_box}, model={model_box}, about={about_box}"
+        )
         assert settings_box["x"] - (about_box["x"] + about_box["width"]) >= 8, (
             "About/Settings gap must be preserved"
         )
