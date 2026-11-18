@@ -107,7 +107,31 @@ with sync_playwright() as playwright:
             )
             return
         if url.endswith("/api/chat/message"):
-            transcript_messages.append(route.request.post_data_json)
+            payload = route.request.post_data_json
+            # Mirror the real FastAPI transcript model's extra="forbid".
+            # Previously the mock accepted Supervisor-only UI fields such as
+            # score and breakthrough, hiding a 422 on every real assessment.
+            allowed = {"conversation_id", "speaker", "text", "recipient", "guidance"}
+            extra = sorted(set(payload) - allowed)
+            if extra:
+                route.fulfill(
+                    status=422,
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "detail": [
+                                {
+                                    "type": "extra_forbidden",
+                                    "loc": ["body", field],
+                                    "msg": "Extra inputs are not permitted",
+                                }
+                                for field in extra
+                            ]
+                        }
+                    ),
+                )
+                return
+            transcript_messages.append(payload)
             route.fulfill(status=204, body="")
             return
         if url.endswith("/api/chat/config"):
@@ -682,6 +706,11 @@ with sync_playwright() as playwright:
         item["speaker"] == "supervisor" and "Research progress:" in item["text"]
         for item in transcript_messages
     ), "A later successful Supervisor assessment must still be recorded"
+    assert not any(
+        item["speaker"] == "supervisor"
+        and "Supervisor assessment unavailable: body.score" in item["text"]
+        for item in transcript_messages
+    ), "Successful Supervisor assessments must not fail transcript schema validation"
     assert all(
         not any(
             message["speaker"] == "supervisor"
