@@ -970,6 +970,7 @@ def test_abandoned_supervisor_reservation_preserves_full_liability() -> None:
     original = research_budget.reserve_before_dispatch(
         ledger, call_id="supervisor", request_body=b"process review"
     )
+    original["purpose"] = "supervisor"
     research_budget.mark_unknown(ledger, call_id="supervisor")
     held_cost = original["cost_bound_usd"]
     research_budget.authorize_supervisor_recovery_after_unknown(
