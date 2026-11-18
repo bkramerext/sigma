@@ -1309,6 +1309,7 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
             if isinstance(item, dict)
         ],
         "project_title": view.project.title,
+        "project_id": view.project.id,
         "session": {
             "id": session_id,
             "number": session.get("session_number"),
