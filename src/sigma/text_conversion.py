@@ -207,13 +207,17 @@ def _saved_transcript_text(path: str, session_id: str, field_path: str) -> str:
         response = item.get("response")
         if isinstance(response, dict):
             output = response.get("output")
-            parts = [
-                part["text"]
-                for block in output
-                if isinstance(block, dict)
-                for part in block.get("content", [])
-                if isinstance(part, dict) and isinstance(part.get("text"), str)
-            ] if isinstance(output, list) else []
+            parts = (
+                [
+                    part["text"]
+                    for block in output
+                    if isinstance(block, dict)
+                    for part in block.get("content", [])
+                    if isinstance(part, dict) and isinstance(part.get("text"), str)
+                ]
+                if isinstance(output, list)
+                else []
+            )
             raw = "\n\n".join(parts) or response.get("output_text", "")
         elif isinstance(response, str):
             raw = response
@@ -343,9 +347,7 @@ async def _convert_text(
                     or target_format != "markdown"
                     or expected_digest != "server-snapshot"
                 ):
-                    raise ProjectError(
-                        "Transcript conversion requires a saved event and Markdown"
-                    )
+                    raise ProjectError("Transcript conversion requires a saved event and Markdown")
                 raw_block = _saved_transcript_text(path, session_id, field_path)
                 source = {
                     "source_format": "plain",
