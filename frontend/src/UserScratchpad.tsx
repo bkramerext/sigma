@@ -46,7 +46,7 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
         const isMarkdown = markdown[entry.id] ?? false;
         return <section className="project-scratchpad-entry" key={entry.id}>
           <div className="project-scratchpad-entry-heading">
-            <button type="button" className="strategy-row-disclosure"
+            <button type="button" className="strategy-row-disclosure project-scratchpad-disclosure"
               aria-expanded={!isCollapsed} aria-controls={`scratchpad-${entry.id}`}
               onClick={() => setCollapsed(previous => ({ ...previous, [entry.id]: !isCollapsed }))}>
               <svg aria-hidden="true" className={`disclosure-chevron${isCollapsed ? '' : ' is-expanded'}`}
@@ -54,7 +54,7 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
               <span>Note {index + 1}</span>
             </button>
             <div className="project-scratchpad-actions">
-              <button type="button" className={`sigma-render-toggle sigma-unified-markdown workspace-icon-button${isMarkdown ? ' sigma-render-active' : ''}`}
+              <button type="button" className={`sigma-render-toggle sigma-unified-markdown project-scratchpad-icon${isMarkdown ? ' sigma-render-active' : ''}`}
                 aria-label={isMarkdown ? 'Show plain text' : 'Render as Markdown'}
                 aria-pressed={isMarkdown} data-tooltip={isMarkdown ? 'Show plain text' : 'Render as Markdown'}
                 onClick={() => setMarkdown(previous => ({ ...previous, [entry.id]: !isMarkdown }))}>
@@ -62,7 +62,7 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
                   xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"
                     fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>
               </button>
-              <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button"
+              <button type="button" className="text-view-link project-scratchpad-icon text-copy-button"
                 aria-label={`Copy scratchpad note ${index + 1}`} data-tooltip={copied === entry.id ? 'Copied' : 'Copy note'}
                 onClick={() => void copy(entry)}>
                 <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -71,7 +71,7 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
                   <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>
                 </svg>
               </button>
-              <button type="button" className="text-view-link text-view-icon workspace-icon-button project-scratchpad-remove"
+              <button type="button" className="text-view-link project-scratchpad-icon project-scratchpad-remove"
                 aria-label={`Remove scratchpad note ${index + 1}`} data-tooltip="Remove note"
                 disabled={disabled} onClick={() => onChange(entries.filter(item => item.id !== entry.id))}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
