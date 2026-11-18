@@ -1162,8 +1162,10 @@ def transcript_markdown_export(
                         sequence,
                         group_key,
                         group_label,
-                        f"### {_event_role_label(event)} · Request pending\n\n"
-                        f"*{stamp}*\n\nAwaiting response.",
+                        (
+                            f"### {_event_role_label(event)} · Request pending\n\n"
+                            f"*{stamp}*\n\nAwaiting response."
+                        ),
                     )
                 )
         elif kind == "session_event" and event.get("event_kind") == "intervention.accepted":
