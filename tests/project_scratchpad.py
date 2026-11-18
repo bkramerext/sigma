@@ -36,13 +36,16 @@ def test_scratchpad_rejects_conflicting_edits_without_discarding_notes(tmp_path)
     assert list(inspect_project(path).project.scratchpad) == [entry]
 
 
-@pytest.mark.parametrize("entries", [
-    [{"id": "x" * 32, "text": "Invalid ID"}],
-    [{"id": "a" * 32, "text": "A"}, {"id": "a" * 32, "text": "duplicate"}],
-    [{"id": "a" * 32, "text": "x" * 50001}],
-    [{"id": "a" * 32, "text": "ok", "extra": "not allowed"}],
-    [{"id": "a" * 32, "text": "ok"}] * 101,
-])
+@pytest.mark.parametrize(
+    "entries",
+    [
+        [{"id": "x" * 32, "text": "Invalid ID"}],
+        [{"id": "a" * 32, "text": "A"}, {"id": "a" * 32, "text": "duplicate"}],
+        [{"id": "a" * 32, "text": "x" * 50001}],
+        [{"id": "a" * 32, "text": "ok", "extra": "not allowed"}],
+        [{"id": "a" * 32, "text": "ok"}] * 101,
+    ],
+)
 def test_scratchpad_rejects_invalid_notes(entries):
     with pytest.raises(ProjectError):
         _validate_scratchpad(entries)
