@@ -5832,7 +5832,10 @@ async def update_session_configuration(
                     "increase the number of rounds instead"
                 )
             if new_settings["single_round_unlimited_turns"]:
-                new_cycles = max(old_cycles, new_settings["turns_per_round"])
+                new_cycles = max(
+                    old_cycles + (1 if completed_any and not prior_unlimited else 0),
+                    new_settings["turns_per_round"],
+                )
             else:
                 new_cycles = new_settings["research_rounds"] * new_settings["turns_per_round"]
             if new_cycles < old_cycles:
@@ -5878,6 +5881,13 @@ async def update_session_configuration(
             record["session_settings"] = new_settings
             if extended and record.get("status") in {"completed", "ended", "failed"}:
                 record["settings_extended"] = True
+                # The established recovery planner accepts ended branches,
+                # not completed branches. The parent Session remains completed
+                # until the user explicitly presses Resume.
+                if new_cycles > old_cycles:
+                    for branch in record.get("strategy_runs", []):
+                        if branch.get("status") == "completed":
+                            branch["status"] = "ended"
                 # Inactive time since the previous completion is not consumed by
                 # the explicitly authorized new Session research allowance.
                 duration = record.get("configured_duration_limit_minutes")
