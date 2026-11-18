@@ -11847,7 +11847,7 @@ def _commit_portfolio_review(
     if (
         isinstance(settings, dict)
         and settings.get("brainstorm_mode") is True
-        and settings.get("single_round_unlimited_turns") is True
+        and settings.get("unlimited_turns") is True
         and decision
         in {
             "stop_productive_conclusion",
@@ -11864,7 +11864,7 @@ def _commit_portfolio_review(
                     for item in output.get("remaining_obligations", [])
                     if str(item).strip()
                 ),
-                ""
+                "",
             )
             or "Independently explore another question about the research objective, "
             "without treating previous tentative conclusions as established."
