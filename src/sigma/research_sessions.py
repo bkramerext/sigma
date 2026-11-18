@@ -14887,7 +14887,45 @@ async def _supervise_completed_pairs(
             and _supervisor_pair_input(record, strategy_id, cycle) is not None
         )
     for strategy_id, cycle in pending:
-        await _portfolio_supervisor_call(session_id, path, strategy_id, cycle, state_lock)
+        try:
+            await _portfolio_supervisor_call(
+                session_id, path, strategy_id, cycle, state_lock
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — optional review cannot fail research
+            logging.getLogger("sigma.lifecycle").error(
+                "session.supervisor_exception session_id=%s strategy_id=%s type=%s",
+                session_id,
+                strategy_id,
+                type(exc).__name__,
+            )
+            async with state_lock:
+                record = _read(path, session_id)
+                reviews = record.setdefault("supervisor_reviews", [])
+                matching = next(
+                    (row for row in reviews if row.get("pair_key") == f"{strategy_id}:{cycle}"),
+                    None,
+                )
+                if matching is None:
+                    reviews.append(
+                        {
+                            "pair_key": f"{strategy_id}:{cycle}",
+                            "strategy_id": strategy_id,
+                            "cycle": cycle,
+                            "status": "failed_preflight",
+                            "at": _now(),
+                        }
+                    )
+                elif matching.get("status") == "running":
+                    # A potentially dispatched call may not be replayed.
+                    matching["status"] = "interrupted"
+                    matching["attempt_status"] = "unknown"
+                    matching["finished_at"] = _now()
+                    ledger = record.get("hard_budget_ledger")
+                    if isinstance(ledger, dict):
+                        mark_unknown(ledger, call_id=matching["id"])
+                _save(path, record)
 
 
 async def _portfolio_supervisor_call(
@@ -15162,6 +15200,7 @@ async def _portfolio_supervisor_call(
                 if failure_reason:
                     review["reason"] = failure_reason
                 if valid_usage and usage is not None:
+                    review["attempt_status"] = "settled"
                     review["token_usage"] = usage
                     review["token_usage_status"] = "reported"
                     record["tokens_reserved"] = max(
@@ -15169,6 +15208,7 @@ async def _portfolio_supervisor_call(
                         int(record.get("tokens_reserved") or 0) - token_reserve,
                     )
                 else:
+                    review["attempt_status"] = "unknown"
                     review["token_usage_status"] = "unavailable"
                 ledger = record.get("hard_budget_ledger")
                 if isinstance(ledger, dict):
@@ -15229,18 +15269,20 @@ async def _portfolio_supervisor_call(
                         if assessment["breakthrough_candidate"]
                         else ""
                     )
-                    session_log.append(
-                        path,
-                        _session_log_context(record),
-                        {
-                            "type": "session_event",
-                            "event_kind": "supervisor.review",
-                            "role": "supervisor",
-                            "round": cycle,
-                            "strategy_id": strategy_id,
-                            "message": observation + candidate,
-                        },
-                    )
+                    log_context = _session_log_context(record)
+                    if log_context:
+                        session_log.append(
+                            path,
+                            log_context,
+                            {
+                                "type": "session_event",
+                                "event_kind": "supervisor.review",
+                                "role": "supervisor",
+                                "round": cycle,
+                                "strategy_id": strategy_id,
+                                "message": observation + candidate,
+                            },
+                        )
                 _event(
                     record,
                     "supervisor.completed" if assessment else "supervisor.failed",
