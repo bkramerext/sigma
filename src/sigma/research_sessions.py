@@ -7130,7 +7130,7 @@ async def start_session(
             )
             record = {
                 "schema_version": 1,
-                "session_settings": frozen_session_settings,
+                **({"session_settings": frozen_session_settings} if session_settings is not None else {}),
                 **(
                     {
                         "scheduler_version": 2,
@@ -9211,7 +9211,23 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             )
     context: dict[str, Any] = {
         "problem": record["problem"],
-        "session_settings": record.get("session_settings", {}),
+        # Keep ordinary role calls byte-for-byte compatible with historical
+        # Sessions. Only behavioral modes belong in the model's context; UI
+        # names and numerical limits are never prompt material.
+        **(
+            {
+                "session_settings": {
+                    "brainstorm_mode": record["session_settings"].get("brainstorm_mode", False),
+                    "supervisor_mode": record["session_settings"].get("supervisor_mode", "none"),
+                }
+            }
+            if isinstance(record.get("session_settings"), dict)
+            and (
+                record["session_settings"].get("brainstorm_mode") is True
+                or record["session_settings"].get("supervisor_mode") in {"light", "heavy"}
+            )
+            else {}
+        ),
         **({"scheduler_version": 2} if record.get("scheduler_version") == 2 else {}),
         "investigation_type": record.get("investigation_type"),
         "research_method_version": record.get("research_method_version") or "phase2-i2-v2",
