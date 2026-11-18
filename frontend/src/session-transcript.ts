@@ -136,6 +136,15 @@ export function projectTranscript(events: TranscriptEvent[], interventions: Tran
     || left.sequence - right.sequence || left.id.localeCompare(right.id));
 }
 
+/** Only accepted saved research or supervisor text should incur AI formatting calls. */
+export function convertibleTranscriptEntry(entry: TranscriptEntry): boolean {
+  return !entry.pending &&
+    entry.title !== 'Provider failure' &&
+    entry.text.length >= 40 && entry.text.length <= 20000 &&
+    (entry.id.startsWith('response-') || (entry.role === 'supervisor' && entry.id.startsWith('event-'))) &&
+    entry.text !== 'The response text was not retained in this historical log.';
+}
+
 export type TranscriptTurnGroup = {
   key: string; label: string; latestTimestamp: string; entries: TranscriptEntry[];
 };
