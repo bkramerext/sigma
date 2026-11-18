@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -898,6 +899,168 @@ def test_brainstorm_second_participant_has_constructive_guidance() -> None:
     assert "required evidence-review schema" in brainstorm
 
 
+
+def test_supervisor_response_validation_and_process_guidance() -> None:
+    from sigma import research_sessions, session_supervisor
+    from sigma.projects import ProjectError
+
+    answer = {
+        "assessment": "The agents have clarified their own assumptions.",
+        "action": "nudge",
+        "recipient": "ai_2",
+        "guidance": "State the uncertainty in your own argument.",
+        "breakthrough_candidate": False,
+        "breakthrough_detail": "",
+    }
+    assert session_supervisor.parse_assessment(json.dumps(answer)) == answer
+    assert "State the uncertainty" in research_sessions._role_instructions(
+        "skeptic",
+        {
+            "session_settings": {"supervisor_mode": "light"},
+            "supervisor_guidance": answer["guidance"],
+        },
+    )
+    assert "State the uncertainty" not in research_sessions._role_instructions(
+        "investigator", {"session_settings": {"supervisor_mode": "none"}}
+    )
+    answer["recipient"] = None
+    try:
+        session_supervisor.parse_assessment(json.dumps(answer))
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("A non-addressed supervisor nudge was accepted")
+
+
+def test_supervisor_usage_is_authoritative_and_uncertain_cost_is_retained() -> None:
+    from sigma import research_sessions
+
+    record = {
+        "status": "running",
+        "steps": [{
+            "status": "completed",
+            "token_usage": {"input_tokens": 20, "output_tokens": 7},
+        }],
+        "supervisor_reviews": [{
+            "status": "completed",
+            "token_usage": {"input_tokens": 13, "output_tokens": 5},
+        }],
+    }
+    research_sessions._refresh_token_accounting(record)
+    assert record["tokens_used"] == 45
+    assert record["token_usage_status"] == "complete"
+    record["supervisor_reviews"].append({
+        "status": "interrupted",
+        "attempt_status": "unknown",
+    })
+    research_sessions._refresh_token_accounting(record)
+    assert record["tokens_used"] == 45
+    assert record["token_usage_status"] == "partial"
+
+
+def test_abandoned_supervisor_reservation_preserves_full_liability() -> None:
+    from sigma import research_budget
+    from sigma.research_budget import BudgetExceeded
+
+    ledger = research_budget.new_ledger(
+        call_limit=3, input_token_limit=30000,
+        output_tokens_per_call=100, cost_limit_usd=10.0,
+        input_price_per_million=1.0, output_price_per_million=10.0,
+    )
+    original = research_budget.reserve_before_dispatch(
+        ledger, call_id="supervisor", request_body=b"process review"
+    )
+    research_budget.mark_unknown(ledger, call_id="supervisor")
+    held_cost = original["cost_bound_usd"]
+    research_budget.authorize_supervisor_recovery_after_unknown(
+        ledger, call_id="supervisor"
+    )
+    assert ledger["blocked_reason"] is None
+    assert original["status"] == "unknown_supervisor_abandoned"
+    assert original["cost_bound_usd"] == held_cost
+    assert original["input_token_bound"] > 0
+    second = research_budget.reserve_before_dispatch(
+        ledger, call_id="research", request_body=b"next original role"
+    )
+    research_budget.mark_unknown(ledger, call_id="research")
+    assert second["status"] == "unknown"
+    try:
+        research_budget.authorize_supervisor_recovery_after_unknown(
+            ledger, call_id="research"
+        )
+    except BudgetExceeded:
+        pass
+    else:
+        raise AssertionError("An unrelated uncertain role call was cleared")
+
+
+def test_pending_supervisor_reviews_only_run_once_after_resume() -> None:
+    from sigma import research_sessions
+
+    calls = []
+    record = {
+        "status": "running",
+        "session_settings": {"supervisor_mode": "light"},
+        "steps": [
+            {**_completed_pair_step("investigator", 1), "output": {"claim": "A"}},
+            {**_completed_pair_step("skeptic", 1), "output": {"response": "B"}},
+        ],
+        "supervisor_reviews": [],
+    }
+
+    async def fake_supervisor(_session_id, _path, strategy_id, cycle, _lock):
+        calls.append((strategy_id, cycle))
+        record["supervisor_reviews"].append({
+            "pair_key": f"{strategy_id}:{cycle}",
+            "status": "completed",
+        })
+
+    async def run():
+        with (
+            patch.object(research_sessions, "_read", return_value=record),
+            patch.object(research_sessions, "_portfolio_supervisor_call", fake_supervisor),
+        ):
+            lock = asyncio.Lock()
+            await research_sessions._supervise_completed_pairs("session", "fake", lock)
+            await research_sessions._supervise_completed_pairs("session", "fake", lock)
+
+    asyncio.run(run())
+    assert calls == [("strategy-a", 1)]
+
+
+def test_transcript_conversion_uses_server_saved_event_only() -> None:
+    from sigma import text_conversion
+    from sigma.projects import ProjectError
+
+    with patch.object(
+        session_log, "read",
+        return_value={
+            "events": [
+                {
+                    "seq": 5,
+                    "type": "provider_response",
+                    "response": {"output_text": "Claim: x_i is unverified."},
+                }
+            ]
+        },
+    ):
+        assert text_conversion._saved_transcript_text(
+            "saved", "session", "event.5"
+        ) == "Claim: x_i is unverified."
+        try:
+            text_conversion._saved_transcript_text("saved", "session", "event.6")
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("Unknown event was converted")
+        try:
+            text_conversion._saved_transcript_text("saved", "session", "../event.5")
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("Unallowlisted source path was accepted")
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
@@ -921,6 +1084,11 @@ def main() -> None:
         test_extension_preserves_partial_pair_and_refuses_duplicate_accepted_steps()
         test_unlimited_turn_growth_does_not_extend_finished_branches()
         test_brainstorm_second_participant_has_constructive_guidance()
+        test_supervisor_response_validation_and_process_guidance()
+        test_supervisor_usage_is_authoritative_and_uncertain_cost_is_retained()
+        test_abandoned_supervisor_reservation_preserves_full_liability()
+        test_pending_supervisor_reviews_only_run_once_after_resume()
+        test_transcript_conversion_uses_server_saved_event_only()
         from test_project_diagnostics import (
             test_client_report_and_copy_download_share_canonical_record,
             test_logging_failure_is_reported_without_breaking_admission,
