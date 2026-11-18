@@ -5779,6 +5779,85 @@ def _reject_intervention(
     raise ProjectError(reason)
 
 
+async def update_session_configuration(
+    path: str, session_id: str, settings: dict[str, Any]
+) -> dict[str, Any]:
+    """Edit a saved Session without changing its account connection or history.
+
+    Extending rounds/turns authorizes additional existing protocol slots. Resume
+    remains the only operation that actually dispatches work.
+    """
+    new_settings = _session_configuration(settings)
+    async with _session_state_lock(session_id):
+        with _project_manager_lock(path), _idle_worker_lock(path, session_id):
+            record = _recover(_read(path, session_id))
+            if record.get("scheduler_version") != 2:
+                raise ProjectError("This historical session does not have adjustable paired turns")
+            old_settings = _session_configuration(record.get("session_settings"))
+            old_cycles = int(record.get("cycle_limit", 0))
+            if new_settings["single_round_unlimited_turns"]:
+                new_cycles = max(old_cycles, new_settings["turns_per_round"])
+            else:
+                new_cycles = new_settings["research_rounds"] * new_settings["turns_per_round"]
+            if new_cycles < old_cycles:
+                raise ProjectError("Saved research turns cannot be removed by reducing session limits")
+            if record.get("status") in {"queued", "running"} and new_cycles > old_cycles:
+                raise ProjectError("Pause the session before changing its round or turn limits")
+            extended = new_cycles > old_cycles or (
+                new_settings["single_round_unlimited_turns"]
+                and not old_settings["single_round_unlimited_turns"]
+            )
+            if new_cycles > old_cycles:
+                added_calls = 2 * (new_cycles - old_cycles) * len(record.get("strategy_runs", []))
+                ledger = record.get("hard_budget_ledger")
+                if isinstance(ledger, dict):
+                    try:
+                        increase_call_limit(
+                            ledger, int(ledger.get("call_limit", 0)) + added_calls
+                        )
+                    except BudgetExceeded as exc:
+                        raise ProjectError(str(exc)) from exc
+                record["cycle_limit"] = new_cycles
+                record["call_limit"] += added_calls
+                record["total_token_limit"] += added_calls * (
+                    _agent_dispatch_guard_bytes({"model": record.get("model", "")})
+                    + 65_536 + int(record["output_token_limit"])
+                )
+                record.setdefault("call_limit_adjustments", []).append(
+                    {
+                        "at": _now(),
+                        "from": record["call_limit"] - added_calls,
+                        "to": record["call_limit"],
+                        "additional_calls": added_calls,
+                        "purpose": "user changed Session research rounds/turns",
+                    }
+                )
+            if new_settings["single_round_unlimited_turns"]:
+                record["research_round_limit"] = 1
+                record["turns_per_round"] = record["cycle_limit"]
+            else:
+                record["research_round_limit"] = new_settings["research_rounds"]
+                record["turns_per_round"] = new_settings["turns_per_round"]
+            record["session_settings"] = new_settings
+            if (
+                extended
+                and record.get("status") in {"completed", "ended", "failed"}
+            ):
+                record["settings_extended"] = True
+                # Inactive time since the previous completion is not consumed by
+                # the explicitly authorized new Session research allowance.
+                duration = record.get("configured_duration_limit_minutes")
+                if type(duration) is int and duration > 0:
+                    record["deadline_at"] = (
+                        datetime.now(UTC) + timedelta(minutes=duration)
+                    ).isoformat()
+                record["stopped_at"] = _now()
+            record["updated_at"] = _now()
+            _event(record, "session.configuration_changed", "Session settings saved.")
+            _save(path, record)
+            return _public(record)
+
+
 async def submit_intervention(
     path: str,
     session_id: str,
@@ -7581,6 +7660,10 @@ async def control_session(
                 and (
                     record.get("status") in {"ended", "failed"}
                     or (
+                        record.get("status") == "completed"
+                        and record.get("settings_extended") is True
+                    )
+                    or (
                         explicit_protocol_recovery and record.get("status") in {"stopped", "paused"}
                     )
                     or (additional_calls > 0 and record.get("status") == "paused")
@@ -7831,6 +7914,7 @@ async def control_session(
                         record.get("provider_usage_limited")
                     )
                     record["protocol_completion_recovery_active"] = True
+                    record["settings_extended"] = False
                     record["protocol_completion_required_calls"] = int(plan["required_calls"])
                     record["current_action"] = "Paused · protocol completion"
                     record["message"] = (
@@ -13824,7 +13908,10 @@ def _protocol_completion_recovery_plan(
     record: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Plan explicit continuation from terminal, incomplete research without replaying calls."""
-    if record.get("status") not in {"ended", "failed", "paused", "stopped"}:
+    if record.get("status") not in {"ended", "failed", "paused", "stopped"} and not (
+        record.get("status") == "completed"
+        and record.get("settings_extended") is True
+    ):
         return None, "Only a terminal incomplete session needs protocol completion recovery."
     branches = record.get("strategy_runs")
     if not isinstance(branches, list) or not branches:
