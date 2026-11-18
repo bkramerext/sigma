@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, transcriptCategories, type TranscriptIntervention, type TranscriptRole } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, transcriptCategories, type TranscriptIntervention, type TranscriptRole } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -31,6 +31,7 @@ export default function SessionLogPage() {
   const [enabledCategories, setEnabledCategories] = useState<TranscriptRole[]>(transcriptCategories.map(category => category.value));
   const [interventions, setInterventions] = useState<TranscriptIntervention[]>([]);
   const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
+  const [renderMarkdown, setRenderMarkdown] = useState(false);
   const [following, setFollowing] = useState(true);
   const [jumpVisible, setJumpVisible] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -94,10 +95,12 @@ export default function SessionLogPage() {
     const title = `${shortName}, Session ${session.number}`;
     document.title = title;
   }, [projectTitle, shortName, session]);
-  useEffect(() => { if (following && list.current) list.current.scrollTop = list.current.scrollHeight; }, [events, following]);
+  useEffect(() => { if (following && list.current) list.current.scrollTop = 0; }, [events, following]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const compilationLabel = referencePreparation?.compiler.status === 'completed' ? 'succeeded' : ['fallback', 'interrupted', 'failed'].includes(referencePreparation?.compiler.status ?? '') ? 'failed/degraded' : referencePreparation?.compiler.status ?? 'unknown/not recorded';
-  const shown = projectTranscript(events, interventions).filter(entry => enabledCategories.includes(entry.role));
+  const shownGroups = groupTranscriptTurns(
+    projectTranscript(events, interventions).filter(entry => enabledCategories.includes(entry.role)),
+  );
   const allSelected = enabledCategories.length === transcriptCategories.length;
   const toggleCategory = (category: TranscriptRole) => {
     setEnabledCategories(current => current.includes(category)
@@ -106,14 +109,14 @@ export default function SessionLogPage() {
   const updateScrollState = () => {
     const node = list.current;
     if (!node) return;
-    const atBottom = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
-    setJumpVisible(!atBottom);
-    if (atBottom) setFollowing(true);
+    const atLatest = node.scrollTop <= 24;
+    setJumpVisible(!atLatest);
+    setFollowing(atLatest);
     else setFollowing(false);
   };
   const jumpToEnd = () => {
     const node = list.current;
-    if (node) node.scrollTop = node.scrollHeight;
+    if (node) node.scrollTop = 0;
     setFollowing(true);
     setJumpVisible(false);
   };
@@ -130,7 +133,17 @@ export default function SessionLogPage() {
               onChange={() => toggleCategory(category.value)}/>{category.label}
           </label>)}
         </fieldset>
-        {jumpVisible && <button className="session-log-secondary-action" type="button" onClick={jumpToEnd}>Jump to end</button>}
+        {jumpVisible && <button className="session-log-secondary-action" type="button" onClick={jumpToEnd}>Jump to latest</button>}
+        <button type="button"
+          className={`sigma-render-toggle sigma-unified-markdown workspace-icon-button${renderMarkdown ? ' sigma-render-active' : ''}`}
+          aria-label={renderMarkdown ? 'Show plain transcript' : 'Render transcript as Markdown'}
+          aria-pressed={renderMarkdown}
+          data-tooltip={renderMarkdown ? 'Show plain text' : 'Render as Markdown'}
+          onClick={() => setRenderMarkdown(current => !current)}>
+          <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none"
+            xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"
+              fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>
+        </button>
         <button type="button" className="session-log-toolbar-icon workspace-icon-button text-copy-button"
           aria-label="Copy transcript to clipboard" data-tooltip={copyState === 'copied' ? 'Copied' : 'Copy transcript to clipboard'}
           disabled={copyState === 'copying'} onClick={() => { void copyLog(); }}>
@@ -162,30 +175,42 @@ export default function SessionLogPage() {
       </details>
     </section>}
     <ol ref={list} onScroll={updateScrollState} className="session-log-events session-transcript-events" aria-live="polite">
-      {shown.map(entry => {
-        const expanded = expandedEntries[entry.id] ?? entry.role !== 'other';
-        return <li key={entry.id} className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
-          <div className="session-transcript-entry-heading">
-            <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
-              aria-controls={'transcript-entry-' + entry.id}
-              onClick={() => setExpandedEntries(current => ({ ...current, [entry.id]: !expanded }))}>
-              <svg aria-hidden="true" className={'disclosure-chevron' + (expanded ? ' is-expanded' : '')} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
-              <strong>{entry.title}</strong>
-            </button>
-            <span>{typeof entry.round === 'number' ? 'Round ' + entry.round : ''}
-              {entry.strategyId ? ' · Strategy ' + entry.strategyId : ''}</span>
-            <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleString()}</time>
-          </div>
-          <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
-            <div className="session-transcript-markdown"><RenderedMarkdown body={entry.text}/></div>
-            {entry.request !== undefined && <details className="session-transcript-provider-details">
-              <summary>Request and response details</summary>
-              <pre>{JSON.stringify(entry.request, null, 2)}</pre>
-              {entry.response !== undefined && <pre>{JSON.stringify(entry.response, null, 2)}</pre>}
-            </details>}
-          </div>
-        </li>;
-      })}
+      {shownGroups.map(group => <li key={group.key} className="session-transcript-turn">
+        <header className="session-transcript-turn-heading">
+          <strong>{group.label}</strong>
+          {group.entries.find(entry => entry.strategyId)?.strategyId &&
+            <span>Strategy {group.entries.find(entry => entry.strategyId)?.strategyId}</span>}
+          <time dateTime={group.latestTimestamp}>{new Date(group.latestTimestamp).toLocaleString()}</time>
+        </header>
+        <ol className="session-transcript-turn-entries">
+          {group.entries.map(entry => {
+            const expanded = expandedEntries[entry.id] ?? entry.role !== 'other';
+            return <li key={entry.id} className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
+              <div className="session-transcript-entry-heading">
+                <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
+                  aria-controls={'transcript-entry-' + entry.id}
+                  onClick={() => setExpandedEntries(current => ({ ...current, [entry.id]: !expanded }))}>
+                  <svg aria-hidden="true" className={'disclosure-chevron' + (expanded ? ' is-expanded' : '')} viewBox="0 0 12 12">
+                    <path d="m4 2 4 4-4 4"/>
+                  </svg>
+                  <strong>{entry.title}</strong>
+                </button>
+                <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleString()}</time>
+              </div>
+              <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
+                {renderMarkdown
+                  ? <div className="session-transcript-markdown"><RenderedMarkdown body={entry.text}/></div>
+                  : <pre className="session-transcript-plain">{entry.text}</pre>}
+                {entry.request !== undefined && <details className="session-transcript-provider-details">
+                  <summary>Request and response details</summary>
+                  <pre>{JSON.stringify(entry.request, null, 2)}</pre>
+                  {entry.response !== undefined && <pre>{JSON.stringify(entry.response, null, 2)}</pre>}
+                </details>}
+              </div>
+            </li>;
+          })}
+        </ol>
+      </li>)}
     </ol>
   </main>;
 }
