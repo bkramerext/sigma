@@ -3143,11 +3143,7 @@ class ProjectScratchpadRequest(OpenRequest):
 
 @app.put("/api/projects/scratchpad")
 def update_project_scratchpad_view(body: ProjectScratchpadRequest):
-    from sigma import project_collaboration
-
-    project_collaboration.require_execution_operator(
-        body.path, "project", inspect_project(body.path).project.id, "Project"
-    )
+    # The project's existing write_guard enforces the shared-project ACL.
     return asdict(update_project_scratchpad(body.path, body.entries, body.expected))
 
 
