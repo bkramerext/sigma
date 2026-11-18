@@ -779,6 +779,119 @@ def test_complete_transcript_export_groups_turns_newest_first() -> None:
     assert "Earlier diagnostics were omitted" in exported
 
 
+
+def _completed_pair_step(role: str, cycle: int) -> dict:
+    return {
+        "id": f"{role}-{cycle}",
+        "role": role,
+        "cycle": cycle,
+        "strategy_id": "strategy-a",
+        "status": "completed",
+    }
+
+
+def _extended_session_record() -> dict:
+    """Small scheduler_v2 checkpoint after one completed Investigator/Skeptic pair."""
+    return {
+        "status": "completed",
+        "settings_extended": True,
+        "scheduler_version": 2,
+        "cycle_limit": 2,
+        "call_limit": 4,
+        "calls_used": 2,
+        "strategy_runs": [{
+            "strategy_id": "strategy-a",
+            "status": "ended",
+            "cycle": 1,
+            "pending_investigation": None,
+        }],
+        "steps": [
+            _completed_pair_step("investigator", 1),
+            _completed_pair_step("skeptic", 1),
+        ],
+    }
+
+
+def test_extended_completed_session_plans_new_slots_without_replaying_history() -> None:
+    from sigma import research_sessions
+
+    saved = _extended_session_record()
+    plan, error = research_sessions._protocol_completion_recovery_plan(saved)
+    assert error is None, error
+    assert plan is not None
+    assert plan["completed_turns"] == 2
+    assert plan["required_calls"] == 2
+    assert plan["branches"] == [{
+        "strategy_id": "strategy-a",
+        "role": "investigator",
+        "cycle": 2,
+        "recovery_context": plan["branches"][0]["recovery_context"],
+    }]
+    assert plan["branches"][0]["recovery_context"]["new_request"] is True
+    assert saved["steps"] == [_completed_pair_step("investigator", 1),
+                              _completed_pair_step("skeptic", 1)]
+    # No extension marker means a completed Session must stay completed.
+    saved["settings_extended"] = False
+    rejected, reason = research_sessions._protocol_completion_recovery_plan(saved)
+    assert rejected is None
+    assert reason
+
+
+def test_extension_preserves_partial_pair_and_refuses_duplicate_accepted_steps() -> None:
+    from sigma import research_sessions
+
+    saved = _extended_session_record()
+    saved["steps"].append(_completed_pair_step("investigator", 2))
+    saved["strategy_runs"][0]["cycle"] = 1
+    saved["strategy_runs"][0]["pending_investigation"] = {"claim": "Pending review"}
+    plan, error = research_sessions._protocol_completion_recovery_plan(saved)
+    assert error is None, error
+    assert plan is not None and plan["required_calls"] == 1
+    assert plan["branches"][0]["role"] == "skeptic"
+    assert plan["branches"][0]["cycle"] == 2
+    saved["steps"].append(_completed_pair_step("investigator", 2))
+    rejected, reason = research_sessions._protocol_completion_recovery_plan(saved)
+    assert rejected is None
+    assert "duplicate" in reason.lower()
+
+
+def test_unlimited_turn_growth_does_not_extend_finished_branches() -> None:
+    from sigma import research_sessions
+
+    record = {
+        "session_settings": {"unlimited_turns": True},
+        "scheduler_version": 2,
+        "cycle_limit": 2,
+        "call_ceiling_cycles": 2,
+        "call_limit": 4,
+        "total_token_limit": 1000000,
+        "output_token_limit": 256,
+        "model": "gpt-6",
+        "turns_are_flat": True,
+        "strategy_runs": [{"strategy_id": "strategy-a", "status": "queued", "cycle": 1}],
+    }
+    assert research_sessions._grow_unlimited_session_turns(record)
+    assert record["cycle_limit"] == 3
+    assert record["call_limit"] == 6
+    assert record["turns_per_round"] == 3
+    assert not research_sessions._grow_unlimited_session_turns(record)
+    record["strategy_runs"][0]["status"] = "ended"
+    record["strategy_runs"][0]["cycle"] = 3
+    assert not research_sessions._grow_unlimited_session_turns(record)
+    assert record["call_limit"] == 6
+
+
+def test_brainstorm_second_participant_has_constructive_guidance() -> None:
+    from sigma import research_sessions
+
+    ordinary = research_sessions._role_instructions("skeptic", {"session_settings": {}})
+    brainstorm = research_sessions._role_instructions(
+        "skeptic", {"session_settings": {"brainstorm_mode": True}}
+    )
+    assert "co-investigator with independent intellectual" not in ordinary
+    assert "co-investigator with independent intellectual" in brainstorm
+    assert "required evidence-review schema" in brainstorm
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
@@ -798,6 +911,10 @@ def main() -> None:
         test_session_status_and_correlated_errors_match_export()
         test_flat_turn_settings_convert_legacy_rounds_without_relabeling()
         test_complete_transcript_export_groups_turns_newest_first()
+        test_extended_completed_session_plans_new_slots_without_replaying_history()
+        test_extension_preserves_partial_pair_and_refuses_duplicate_accepted_steps()
+        test_unlimited_turn_growth_does_not_extend_finished_branches()
+        test_brainstorm_second_participant_has_constructive_guidance()
         from test_project_diagnostics import (
             test_client_report_and_copy_download_share_canonical_record,
             test_logging_failure_is_reported_without_breaking_admission,
