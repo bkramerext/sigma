@@ -74,6 +74,24 @@ function entryTimestamp(timestamp?: string): string {
 }
 const errorText = (cause: unknown) => cause instanceof Error ? cause.message : 'Brainstorm could not continue.';
 
+// FastAPI validation failures contain structured issues. Do not stringify an
+// array of objects into "[object Object]" and lose the actionable error.
+function apiErrorMessage(value: unknown, fallback: string): string {
+  if (!value || typeof value !== 'object') return fallback;
+  const response = value as { detail?: unknown; error?: unknown };
+  const detail = response.error ?? response.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (!Array.isArray(detail)) return fallback;
+  const issues = detail.map((item: unknown) => {
+    if (!item || typeof item !== 'object') return '';
+    const issue = item as { loc?: unknown; msg?: unknown };
+    const path = Array.isArray(issue.loc) ? issue.loc.map(String).join('.') : '';
+    const message = typeof issue.msg === 'string' ? issue.msg : '';
+    return path && message ? `${path}: ${message}` : message;
+  }).filter(Boolean);
+  return issues.length ? issues.join('; ') : fallback;
+}
+
 function CopyReplyButton({ name, text }: { name: string; text: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -232,11 +250,17 @@ export default function ChatPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ conversation_id: id, ...message }),
+        // Persist only the API schema fields. The UI-only score, breakthrough
+        // and timestamp metadata must not be sent: extra="forbid" rejects them.
+        body: JSON.stringify({
+          conversation_id: id, speaker: message.speaker, text: message.text,
+          ...(message.recipient ? { recipient: message.recipient } : {}),
+          ...(message.guidance ? { guidance: message.guidance } : {}),
+        }),
       });
       if (!response.ok) {
-        const detail = await response.json().catch(() => null) as { detail?: string; error?: string } | null;
-        throw new Error(detail?.error ?? detail?.detail ?? 'The Brainstorm transcript could not be updated.');
+        const detail = await response.json().catch(() => null) as unknown;
+        throw new Error(apiErrorMessage(detail, 'The Brainstorm transcript could not be updated.'));
       }
     });
     transcriptWrites.current = write;
@@ -359,8 +383,8 @@ export default function ChatPage() {
         milestone_latched: breakthroughLatched.current,
       }),
     });
-    const assessment = await response.json() as SupervisorAssessment & { detail?: string; error?: string };
-    if (!response.ok) throw new Error(assessment.detail ?? assessment.error ?? 'Supervisor assessment failed.');
+    const assessment = await response.json() as SupervisorAssessment;
+    if (!response.ok) throw new Error(apiErrorMessage(assessment, 'Supervisor assessment failed.'));
     if (typeof assessment.score !== 'number' || !Number.isFinite(assessment.score) ||
         typeof assessment.assessment !== 'string' || !assessment.assessment) {
       throw new Error('The supervisor returned an invalid assessment.');
