@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, transcriptCategories, type TranscriptIntervention, type TranscriptEntry, type TranscriptRole } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, transcriptCategories, convertibleTranscriptEntry, type TranscriptIntervention, type TranscriptEntry, type TranscriptRole } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -33,6 +33,7 @@ export default function SessionLogPage() {
   const [interventions, setInterventions] = useState<TranscriptIntervention[]>([]);
   const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
   const [renderMarkdown, setRenderMarkdown] = useState(false);
+  const [seenMarkdownEntries, setSeenMarkdownEntries] = useState<Set<string>>(() => new Set());
   const [formattedEntries, setFormattedEntries] = useState<Record<string, { source: string; body: string }>>({});
   const formattedEntriesRef = useRef<Record<string, { source: string; body: string }>>({});
   const conversionQueue = useRef<TranscriptEntry[]>([]);
@@ -106,6 +107,27 @@ export default function SessionLogPage() {
   }, [projectTitle, shortName, session]);
   useEffect(() => { if (following && list.current) list.current.scrollTop = 0; }, [events, following]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  // Queue formatting only after a transcript row has entered the scroll viewport.
+  // A long historical transcript must not trigger hundreds of paid conversions
+  // merely because the user enabled Markdown.
+  useEffect(() => {
+    if (!renderMarkdown || !list.current || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(changes => {
+      const newlySeen = changes.filter(change => change.isIntersecting);
+      if (!newlySeen.length) return;
+      setSeenMarkdownEntries(current => {
+        const next = new Set(current);
+        for (const change of newlySeen) {
+          const id = change.target.getAttribute('data-transcript-entry');
+          if (id) next.add(id);
+        }
+        return next.size === current.size ? current : next;
+      });
+    }, { root: list.current });
+    list.current.querySelectorAll('[data-transcript-entry]').forEach(node => observer.observe(node));
+    return () => observer.disconnect();
+  }, [renderMarkdown, events, enabledCategories, expandedEntries]);
+
   // The existing Markdown action formats saved provider text with the same
   // metered converter as other SIGMA research blocks. The original transcript
   // and Copy/Download remain byte-for-byte unchanged. Only accepted, visible
@@ -113,9 +135,10 @@ export default function SessionLogPage() {
   useEffect(() => {
     if (!renderMarkdown || !projectId) return;
     const entries = projectTranscript(events, interventions).filter(entry =>
-      !entry.pending && entry.text.length >= 40 && entry.text.length <= 20000 &&
-      (entry.id.startsWith('response-') || (entry.role === 'supervisor' && entry.id.startsWith('event-'))) &&
-      entry.text !== 'The response text was not retained in this historical log.');
+      seenMarkdownEntries.has(entry.id) &&
+      enabledCategories.includes(entry.role) &&
+      (expandedEntries[entry.id] ?? entry.role !== 'other') &&
+      convertibleTranscriptEntry(entry));
     for (const entry of entries) {
       if (formattedEntriesRef.current[entry.id]?.source === entry.text || conversionQueued.current.has(entry.id)) continue;
       conversionQueued.current.add(entry.id);
@@ -171,7 +194,7 @@ export default function SessionLogPage() {
       }
     };
     void drain();
-  }, [renderMarkdown, events, interventions, projectId, path, sessionId]);
+  }, [renderMarkdown, events, interventions, projectId, path, sessionId, enabledCategories, expandedEntries, seenMarkdownEntries]);
 
   const toggleMarkdown = () => {
     const next = !renderMarkdown;
@@ -181,6 +204,7 @@ export default function SessionLogPage() {
       conversionAbort.current?.abort();
       conversionQueue.current = [];
       conversionQueued.current = new Set(Object.keys(formattedEntriesRef.current));
+      setSeenMarkdownEntries(new Set());
       setMarkdownError('');
     }
   };
@@ -272,7 +296,7 @@ export default function SessionLogPage() {
         <ol className="session-transcript-turn-entries">
           {group.entries.map(entry => {
             const expanded = expandedEntries[entry.id] ?? entry.role !== 'other';
-            return <li key={entry.id} className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
+            return <li key={entry.id} data-transcript-entry={entry.id} className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
               <div className="session-transcript-entry-heading">
                 <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
                   aria-controls={'transcript-entry-' + entry.id}
