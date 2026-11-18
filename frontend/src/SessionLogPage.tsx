@@ -112,7 +112,6 @@ export default function SessionLogPage() {
     const atLatest = node.scrollTop <= 24;
     setJumpVisible(!atLatest);
     setFollowing(atLatest);
-    else setFollowing(false);
   };
   const jumpToEnd = () => {
     const node = list.current;
