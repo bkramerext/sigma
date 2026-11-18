@@ -30,7 +30,7 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
   };
   return <div className="project-scratchpad">
     <div className="project-scratchpad-heading">
-      <h3>Scratchpad</h3>
+      <h3>Notes</h3>
       <button type="button" className="pt-new-action"
         disabled={disabled || entries.length >= 100} aria-label="Add scratchpad entry"
         data-tooltip="Add scratchpad entry" onClick={add}>
