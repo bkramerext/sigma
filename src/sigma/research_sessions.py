@@ -894,17 +894,19 @@ def _session_start_limits(
     return limits
 
 
-def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
-    """Freeze research behavior inside the Session, not the user's provider connection."""
+def _session_configuration(
+    raw: dict[str, Any] | None, *, default_turn_limit: int = 9
+) -> dict[str, Any]:
+    """Use flat paired-turn limits while accepting old rounds/turns snapshots.
+
+    Existing Session wire slots are already a monotonically increasing cycle.
+    Converting only the settings leaves those durable cycle IDs untouched.
+    """
     value = raw if isinstance(raw, dict) else {}
     allowed = {
-        "name",
-        "brainstorm_mode",
-        "supervisor_mode",
-        "single_round_unlimited_turns",
-        "session_score",
-        "research_rounds",
-        "turns_per_round",
+        "name", "brainstorm_mode", "supervisor_mode", "unlimited_turns",
+        "turn_limit", "single_round_unlimited_turns", "research_rounds",
+        "turns_per_round", "session_score",
     }
     if set(value) - allowed:
         raise ProjectError("Unsupported session configuration")
@@ -914,25 +916,29 @@ def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
         raise ProjectError("Session name must be at most 200 characters")
     if type(mode) is not str or mode not in {"none", "light", "heavy"}:
         raise ProjectError("Supervisor mode must be None, Light, or Heavy")
-    for key in ("brainstorm_mode", "single_round_unlimited_turns", "session_score"):
-        if type(value.get(key, False)) is not bool:
+    for key in ("brainstorm_mode", "unlimited_turns", "single_round_unlimited_turns"):
+        if key in value and type(value[key]) is not bool:
             raise ProjectError("Session configuration checkboxes must be boolean")
-    rounds = 1 if value.get("single_round_unlimited_turns") else value.get("research_rounds", 3)
-    turns = value.get("turns_per_round", 3)
-    if type(rounds) is not int or not 1 <= rounds <= 60:
-        raise ProjectError("Research rounds must be between 1 and 60")
-    if type(turns) is not int or not 1 <= turns <= 20 or rounds * turns > 1200:
-        raise ProjectError(
-            "Turns per round must be between 1 and 20 within the configured call limit"
-        )
+    if "turn_limit" in value:
+        turn_limit = value["turn_limit"]
+    elif "research_rounds" in value or "turns_per_round" in value:
+        rounds = value.get("research_rounds", 3)
+        per_round = value.get("turns_per_round", 3)
+        if type(rounds) is not int or type(per_round) is not int:
+            raise ProjectError("Previous Session round/turn counts must be whole numbers")
+        turn_limit = rounds * per_round
+    else:
+        turn_limit = default_turn_limit
+    if type(turn_limit) is not int or not 1 <= turn_limit <= 1200:
+        raise ProjectError("Turns must be between 1 and 1200")
     return {
         "name": name.strip(),
         "brainstorm_mode": value.get("brainstorm_mode", False),
         "supervisor_mode": mode,
-        "single_round_unlimited_turns": value.get("single_round_unlimited_turns", False),
-        "session_score": value.get("session_score", False),
-        "research_rounds": rounds,
-        "turns_per_round": turns,
+        "unlimited_turns": value.get(
+            "unlimited_turns", value.get("single_round_unlimited_turns", False)
+        ),
+        "turn_limit": turn_limit,
     }
 
 
@@ -942,14 +948,9 @@ def _paired_call_limit(limits: dict[str, Any], enabled_count: int) -> int:
 
 
 def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
-    """Advance the existing v2 pair budget, not a new workflow or agent engine.
-
-    Keep one spare paired slot so the established coordinator cannot terminate
-    an otherwise continuing round simply because it reached the previous slot
-    limit. Cost/time/account admission and hard-token ceilings remain in force.
-    """
+    """Extend an existing paired Session by a slot, retaining all prior IDs."""
     settings = record.get("session_settings")
-    if not isinstance(settings, dict) or settings.get("single_round_unlimited_turns") is not True:
+    if not isinstance(settings, dict) or not settings.get("unlimited_turns"):
         return False
     if record.get("scheduler_version") != 2:
         return False
@@ -961,23 +962,27 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
         for branch in branches
         if isinstance(branch, dict) and branch.get("status") in {"queued", "running"}
     ]
-    if (
-        not active
-        or max(int(branch.get("cycle", 0)) for branch in active) + 1 < record["cycle_limit"]
-    ):
+    if not active or max(int(branch.get("cycle", 0)) for branch in active) + 1 < record["cycle_limit"]:
         return False
-    # The only change is a larger allowance in the existing Session budget.
-    added_calls = 2 * len(branches)
+    next_limit = record["cycle_limit"] + 1
+    # A prior decrease in configured turns never surrendered the conservative
+    # provider reservations. Grow the call ceiling only beyond those slots.
+    reserved_turns = int(record.get("call_ceiling_cycles", record["cycle_limit"]))
+    added_calls = 2 * len(branches) if next_limit > reserved_turns else 0
     ledger = record.get("hard_budget_ledger")
-    if isinstance(ledger, dict):
+    if added_calls and isinstance(ledger, dict):
         try:
             increase_call_limit(ledger, int(ledger["call_limit"]) + added_calls)
         except BudgetExceeded:
-            # Preserve hard provider-billing reservations and finish normally.
             return False
-    record["cycle_limit"] += 1
-    record["turns_per_round"] = record["cycle_limit"]
-    record["research_round_limit"] = 1
+    record["cycle_limit"] = next_limit
+    record["call_ceiling_cycles"] = max(next_limit, reserved_turns)
+    if record.get("turns_are_flat"):
+        record["turns_per_round"] = next_limit
+        record["research_round_limit"] = 1
+    else:
+        old_per_round = max(1, int(record.get("turns_per_round", 1)))
+        record["research_round_limit"] = math.ceil(next_limit / old_per_round)
     record["call_limit"] += added_calls
     record["total_token_limit"] += added_calls * (
         _agent_dispatch_guard_bytes({"model": record.get("model", "")})
@@ -5792,71 +5797,63 @@ def _reject_intervention(
 async def update_session_configuration(
     path: str, session_id: str, settings: dict[str, Any]
 ) -> dict[str, Any]:
-    """Edit a saved Session without changing its account connection or history.
-
-    Extending rounds/turns authorizes additional existing protocol slots. Resume
-    remains the only operation that actually dispatches work.
-    """
-    new_settings = _session_configuration(settings)
+    """Edit only a stopped Session and keep the existing Resume operation."""
     async with _session_state_lock(session_id):
         with _project_manager_lock(path), _idle_worker_lock(path, session_id):
             record = _recover(_read(path, session_id))
             if record.get("scheduler_version") != 2:
-                raise ProjectError("This historical session does not have adjustable paired turns")
-            old_settings = _session_configuration(record.get("session_settings"))
-            old_cycles = int(record.get("cycle_limit", 0))
-            completed_any = any(
-                step.get("status") == "completed"
-                and step.get("role") in {"investigator", "skeptic"}
-                for step in record.get("steps", [])
-                if isinstance(step, dict)
+                raise ProjectError("This historical session has no adjustable paired turns")
+            if record.get("status") in {"queued", "running"}:
+                raise ProjectError("Stop the Session before editing its settings")
+            old_cycles = int(record["cycle_limit"])
+            current = _session_configuration(
+                record.get("session_settings"), default_turn_limit=old_cycles
             )
-            prior_unlimited = old_settings["single_round_unlimited_turns"]
-            next_unlimited = new_settings["single_round_unlimited_turns"]
-            if completed_any and prior_unlimited and not next_unlimited:
+            new_settings = _session_configuration(settings, default_turn_limit=old_cycles)
+            executed_turns = max(
+                [0]
+                + [
+                    int(step["cycle"])
+                    for step in record.get("steps", [])
+                    if isinstance(step, dict)
+                    and step.get("role") in {"investigator", "skeptic"}
+                    and type(step.get("cycle")) is int
+                    and step["cycle"] > 0
+                ]
+                + [
+                    int(branch.get("cycle", 0))
+                    for branch in record.get("strategy_runs", [])
+                    if isinstance(branch, dict)
+                    and type(branch.get("cycle")) is int
+                ]
+            )
+            if new_settings["turn_limit"] < executed_turns:
                 raise ProjectError(
-                    "A single-round session with saved turns cannot be converted to multiple rounds"
+                    "Turns cannot be lower than the number of turns already executed"
                 )
-            if completed_any and next_unlimited and not prior_unlimited and record["research_round_limit"] > 1:
-                raise ProjectError(
-                    "A session with multiple completed rounds cannot be converted to a single round"
-                )
+            new_cycles = new_settings["turn_limit"]
             if (
-                completed_any
-                and not prior_unlimited
-                and not next_unlimited
-                and new_settings["turns_per_round"] != record["turns_per_round"]
+                new_settings["unlimited_turns"]
+                and not current["unlimited_turns"]
+                and record.get("status") == "completed"
+                and new_cycles <= executed_turns
             ):
-                raise ProjectError(
-                    "Turns per round cannot be changed after research has been saved; "
-                    "increase the number of rounds instead"
-                )
-            if new_settings["single_round_unlimited_turns"]:
-                new_cycles = max(
-                    old_cycles + (1 if completed_any and not prior_unlimited else 0),
-                    new_settings["turns_per_round"],
-                )
-            else:
-                new_cycles = new_settings["research_rounds"] * new_settings["turns_per_round"]
-            if new_cycles < old_cycles:
-                raise ProjectError(
-                    "Saved research turns cannot be removed by reducing session limits"
-                )
-            if record.get("status") in {"queued", "running"} and new_cycles > old_cycles:
-                raise ProjectError("Pause the session before changing its round or turn limits")
-            extended = new_cycles > old_cycles or (
-                new_settings["single_round_unlimited_turns"]
-                and not old_settings["single_round_unlimited_turns"]
-            )
-            if new_cycles > old_cycles:
-                added_calls = 2 * (new_cycles - old_cycles) * len(record.get("strategy_runs", []))
-                ledger = record.get("hard_budget_ledger")
-                if isinstance(ledger, dict):
-                    try:
-                        increase_call_limit(ledger, int(ledger.get("call_limit", 0)) + added_calls)
-                    except BudgetExceeded as exc:
-                        raise ProjectError(str(exc)) from exc
-                record["cycle_limit"] = new_cycles
+                # Authorize one more future paired slot. Subsequent turns are
+                # allocated lazily by the same scheduler.
+                new_cycles = executed_turns + 1
+            reserved_turns = int(record.get("call_ceiling_cycles", old_cycles))
+            extra_turns = max(0, new_cycles - reserved_turns)
+            added_calls = 2 * extra_turns * len(record.get("strategy_runs", []))
+            ledger = record.get("hard_budget_ledger")
+            if added_calls and isinstance(ledger, dict):
+                try:
+                    increase_call_limit(
+                        ledger, int(ledger.get("call_limit", 0)) + added_calls
+                    )
+                except BudgetExceeded as exc:
+                    raise ProjectError(str(exc)) from exc
+            if added_calls:
+                old_call_limit = record["call_limit"]
                 record["call_limit"] += added_calls
                 record["total_token_limit"] += added_calls * (
                     _agent_dispatch_guard_bytes({"model": record.get("model", "")})
@@ -5866,30 +5863,32 @@ async def update_session_configuration(
                 record.setdefault("call_limit_adjustments", []).append(
                     {
                         "at": _now(),
-                        "from": record["call_limit"] - added_calls,
+                        "from": old_call_limit,
                         "to": record["call_limit"],
                         "additional_calls": added_calls,
-                        "purpose": "user changed Session research rounds/turns",
+                        "purpose": "user changed Session turn limit",
                     }
                 )
-            if new_settings["single_round_unlimited_turns"]:
+            record["call_ceiling_cycles"] = max(reserved_turns, new_cycles)
+            record["cycle_limit"] = new_cycles
+            # Old snapshots retain their original divisor so prior research
+            # labels never change. Newly created flat-turn Sessions remain
+            # internally one round, however many turns the user configures.
+            if record.get("turns_are_flat"):
+                record["turns_per_round"] = new_cycles
                 record["research_round_limit"] = 1
-                record["turns_per_round"] = record["cycle_limit"]
             else:
-                record["research_round_limit"] = new_settings["research_rounds"]
-                record["turns_per_round"] = new_settings["turns_per_round"]
+                per_round = max(1, int(record.get("turns_per_round", 1)))
+                record["research_round_limit"] = math.ceil(new_cycles / per_round)
             record["session_settings"] = new_settings
-            if extended and record.get("status") in {"completed", "ended", "failed"}:
-                record["settings_extended"] = True
-                # The established recovery planner accepts ended branches,
-                # not completed branches. The parent Session remains completed
-                # until the user explicitly presses Resume.
-                if new_cycles > old_cycles:
+            extended = new_cycles > old_cycles
+            if record.get("status") == "completed":
+                record["settings_extended"] = extended and new_cycles > executed_turns
+                if record["settings_extended"]:
                     for branch in record.get("strategy_runs", []):
                         if branch.get("status") == "completed":
                             branch["status"] = "ended"
-                # Inactive time since the previous completion is not consumed by
-                # the explicitly authorized new Session research allowance.
+            if extended and record.get("status") in {"completed", "ended", "failed"}:
                 duration = record.get("configured_duration_limit_minutes")
                 if type(duration) is int and duration > 0:
                     record["deadline_at"] = (
@@ -7080,16 +7079,16 @@ async def start_session(
                 )
             limits = _session_start_limits(get_limits(view.path), expected_limits)
             if session_settings is not None and limits.get("scheduler_version") == 2:
-                limits = _validate_limits(
-                    {
-                        **limits,
-                        "research_rounds": frozen_session_settings["research_rounds"],
-                        "turns_per_round": frozen_session_settings["turns_per_round"],
-                        "model_calls": 2
-                        * frozen_session_settings["research_rounds"]
-                        * frozen_session_settings["turns_per_round"],
-                    }
-                )
+                # The old settings validator still protects global cost, time,
+                # token and concurrency constraints. A flat paired-turn count is
+                # the already-supported cycle budget, not a second scheduler.
+                turn_limit = frozen_session_settings["turn_limit"]
+                limits = {
+                    **limits,
+                    "research_rounds": 1,
+                    "turns_per_round": turn_limit,
+                    "model_calls": 2 * turn_limit,
+                }
             runtime_limits = _effective_limits(limits)
             records = _all(view.path)
             existing = next(
@@ -7172,6 +7171,7 @@ async def start_session(
                         "scheduler_version": 2,
                         "turns_per_round": limits["turns_per_round"],
                         "research_round_limit": limits["research_rounds"],
+                        **({"turns_are_flat": True} if session_settings is not None else {}),
                     }
                     if paired_scheduler
                     else {}
@@ -13970,7 +13970,8 @@ def _uncredited_transient_failures(record: dict[str, Any]) -> int:
         and type(item.get("additional_calls", 0)) is int
         # Research the user explicitly added is not a replacement attempt and
         # must never consume credit for recovering a transient failed request.
-        and item.get("purpose") != "user changed Session research rounds/turns"
+        and item.get("purpose")
+        not in {"user changed Session research rounds/turns", "user changed Session turn limit"}
     )
     return max(0, transient_attempts - already_extended)
 
