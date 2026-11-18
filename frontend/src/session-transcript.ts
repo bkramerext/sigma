@@ -150,7 +150,7 @@ export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurn
   for (const entry of [...entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp)
     || a.sequence - b.sequence)) {
     const hasTurn = typeof entry.round === 'number' && entry.round > 0;
-    const key = hasTurn ? `${entry.strategyId ?? 'session'}:${entry.round}`
+    const key: string = hasTurn ? `${entry.strategyId ?? 'session'}:${entry.round}`
       : entry.role === 'human' && lastTurn ? lastTurn : `event:${entry.id}`;
     if (hasTurn) lastTurn = key;
     const label = hasTurn ? `Turn ${entry.round}` : entry.role === 'human' && lastTurn
