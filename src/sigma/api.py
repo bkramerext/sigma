@@ -79,7 +79,6 @@ from sigma.projects import (
     save_project_as,
     set_strategy_enabled,
     update_project,
-    update_project_scratchpad,
 )
 from sigma.proposals import (
     accepted_provenance,
@@ -3134,17 +3133,6 @@ def update_project_description_view(body: UpdateProjectRequest):
         semantic_update=True,
     )
     return asdict(view)
-
-
-class ProjectScratchpadRequest(OpenRequest):
-    entries: list[dict[str, str]]
-    expected: list[dict[str, str]]
-
-
-@app.put("/api/projects/scratchpad")
-def update_project_scratchpad_view(body: ProjectScratchpadRequest):
-    # The project's existing write_guard enforces the shared-project ACL.
-    return asdict(update_project_scratchpad(body.path, body.entries, body.expected))
 
 
 @app.post("/api/projects/update")
