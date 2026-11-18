@@ -917,7 +917,7 @@ def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
     for key in ("brainstorm_mode", "single_round_unlimited_turns", "session_score"):
         if type(value.get(key, False)) is not bool:
             raise ProjectError("Session configuration checkboxes must be boolean")
-    rounds = value.get("research_rounds", 3)
+    rounds = 1 if value.get("single_round_unlimited_turns") else value.get("research_rounds", 3)
     turns = value.get("turns_per_round", 3)
     if type(rounds) is not int or not 1 <= rounds <= 60:
         raise ProjectError("Research rounds must be between 1 and 60")
@@ -937,6 +937,47 @@ def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
 def _paired_call_limit(limits: dict[str, Any], enabled_count: int) -> int:
     """Individual provider-call ceiling; disabled strategies are excluded."""
     return 2 * limits["research_rounds"] * limits["turns_per_round"] * enabled_count
+
+
+def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
+    """Advance the existing v2 pair budget, not a new workflow or agent engine.
+
+    Keep one spare paired slot so the established coordinator cannot terminate
+    an otherwise continuing round simply because it reached the previous slot
+    limit. Cost/time/account admission and hard-token ceilings remain in force.
+    """
+    settings = record.get("session_settings")
+    if not isinstance(settings, dict) or settings.get("single_round_unlimited_turns") is not True:
+        return False
+    if record.get("scheduler_version") != 2:
+        return False
+    branches = record.get("strategy_runs", [])
+    if not isinstance(branches, list) or not branches:
+        return False
+    active = [
+        branch for branch in branches
+        if isinstance(branch, dict) and branch.get("status") in {"queued", "running"}
+    ]
+    if not active or max(int(branch.get("cycle", 0)) for branch in active) + 1 < record["cycle_limit"]:
+        return False
+    # The only change is a larger allowance in the existing Session budget.
+    added_calls = 2 * len(branches)
+    ledger = record.get("hard_budget_ledger")
+    if isinstance(ledger, dict):
+        try:
+            increase_call_limit(ledger, int(ledger["call_limit"]) + added_calls)
+        except BudgetExceeded:
+            # Preserve hard provider-billing reservations and finish normally.
+            return False
+    record["cycle_limit"] += 1
+    record["turns_per_round"] = record["cycle_limit"]
+    record["research_round_limit"] = 1
+    record["call_limit"] += added_calls
+    record["total_token_limit"] += added_calls * (
+        _agent_dispatch_guard_bytes({"model": record.get("model", "")})
+        + 65_536 + int(record["output_token_limit"])
+    )
+    return True
 
 
 def _research_round_label(record: dict[str, Any], cycle: int) -> str:
@@ -11643,6 +11684,32 @@ def _commit_portfolio_review(
             "unverified; another configured round will challenge it.",
         )
 
+    # A continuous Brainstorm exchange has no model-selected terminal turn.
+    # Preserve the actual model assessment in the saved review, but carry the
+    # next question forward through the existing Investigator/Skeptic scheduler.
+    settings = record.get("session_settings")
+    if (
+        isinstance(settings, dict)
+        and settings.get("brainstorm_mode") is True
+        and settings.get("single_round_unlimited_turns") is True
+        and decision in {
+            "stop_productive_conclusion",
+            "stop_decisive_counterexample",
+            "stop_no_progress",
+        }
+    ):
+        next_question = (
+            next_question
+            or str(output.get("next_question") or "").strip()
+            or next(
+                (str(item).strip() for item in output.get("remaining_obligations", [])
+                 if str(item).strip()), ""
+            )
+            or "Independently explore another question about the research objective, "
+               "without treating previous tentative conclusions as established."
+        )
+        decision = "continue"
+
     artifact_id = str(uuid4())
     valid_cycles = {
         item.get("strategy_cycle", item["sequence"]): item["id"] for item in branch_artifacts
@@ -14070,6 +14137,11 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 _save(path, record)
                 return
             runs = record["strategy_runs"]
+            if _grow_unlimited_session_turns(record):
+                # Persist the extended slot and billing reservation together
+                # before any subsequent provider call can be dispatched.
+                record["updated_at"] = _now()
+                _save(path, record)
             for branch in runs:
                 if branch.get("pending_skeptic") is not None:
                     _commit_portfolio_review_safely(record, session_id, branch)
