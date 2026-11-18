@@ -6136,7 +6136,7 @@ function AboutArchitecture() {
     strategyA: 'A strategy can investigate an observed pattern or relationship. Its objective is bounded: identify supporting evidence, find limits, or expose a useful unanswered question. It does not need to solve the entire project.',
     strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
     strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
-    session: 'When you press Play, SIGMA runs an investigation of your selected approaches. Each approach can be tried, challenged and revised over several rounds, within the limits you set.',
+    session: 'When you press Play, SIGMA runs an investigation of your selected approaches. Each approach can be tried, challenged and revised over successive turns, within the limits you set.',
     orchestration: "SIGMA's session engine selects bounded evidence, dispatches Investigator and Skeptic calls, coordinates strategies and manages limits.",
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
     investigatorFollowup: 'A later Investigator call can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
@@ -6269,7 +6269,7 @@ function AboutArchitecture() {
     { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another method' },
     { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Look for a counterexample' },
   ];
-  // Three illustrative paired turns (six individual calls) in one research round.
+  // Three illustrative paired turns (six individual calls) in a session.
   const exampleTurns = [
     { turn: 1, title: 'Try an idea', investigator: 'Propose an approach', skeptic: 'Look for flaws', investigatorKey: 'investigator', skepticKey: 'skeptic' },
     { turn: 2, title: 'Improve it', investigator: 'Revise after critique', skeptic: 'Challenge the revision', investigatorKey: 'investigatorRound2', skepticKey: 'skepticRound2' },
@@ -6304,7 +6304,7 @@ function AboutArchitecture() {
             </div>);
           })}
         </div>
-        <p className="about-strategy-round-note">Each approach can be tried, challenged, and improved over several rounds.</p>
+        <p className="about-strategy-round-note">Each approach can be tried, challenged, and improved over successive turns.</p>
       </div>
       <div className="about-flow-connector about-strategy-parallel-note"><span>Press Play to investigate the selected approaches</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
@@ -6317,11 +6317,11 @@ function AboutArchitecture() {
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">How one research round works</h4>
+            <h4 id="about-session-detail-heading">How research turns work</h4>
             <p className="about-multi-agent-intro">For <strong>one strategy</strong>, each turn pairs an Investigator call with a subsequent Skeptic review. Later turns can respond to criticism.</p>
-            <p className="about-round-definition"><strong>One research round</strong> has up to three paired <strong>turns</strong> per strategy by default. Each turn contains two <strong>agent calls</strong>: Investigator → Skeptic.</p>
-            <section className="about-agent-instantiation" aria-label="Example of one round with three paired turns and six agent calls within one strategy">
-              <h5>One strategy · One round · Three turns</h5>
+            <p className="about-round-definition">Session Settings lets you choose a finite number of <strong>turns</strong> (9 per strategy by default) or <strong>Unlimited turns</strong>. In standard mode, each turn contains two <strong>agent calls</strong>: Investigator → Skeptic. Brainstorm mode uses two Investigators instead.</p>
+            <section className="about-agent-instantiation" aria-label="Example of three paired turns and six agent calls within one strategy">
+              <h5>One strategy · Three example turns</h5>
               <div className="about-agent-turns">
                 {exampleTurns.map((turn, index) => <div className="about-agent-round" key={turn.turn}>
                   <div className="about-agent-round-heading"><strong>Turn {turn.turn} of 3</strong><span>{turn.title}</span></div>
@@ -6345,22 +6345,22 @@ function AboutArchitecture() {
                   </div>}
                 </div>)}
               </div>
-              <p className="about-agent-instantiation-note">These six calls illustrate one round. Other strategies may run concurrently or stop early; research evidence can inform later turns and rounds.</p>
+              <p className="about-agent-instantiation-note">These six calls illustrate three turns. Other strategies may run concurrently or stop early; research evidence can inform later turns.</p>
             </section>
-            <p className="about-shared-budget"><strong>Why more rounds?</strong> Later turns can test objections or revise claims. Progress is the goal, not a scheduler guarantee.</p>
+            <p className="about-shared-budget"><strong>Why more turns?</strong> Later turns can test objections or revise claims. Progress is the goal, not a scheduler guarantee.</p>
             <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
               <p className="about-exploration-title">How much can one session explore?</p>
-              <p>With three enabled strategies and the default three rounds:</p>
+              <p>With three enabled strategies and the default nine turns per strategy:</p>
               <div className="about-exploration-grid">
                 {strategyExamples.map(strategy => <div className="about-exploration-row" key={strategy.id}>
                   <span className="about-exploration-strategy">{strategy.title}</span>
-                  {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>3 turns</small></span>)}
+                  {[1, 2, 3].map(group => <span className="about-exploration-round" key={group}>Turns {(group - 1) * 3 + 1}–{group * 3}<small>3 turns</small></span>)}
                 </div>)}
               </div>
-              <p className="about-session-exploration-example"><strong>3 rounds × 3 turns × 3 strategies × 2 agent calls = 54 maximum calls.</strong> Strategies progress independently, but each Investigator call precedes its Skeptic. Limits or early stopping may reduce the total.</p>
+              <p className="about-session-exploration-example"><strong>9 turns × 3 strategies × 2 agent calls = 54 maximum calls.</strong> Strategies progress independently, but each Investigator call precedes its Skeptic. Limits or early stopping may reduce the total.</p>
             </div>
             <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
-            <p className="about-multiple-strategies-note">Research evidence is selected into bounded later contexts; there is no automatic round-end merge.</p>
+            <p className="about-multiple-strategies-note">Research evidence is selected into bounded later contexts; successive turns do not imply independent verification.</p>
             <p className="about-multiple-sessions-note">You can run another session later to revisit a strategy with new evidence or compare what changed.</p>
           </div>
         </div>
