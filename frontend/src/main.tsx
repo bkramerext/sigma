@@ -1650,7 +1650,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
-  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string } | null>(null);
+  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
   const [pendingStartSettings, setPendingStartSettings] = useState<SessionSettings | null>(null);
   const [guestSessionCard, setGuestSessionCard] = useState(false);
   const [confirmMissingType, setConfirmMissingType] = useState(false);
@@ -2291,9 +2291,22 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   function existingSessionSettings(session: ResearchSession): SessionSettings {
     const baseline = defaultSessionSettings({
       research_rounds: session.research_round_limit ?? 3,
-      turns_per_round: Math.max(1, Math.min(20, session.turns_per_round ?? 3)),
+      turns_per_round: session.turns_per_round ?? 3,
     });
-    return { ...baseline, ...session.session_settings };
+    const old = session.session_settings as (Partial<SessionSettings> & {
+      research_rounds?: number;
+      turns_per_round?: number;
+      single_round_unlimited_turns?: boolean;
+    }) | undefined;
+    return {
+      ...baseline,
+      name: old?.name ?? '',
+      brainstorm_mode: old?.brainstorm_mode ?? false,
+      supervisor_mode: old?.supervisor_mode ?? 'none',
+      unlimited_turns: old?.unlimited_turns ?? old?.single_round_unlimited_turns ?? false,
+      turn_limit: old?.turn_limit ?? (old?.research_rounds && old?.turns_per_round
+        ? old.research_rounds * old.turns_per_round : session.cycle_limit ?? baseline.turn_limit),
+    };
   }
 
   const activeSessionCount = sessions.filter(session => session.status === 'queued' || session.status === 'running').length;
@@ -2316,13 +2329,12 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
   const effectiveDurationMinutes = limits?.session_duration_minutes ?? null;
-  const startRounds = pendingStartSettings?.single_round_unlimited_turns ? 1
-    : (pendingStartSettings?.research_rounds ?? limits?.research_rounds ?? 3);
-  const startTurns = pendingStartSettings?.turns_per_round ?? limits?.turns_per_round ?? 3;
+  const startTurns = pendingStartSettings?.turn_limit
+    ?? (limits ? limits.research_rounds * (limits.turns_per_round ?? 3) : 9);
   const startStrategies = confirmStart ? pendingStrategyIds.length : eligible.length;
-  const startSummary = limits ? (pendingStartSettings?.single_round_unlimited_turns
-    ? `1 round × unlimited paired turns × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'}`
-    : `${startRounds} ${startRounds === 1 ? 'round' : 'rounds'} × ${startTurns} paired ${startTurns === 1 ? 'turn' : 'turns'} × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'} = ${startRounds * startTurns * 2 * startStrategies} maximum agent calls`) : undefined;
+  const startSummary = limits ? (pendingStartSettings?.unlimited_turns
+    ? `Unlimited paired turns × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'}`
+    : `${startTurns} paired ${startTurns === 1 ? 'turn' : 'turns'} × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'} = ${startTurns * 2 * startStrategies} maximum agent calls`) : undefined;
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), configure: () => setSettingsDialog({ mode: 'start', initial: pendingStartSettings ?? defaultSessionSettings(limits) }), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
@@ -2355,7 +2367,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   });
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     {settingsDialog && <SessionSettingsDialog key={settingsDialog.sessionId ?? 'new-session'}
-      settings={settingsDialog.initial} mode={settingsDialog.mode}
+      settings={settingsDialog.initial} mode={settingsDialog.mode} minTurns={settingsDialog.minTurns ?? 0}
       onCancel={() => setSettingsDialog(null)}
       onApply={next => {
         if (settingsDialog.mode === 'start') {
@@ -2439,10 +2451,15 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                     className="text-view-link text-view-icon workspace-icon-button session-settings-action"
                     aria-label={`Session ${item.session_number} settings`}
                     data-tooltip="Session settings" disabled={busy || ['queued', 'running'].includes(item.status)}
-                    onClick={() => setSettingsDialog({ mode: 'edit', sessionId: item.id, initial: existingSessionSettings(item) })}>
-                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                      <circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2.1-.5-.8-1.9 1.2-1.8-2.1-2.1-1.8 1.2-1.9-.8L11 2.5H8l-.5 2.1-1.9.8-1.8-1.2-2.1 2.1 1.2 1.8-.8 1.9-2.1.5v3l2.1.5.8 1.9-1.2 1.8 2.1 2.1 1.8-1.2 1.9.8.5 2.1h3l.5-2.1 1.9-.8 1.8 1.2 2.1-2.1-1.2-1.8.8-1.9Z" transform="translate(1.5 0) scale(.9)"/>
-                    </svg>
+                    onClick={() => setSettingsDialog({
+                      mode: 'edit', sessionId: item.id, initial: existingSessionSettings(item),
+                      minTurns: Math.max(0,
+                        ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
+                          .map(step => step.cycle),
+                        ...item.strategy_runs.map(branch => branch.cycle ?? 0),
+                      ),
+                    })}>
+                    <SlidersSettingsIcon/>
                   </button>}
                   {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
@@ -2465,7 +2482,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel}` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
                 <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
                   ? 'Stopping · findings remain available'
-                  : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.session_settings?.single_round_unlimited_turns ? '∞' : item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings recorded · {sessionEstimatedCostLabel(item)}</>}</small>
+                  : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${(item.session_settings as SessionSettings | undefined)?.unlimited_turns ? '∞' : item.cycle_limit}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings recorded · {sessionEstimatedCostLabel(item)}</>}</small>
                 {!pendingAction && strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id} className={line.id === 'reference-compilation' ? 'session-standards-guidance' : undefined}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
                 {!pendingAction && strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
