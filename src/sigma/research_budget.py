@@ -54,6 +54,41 @@ def authorize_independent_review_after_unknown(
     ledger["blocked_reason"] = None
 
 
+def authorize_supervisor_recovery_after_unknown(
+    ledger: dict[str, Any], *, call_id: str
+) -> None:
+    """Resume research after one uncertain optional supervisor, retaining its full liability.
+
+    Unlike an Investigator/Skeptic attempt, an abandoned process observation
+    does not require a replacement. This narrow transition never modifies
+    token, cost, or call reservations and cannot clear an unknown role request.
+    """
+    if ledger.get("version") != LEDGER_VERSION:
+        raise BudgetExceeded("Research budget ledger version is invalid")
+    calls = ledger.get("calls")
+    if not isinstance(calls, list):
+        raise BudgetExceeded("Saved supervisor reservations are invalid")
+    matches = [item for item in calls if item.get("call_id") == call_id]
+    if len(matches) != 1:
+        raise BudgetExceeded("Saved supervisor reservation is not unique")
+    target = matches[0]
+    if target.get("status") == "unknown_supervisor_abandoned":
+        if ledger.get("blocked_reason"):
+            raise BudgetExceeded("Another uncertain request blocks research")
+        return
+    if (
+        target.get("status") != "unknown"
+        or ledger.get("blocked_reason") != "Provider call outcome or usage is unknown"
+        or any(
+            item is not target and item.get("status") in {"reserved", "unknown"}
+            for item in calls
+        )
+    ):
+        raise BudgetExceeded("Supervisor recovery cannot clear another unsettled provider call")
+    target["status"] = "unknown_supervisor_abandoned"
+    ledger["blocked_reason"] = None
+
+
 def authorize_reference_compiler_recovery_after_unknown(
     ledger: dict[str, Any], *, call_id: str
 ) -> None:
