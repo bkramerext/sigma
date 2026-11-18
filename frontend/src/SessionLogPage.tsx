@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, transcriptCategories, type TranscriptIntervention, type TranscriptRole } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, transcriptCategories, type TranscriptIntervention, type TranscriptEntry, type TranscriptRole } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -28,10 +28,19 @@ export default function SessionLogPage() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [shortName, setShortName] = useState('Research Project');
   const [projectTitle, setProjectTitle] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [enabledCategories, setEnabledCategories] = useState<TranscriptRole[]>(transcriptCategories.map(category => category.value));
   const [interventions, setInterventions] = useState<TranscriptIntervention[]>([]);
   const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
   const [renderMarkdown, setRenderMarkdown] = useState(false);
+  const [formattedEntries, setFormattedEntries] = useState<Record<string, { source: string; body: string }>>({});
+  const formattedEntriesRef = useRef<Record<string, { source: string; body: string }>>({});
+  const conversionQueue = useRef<TranscriptEntry[]>([]);
+  const conversionQueued = useRef(new Set<string>());
+  const conversionWorker = useRef(false);
+  const conversionAbort = useRef<AbortController | null>(null);
+  const markdownEnabled = useRef(false);
+  const [markdownError, setMarkdownError] = useState('');
   const [following, setFollowing] = useState(true);
   const [jumpVisible, setJumpVisible] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -74,13 +83,13 @@ export default function SessionLogPage() {
         const query = new URLSearchParams({ path, after: String(cursor.current) });
         const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin', headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session transcript.' : 'This session transcript is unavailable or access was denied.');
-        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; session: SessionState; reference_preparation?: ReferencePreparation; interventions?: TranscriptIntervention[] };
+        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; project_id?: string; session: SessionState; reference_preparation?: ReferencePreparation; interventions?: TranscriptIntervention[] };
         if (!alive) return;
         const fresh = data.events.filter(event => !seen.current.has(event.seq));
         fresh.forEach(event => seen.current.add(event.seq));
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
-        setShortName(data.short_name); setProjectTitle(data.project_title); setSession(data.session); setReferencePreparation(data.reference_preparation ?? null); setInterventions(data.interventions ?? []); setError('');
+        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); setReferencePreparation(data.reference_preparation ?? null); setInterventions(data.interventions ?? []); setError('');
       } catch (cause) { if (alive) setError(displayError(cause)); }
       finally {
         fetching = false;
@@ -97,6 +106,85 @@ export default function SessionLogPage() {
   }, [projectTitle, shortName, session]);
   useEffect(() => { if (following && list.current) list.current.scrollTop = 0; }, [events, following]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  // The existing Markdown action formats saved provider text with the same
+  // metered converter as other SIGMA research blocks. The original transcript
+  // and Copy/Download remain byte-for-byte unchanged. Only accepted, visible
+  // transcript content is queued; never send arbitrary browser-authored text.
+  useEffect(() => {
+    if (!renderMarkdown || !projectId) return;
+    const entries = projectTranscript(events, interventions).filter(entry =>
+      !entry.pending && entry.text.length >= 40 && entry.text.length <= 20000 &&
+      (entry.id.startsWith('response-') || (entry.role === 'supervisor' && entry.id.startsWith('event-'))) &&
+      entry.text !== 'The response text was not retained in this historical log.');
+    for (const entry of entries) {
+      if (formattedEntriesRef.current[entry.id]?.source === entry.text || conversionQueued.current.has(entry.id)) continue;
+      conversionQueued.current.add(entry.id);
+      conversionQueue.current.push(entry);
+    }
+    if (conversionWorker.current || !conversionQueue.current.length) return;
+    conversionWorker.current = true;
+    const drain = async () => {
+      try {
+        while (conversionQueue.current.length && markdownEnabled.current) {
+          const entry = conversionQueue.current.shift()!;
+          const controller = new AbortController();
+          conversionAbort.current = controller;
+          try {
+            const settingsResponse = await fetch(
+              `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
+              { signal: controller.signal, cache: 'no-store' },
+            );
+            const settings = await settingsResponse.json();
+            if (!settingsResponse.ok || !settings.available || !settings.binding)
+              throw new Error(settings.message ?? 'Markdown formatting is unavailable.');
+            const response = await fetch('/api/projects/text/convert', {
+              method: 'POST', signal: controller.signal,
+              headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+              body: JSON.stringify({
+                path, scope: 'session-transcript', session_id: sessionId,
+                field_path: `event.${entry.sequence}`, target: 'markdown',
+                expected_digest: 'server-snapshot',
+                expected_project_id: projectId, expected_binding: settings.binding,
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok || typeof result.body !== 'string')
+              throw new Error(result.error ?? result.detail ?? 'Transcript Markdown formatting failed.');
+            if (!controller.signal.aborted && markdownEnabled.current) {
+              const next = { ...formattedEntriesRef.current, [entry.id]: { source: entry.text, body: result.body } };
+              formattedEntriesRef.current = next;
+              setFormattedEntries(next);
+              setMarkdownError('');
+            }
+          } catch (cause) {
+            if (!controller.signal.aborted) {
+              setMarkdownError(displayError(cause));
+              conversionQueue.current = [];
+              break;
+            }
+          } finally {
+            if (conversionAbort.current === controller) conversionAbort.current = null;
+          }
+        }
+      } finally {
+        conversionWorker.current = false;
+      }
+    };
+    void drain();
+  }, [renderMarkdown, events, interventions, projectId, path, sessionId]);
+
+  const toggleMarkdown = () => {
+    const next = !renderMarkdown;
+    markdownEnabled.current = next;
+    setRenderMarkdown(next);
+    if (!next) {
+      conversionAbort.current?.abort();
+      conversionQueue.current = [];
+      conversionQueued.current = new Set(Object.keys(formattedEntriesRef.current));
+      setMarkdownError('');
+    }
+  };
+  useEffect(() => () => { conversionAbort.current?.abort(); }, []);
   const compilationLabel = referencePreparation?.compiler.status === 'completed' ? 'succeeded' : ['fallback', 'interrupted', 'failed'].includes(referencePreparation?.compiler.status ?? '') ? 'failed/degraded' : referencePreparation?.compiler.status ?? 'unknown/not recorded';
   const shownGroups = groupTranscriptTurns(
     projectTranscript(events, interventions).filter(entry => enabledCategories.includes(entry.role)),
@@ -138,7 +226,7 @@ export default function SessionLogPage() {
           aria-label={renderMarkdown ? 'Show plain transcript' : 'Render transcript as Markdown'}
           aria-pressed={renderMarkdown}
           data-tooltip={renderMarkdown ? 'Show plain text' : 'Render as Markdown'}
-          onClick={() => setRenderMarkdown(current => !current)}>
+          onClick={toggleMarkdown}>
           <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none"
             xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"
               fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>
@@ -154,7 +242,7 @@ export default function SessionLogPage() {
     </div></header>
     {copyState === 'copied' && <p role="status" className="session-log-copy-status">Copied transcript to clipboard.</p>}
     {copyError && <p role="alert" className="session-log-copy-error">{copyError}</p>}
-    {error && <p role="alert">{error}</p>}
+    {(error || markdownError) && <p role="alert">{error || markdownError}</p>}
     {session && ['paused', 'stopped', 'failed', 'ended', 'completed'].includes(session.status) && <section aria-label="Saved session status" className="session-log-reference-summary">
       <p><strong>Status:</strong> {session.status} · <strong>Stage:</strong> {session.current_action || 'not recorded'} · <strong>Reason code:</strong> {session.termination_reason_code || 'not recorded'}</p>
       <p>{session.reason || session.message || 'No stop reason recorded.'}</p>
@@ -198,7 +286,7 @@ export default function SessionLogPage() {
               </div>
               <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                 {renderMarkdown
-                  ? <div className="session-transcript-markdown"><RenderedMarkdown body={entry.text}/></div>
+                  ? <div className="session-transcript-markdown"><RenderedMarkdown body={formattedEntries[entry.id]?.source === entry.text ? formattedEntries[entry.id].body : entry.text}/></div>
                   : <pre className="session-transcript-plain">{entry.text}</pre>}
                 {entry.request !== undefined && <details className="session-transcript-provider-details">
                   <summary>Request and response details</summary>
