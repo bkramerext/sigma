@@ -51,7 +51,10 @@ export default function ProjectScratchpad({ entries, onChange, disabled }: {
               aria-expanded={!isCollapsed} aria-controls={`scratchpad-${entry.id}`}
               onClick={() => setCollapsed(previous => ({ ...previous, [entry.id]: !isCollapsed }))}>
               <svg aria-hidden="true" className={`disclosure-chevron${isCollapsed ? '' : ' is-expanded'}`}
-                viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>
+                viewBox="0 0 12 12" fill="none" stroke="#e4ebf3" strokeWidth="1.8"
+                strokeLinecap="round" strokeLinejoin="round">
+                <path d="m4 2 4 4-4 4" fill="none" stroke="#e4ebf3" strokeWidth="1.8"/>
+              </svg>
             </button>
             <button type="button" className="project-scratchpad-title"
               aria-expanded={!isCollapsed} aria-controls={`scratchpad-${entry.id}`}
