@@ -146,15 +146,20 @@ export type TranscriptTurnGroup = {
  */
 export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurnGroup[] {
   const groups = new Map<string, TranscriptTurnGroup>();
-  let lastTurn: string | null = null;
+  // Only attach a Human entry to a prior turn when its explicitly targeted
+  // strategy identifies that turn. Never infer an arbitrary concurrent branch.
+  const latestTurnByStrategy = new Map<string, string>();
   for (const entry of [...entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp)
     || a.sequence - b.sequence)) {
     const hasTurn = typeof entry.round === 'number' && entry.round > 0;
-    const key: string = hasTurn ? `${entry.strategyId ?? 'session'}:${entry.round}`
-      : entry.role === 'human' && lastTurn ? lastTurn : `event:${entry.id}`;
-    if (hasTurn) lastTurn = key;
-    const label = hasTurn ? `Turn ${entry.round}` : entry.role === 'human' && lastTurn
-      ? groups.get(key)?.label ?? 'Human' : 'Session activity';
+    const turnKey = hasTurn ? `${entry.strategyId ?? 'session'}:${entry.round}` : null;
+    const humanTurn = entry.role === 'human' && entry.strategyId
+      ? latestTurnByStrategy.get(entry.strategyId) : undefined;
+    const key = turnKey ?? humanTurn ?? `event:${entry.id}`;
+    if (turnKey && entry.strategyId) latestTurnByStrategy.set(entry.strategyId, turnKey);
+    const label = turnKey ? `Turn ${entry.round}`
+      : humanTurn ? groups.get(humanTurn)?.label ?? 'Human' 
+      : entry.role === 'human' ? 'Human' : 'Session activity';
     const existing = groups.get(key);
     if (existing) {
       existing.entries.push(entry);
