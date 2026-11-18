@@ -935,8 +935,12 @@ def _session_configuration(
         turn_limit = rounds * per_round
     else:
         turn_limit = default_turn_limit
-    if type(turn_limit) is not int or not 1 <= turn_limit <= 1200:
-        raise ProjectError("Turns must be between 1 and 1200")
+    # The finite editor caps a requested protocol at 1200 turns. Unlimited
+    # sessions can legitimately have an already-saved cursor beyond that cap;
+    # editing their name or mode must not become impossible.
+    unlimited = value.get("unlimited_turns", value.get("single_round_unlimited_turns", False))
+    if type(turn_limit) is not int or turn_limit < 1 or (not unlimited and turn_limit > 1200):
+        raise ProjectError("Turns must be between 1 and 1200 unless Unlimited turns is enabled")
     return {
         "name": name.strip(),
         "brainstorm_mode": value.get("brainstorm_mode", False),
