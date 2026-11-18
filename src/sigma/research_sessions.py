@@ -14808,188 +14808,336 @@ async def _portfolio_supervisor_call(
     cycle: int,
     state_lock: asyncio.Lock,
 ) -> None:
-    """One separately funded, checkpointed, non-replaying supervisor per completed pair.
+    """Safely meter and checkpoint one independent process review per accepted pair.
 
-    Supervisor failure must never discard accepted research or fabricate usage.
-    Every dispatched attempt receives a durable reservation before provider I/O.
+    An interrupted or uncertain review is never replayed. Review failure cannot
+    turn accepted Investigator/Skeptic output into a failed research result.
     """
     from sigma import chat, session_supervisor
 
     pair_key = f"{strategy_id}:{cycle}"
     async with _portfolio_global_gate(session_id):
+        # The same frozen account identity is validated before reservation and
+        # again by the transport immediately before provider dispatch.
+        credential = await auth_context()
         async with state_lock:
             record = _read(path, session_id)
             settings = record.get("session_settings")
             mode = settings.get("supervisor_mode") if isinstance(settings, dict) else "none"
-            if mode not in {"light", "heavy"} or record["status"] in {
-                "paused", "stopped", "ended", "completed", "failed"
+            if mode not in {"light", "heavy"} or record["status"] not in {
+                "running",
+                "queued",
             }:
                 return
             reviews = record.setdefault("supervisor_reviews", [])
-            if any(review.get("pair_key") == pair_key for review in reviews):
+            if any(item.get("pair_key") == pair_key for item in reviews):
                 return
             pair = _supervisor_pair_input(record, strategy_id, cycle)
             if pair is None:
                 return
-            if record["calls_used"] >= record["call_limit"]:
-                reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
-                                "cycle": cycle, "status": "skipped_budget", "at": _now()})
+            if (
+                credential["mode"] != record["mode"]
+                or _digest(credential["identity"]) != record.get("identity_hash")
+            ):
+                # Keep the accepted pair and require the usual stopped-Session
+                # provider rebind. Never silently select another payer.
+                reviews.append(
+                    {
+                        "pair_key": pair_key,
+                        "strategy_id": strategy_id,
+                        "cycle": cycle,
+                        "status": "skipped_connection",
+                        "at": _now(),
+                    }
+                )
                 _save(path, record)
                 return
             objective = str(record.get("problem") or record.get("desired_outcomes") or "")[:6000]
-            prompt = json.dumps(pair, ensure_ascii=False).encode("utf-8")
-            # Chat's metered supervisor uses at most 1200 generated tokens. The
-            # extra byte headroom covers the instruction envelope conservatively.
-            input_bound = len(prompt) + len(session_supervisor.INSTRUCTIONS.encode()) + 8192
+            model = record["model"]
+            effort = record["reasoning_effort"]
+            # Conservatively bound the provider envelope, not only the raw pair.
+            request_body = json.dumps(
+                {
+                    "instructions": session_supervisor.INSTRUCTIONS,
+                    "objective": objective,
+                    "mode": mode,
+                    "messages": pair,
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+            input_bound = len(request_body) + 8192
             output_bound = chat.MAX_OUTPUT_TOKENS
-            if (
-                int(record.get("tokens_used") or 0) + int(record.get("tokens_reserved") or 0)
-                + input_bound + output_bound > int(record.get("total_token_limit") or 0)
-            ):
-                reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
-                                "cycle": cycle, "status": "skipped_budget", "at": _now()})
-                _save(path, record)
-                return
-            pricing = TOKEN_PRICES_PER_MILLION.get(record["model"])
-            estimated_reserve = (
-                (input_bound * max(pricing["input"], pricing["cache_write"])
-                 + output_bound * pricing["output"]) / 1_000_000
-                if pricing else None
+            token_reserve = input_bound + output_bound
+            prices = TOKEN_PRICES_PER_MILLION.get(model)
+            cost_reserve = (
+                (
+                    input_bound * max(prices["input"], prices["cache_write"])
+                    + output_bound * prices["output"]
+                )
+                / 1_000_000
+                if prices
+                else None
             )
-            saved_cost = record.get("estimated_cost_usd")
-            reserved_cost = float(record.get("estimated_cost_reserved_usd") or 0)
+            # Hosted global spend must reserve maximum provider liability, as
+            # the ChatGPT transport does not enforce max_output_tokens.
+            output_liability = MODEL_OUTPUT_LIMITS.get(model)
+            liability = (
+                (
+                    input_bound * max(prices["input"], prices["cache_write"])
+                    + output_liability * prices["output"]
+                )
+                / 1_000_000
+                if prices and output_liability
+                else None
+            )
             cost_cap = record.get("maximum_estimated_cost_usd")
-            if cost_cap is not None and (
-                estimated_reserve is None or not isinstance(saved_cost, (int, float))
-                or saved_cost + reserved_cost + estimated_reserve > cost_cap
-            ):
-                reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
-                                "cycle": cycle, "status": "skipped_budget", "at": _now()})
+            cost_used = record.get("estimated_cost_usd")
+            cost_held = float(record.get("estimated_cost_reserved_usd") or 0)
+            insufficient = (
+                record["calls_used"] >= record["call_limit"]
+                or int(record.get("tokens_used") or 0)
+                + int(record.get("tokens_reserved") or 0)
+                + token_reserve
+                > int(record.get("total_token_limit") or 0)
+                or (
+                    cost_cap is not None
+                    and (
+                        cost_reserve is None
+                        or not isinstance(cost_used, (int, float))
+                        or cost_used + cost_held + cost_reserve > cost_cap
+                    )
+                )
+                or (cloud_research.billing_enabled() and (cost_reserve is None or liability is None))
+            )
+            if insufficient:
+                reviews.append(
+                    {
+                        "pair_key": pair_key,
+                        "strategy_id": strategy_id,
+                        "cycle": cycle,
+                        "status": "skipped_budget",
+                        "at": _now(),
+                    }
+                )
                 _save(path, record)
                 return
             call_id = str(uuid4())
-            ledger = record.get("hard_budget_ledger")
-            if isinstance(ledger, dict):
+            hard_ledger = record.get("hard_budget_ledger")
+            if isinstance(hard_ledger, dict):
                 try:
-                    budget_reservation = reserve_before_dispatch(
-                        ledger, call_id=call_id, request_body=prompt,
-                        output_token_reservation=output_bound, allow_concurrent=True,
+                    reservation = reserve_before_dispatch(
+                        hard_ledger,
+                        call_id=call_id,
+                        request_body=request_body,
+                        output_token_reservation=output_bound,
+                        allow_concurrent=True,
                     )
                 except BudgetExceeded:
-                    reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
-                                    "cycle": cycle, "status": "skipped_budget", "at": _now()})
+                    reviews.append(
+                        {
+                            "pair_key": pair_key,
+                            "strategy_id": strategy_id,
+                            "cycle": cycle,
+                            "status": "skipped_budget",
+                            "at": _now(),
+                        }
+                    )
                     _save(path, record)
                     return
             else:
-                budget_reservation = None
+                reservation = None
             review = {
+                "id": call_id,
                 "pair_key": pair_key,
                 "strategy_id": strategy_id,
                 "cycle": cycle,
-                "id": call_id,
                 "status": "running",
+                "attempt_status": "preparing",
                 "started_at": _now(),
-                "model": record["model"],
-                "token_reservation": input_bound + output_bound,
-                "budget_reservation": budget_reservation,
-                "cost_reserve": estimated_reserve if cost_cap is not None else None,
+                "model": model,
+                "token_reservation": token_reserve,
+                "budget_reservation": reservation,
+                "cost_reserve": cost_reserve if cost_cap is not None else None,
             }
             reviews.append(review)
             record["calls_used"] += 1
-            record["tokens_reserved"] = int(record.get("tokens_reserved") or 0) + input_bound + output_bound
-            if cost_cap is not None and estimated_reserve is not None:
-                record["estimated_cost_reserved_usd"] = reserved_cost + estimated_reserve
+            record["tokens_reserved"] = int(record.get("tokens_reserved") or 0) + token_reserve
+            if cost_cap is not None and cost_reserve is not None:
+                record["estimated_cost_reserved_usd"] = cost_held + cost_reserve
+            _save(path, record)
+            if cloud_research.billing_enabled():
+                try:
+                    assert cost_reserve is not None and liability is not None
+                    cloud_research.reserve_call(
+                        session_id,
+                        call_id,
+                        cost_reserve,
+                        token_reserve,
+                        maximum_liability_usd=liability,
+                    )
+                except cloud_research.CloudResearchUnavailable:
+                    # A rejected pre-dispatch reservation is not a paid call.
+                    if isinstance(hard_ledger, dict):
+                        cancel_before_dispatch(hard_ledger, call_id=call_id)
+                    review["status"] = "skipped_budget"
+                    review["attempt_status"] = "not_dispatched"
+                    review["finished_at"] = _now()
+                    record["calls_used"] = max(0, record["calls_used"] - 1)
+                    record["tokens_reserved"] = max(
+                        0, record["tokens_reserved"] - token_reserve
+                    )
+                    if cost_cap is not None and cost_reserve is not None:
+                        record["estimated_cost_reserved_usd"] = max(
+                            0.0, record["estimated_cost_reserved_usd"] - cost_reserve
+                        )
+                    _save(path, record)
+                    return
+            review["attempt_status"] = "reserved"
             _event(record, "supervisor.started", "Independent process review reserved.", "supervisor")
             _save(path, record)
-            model = record["model"]
-            effort = record["reasoning_effort"]
+            expected_identity = str(record["identity_hash"])
+            expected_mode = str(record["mode"])
 
-        output: dict[str, Any] | None = None
-        usage: dict[str, Any] | None = None
+        raw: dict[str, Any] | None = None
+        assessment: dict[str, Any] | None = None
+        usage: dict[str, int | None] | None = None
         failure_reason = ""
         try:
-            raw, response = await chat.respond(
-                speaker="supervisor", messages=pair,
-                conversation_id=call_id, model=model, reasoning_effort=effort,
+            # Fence the request BEFORE provider I/O. A restart after this point
+            # retains full uncertainty and never replays the same review.
+            async with state_lock:
+                record = _read(path, session_id)
+                review = next(
+                    item
+                    for item in record["supervisor_reviews"]
+                    if item.get("id") == call_id
+                )
+                review["attempt_status"] = "dispatched_unknown"
+                _save(path, record)
+            raw = await chat.respond(
+                speaker="supervisor",
+                messages=pair,
+                conversation_id=call_id,
+                model=model,
+                reasoning_effort=effort,
                 research_objective=objective,
-                repeated_text=("Heavy, attentive process supervision." if mode == "heavy"
-                               else "Light, restrained process supervision."),
-                session_supervision=True, return_metadata=True,
+                repeated_text=(
+                    "Heavy, attentive process supervision."
+                    if mode == "heavy"
+                    else "Light, restrained process supervision."
+                ),
+                session_supervision=True,
+                external_session_billing=True,
+                expected_mode=expected_mode,
+                expected_identity_hash=expected_identity,
+                return_raw_response=True,
             )
-            output = session_supervisor.parse_assessment(raw)
-            raw_usage = response.get("usage")
+            raw_usage = raw.get("usage")
             if isinstance(raw_usage, dict):
                 usage = {
                     "input_tokens": raw_usage.get("input_tokens"),
                     "output_tokens": raw_usage.get("output_tokens"),
                 }
+            # Content validation is strictly AFTER usage capture. A bad JSON
+            # assessment does not make a completed, metered response uncertain.
+            text = chat._response_text(raw, model)
+            assessment = session_supervisor.parse_assessment(text)
         except asyncio.CancelledError:
             failure_reason = "Process review interrupted; provider usage is uncertain."
             raise
-        except Exception as exc:  # noqa: BLE001 — optional review may fail independently
-            failure_reason = f"Independent process review unavailable ({type(exc).__name__})."
+        except Exception as exc:  # noqa: BLE001 — optional review cannot fail research
+            failure_reason = (
+                f"Independent process review unavailable ({type(exc).__name__})."
+            )
         finally:
             async with state_lock:
                 record = _read(path, session_id)
                 review = next(
-                    (row for row in record.get("supervisor_reviews", [])
-                     if row.get("id") == call_id), None
+                    (item for item in record.get("supervisor_reviews", [])
+                     if item.get("id") == call_id),
+                    None,
                 )
                 if review is None:
-                    raise ProjectError("Supervisor checkpoint missing; no replay permitted.")
-                settled = (
+                    raise ProjectError("Supervisor checkpoint missing; call must never be replayed.")
+                valid_usage = (
                     usage is not None
                     and type(usage.get("input_tokens")) is int
                     and type(usage.get("output_tokens")) is int
+                    and usage["input_tokens"] >= 0
+                    and usage["output_tokens"] >= 0
                 )
+                review["status"] = "completed" if assessment else "failed"
                 review["finished_at"] = _now()
-                review["status"] = "completed" if output else "failed"
-                if output is not None:
-                    review["assessment"] = output
+                if assessment is not None:
+                    review["assessment"] = assessment
                 if failure_reason:
                     review["reason"] = failure_reason
-                if settled:
+                if valid_usage and usage is not None:
                     review["token_usage"] = usage
+                    review["token_usage_status"] = "reported"
+                    record["tokens_reserved"] = max(
+                        0,
+                        int(record.get("tokens_reserved") or 0) - token_reserve,
+                    )
                 else:
                     review["token_usage_status"] = "unavailable"
                 ledger = record.get("hard_budget_ledger")
                 if isinstance(ledger, dict):
-                    if settled:
+                    if valid_usage and usage is not None:
                         try:
-                            prices = TOKEN_PRICES_PER_MILLION.get(model)
                             settle_after_response(
-                                ledger, call_id=call_id,
+                                ledger,
+                                call_id=call_id,
                                 input_tokens=usage["input_tokens"],
                                 output_tokens=usage["output_tokens"],
-                                input_price_per_million=max(
-                                    prices["input"], prices["cache_write"]
-                                ) if prices else None,
-                                output_price_per_million=prices["output"] if prices else None,
+                                input_price_per_million=(
+                                    max(prices["input"], prices["cache_write"])
+                                    if prices
+                                    else None
+                                ),
+                                output_price_per_million=(
+                                    prices["output"] if prices else None
+                                ),
                             )
                         except BudgetExceeded:
-                            mark_unknown(ledger, call_id=call_id)
+                            review["hard_budget_status"] = "usage_exceeded_reservation"
                     else:
                         mark_unknown(ledger, call_id=call_id)
-                record["tokens_reserved"] = max(
-                    0, int(record.get("tokens_reserved") or 0)
-                    - (input_bound + output_bound)
-                ) if settled else int(record.get("tokens_reserved") or 0)
-                if settled:
-                    record["tokens_used"] = int(record.get("tokens_used") or 0) + (
-                        usage["input_tokens"] + usage["output_tokens"]
-                    )
-                if cost_cap is not None and estimated_reserve is not None and settled:
+                if cloud_research.billing_enabled():
+                    try:
+                        cloud_research.settle_call(
+                            session_id,
+                            call_id,
+                            input_tokens=usage["input_tokens"] if valid_usage and usage else None,
+                            output_tokens=usage["output_tokens"] if valid_usage and usage else None,
+                            estimated_cost_usd=(
+                                _estimate_cost(model, usage)
+                                if valid_usage and usage
+                                else None
+                            ),
+                        )
+                    except cloud_research.CloudResearchUnavailable:
+                        review["cloud_settlement_status"] = "unknown"
+                if cost_cap is not None and cost_reserve is not None and valid_usage and usage:
                     record["estimated_cost_reserved_usd"] = max(
-                        0.0, float(record.get("estimated_cost_reserved_usd") or 0)
-                        - estimated_reserve
+                        0.0,
+                        float(record.get("estimated_cost_reserved_usd") or 0)
+                        - cost_reserve,
                     )
                     estimate = _estimate_cost(model, usage)
                     if estimate is not None and record.get("cost_status") == "available":
-                        record["estimated_cost_usd"] += estimate
-                _event(record, "supervisor.completed" if output else "supervisor.failed",
-                       "Independent process review saved." if output else
-                       "Independent process review unavailable; research is retained.",
-                       "supervisor")
+                        record["estimated_cost_usd"] = (
+                            float(record.get("estimated_cost_usd") or 0) + estimate
+                        )
+                _refresh_token_accounting(record)
+                _event(
+                    record,
+                    "supervisor.completed" if assessment else "supervisor.failed",
+                    "Independent process review saved."
+                    if assessment
+                    else "Independent process review unavailable; research is retained.",
+                    "supervisor",
+                )
                 _save(path, record)
 
 
