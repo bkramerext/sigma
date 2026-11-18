@@ -752,7 +752,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; starting?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; starting?: boolean; start?: () => void; cancel?: () => void; configure?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
 
 type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; revision?: string; children: ReactNode; fallback?: ReactNode };
 type SessionRenderBoundaryState = { error: Error | null };
@@ -1929,7 +1929,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
         setPendingStrategyIds(chosenIds);
         setConfig({ available: true, model: 'mock-deterministic', reasoning_effort: 'none', mode: 'mock', binding: 'mock', message: 'Local simulation: no provider calls.' });
-        setSettingsDialog({ mode: 'start', initial: defaultSessionSettings() });
+        setPendingStartSettings(null);
+        setConfirmStart(true);
         return;
       }
       // Neither read depends on the other; avoid two serial network RTTs.
@@ -1953,7 +1954,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }
       setPendingStrategyIds(chosenIds);
       setConfig(current); setLimits(currentLimits);
-      setSettingsDialog({ mode: 'start', initial: defaultSessionSettings(currentLimits) });
+      setPendingStartSettings(null);
+      setConfirmStart(true);
     } catch (cause) {
       const message = errorMessage(cause);
       setError(message); reportRequestFailure(message);
@@ -2314,17 +2316,24 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
   const effectiveDurationMinutes = limits?.session_duration_minutes ?? null;
+  const startRounds = pendingStartSettings?.single_round_unlimited_turns ? 1
+    : (pendingStartSettings?.research_rounds ?? limits?.research_rounds ?? 3);
+  const startTurns = pendingStartSettings?.turns_per_round ?? limits?.turns_per_round ?? 3;
+  const startStrategies = confirmStart ? pendingStrategyIds.length : eligible.length;
+  const startSummary = limits ? (pendingStartSettings?.single_round_unlimited_turns
+    ? `1 round × unlimited paired turns × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'}`
+    : `${startRounds} ${startRounds === 1 ? 'round' : 'rounds'} × ${startTurns} paired ${startTurns === 1 ? 'turn' : 'turns'} × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'} = ${startRounds * startTurns * 2 * startStrategies} maximum agent calls`) : undefined;
   useEffect(() => {
     onControlsChange({
-      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits ? `${limits.research_rounds} ${limits.research_rounds === 1 ? "round" : "rounds"} × ${limits.turns_per_round ?? 3} paired ${limits.turns_per_round === 1 ? "turn" : "turns"} × 2 agents × ${confirmStart ? pendingStrategyIds.length : eligible.length} enabled ${(confirmStart ? pendingStrategyIds.length : eligible.length) === 1 ? "strategy" : "strategies"} = ${limits.research_rounds * (limits.turns_per_round ?? 3) * 2 * (confirmStart ? pendingStrategyIds.length : eligible.length)} maximum agent calls` : undefined,
+      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), configure: () => setSettingsDialog({ mode: 'start', initial: pendingStartSettings ?? defaultSessionSettings(limits) }), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      confirmationSummary: startSummary,
       // Match the backend's queued/running slot count. The server remains
       // authoritative when another browser starts a session concurrently.
       playDisabled: busy || !!readError || confirmStart || !!settingsDialog || !eligible.length || projectAtCapacity,
       stopDisabled: busy || !!readError || !runningSession,
       playLabel,
     });
-  }, [busy, admittingSession, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, projectAtCapacity, readError, runningSession, sessions, sponsoredSession, pendingStrategyIds.length, settingsDialog]);
+  }, [busy, admittingSession, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, projectAtCapacity, readError, runningSession, sessions, sponsoredSession, pendingStrategyIds.length, settingsDialog, pendingStartSettings, startSummary]);
 
   const orderedSessions = [...sessions].sort((left, right) => right.session_number - left.session_number);
 
@@ -8853,6 +8862,7 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
         ? <span className="research-running-indicator-frame" role="status" aria-label="Starting research session" data-tooltip="Starting session · awaiting server acceptance"><span className="research-running-indicator"/></span>
         : <>
         {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Effective session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
+        <button type="button" className="text-view-link session-start-link" data-tooltip="Session settings" aria-label="Session settings" disabled={disabled} onClick={controls.configure}>Settings</button>
         <button type="button" className="text-view-link session-start-link" data-tooltip="Start Session" aria-label="Start Session" disabled={disabled} onClick={controls.start}>Start Session</button>
         <button type="button" className="text-view-link session-start-link" data-tooltip="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
