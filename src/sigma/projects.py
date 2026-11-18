@@ -221,6 +221,7 @@ class Project:
     desired_outcomes: str = ""
     paper_requirements: str = ""
     source_material_links: tuple[dict[str, Any], ...] = ()
+    scratchpad: tuple[dict[str, str], ...] = ()
 
     @property
     def research_mode(self) -> str:
@@ -405,6 +406,9 @@ def _decode(raw: Any) -> Project:
         fields.add("show_advanced_outcome_details")
     if "project_type_snapshot" in raw:
         fields.add("project_type_snapshot")
+    if "scratchpad" in raw:
+        fields.add("scratchpad")
+        _validate_scratchpad(raw["scratchpad"])
     if "source_material_links" in raw:
         fields.add("source_material_links")
         links = raw["source_material_links"]
@@ -764,6 +768,7 @@ def _decode(raw: Any) -> Project:
         settings.desired_outcomes,
         settings.paper_requirements,
         tuple(raw.get("source_material_links", [])),
+        tuple(raw.get("scratchpad", [])),
     )
 
 
@@ -776,6 +781,8 @@ def _document(project: Project) -> bytes:
         del raw["paper_requirements"]
     if not raw["source_material_links"]:
         del raw["source_material_links"]
+    if not raw["scratchpad"]:
+        del raw["scratchpad"]
     if project.schema_version < 8:
         del raw["difficulty"]
     if project.schema_version < 9 or project.schema_version >= 12:
@@ -2130,3 +2137,40 @@ def read_project_artifact(value: str | Path, name: str) -> bytes:
         return read_file(path, name)
     except (OSError, ValueError) as exc:
         raise ProjectError(f"Cannot read project artifact: {exc}") from exc
+
+
+def _validate_scratchpad(entries: Any) -> tuple[dict[str, str], ...]:
+    """Keep user-authored notes bounded and portable in the project document."""
+    if not isinstance(entries, (list, tuple)) or len(entries) > 100:
+        raise ProjectError("Scratchpad must contain no more than 100 entries")
+    ids: set[str] = set()
+    result: list[dict[str, str]] = []
+    for item in entries:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"id", "text"}
+            or not isinstance(item["id"], str)
+            or not isinstance(item["text"], str)
+            or re.fullmatch(r"[0-9a-f]{32}", item["id"]) is None
+            or len(item["text"]) > 50_000
+            or item["id"] in ids
+        ):
+            raise ProjectError("Invalid Scratchpad entry")
+        ids.add(item["id"])
+        result.append({"id": item["id"], "text": item["text"]})
+    return tuple(result)
+
+
+def update_project_scratchpad(
+    path: str | Path, entries: list[dict[str, str]], expected: list[dict[str, str]]
+) -> ProjectView:
+    """Optimistic scratchpad update; never clobber another editor's changes."""
+    wanted = _validate_scratchpad(entries)
+    baseline = _validate_scratchpad(expected)
+
+    def edit(project: Project) -> Project:
+        if project.scratchpad != baseline:
+            raise ProjectError("Scratchpad changed elsewhere. Reopen Project Settings before saving.")
+        return replace(project, scratchpad=wanted)
+
+    return _update_project(path, edit, _allow_project_edit=True)
