@@ -257,8 +257,7 @@ async def respond(
     credential = await auth_context()
     if session_supervision and (
         credential["mode"] != expected_mode
-        or hashlib.sha256(credential["identity"].encode()).hexdigest()
-        != expected_identity_hash
+        or hashlib.sha256(credential["identity"].encode()).hexdigest() != expected_identity_hash
     ):
         raise ProjectError("The Session AI connection changed before supervisor dispatch.")
     is_personal = model_dispatch.uses_personal_worker(credential)
