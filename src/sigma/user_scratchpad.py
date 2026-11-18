@@ -78,7 +78,9 @@ def current() -> dict[str, list[dict[str, str]]]:
         os.close(fd)
 
 
-def save(entries: list[dict[str, str]], expected: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
+def save(
+    entries: list[dict[str, str]], expected: list[dict[str, str]]
+) -> dict[str, list[dict[str, str]]]:
     """Use one user-scoped file lock and compare the prior version before replacing."""
     wanted = _validate(entries)
     baseline = _validate(expected)
