@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import httpx
 
-from sigma import chat_supervisor, cloud_research, cloud_workspaces, model_dispatch
+from sigma import chat_supervisor, cloud_research, cloud_workspaces, model_dispatch, session_supervisor
 from sigma.model_catalog import CATALOG, DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, cloud_credential, models
 from sigma.plan_stream import completed, failure
@@ -185,7 +185,9 @@ async def respond(
     repeated_text: str = "",
     research_objective: str = "",
     supervisor_latched: bool = False,
-) -> str:
+    session_supervision: bool = False,
+    return_metadata: bool = False,
+) -> str | tuple[str, dict[str, Any]]:
     """Generate one bounded agent turn and account hosted sponsored usage."""
     if len(messages) > MAX_MESSAGES or not messages:
         raise ProjectError(
@@ -200,6 +202,8 @@ async def respond(
         raise ProjectError("A chat message must contain nonempty text.")
     if not isinstance(repeated_text, str):
         raise ProjectError("Repeated text must be a string.")
+    if session_supervision and speaker != "supervisor":
+        raise ProjectError("Independent Session supervision requires the supervisor role.")
 
     credential = await auth_context()
     is_personal = model_dispatch.uses_personal_worker(credential)
@@ -235,7 +239,9 @@ async def respond(
         "store": False,
         "max_output_tokens": MAX_OUTPUT_TOKENS,
         "reasoning": {"effort": reasoning_effort},
-        "instructions": INSTRUCTIONS[speaker],
+        "instructions": (
+            session_supervisor.INSTRUCTIONS if session_supervision else INSTRUCTIONS[speaker]
+        ),
         "input": [
             {
                 "role": "user",
@@ -313,6 +319,8 @@ async def respond(
                     response_data = raw
                 text = _response_text(raw, model)
         cloud_research.settle_provider_attempt(attempt, response_data)
+        if return_metadata:
+            return text, dict(response_data or {})
         return text
     except asyncio.CancelledError:
         raise
