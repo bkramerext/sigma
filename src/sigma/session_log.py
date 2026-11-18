@@ -1136,9 +1136,7 @@ def transcript_markdown_export(
                 _readable_response(event.get("response"))
                 if kind == "provider_response"
                 else str(
-                    event.get("provider_error")
-                    or event.get("message")
-                    or "Provider call failed."
+                    event.get("provider_error") or event.get("message") or "Provider call failed."
                 )
             )
             group_key = f"{strategy or 'session'}:{turn}"
@@ -1174,12 +1172,7 @@ def transcript_markdown_export(
             continue
         else:
             label = str(event.get("event_kind") or kind or "Session event").replace("_", " ")
-            message = str(
-                event.get("message")
-                or event.get("reason")
-                or event.get("status")
-                or ""
-            )
+            message = str(event.get("message") or event.get("reason") or event.get("status") or "")
             rows.append(
                 (
                     stamp,
@@ -1201,8 +1194,7 @@ def transcript_markdown_export(
                 len(events) + index + 1,
                 None,
                 "Human",
-                f"### Human · {label}\n\n*{stamp}*\n\n"
-                + _markdown_payload(message, "Human"),
+                f"### Human · {label}\n\n*{stamp}*\n\n" + _markdown_payload(message, "Human"),
             )
         )
     # A Human message between two agent pairs belongs with the preceding
@@ -1218,9 +1210,7 @@ def transcript_markdown_export(
             group_key = current_turn
         if group_key is None:
             group_key = f"event:{sequence}"
-        group = groups.setdefault(
-            group_key, {"label": label, "entries": [], "latest": stamp}
-        )
+        group = groups.setdefault(group_key, {"label": label, "entries": [], "latest": stamp})
         group["entries"].append((stamp, sequence, message))
         group["latest"] = max(group["latest"], stamp)
     output = [
@@ -1230,9 +1220,7 @@ def transcript_markdown_export(
         "Unavailable historical content is never reconstructed.",
         "",
     ]
-    for group in sorted(
-        groups.values(), key=lambda item: item["latest"], reverse=True
-    ):
+    for group in sorted(groups.values(), key=lambda item: item["latest"], reverse=True):
         output.append(f"## {group['label']}")
         output.append("")
         for _stamp, _sequence, message in sorted(group["entries"]):
@@ -1241,7 +1229,6 @@ def transcript_markdown_export(
     if not groups:
         output.append("No transcript entries are recorded.")
     return "\n".join(output).rstrip() + "\n"
-
 
 def _next_sequence(path: Path) -> int:
     events, _ = _frames(path)
