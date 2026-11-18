@@ -981,7 +981,12 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
     # A prior decrease in configured turns never surrendered the conservative
     # provider reservations. Grow the call ceiling only beyond those slots.
     reserved_turns = int(record.get("call_ceiling_cycles", record["cycle_limit"]))
-    added_calls = 2 * len(branches) if next_limit > reserved_turns else 0
+    pair_calls = 2 * len(branches) if next_limit > reserved_turns else 0
+    supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
+    supervisor_enabled = settings.get("supervisor_mode") in {"light", "heavy"}
+    supervisor_target = next_limit * len(branches) if supervisor_enabled else 0
+    added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
+    added_calls = pair_calls + added_supervisor_calls
     ledger = record.get("hard_budget_ledger")
     if added_calls and isinstance(ledger, dict):
         try:
@@ -990,6 +995,7 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
             return False
     record["cycle_limit"] = next_limit
     record["call_ceiling_cycles"] = max(next_limit, reserved_turns)
+    record["supervisor_ceiling_calls"] = max(supervisor_reserved, supervisor_target)
     if record.get("turns_are_flat"):
         record["turns_per_round"] = next_limit
         record["research_round_limit"] = 1
@@ -5873,7 +5879,15 @@ async def update_session_configuration(
                 new_cycles = executed_turns + 1
             reserved_turns = int(record.get("call_ceiling_cycles", old_cycles))
             extra_turns = max(0, new_cycles - reserved_turns)
-            added_calls = 2 * extra_turns * len(record.get("strategy_runs", []))
+            branches_count = len(record.get("strategy_runs", []))
+            supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
+            supervisor_target = (
+                new_cycles * branches_count
+                if new_settings["supervisor_mode"] in {"light", "heavy"}
+                else 0
+            )
+            added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
+            added_calls = 2 * extra_turns * branches_count + added_supervisor_calls
             ledger = record.get("hard_budget_ledger")
             if added_calls and isinstance(ledger, dict):
                 try:
@@ -5898,6 +5912,9 @@ async def update_session_configuration(
                     }
                 )
             record["call_ceiling_cycles"] = max(reserved_turns, new_cycles)
+            record["supervisor_ceiling_calls"] = max(
+                supervisor_reserved, supervisor_target
+            )
             record["cycle_limit"] = new_cycles
             # Old snapshots retain their original divisor so prior research
             # labels never change. Newly created flat-turn Sessions remain
@@ -7174,8 +7191,14 @@ async def start_session(
             # New sessions use independent, complete pair slots. All historical
             # records retain their original shared call_limit and cycle.
             paired_scheduler = limits.get("scheduler_version") == 2
+            supervisor_ceiling_calls = (
+                limits["research_rounds"] * limits["turns_per_round"] * len(selected_ids)
+                if paired_scheduler
+                and frozen_session_settings["supervisor_mode"] in {"light", "heavy"}
+                else 0
+            )
             call_ceiling = (
-                _paired_call_limit(limits, len(selected_ids))
+                _paired_call_limit(limits, len(selected_ids)) + supervisor_ceiling_calls
                 if paired_scheduler
                 else limits["model_calls"]
             )
@@ -7307,6 +7330,8 @@ async def start_session(
                 ),
                 "calls_used": 0,
                 "call_limit": call_ceiling,
+                "supervisor_ceiling_calls": supervisor_ceiling_calls,
+                "supervisor_reviews": [],
                 "max_concurrent_sessions": limits["max_concurrent_sessions"],
                 # Internal cycle is a unique pair-slot for role dispatch and
                 # obligation identity. Exposed research rounds are derived.
