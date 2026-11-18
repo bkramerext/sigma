@@ -185,6 +185,49 @@ def _saved_research_block(path: str, session_id: str, field_path: str) -> str:
     return value
 
 
+TRANSCRIPT_EVENT_PATH = re.compile(r"^event\\.[1-9][0-9]{0,8}$")
+
+
+def _saved_transcript_text(path: str, session_id: str, field_path: str) -> str:
+    """Resolve only authorized append-only Session transcript text, never client prose."""
+    from sigma import session_log
+
+    if not TRANSCRIPT_EVENT_PATH.fullmatch(field_path):
+        raise ProjectError("Transcript entry identity is invalid")
+    sequence = int(field_path.split(".")[1])
+    entries = session_log.read(path, session_id)["events"]
+    item = next(
+        (entry for entry in entries if entry.get("seq") == sequence),
+        None,
+    )
+    if not isinstance(item, dict):
+        raise ProjectError("Saved transcript entry is unavailable")
+    kind = item.get("type")
+    if kind == "provider_response":
+        response = item.get("response")
+        if isinstance(response, dict):
+            output = response.get("output")
+            parts = [
+                part["text"]
+                for block in output
+                if isinstance(block, dict)
+                for part in block.get("content", [])
+                if isinstance(part, dict) and isinstance(part.get("text"), str)
+            ] if isinstance(output, list) else []
+            raw = "\\n\\n".join(parts) or response.get("output_text", "")
+        elif isinstance(response, str):
+            raw = response
+        else:
+            raw = ""
+    elif kind in {"provider_failure", "session_event"}:
+        raw = item.get("message") or item.get("provider_error") or ""
+    else:
+        raise ProjectError("Only saved transcript responses and events are convertible")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ProjectError("Saved transcript entry has no convertible text")
+    return raw
+
+
 def _looks_like_sse(data: bytes) -> bool:
     """Recognize event-stream framing when a ChatGPT bridge omits its media type."""
     try:
@@ -291,6 +334,25 @@ async def _convert_text(
                     "plain": {"body": raw_block},
                     "markdown": None,
                 }
+            elif scope == "session-transcript":
+                if (
+                    not session_id
+                    or strategy_id is not None
+                    or qa_id is not None
+                    or not field_path
+                    or target_format != "markdown"
+                    or expected_digest != "server-snapshot"
+                ):
+                    raise ProjectError(
+                        "Transcript conversion requires a saved event and Markdown"
+                    )
+                raw_block = _saved_transcript_text(path, session_id, field_path)
+                source = {
+                    "source_format": "plain",
+                    "source_digest": digest(raw_block),
+                    "plain": {"body": raw_block},
+                    "markdown": None,
+                }
             elif scope == "research-block":
                 if (
                     not session_id
@@ -341,7 +403,11 @@ async def _convert_text(
                 if session_id is not None:
                     raise ProjectError("Session ID requires a research text scope")
                 source = inspect_text(path, scope, strategy_id)
-            if expected_digest is not None and source["source_digest"] != expected_digest:
+            if (
+                expected_digest is not None
+                and not (scope == "session-transcript" and expected_digest == "server-snapshot")
+                and source["source_digest"] != expected_digest
+            ):
                 raise ProjectError("Text changed since this view opened. Refresh before converting")
             if target_format == source["source_format"]:
                 return source
@@ -358,6 +424,7 @@ async def _convert_text(
                     "research-block",
                     "research-qa",
                     "current-understanding",
+                    "session-transcript",
                 }
                 else MAX_STRATEGY_APPROACH
             )
@@ -582,6 +649,26 @@ async def _convert_text(
             ):
                 raise ProjectError("Provider returned invalid conversion notes")
             # The conversion provenance reflects the user selection at dispatch.
+            if scope == "session-transcript":
+                if (
+                    session_id is None
+                    or field_path is None
+                    or digest(_saved_transcript_text(path, session_id, field_path))
+                    != source["source_digest"]
+                ):
+                    raise ProjectError(
+                        "The saved transcript entry changed during formatting; source was kept"
+                    )
+                return {
+                    "body": body,
+                    "warnings": result.warnings,
+                    "source_digest": source["source_digest"],
+                    "provenance": {
+                        "provider": "openai",
+                        "model": config["model"],
+                        "reasoning_effort": config["reasoning_effort"],
+                    },
+                }
             if scope == "current-understanding":
                 if (
                     field_path is None
