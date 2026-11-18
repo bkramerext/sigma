@@ -52,6 +52,7 @@ from sigma.research_budget import (
     BudgetExceeded,
     authorize_independent_review_after_unknown,
     authorize_reference_compiler_recovery_after_unknown,
+    authorize_supervisor_recovery_after_unknown,
     cancel_before_dispatch,
     increase_call_limit,
     mark_unknown,
@@ -5133,6 +5134,9 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         in_flight_step = any(
             isinstance(step, dict) and step.get("status") == "running"
             for step in record.get("steps", [])
+        ) or any(
+            isinstance(review, dict) and review.get("status") == "running"
+            for review in record.get("supervisor_reviews", [])
         )
         try:
             unsettled = cloud_research.has_reserved_calls(record["id"])
@@ -5178,6 +5182,38 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             return record
         record["status"] = "paused"
         record["updated_at"] = _now()
+        for review in record.get("supervisor_reviews", []):
+            if not isinstance(review, dict) or review.get("status") != "running":
+                continue
+            # Worker death cannot establish whether the provider saw a request.
+            # Never replay it and never erase its full reserved liability.
+            review["status"] = "interrupted"
+            review["attempt_status"] = "unknown"
+            review["token_usage_status"] = "unavailable"
+            review["finished_at"] = _now()
+            ledger = record.get("hard_budget_ledger")
+            if isinstance(ledger, dict):
+                call_id = review.get("id")
+                matches = [
+                    item
+                    for item in ledger.get("calls", [])
+                    if isinstance(item, dict) and item.get("call_id") == call_id
+                ]
+                if len(matches) != 1 or matches[0].get("status") not in {
+                    "reserved",
+                    "unknown",
+                }:
+                    ledger["blocked_reason"] = (
+                        "Saved interrupted supervisor call has no matching reservation"
+                    )
+                else:
+                    mark_unknown(ledger, call_id=call_id)
+            _event(
+                record,
+                "supervisor.interrupted",
+                "Independent process review interrupted; its response will not be replayed.",
+                "supervisor",
+            )
         for step in record.get("steps", []):
             if step.get("status") == "running":
                 if (
@@ -5256,6 +5292,9 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 _record_guidance_interruption(record, step, "interrupted")
         interrupted_on_restart = any(
             step.get("interruption_reason") == "backend_restart" for step in record.get("steps", [])
+        ) or any(
+            isinstance(review, dict) and review.get("status") == "interrupted"
+            for review in record.get("supervisor_reviews", [])
         )
         record["message"] = (
             "Backend restarted with an unsettled provider reservation or call. "
@@ -7735,6 +7774,27 @@ async def control_session(
                 record["browser_presence_required"] = True
             ledger = record.get("hard_budget_ledger")
             if action == "resume" and isinstance(ledger, dict):
+                # An interrupted optional supervisor is never replayed.
+                # Preserve its entire unknown reservation while allowing
+                # accepted research to continue only when no OTHER unsettled
+                # role or supervisor attempt exists.
+                interrupted_supervisors = [
+                    review
+                    for review in record.get("supervisor_reviews", [])
+                    if isinstance(review, dict)
+                    and review.get("status") == "interrupted"
+                    and review.get("attempt_status") == "unknown"
+                    and isinstance(review.get("id"), str)
+                ]
+                for review in interrupted_supervisors:
+                    try:
+                        authorize_supervisor_recovery_after_unknown(
+                            ledger, call_id=review["id"]
+                        )
+                    except BudgetExceeded:
+                        # Existing role recovery and its conservative ledger
+                        # guards remain authoritative for all other calls.
+                        break
                 calls = ledger.get("calls")
                 # Check the persisted ledger even for already-paused legacy
                 # records. Every uncertain role dispatch must retain exactly
