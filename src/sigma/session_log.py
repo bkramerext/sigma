@@ -1122,6 +1122,9 @@ def transcript_markdown_export(
         and event.get("request_id")
     }
     rows: list[tuple[str, int, str | None, str, str]] = []
+    # Intervention target metadata is used solely for grouping, never to alter
+    # the retained Human content.
+    human_targets: dict[int, str] = {}
     for event in events:
         kind = event.get("type")
         stamp = str(event.get("timestamp") or "")
@@ -1189,10 +1192,14 @@ def transcript_markdown_export(
         stamp = str(intervention["submitted_at"])
         label = str(intervention.get("kind") or "intervention")
         message = str(intervention.get("text") or "")
+        human_sequence = len(events) + index + 1
+        targets = intervention.get("target_strategy_ids")
+        if isinstance(targets, list) and len(targets) == 1 and isinstance(targets[0], str):
+            human_targets[human_sequence] = targets[0]
         rows.append(
             (
                 stamp,
-                len(events) + index + 1,
+                human_sequence,
                 None,
                 "Human",
                 f"### Human · {label}\n\n*{stamp}*\n\n" + _markdown_payload(message, "Human"),
@@ -1201,14 +1208,17 @@ def transcript_markdown_export(
     # A Human message between two agent pairs belongs with the preceding
     # exchange. Other system events remain independently attributed.
     groups: dict[str, dict[str, Any]] = {}
-    current_turn: str | None = None
+    latest_turn_by_strategy: dict[str, str] = {}
     for stamp, sequence, group_key, label, message in sorted(
         rows, key=lambda item: (item[0], item[1])
     ):
-        if group_key is not None:
-            current_turn = group_key
+        if group_key is not None and not group_key.startswith("event:"):
+            strategy_id = group_key.rsplit(":", 1)[0]
+            if strategy_id != "session":
+                latest_turn_by_strategy[strategy_id] = group_key
         elif label == "Human":
-            group_key = current_turn
+            target = human_targets.get(sequence)
+            group_key = latest_turn_by_strategy.get(target) if target else None
         if group_key is None:
             group_key = f"event:{sequence}"
         group = groups.setdefault(group_key, {"label": label, "entries": [], "latest": stamp})
