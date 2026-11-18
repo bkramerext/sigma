@@ -41,12 +41,15 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
   const choices: SupervisorMode[] = ['none', 'light', 'heavy'];
   const nextMode = choices[(choices.indexOf(draft.supervisor_mode) + 1) % choices.length];
   const parsedTurns = Number(turns);
-  const valid = Number.isInteger(parsedTurns) && parsedTurns >= Math.max(1, minTurns)
-    && parsedTurns <= 1200 && draft.name.length <= 200;
+  const valid = (draft.unlimited_turns || (Number.isInteger(parsedTurns)
+    && parsedTurns >= Math.max(1, minTurns) && parsedTurns <= 1200))
+    && draft.name.length <= 200;
   const commit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!valid) return;
-    onApply({ ...draft, turn_limit: parsedTurns, name: draft.name.trim() });
+    onApply({ ...draft, turn_limit: draft.unlimited_turns
+      ? Math.max(1, minTurns, Number.isInteger(parsedTurns) ? parsedTurns : 1)
+      : parsedTurns, name: draft.name.trim() });
   };
   return <dialog ref={dialog} className="project-settings-dialog session-settings-dialog" aria-labelledby="session-settings-title"
     onCancel={event => { event.preventDefault(); onCancel(); }}>
