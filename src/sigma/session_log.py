@@ -1098,6 +1098,90 @@ def markdown_export(
     return "\n".join(output).rstrip() + "\n"
 
 
+
+def transcript_markdown_export(
+    events: list[dict[str, Any]],
+    interventions: list[dict[str, Any]],
+    session: dict[str, Any],
+    title: str,
+) -> str:
+    """Export complete readable dialogue from the existing durable records.
+
+    The operational log remains authoritative and retains the low-level
+    request/response and diagnostic metadata. Nothing is rewritten here.
+    """
+    requests = {
+        str(event["request_id"]): event
+        for event in events
+        if event.get("type") == "provider_request" and event.get("request_id")
+    }
+    responded = {
+        str(event["request_id"])
+        for event in events
+        if event.get("type") in {"provider_response", "provider_failure"}
+        and event.get("request_id")
+    }
+    rows: list[tuple[str, int, str]] = []
+    for event in events:
+        kind = event.get("type")
+        timestamp = str(event.get("timestamp") or "")
+        sequence = int(event.get("seq") or 0)
+        if kind in {"provider_response", "provider_failure"}:
+            request = requests.get(str(event.get("request_id") or ""), {})
+            role = _event_role_label(request or event)
+            round_label = request.get("round", event.get("round", "—"))
+            strategy = request.get("strategy_id", event.get("strategy_id"))
+            text = (
+                _readable_response(event.get("response"))
+                if kind == "provider_response"
+                else str(event.get("provider_error") or event.get("message") or "Provider call failed.")
+            )
+            heading = (
+                f"### {role} · Round {round_label}"
+                + (f" · Strategy {strategy}" if strategy else "")
+            )
+            rows.append(
+                (timestamp, sequence, heading + "\n\n"
+                 + f"*{timestamp}*\n\n"
+                 + _markdown_payload(text or "Response text unavailable in this historical log.", role))
+            )
+        elif kind == "provider_request":
+            if str(event.get("request_id")) not in responded:
+                rows.append(
+                    (timestamp, sequence,
+                     f"### {_event_role_label(event)} · Request pending\n\n*{timestamp}*\n\nAwaiting response.")
+                )
+        elif kind == "session_event":
+            if event.get("event_kind") == "intervention.accepted":
+                continue
+            message = str(event.get("message") or "")
+            rows.append(
+                (timestamp, sequence,
+                 f"### {str(event.get('event_kind') or 'Session event')}\n\n*{timestamp}*\n\n{message}")
+            )
+    for offset, entry in enumerate(interventions):
+        if not isinstance(entry, dict) or not entry.get("submitted_at"):
+            continue
+        timestamp = str(entry["submitted_at"])
+        text = str(entry.get("text") or "")
+        rows.append(
+            (timestamp, len(events) + offset + 1,
+             f"### Human · {entry.get('kind') or 'intervention'}\n\n*{timestamp}*\n\n"
+             + _markdown_payload(text, "Human"))
+        )
+    rows.sort(key=lambda row: (row[0], row[1]))
+    output = [
+        f"# {title}, Session {session.get('number', '—')} — Transcript",
+        "",
+        "Chronological research messages from the saved Session and provider log.",
+        "Older missing content is not reconstructed.",
+        "",
+    ]
+    output.extend("\n\n".join(row[2] for row in rows).split("\n") if rows else ["No transcript entries are recorded."])
+    return "\n".join(output).rstrip() + "\n"
+
+
+
 def _next_sequence(path: Path) -> int:
     events, _ = _frames(path)
     return (events[-1].get("seq", len(events)) if events else 0) + 1
@@ -1150,6 +1234,20 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
         "short_name": short_name,
         "saved_short_name": short_name if has_saved_short_name else None,
         "reference_preparation": reference_preparation_summary(session),
+        # Human inputs are already part of the authorized saved Session record.
+        # Project them alongside the append-only provider log without a second store.
+        "interventions": [
+            {
+                "id": item.get("id", ""),
+                "text": item.get("text", ""),
+                "kind": item.get("kind", ""),
+                "submitted_at": item.get("submitted_at", ""),
+                "target_strategy_ids": item.get("target_strategy_ids", []),
+                "target_roles": item.get("target_roles", []),
+            }
+            for item in session.get("interventions", [])
+            if isinstance(item, dict)
+        ],
         "project_title": view.project.title,
         "session": {
             "id": session_id,
