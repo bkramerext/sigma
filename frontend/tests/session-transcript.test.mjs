@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { projectTranscript, groupTranscriptTurns, readableTranscriptResponse, transcriptCategories } from '../src/session-transcript.ts';
+import { projectTranscript, groupTranscriptTurns, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry } from '../src/session-transcript.ts';
 
 test('response entries use completion order and retain full provider-authored output', () => {
   const entries = projectTranscript([
@@ -62,4 +62,15 @@ test('Human input attaches only to its explicit strategy and never to a concurre
   assert.ok(groups.find(group => group.key === 'x:1').entries.some(entry => entry.text === 'Examine X'));
   assert.ok(!groups.find(group => group.key === 'y:1').entries.some(entry => entry.text === 'Examine X'));
   assert.ok(groups.find(group => group.label === 'Human').entries.some(entry => entry.text === 'For all'));
+});
+
+test('Markdown conversion excludes provider failures and short or unavailable records', () => {
+  const rows = projectTranscript([
+    { seq: 1, timestamp: '2026-11-18T01:00:00Z', type: 'provider_request', request_id: 'ok', role: 'investigator', round: 1, strategy_id: 'x' },
+    { seq: 2, timestamp: '2026-11-18T01:00:01Z', type: 'provider_response', request_id: 'ok', response: { output_text: 'A substantive accepted research result with a full explanation.' } },
+    { seq: 3, timestamp: '2026-11-18T01:00:02Z', type: 'provider_request', request_id: 'bad', role: 'skeptic', round: 1, strategy_id: 'x' },
+    { seq: 4, timestamp: '2026-11-18T01:00:03Z', type: 'provider_failure', request_id: 'bad', provider_error: 'Provider error: request failed after authentication.' },
+    { seq: 5, timestamp: '2026-11-18T01:00:04Z', type: 'session_event', event_kind: 'supervisor.review', role: 'supervisor', message: 'The agents should make their assumptions clearer before drawing conclusions.' },
+  ]);
+  assert.deepEqual(rows.filter(convertibleTranscriptEntry).map(entry => entry.id), ['response-ok', 'event-5']);
 });
