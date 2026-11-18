@@ -185,7 +185,7 @@ def _saved_research_block(path: str, session_id: str, field_path: str) -> str:
     return value
 
 
-TRANSCRIPT_EVENT_PATH = re.compile(r"^event\\.[1-9][0-9]{0,8}$")
+TRANSCRIPT_EVENT_PATH = re.compile(r"^event\.[1-9][0-9]{0,8}$")
 
 
 def _saved_transcript_text(path: str, session_id: str, field_path: str) -> str:
@@ -214,7 +214,7 @@ def _saved_transcript_text(path: str, session_id: str, field_path: str) -> str:
                 for part in block.get("content", [])
                 if isinstance(part, dict) and isinstance(part.get("text"), str)
             ] if isinstance(output, list) else []
-            raw = "\\n\\n".join(parts) or response.get("output_text", "")
+            raw = "\n\n".join(parts) or response.get("output_text", "")
         elif isinstance(response, str):
             raw = response
         else:
