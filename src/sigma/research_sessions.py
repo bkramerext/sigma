@@ -3979,7 +3979,24 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
             "self-reflection, not proof validation or a reason to stop. "
         ),
     }.get(supervisor_mode, "")
-    guidance = INVESTIGATOR_GUIDANCE if role == "investigator" else SKEPTIC_GUIDANCE
+    # Brainstorm's second participant remains in the durable reviewer wire
+    # slot, but must contribute independently rather than behave as a dedicated
+    # adversary. Keep the evidence-review schema and stop safeguards intact.
+    brainstorm_peer_guidance = (
+        " As AI #2, you are a co-investigator with independent intellectual "
+        "agency, not a dedicated critic. Use response, next_question and "
+        "argument_summary to contribute your own constructive hypotheses, "
+        "connections and possible approaches, while assessing AI #1's claims "
+        "under the required evidence-review schema. Do not manufacture "
+        "objections or force a stop simply because a line of exploration "
+        "is inconclusive. Welcome further conceptual exploration. "
+        if brainstorming and role == "skeptic"
+        else ""
+    )
+    guidance = (
+        INVESTIGATOR_GUIDANCE if role == "investigator"
+        else SKEPTIC_GUIDANCE + brainstorm_peer_guidance
+    )
     retry_guidance = (
         " A prior response for this role and round was clipped at its output-token "
         "limit. This is a fresh attempt, not a continuation of the partial JSON. "
