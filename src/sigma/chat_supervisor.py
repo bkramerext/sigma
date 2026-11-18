@@ -77,13 +77,11 @@ A potential breakthrough is exceptional: breakthrough_candidate=true ONLY
 when a specific, consequential apparent finding substantially advances or
 fulfills the objective and has enough supporting evidence to merit independent
 validation. Do NOT conflate a candidate with an established proof or discovery.
-A 10.0 milestone will be latched by the client when this flag is true.
-If a previously latched finding is convincingly invalidated by the discussion,
-set breakthrough_invalidated=true; this restores ordinary scoring. Only flag
-invalidation for a meaningful refutation of the specific prior candidate,
-not uncertainty or incomplete external verification.
-Otherwise provide normal rubric scoring. The participants must NEVER receive
-your numeric scores, rubric, or private assessments.
+Do not use numeric milestones or score overrides to declare a breakthrough.
+If the research appears to have made a significant advance, describe the
+concrete claim, evidence, objections, and independent validation still needed
+in the ordinary transcript assessment. Leave the compatibility flags false.
+The participants must NEVER receive your numeric scores or rubric.
 
 Return ONLY a valid JSON object, no Markdown, with these exact fields:
 {
@@ -150,7 +148,7 @@ def parse_assessment(raw: str) -> dict[str, Any]:
     ):
         raise ProjectError("Supervisor guidance requires an explicit recipient.")
     return {
-        "score": 10.0 if candidate else min(9.9, round(sum(rubric.values()), 1)),
+        "score": round(sum(rubric.values()), 1),
         "rubric": rubric,
         "assessment": assessment.strip()[:700],
         "action": action,

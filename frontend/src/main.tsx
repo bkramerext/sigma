@@ -3,6 +3,7 @@ import { createPortal, flushSync } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
+import SessionSettingsDialog, { defaultSessionSettings, type SessionSettings } from './SessionSettingsDialog';
 import { sessionValidationDetail } from './session-validation-diagnostics';
 import DialogDismissButton from './DialogDismissButton';
 import ResumeAuthorizationDialog, { type ResumeAuthorization } from './ResumeAuthorizationDialog';
@@ -173,7 +174,7 @@ type ResearchSourceMaterial = { version: string; status: string; mode: string; b
 type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; source_material?: ResearchSourceMaterial; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { investigation_type?: string; provider_usage_limited?: boolean; cloud_sponsored?: boolean; research_method_sources?: { advisory?: string | null; sources?: unknown[] }; approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; scheduler_version?: number; turns_per_round?: number; research_round?: number; research_round_limit?: number; paired_turn_in_round?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; protocol_completed_calls?: number; protocol_target_calls?: number; provider_limit_continuation?: { eligible: boolean; missing_calls: number; reason?: string | null }; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { session_settings?: SessionSettings; settings_extended?: boolean; investigation_type?: string; provider_usage_limited?: boolean; cloud_sponsored?: boolean; research_method_sources?: { advisory?: string | null; sources?: unknown[] }; approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; backend_build_commit?: string | null; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; scheduler_version?: number; turns_per_round?: number; research_round?: number; research_round_limit?: number; paired_turn_in_round?: number; configured_duration_limit_minutes?: number | null; duration_limit_minutes?: number | null; termination_reason_code?: string; current_question: string; current_action: string; message: string; next_step_guidance?: string; recoverable_clipped_response?: boolean; protocol_completed_calls?: number; protocol_target_calls?: number; provider_limit_continuation?: { eligible: boolean; missing_calls: number; reason?: string | null }; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
 
 /**
@@ -258,6 +259,8 @@ function sessionHasAcceptedEveryConfiguredTurn(session: ResearchSession): boolea
 }
 
 function sessionOffersResume(session: ResearchSession): boolean {
+  if (session.settings_extended && ['completed', 'ended', 'failed', 'paused', 'stopped'].includes(session.status))
+    return !sessionHasAcceptedEveryConfiguredTurn(session);
   if (!['stopped', 'paused', 'failed', 'ended'].includes(session.status)) return false;
   if (['protocol_complete', 'research_completed_early'].includes(session.termination_reason_code ?? '')) return false;
   return !sessionHasAcceptedEveryConfiguredTurn(session);
@@ -749,7 +752,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; starting?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; starting?: boolean; start?: () => void; cancel?: () => void; configure?: () => void; nextSessionNumber?: number; confirmationSummary?: string };
 
 type SessionRenderBoundaryProps = { sessionId: string; sessionNumber: number; revision?: string; children: ReactNode; fallback?: ReactNode };
 type SessionRenderBoundaryState = { error: Error | null };
@@ -1647,6 +1650,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
+  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
+  const [pendingStartSettings, setPendingStartSettings] = useState<SessionSettings | null>(null);
   const [guestSessionCard, setGuestSessionCard] = useState(false);
   const [confirmMissingType, setConfirmMissingType] = useState(false);
   const continueWithSavedType = useRef(false);
@@ -1924,6 +1929,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
         setPendingStrategyIds(chosenIds);
         setConfig({ available: true, model: 'mock-deterministic', reasoning_effort: 'none', mode: 'mock', binding: 'mock', message: 'Local simulation: no provider calls.' });
+        setPendingStartSettings(null);
         setConfirmStart(true);
         return;
       }
@@ -1948,6 +1954,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }
       setPendingStrategyIds(chosenIds);
       setConfig(current); setLimits(currentLimits);
+      setPendingStartSettings(null);
       setConfirmStart(true);
     } catch (cause) {
       const message = errorMessage(cause);
@@ -1957,7 +1964,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     finally { setBusy(false); }
   }
 
-  async function start() {
+  async function start(selectedSettings?: SessionSettings) {
+    const sessionSettings = selectedSettings ?? pendingStartSettings;
     if (guest) { setConfirmStart(false); setGuestSessionCard(true); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
@@ -1972,8 +1980,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
       const next = mockResearch
-        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current })
-        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, browser_presence_required: true, continue_using_saved_type_settings: continueWithSavedType.current });
+        ? await post<ResearchSession>('research-sessions/mock', { path, strategy_id: pendingStrategyIds[0], expected_project_id: projectId, idempotency_key: idempotencyKey.current, continue_using_saved_type_settings: continueWithSavedType.current, ...(sessionSettings ? { session_settings: sessionSettings } : {}) })
+        : await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current, browser_presence_required: true, continue_using_saved_type_settings: continueWithSavedType.current, ...(sessionSettings ? { session_settings: sessionSettings } : {}) });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       // Start can be stopped before the first server response. Its identifier
@@ -2252,6 +2260,56 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     }
   }
 
+  async function saveSessionSettings(sessionId: string, settings: SessionSettings) {
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `/api/projects/research-sessions/${encodeURIComponent(sessionId)}/settings`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify({ path, settings }),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Session settings could not be saved.');
+      const saved = sessionForDisplay(result);
+      if (saved) setSessions(current => current.map(item => item.id === sessionId ? saved : item));
+      setSettingsDialog(null);
+      void load(sessionId).catch(reportReadFailure);
+    } catch (cause) {
+      // Use the existing Session error region, not a new toast, confirmation
+      // popup or notification type.
+      const message = errorMessage(cause);
+      setError(message);
+      void recordClientError(message, 'session_settings', sessionId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function existingSessionSettings(session: ResearchSession): SessionSettings {
+    const baseline = defaultSessionSettings({
+      research_rounds: session.research_round_limit ?? 3,
+      turns_per_round: session.turns_per_round ?? 3,
+    });
+    const old = session.session_settings as (Partial<SessionSettings> & {
+      research_rounds?: number;
+      turns_per_round?: number;
+      single_round_unlimited_turns?: boolean;
+    }) | undefined;
+    return {
+      ...baseline,
+      name: old?.name ?? '',
+      brainstorm_mode: old?.brainstorm_mode ?? false,
+      supervisor_mode: old?.supervisor_mode ?? 'none',
+      unlimited_turns: old?.unlimited_turns ?? old?.single_round_unlimited_turns ?? false,
+      turn_limit: Math.max(1, session.cycle_limit ?? 0,
+        old?.turn_limit ?? (old?.research_rounds && old?.turns_per_round
+          ? old.research_rounds * old.turns_per_round : baseline.turn_limit)),
+    };
+  }
+
   const activeSessionCount = sessions.filter(session => session.status === 'queued' || session.status === 'running').length;
   const projectAtCapacity = activeSessionCount >= maxConcurrentSessions;
   const playLabel = projectAtCapacity
@@ -2272,17 +2330,23 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     if (runningSession && !busy && !readError) void control('stop', runningSession);
   }, [runningSession, busy, readError]);
   const effectiveDurationMinutes = limits?.session_duration_minutes ?? null;
+  const startTurns = pendingStartSettings?.turn_limit
+    ?? (limits ? limits.research_rounds * (limits.turns_per_round ?? 3) : 9);
+  const startStrategies = confirmStart ? pendingStrategyIds.length : eligible.length;
+  const startSummary = limits ? (pendingStartSettings?.unlimited_turns
+    ? `Unlimited paired turns × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'}`
+    : `${startTurns} paired ${startTurns === 1 ? 'turn' : 'turns'} × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'} = ${startTurns * 2 * startStrategies} maximum agent calls`) : undefined;
   useEffect(() => {
     onControlsChange({
-      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      confirmationSummary: limits ? `${limits.research_rounds} ${limits.research_rounds === 1 ? "round" : "rounds"} × ${limits.turns_per_round ?? 3} paired ${limits.turns_per_round === 1 ? "turn" : "turns"} × 2 agents × ${confirmStart ? pendingStrategyIds.length : eligible.length} enabled ${(confirmStart ? pendingStrategyIds.length : eligible.length) === 1 ? "strategy" : "strategies"} = ${limits.research_rounds * (limits.turns_per_round ?? 3) * 2 * (confirmStart ? pendingStrategyIds.length : eligible.length)} maximum agent calls` : undefined,
+      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), configure: () => setSettingsDialog({ mode: 'start', initial: pendingStartSettings ?? defaultSessionSettings(limits) }), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      confirmationSummary: startSummary,
       // Match the backend's queued/running slot count. The server remains
       // authoritative when another browser starts a session concurrently.
-      playDisabled: busy || !!readError || confirmStart || !eligible.length || projectAtCapacity,
+      playDisabled: busy || !!readError || confirmStart || !!settingsDialog || !eligible.length || projectAtCapacity,
       stopDisabled: busy || !!readError || !runningSession,
       playLabel,
     });
-  }, [busy, admittingSession, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, projectAtCapacity, readError, runningSession, sessions, sponsoredSession, pendingStrategyIds.length]);
+  }, [busy, admittingSession, confirmStart, eligible.length, effectiveDurationMinutes, limits, onControlsChange, stop, play, playLabel, projectAtCapacity, readError, runningSession, sessions, sponsoredSession, pendingStrategyIds.length, settingsDialog, pendingStartSettings, startSummary]);
 
   const orderedSessions = [...sessions].sort((left, right) => right.session_number - left.session_number);
 
@@ -2298,11 +2362,23 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     ? pendingSessionAction.id : null;
   const runningCount = activeSessionCount -
     (sessions.some(item => item.id === stoppingSessionId && ['queued', 'running'].includes(item.status)) ? 1 : 0);
-  const pendingSessionName = 'Session';
+  const pendingSessionName = pendingStartSettings?.name || 'Session';
   const pendingSessionMetadata = formatRunAttribution({
     kind: 'session', creator: viewerEmail, model: config?.model, thinking: config?.reasoning_effort,
   });
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
+    {settingsDialog && <SessionSettingsDialog key={settingsDialog.sessionId ?? 'new-session'}
+      settings={settingsDialog.initial} mode={settingsDialog.mode} minTurns={settingsDialog.minTurns ?? 0}
+      onCancel={() => setSettingsDialog(null)}
+      onApply={next => {
+        if (settingsDialog.mode === 'start') {
+          setPendingStartSettings(next);
+          setSettingsDialog(null);
+          setConfirmStart(true);
+        } else if (settingsDialog.sessionId) {
+          void saveSessionSettings(settingsDialog.sessionId, next);
+        }
+      }}/>}
     <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} anchorSnapshot={resumePlayAnchorSnapshot.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
       <div className="sigma-dialog-heading"><h2 id="missing-type-heading">Project type unavailable</h2><DialogDismissButton label="Cancel project type selection" disabled={busy} onClick={() => { missingTypeDialog.current?.close(); setConfirmMissingType(false); }}/></div>
@@ -2368,10 +2444,24 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           return <SessionRenderBoundary key={item.id} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at}><li className="session-row" data-session-id={item.id}>
             <div className="session-row-heading">
               <div className="session-summary">
-                <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}</span></button>
+                <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}{item.session_settings?.name ? ' · ' + item.session_settings.name : ''}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {!guest && canControl && sessionOffersResume(item) && !(pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume') && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
+                  {!guest && canControl && (sessionOffersResume(item) || item.status === 'completed') && !(pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume') && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={!sessionOffersResume(item) || busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
                   {!guest && canControl && (pendingAction === 'resume' || pendingAction === 'stop' || pendingAction === 'pause' || (!pendingAction && ['queued', 'running'].includes(item.status))) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={pendingAction === 'stop' || pendingAction === 'pause' ? `Stopping Session ${item.session_number}` : `Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={pendingAction === 'stop' || pendingAction === 'pause' || (busy && pendingAction !== 'resume')} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+                  {!guest && canControl && <button type="button"
+                    className="text-view-link text-view-icon workspace-icon-button session-settings-action"
+                    aria-label={`Session ${item.session_number} settings`}
+                    data-tooltip="Session settings" disabled={busy || ['queued', 'running'].includes(item.status)}
+                    onClick={() => setSettingsDialog({
+                      mode: 'edit', sessionId: item.id, initial: existingSessionSettings(item),
+                      minTurns: Math.max(0,
+                        ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
+                          .map(step => step.cycle),
+                        ...(item.strategy_runs ?? []).map(branch => branch.cycle ?? 0),
+                      ),
+                    })}>
+                    <SlidersSettingsIcon/>
+                  </button>}
                   {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove session ${item.session_number}?` : `Remove session ${item.session_number} and its saved work?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
@@ -2393,7 +2483,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel}` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
                 <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
                   ? 'Stopping · findings remain available'
-                  : <>Round {item.scheduler_version === 2 ? (item.research_round ?? 0) : item.cycle} of {item.scheduler_version === 2 ? (item.research_round_limit ?? 3) : (item.cycle_limit ?? 3)}{item.scheduler_version === 2 && item.paired_turn_in_round ? ` · Turn ${item.paired_turn_in_round} of ${item.turns_per_round}` : ''} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings recorded · {sessionEstimatedCostLabel(item)}</>}</small>
+                  : <>{item.scheduler_version === 2 ? `Turn ${item.cycle} of ${(item.session_settings as SessionSettings | undefined)?.unlimited_turns ? '∞' : item.cycle_limit ?? 3}` : `Round ${item.cycle} of ${item.cycle_limit ?? 3}`} · {item.scheduler_version === 2 ? `${item.protocol_completed_calls ?? 0}/${item.protocol_target_calls ?? item.call_limit} completed agent calls` : `${item.calls_used}/${item.call_limit} agent calls`}{parallelSessionActivity(item) ? ` · ${parallelSessionActivity(item)}` : ''} · {item.artifacts.length} findings recorded · {sessionEstimatedCostLabel(item)}</>}</small>
                 {!pendingAction && strategyLiveStatusLines(item).length > 0 && <ul className="session-strategy-live-status" aria-label={`Session ${item.session_number} strategy status`}>{strategyLiveStatusLines(item).slice(0, 5).map(line => <li key={line.id} className={line.id === 'reference-compilation' ? 'session-standards-guidance' : undefined}><strong>{line.label}:</strong> {line.detail}</li>)}</ul>}
                 {!pendingAction && strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
@@ -6046,7 +6136,7 @@ function AboutArchitecture() {
     strategyA: 'A strategy can investigate an observed pattern or relationship. Its objective is bounded: identify supporting evidence, find limits, or expose a useful unanswered question. It does not need to solve the entire project.',
     strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
     strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
-    session: 'When you press Play, SIGMA runs an investigation of your selected approaches. Each approach can be tried, challenged and revised over several rounds, within the limits you set.',
+    session: 'When you press Play, SIGMA runs an investigation of your selected approaches. Each approach can be tried, challenged and revised over successive turns, within the limits you set.',
     orchestration: "SIGMA's session engine selects bounded evidence, dispatches Investigator and Skeptic calls, coordinates strategies and manages limits.",
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
     investigatorFollowup: 'A later Investigator call can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
@@ -6179,7 +6269,7 @@ function AboutArchitecture() {
     { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another method' },
     { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Look for a counterexample' },
   ];
-  // Three illustrative paired turns (six individual calls) in one research round.
+  // Three illustrative paired turns (six individual calls) in a session.
   const exampleTurns = [
     { turn: 1, title: 'Try an idea', investigator: 'Propose an approach', skeptic: 'Look for flaws', investigatorKey: 'investigator', skepticKey: 'skeptic' },
     { turn: 2, title: 'Improve it', investigator: 'Revise after critique', skeptic: 'Challenge the revision', investigatorKey: 'investigatorRound2', skepticKey: 'skepticRound2' },
@@ -6214,7 +6304,7 @@ function AboutArchitecture() {
             </div>);
           })}
         </div>
-        <p className="about-strategy-round-note">Each approach can be tried, challenged, and improved over several rounds.</p>
+        <p className="about-strategy-round-note">Each approach can be tried, challenged, and improved over successive turns.</p>
       </div>
       <div className="about-flow-connector about-strategy-parallel-note"><span>Press Play to investigate the selected approaches</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
@@ -6227,11 +6317,11 @@ function AboutArchitecture() {
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">How one research round works</h4>
+            <h4 id="about-session-detail-heading">How research turns work</h4>
             <p className="about-multi-agent-intro">For <strong>one strategy</strong>, each turn pairs an Investigator call with a subsequent Skeptic review. Later turns can respond to criticism.</p>
-            <p className="about-round-definition"><strong>One research round</strong> has up to three paired <strong>turns</strong> per strategy by default. Each turn contains two <strong>agent calls</strong>: Investigator → Skeptic.</p>
-            <section className="about-agent-instantiation" aria-label="Example of one round with three paired turns and six agent calls within one strategy">
-              <h5>One strategy · One round · Three turns</h5>
+            <p className="about-round-definition">Session Settings lets you choose a finite number of <strong>turns</strong> (9 per strategy by default) or <strong>Unlimited turns</strong>. In standard mode, each turn contains two <strong>agent calls</strong>: Investigator → Skeptic. Brainstorm mode uses two Investigators instead.</p>
+            <section className="about-agent-instantiation" aria-label="Example of three paired turns and six agent calls within one strategy">
+              <h5>One strategy · Three example turns</h5>
               <div className="about-agent-turns">
                 {exampleTurns.map((turn, index) => <div className="about-agent-round" key={turn.turn}>
                   <div className="about-agent-round-heading"><strong>Turn {turn.turn} of 3</strong><span>{turn.title}</span></div>
@@ -6255,22 +6345,22 @@ function AboutArchitecture() {
                   </div>}
                 </div>)}
               </div>
-              <p className="about-agent-instantiation-note">These six calls illustrate one round. Other strategies may run concurrently or stop early; research evidence can inform later turns and rounds.</p>
+              <p className="about-agent-instantiation-note">These six calls illustrate three turns. Other strategies may run concurrently or stop early; research evidence can inform later turns.</p>
             </section>
-            <p className="about-shared-budget"><strong>Why more rounds?</strong> Later turns can test objections or revise claims. Progress is the goal, not a scheduler guarantee.</p>
+            <p className="about-shared-budget"><strong>Why more turns?</strong> Later turns can test objections or revise claims. Progress is the goal, not a scheduler guarantee.</p>
             <div className="about-exploration-space" role="group" aria-label="Example of how much research fits into one session">
               <p className="about-exploration-title">How much can one session explore?</p>
-              <p>With three enabled strategies and the default three rounds:</p>
+              <p>With three enabled strategies and the default nine turns per strategy:</p>
               <div className="about-exploration-grid">
                 {strategyExamples.map(strategy => <div className="about-exploration-row" key={strategy.id}>
                   <span className="about-exploration-strategy">{strategy.title}</span>
-                  {[1, 2, 3].map(round => <span className="about-exploration-round" key={round}>Round {round}<small>3 turns</small></span>)}
+                  {[1, 2, 3].map(group => <span className="about-exploration-round" key={group}>Turns {(group - 1) * 3 + 1}–{group * 3}<small>3 turns</small></span>)}
                 </div>)}
               </div>
-              <p className="about-session-exploration-example"><strong>3 rounds × 3 turns × 3 strategies × 2 agent calls = 54 maximum calls.</strong> Strategies progress independently, but each Investigator call precedes its Skeptic. Limits or early stopping may reduce the total.</p>
+              <p className="about-session-exploration-example"><strong>9 turns × 3 strategies × 2 agent calls = 54 maximum calls.</strong> Strategies progress independently, but each Investigator call precedes its Skeptic. Limits or early stopping may reduce the total.</p>
             </div>
             <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
-            <p className="about-multiple-strategies-note">Research evidence is selected into bounded later contexts; there is no automatic round-end merge.</p>
+            <p className="about-multiple-strategies-note">Research evidence is selected into bounded later contexts; successive turns do not imply independent verification.</p>
             <p className="about-multiple-sessions-note">You can run another session later to revisit a strategy with new evidence or compare what changed.</p>
           </div>
         </div>
@@ -8790,6 +8880,7 @@ function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, p
         ? <span className="research-running-indicator-frame" role="status" aria-label="Starting research session" data-tooltip="Starting session · awaiting server acceptance"><span className="research-running-indicator"/></span>
         : <>
         {controls.confirmationSummary && <span className="session-start-limits" aria-label={`Effective session limits: ${controls.confirmationSummary}`}>{controls.confirmationSummary}</span>}
+        <button type="button" className="text-view-link session-start-link" data-tooltip="Session settings" aria-label="Session settings" disabled={disabled} onClick={controls.configure}>Settings</button>
         <button type="button" className="text-view-link session-start-link" data-tooltip="Start Session" aria-label="Start Session" disabled={disabled} onClick={controls.start}>Start Session</button>
         <button type="button" className="text-view-link session-start-link" data-tooltip="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>

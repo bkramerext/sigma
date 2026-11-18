@@ -1,0 +1,42 @@
+/* Session Transcript reuses the existing Session log page and its durable data. */
+.session-log-page .session-transcript-toolbar { align-items: center; gap: .7rem; }
+.session-log-page .session-transcript-filters { display: flex; flex: 1 1 auto; align-items: center; flex-wrap: wrap; column-gap: .8rem; row-gap: .25rem; border: 0; padding: 0; margin: 0; min-width: 0; }
+.session-log-page .session-transcript-filters legend { float: left; padding: 0; margin: 0 .6rem 0 0; }
+.session-log-page .session-transcript-toggle-all { min-height: 28px; padding: .2rem .35rem; border: 0; background: transparent; font-weight: 650; }
+.session-log-page .session-transcript-filters label { display: inline-flex; align-items: center; gap: .35rem; padding: 0; white-space: nowrap; cursor: pointer; }
+.session-log-page .session-transcript-filters input { accent-color: #bf955f; width: 15px; height: 15px; margin: 0; }
+.session-log-page .session-transcript-events { max-height: calc(100vh - 220px); }
+.session-log-page .session-transcript-entry { border: 1px solid #534331; border-left: 3px solid #876743; border-radius: 5px; margin: .65rem 0; padding: .75rem 1rem; }
+.session-log-page .session-transcript-entry-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin-bottom: .35rem; }
+.session-log-page .session-transcript-entry-heading span { color: #b9afa2; font-size: 12px; }
+.session-log-page .session-transcript-entry-heading time { color: #b9afa2; font-size: 12px; margin-left: auto; }
+.session-log-page .session-transcript-entry .chat-disclosure-button { display: inline-flex; align-items: center; gap: .45rem; padding: .15rem .25rem; min-height: 28px; border: 0; background: transparent; font: inherit; color: var(--sigma-copper-foreground); }
+.session-log-page .session-transcript-entry .disclosure-chevron { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none; transition: transform .15s ease; }
+.session-log-page .session-transcript-entry .disclosure-chevron.is-expanded { transform: rotate(90deg); }
+.session-log-page .session-transcript-entry .session-transcript-markdown { max-width: 100ch; overflow-wrap: anywhere; padding: .1rem .45rem .25rem 1.2rem; }
+.session-log-page .session-transcript-markdown p { margin: .5rem 0; }
+.session-log-page .session-transcript-markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.session-log-page .session-transcript-provider-details { margin: .5rem 0 0 1.2rem; font-size: 12px; }
+.session-log-page .chat-history-human { border-left-color: #7c9dba; }
+.session-log-page .chat-history-supervisor { border-left-color: #8db27b; }
+.session-log-page .chat-history-other { border-left-color: #6e767c; }
+
+/* Match Brainstorm's newest-exchange-first grouping. Each saved paired slot
+   remains separate even when strategies finish out of order. */
+.session-log-page .session-transcript-events { display: grid; gap: .65rem; padding: 0; list-style: none; }
+.session-log-page .session-transcript-turn {
+  list-style: none; padding: .65rem .85rem; margin: 0; border-radius: 8px;
+  background: #211e1a; border: 1px solid #544636;
+}
+.session-log-page .session-transcript-turn-heading { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.session-log-page .session-transcript-turn-heading strong { color: #edc28e; }
+.session-log-page .session-transcript-turn-heading span,
+.session-log-page .session-transcript-turn-heading time { color: #b9afa2; font-size: 12px; }
+.session-log-page .session-transcript-turn-heading time { margin-left: auto; }
+.session-log-page .session-transcript-turn-entries { padding: 0; margin: .5rem 0 0; list-style: none; }
+.session-log-page .session-transcript-entry { margin: .35rem 0; }
+.session-log-page .session-transcript-plain {
+  white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; padding: .15rem .45rem .3rem 1.2rem;
+  margin: .35rem 0; font: inherit; line-height: 1.5;
+}
+.session-log-page .session-transcript-markdown :is(pre, table, .katex-display) { max-width: 100%; overflow-x: auto; }

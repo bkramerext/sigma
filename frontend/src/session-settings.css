@@ -1,0 +1,35 @@
+.session-settings-dialog {
+  box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  overflow: auto; padding: 24px; border: 1px solid #755b3e; border-radius: 12px;
+  background: #101820; color: #e8d9cc; box-shadow: 0 20px 60px #000b;
+  font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.session-settings-dialog::backdrop { background: #0009; }
+.session-settings-dialog form { display: grid; gap: 18px; }
+.session-settings-dialog h2 { margin: 0; font-size: 18px; color: var(--sigma-copper-foreground, #ddb18d); }
+.session-settings-field { display: grid; gap: 6px; }
+.session-settings-field input {
+  box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px;
+  border: 1px solid #71583e; border-radius: 5px; color: inherit;
+  background: #17222b; font: inherit;
+}
+.session-settings-limits { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.session-settings-field input:disabled { opacity: .5; }
+.session-settings-supervisor { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.session-settings-supervisor-pill { position: relative; min-width: 160px; display: grid; place-items: center; }
+.session-settings-supervisor-pill .global-model-pill-primary,
+.session-settings-supervisor-pill .session-settings-supervisor-measure { grid-area: 1 / 1; }
+.session-settings-supervisor-measure { visibility: hidden; pointer-events: none; }
+.session-settings-check { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.session-settings-check input { accent-color: #bc8b66; margin: 3px 0 0; }
+.session-settings-brainstorm { display: grid; gap: 2px; }
+.session-settings-brainstorm > span { display: flex; align-items: center; gap: 8px; }
+.session-settings-brainstorm small { margin-left: 21px; color: #c7b8aa; }
+.session-settings-dialog footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 6px; }
+.session-settings-dialog footer button {
+  min-height: 34px; padding: 7px 14px; border: 1px solid #846244; border-radius: 5px;
+  background: #17222b; color: #eed1b4; font: inherit; cursor: pointer;
+}
+.session-settings-dialog footer button:disabled { opacity: .5; cursor: default; }
+.session-settings-dialog footer .session-settings-apply { background: #57402d; }
+.session-settings-dialog :is(button, input):focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }

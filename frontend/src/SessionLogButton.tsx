@@ -8,8 +8,8 @@ export default function SessionLogButton({ sessionId, sessionNumber, path }: {
   const query = new URLSearchParams({ session_log: sessionId, path });
   return <a
     className="text-view-link text-view-icon workspace-icon-button session-log-open-link"
-    aria-label={`View Session ${sessionNumber} log`}
-    data-tooltip="View session log"
+    aria-label={`View Session ${sessionNumber} transcript`}
+    data-tooltip="View session transcript"
     href={`/?${query}`}
     onClick={event => openReusableTab(event, `sigma-log:${path}:${sessionId}`)}
     target="_blank"

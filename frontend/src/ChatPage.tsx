@@ -392,7 +392,9 @@ export default function ChatPage() {
     if (!runningRef.current || id !== runId.current || !supervisorEnabledRef.current) return;
     if (assessment.breakthrough_invalidated) breakthroughLatched.current = false;
     if (assessment.breakthrough_candidate) breakthroughLatched.current = true;
-    const score = breakthroughLatched.current ? 10 : assessment.score;
+    // Progress is derived from the rubric; a claimed breakthrough never
+    // overrides the numeric score or establishes validity.
+    const score = assessment.score;
     const guidance = assessment.guidance?.trim() ?? '';
     const recipient = assessment.recipient;
     const summary = assessment.rubric ? Object.entries(assessment.rubric).map(([name, points]) =>

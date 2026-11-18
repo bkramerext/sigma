@@ -667,8 +667,13 @@ class ResearchStartRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_limits: dict[str, Any] | None = None
+    session_settings: dict[str, Any] | None = None
     continue_using_saved_type_settings: bool = False
     browser_presence_required: bool = Field(default=False, strict=True)
+
+
+class SessionSettingsRequest(OpenRequest):
+    settings: dict[str, Any]
 
 
 class ResearchControlRequest(OpenRequest):
@@ -2002,15 +2007,23 @@ def research_session_log_view(session_id: str, path: str, after: int = 0):
 
 
 @app.get("/api/projects/research-sessions/{session_id}/log/download")
-def research_session_log_download_view(session_id: str, path: str):
+def research_session_log_download_view(session_id: str, path: str, format: str = "log"):
     try:
         result = session_log.read(path, session_id, 0)  # Reuse project/session ownership checks.
-        body = session_log.markdown_export(
-            result["events"],
-            result["session"],
-            result["project_title"],
-            result["reference_preparation"],
-        )
+        if format == "transcript":
+            body = session_log.transcript_markdown_export(
+                result["events"],
+                result["interventions"],
+                result["session"],
+                result["project_title"],
+            )
+        else:
+            body = session_log.markdown_export(
+                result["events"],
+                result["session"],
+                result["project_title"],
+                result["reference_preparation"],
+            )
         # Same sanitized project diagnostic records appear in readable session
         # exports when explicitly correlated to this session. Do not import
         # pre-session errors into unrelated historical session logs.
@@ -2023,7 +2036,7 @@ def research_session_log_download_view(session_id: str, path: str):
         except (ProjectError, OSError, ValueError):
             # Diagnostic storage failure must never make the session log unavailable.
             related = []
-        if related:
+        if related and format != "transcript":
             body += "\n## Exportable UI diagnostics\n\n"
             for item in related:
                 body += (
@@ -2032,6 +2045,8 @@ def research_session_log_download_view(session_id: str, path: str):
         filename = session_log.export_filename(
             result["saved_short_name"], result["project_title"], result["session"]["number"]
         )
+        if format == "transcript":
+            filename = filename.removesuffix(".log") + ".transcript.md"
         # RFC 5987 preserves readable Unicode while the ASCII fallback keeps
         # Content-Disposition safe for Latin-1 HTTP headers and older browsers.
         ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "project.log"
@@ -2047,6 +2062,7 @@ def research_session_log_download_view(session_id: str, path: str):
 
 
 class MockResearchStartRequest(OpenRequest):
+    session_settings: dict[str, Any] | None = None
     strategy_id: str
     idempotency_key: str
     expected_project_id: str
@@ -2080,6 +2096,7 @@ def mock_research_start_view(
         body.idempotency_key,
         scenario,
         body.continue_using_saved_type_settings,
+        body.session_settings,
     )
     project_collaboration.note_artifact_author(
         body.path, "session", result["id"], created_only=True
@@ -2102,6 +2119,7 @@ async def research_start_view(body: ResearchStartRequest):
             body.strategy_ids,
             body.continue_using_saved_type_settings,
             body.browser_presence_required,
+            body.session_settings,
         )
     except ProjectError as exc:
         safe_message = project_diagnostics.sanitize(str(exc))
@@ -2139,6 +2157,16 @@ async def research_start_view(body: ResearchStartRequest):
         "session.start_ack duration_ms=%.1f", (perf_counter() - admission_started) * 1000
     )
     return result
+
+
+@app.put("/api/projects/research-sessions/{session_id}/settings")
+async def research_session_settings_view(session_id: str, body: SessionSettingsRequest):
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
+    )
+    return await research_sessions.update_session_configuration(
+        body.path, session_id, body.settings
+    )
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")

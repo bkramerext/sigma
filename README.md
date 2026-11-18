@@ -76,7 +76,7 @@ These papers are **proofs of concept**, demonstrating what SIGMA can produce tod
 
 ## Research loop
 
-A research **session** runs selected strategies through **rounds** of Investigator/Skeptic **turns**. Each turn pairs one Investigator proposal with one Skeptic critique; later turns and rounds can use selected earlier findings and objections. The default configuration allows up to **54 agent calls** across 3 rounds, 3 turns per strategy per round, and 3 strategies. See [Information Flow](docs/INFORMATION_FLOW.md) for how work and evidence move between turns, rounds, and strategies—and how Session Outcome and Current Understanding summarize the results.
+A research **session** runs selected strategies through a sequence of **turns**, without a separate user-facing round setting. In the standard mode, each turn pairs an Investigator proposal with a Skeptic critique; later turns can use selected earlier findings and objections. **Session Settings** offers a finite turn limit (9 turns per strategy by default) or **Unlimited turns**, plus optional Light/Heavy Supervisor guidance and Brainstorm mode (two Investigators instead of an Investigator/Skeptic pair). With 3 enabled strategies, the default 9-turn limit permits up to **54 agent calls** (9 turns × 3 strategies × 2 calls); stopping, budget limits, or other constraints may reduce this. A stopped session can be resumed, and a completed session can be extended by changing its turn limit. The session transcript remains available for review, filtering, copy, and download. See [Getting Started](docs/GETTING_STARTED.md#connect-ai-and-investigate) for the current controls and [Information Flow](docs/INFORMATION_FLOW.md) for the underlying evidence flow and legacy scheduling terminology.
 
 
 ## Run locally

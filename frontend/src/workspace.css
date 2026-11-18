@@ -649,6 +649,13 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   grid-area: model-column;
   pointer-events: auto;
 }
+/* Align both header rows to the wider Model pill. The Settings icon's
+   trailing edge must coincide with the model's trailing edge, not stop at
+   the narrower intrinsic width of About + Settings. */
+.workspace-page .project-art-header .sigma-header-about-model-anchor .sigma-header-first-row {
+  width: 100%;
+  justify-content: space-between;
+}
 .workspace-page .project-art-header .sigma-header-first-row > .about-action {
   width: auto;
   min-width: 0;
