@@ -1137,7 +1137,7 @@ def transcript_markdown_export(
                 else str(event.get("provider_error") or event.get("message") or "Provider call failed.")
             )
             heading = (
-                f"### {role} · Round {round_label}"
+                f"### {role} · Turn {round_label}"
                 + (f" · Strategy {strategy}" if strategy else "")
             )
             rows.append(
@@ -1157,7 +1157,18 @@ def transcript_markdown_export(
             message = str(event.get("message") or "")
             rows.append(
                 (timestamp, sequence,
-                 f"### {str(event.get('event_kind') or 'Session event')}\n\n*{timestamp}*\n\n{message}")
+                 f"### {event.get('event_kind') or 'Session event'!s}\n\n*{timestamp}*\n\n{message}")
+            )
+        else:
+            # Keep retention markers and unusual operational events visible.
+            label = str(kind or "session event").replace("_", " ")
+            message = str(event.get("message") or event.get("reason") or event.get("status") or "")
+            rows.append(
+                (
+                    timestamp,
+                    sequence,
+                    f"### {label}\n\n*{timestamp}*\n\n{_markdown_payload(message, label)}",
+                )
             )
     for offset, entry in enumerate(interventions):
         if not isinstance(entry, dict) or not entry.get("submitted_at"):
@@ -1239,11 +1250,11 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
         "interventions": [
             {
                 "id": item.get("id", ""),
-                "text": item.get("text", ""),
-                "kind": item.get("kind", ""),
+                "text": _redact(item.get("text", "")),
+                "kind": _redact(item.get("kind", "")),
                 "submitted_at": item.get("submitted_at", ""),
-                "target_strategy_ids": item.get("target_strategy_ids", []),
-                "target_roles": item.get("target_roles", []),
+                "target_strategy_ids": _redact(item.get("target_strategy_ids", [])),
+                "target_roles": _redact(item.get("target_roles", [])),
             }
             for item in session.get("interventions", [])
             if isinstance(item, dict)
