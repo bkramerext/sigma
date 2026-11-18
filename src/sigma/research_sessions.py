@@ -894,6 +894,36 @@ def _session_start_limits(
     return limits
 
 
+def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
+    """Freeze research behavior inside the Session, not the user's provider connection."""
+    value = raw if isinstance(raw, dict) else {}
+    allowed = {
+        "name",
+        "brainstorm_mode",
+        "supervisor_mode",
+        "single_round_unlimited_turns",
+        "session_score",
+    }
+    if set(value) - allowed:
+        raise ProjectError("Unsupported session configuration")
+    name = value.get("name", "")
+    mode = value.get("supervisor_mode", "none")
+    if type(name) is not str or len(name) > 200:
+        raise ProjectError("Session name must be at most 200 characters")
+    if type(mode) is not str or mode not in {"none", "light", "heavy"}:
+        raise ProjectError("Supervisor mode must be None, Light, or Heavy")
+    for key in ("brainstorm_mode", "single_round_unlimited_turns", "session_score"):
+        if type(value.get(key, False)) is not bool:
+            raise ProjectError("Session configuration checkboxes must be boolean")
+    return {
+        "name": name.strip(),
+        "brainstorm_mode": value.get("brainstorm_mode", False),
+        "supervisor_mode": mode,
+        "single_round_unlimited_turns": value.get("single_round_unlimited_turns", False),
+        "session_score": value.get("session_score", False),
+    }
+
+
 def _paired_call_limit(limits: dict[str, Any], enabled_count: int) -> int:
     """Individual provider-call ceiling; disabled strategies are excluded."""
     return 2 * limits["research_rounds"] * limits["turns_per_round"] * enabled_count
@@ -6717,11 +6747,13 @@ async def start_session(
     strategy_ids: list[str] | None = None,
     continue_using_saved_type_settings: bool = False,
     browser_presence_required: bool = False,
+    session_settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from sigma import project_collaboration
     from sigma.memory_guard import require_capacity
 
     require_capacity()
+    frozen_session_settings = _session_configuration(session_settings)
     if type(browser_presence_required) is not bool:
         raise ProjectError("Browser execution origin must be a boolean")
     try:
@@ -6758,6 +6790,7 @@ async def start_session(
             or existing.get("strategy_id") != strategy_id
             or existing.get("strategy_ids", [existing.get("strategy_id")]) != selected_ids
             or existing.get("browser_presence_required", False) != browser_presence_required
+            or _session_configuration(existing.get("session_settings")) != frozen_session_settings
         ):
             raise ProjectError("Idempotency key is already bound to a different research request")
         return _public(_recover(existing))
@@ -6850,6 +6883,7 @@ async def start_session(
                     or existing.get("strategy_id") != strategy_id
                     or existing.get("strategy_ids", [existing.get("strategy_id")]) != selected_ids
                     or existing.get("browser_presence_required", False) != browser_presence_required
+                    or _session_configuration(existing.get("session_settings")) != frozen_session_settings
                 ):
                     raise ProjectError(
                         "Idempotency key is already bound to a different research request"
@@ -6913,6 +6947,7 @@ async def start_session(
             )
             record = {
                 "schema_version": 1,
+                "session_settings": frozen_session_settings,
                 **(
                     {
                         "scheduler_version": 2,
@@ -8988,6 +9023,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             )
     context: dict[str, Any] = {
         "problem": record["problem"],
+        "session_settings": record.get("session_settings", {}),
         **({"scheduler_version": 2} if record.get("scheduler_version") == 2 else {}),
         "investigation_type": record.get("investigation_type"),
         "research_method_version": record.get("research_method_version") or "phase2-i2-v2",
