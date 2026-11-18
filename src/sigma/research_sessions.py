@@ -14720,6 +14720,220 @@ async def _portfolio_run_selected(
     )
 
 
+
+def _supervisor_pair_input(record: dict[str, Any], strategy_id: str, cycle: int) -> list[dict[str, str]] | None:
+    """Freeze only accepted research outputs for independent process review."""
+    pair = {}
+    for step in record.get("steps", []):
+        if (
+            isinstance(step, dict)
+            and step.get("strategy_id") == strategy_id
+            and step.get("cycle") == cycle
+            and step.get("role") in {"investigator", "skeptic"}
+            and step.get("status") == "completed"
+        ):
+            pair[step["role"]] = step.get("output")
+    if len(pair) != 2:
+        return None
+    return [
+        {"speaker": "human", "text": "Observe this completed pair as a process supervisor. Do not contribute research."},
+        {"speaker": "ai_1", "text": json.dumps(pair["investigator"], ensure_ascii=False)[:12000]},
+        {"speaker": "ai_2", "text": json.dumps(pair["skeptic"], ensure_ascii=False)[:12000]},
+    ]
+
+
+async def _portfolio_supervisor_call(
+    session_id: str,
+    path: str,
+    strategy_id: str,
+    cycle: int,
+    state_lock: asyncio.Lock,
+) -> None:
+    """One separately funded, checkpointed, non-replaying supervisor per completed pair.
+
+    Supervisor failure must never discard accepted research or fabricate usage.
+    Every dispatched attempt receives a durable reservation before provider I/O.
+    """
+    from sigma import chat, session_supervisor
+
+    pair_key = f"{strategy_id}:{cycle}"
+    async with _portfolio_global_gate(session_id):
+        async with state_lock:
+            record = _read(path, session_id)
+            settings = record.get("session_settings")
+            mode = settings.get("supervisor_mode") if isinstance(settings, dict) else "none"
+            if mode not in {"light", "heavy"} or record["status"] in {
+                "paused", "stopped", "ended", "completed", "failed"
+            }:
+                return
+            reviews = record.setdefault("supervisor_reviews", [])
+            if any(review.get("pair_key") == pair_key for review in reviews):
+                return
+            pair = _supervisor_pair_input(record, strategy_id, cycle)
+            if pair is None:
+                return
+            if record["calls_used"] >= record["call_limit"]:
+                reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
+                                "cycle": cycle, "status": "skipped_budget", "at": _now()})
+                _save(path, record)
+                return
+            objective = str(record.get("problem") or record.get("desired_outcomes") or "")[:6000]
+            prompt = json.dumps(pair, ensure_ascii=False).encode("utf-8")
+            # Chat's metered supervisor uses at most 1200 generated tokens. The
+            # extra byte headroom covers the instruction envelope conservatively.
+            input_bound = len(prompt) + len(session_supervisor.INSTRUCTIONS.encode()) + 8192
+            output_bound = chat.MAX_OUTPUT_TOKENS
+            if (
+                int(record.get("tokens_used") or 0) + int(record.get("tokens_reserved") or 0)
+                + input_bound + output_bound > int(record.get("total_token_limit") or 0)
+            ):
+                reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
+                                "cycle": cycle, "status": "skipped_budget", "at": _now()})
+                _save(path, record)
+                return
+            pricing = TOKEN_PRICES_PER_MILLION.get(record["model"])
+            estimated_reserve = (
+                (input_bound * max(pricing["input"], pricing["cache_write"])
+                 + output_bound * pricing["output"]) / 1_000_000
+                if pricing else None
+            )
+            saved_cost = record.get("estimated_cost_usd")
+            reserved_cost = float(record.get("estimated_cost_reserved_usd") or 0)
+            cost_cap = record.get("maximum_estimated_cost_usd")
+            if cost_cap is not None and (
+                estimated_reserve is None or not isinstance(saved_cost, (int, float))
+                or saved_cost + reserved_cost + estimated_reserve > cost_cap
+            ):
+                reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
+                                "cycle": cycle, "status": "skipped_budget", "at": _now()})
+                _save(path, record)
+                return
+            call_id = str(uuid4())
+            ledger = record.get("hard_budget_ledger")
+            if isinstance(ledger, dict):
+                try:
+                    budget_reservation = reserve_before_dispatch(
+                        ledger, call_id=call_id, request_body=prompt,
+                        output_token_reservation=output_bound, allow_concurrent=True,
+                    )
+                except BudgetExceeded:
+                    reviews.append({"pair_key": pair_key, "strategy_id": strategy_id,
+                                    "cycle": cycle, "status": "skipped_budget", "at": _now()})
+                    _save(path, record)
+                    return
+            else:
+                budget_reservation = None
+            review = {
+                "pair_key": pair_key,
+                "strategy_id": strategy_id,
+                "cycle": cycle,
+                "id": call_id,
+                "status": "running",
+                "started_at": _now(),
+                "model": record["model"],
+                "token_reservation": input_bound + output_bound,
+                "budget_reservation": budget_reservation,
+                "cost_reserve": estimated_reserve if cost_cap is not None else None,
+            }
+            reviews.append(review)
+            record["calls_used"] += 1
+            record["tokens_reserved"] = int(record.get("tokens_reserved") or 0) + input_bound + output_bound
+            if cost_cap is not None and estimated_reserve is not None:
+                record["estimated_cost_reserved_usd"] = reserved_cost + estimated_reserve
+            _event(record, "supervisor.started", "Independent process review reserved.", "supervisor")
+            _save(path, record)
+            model = record["model"]
+            effort = record["reasoning_effort"]
+
+        output: dict[str, Any] | None = None
+        usage: dict[str, Any] | None = None
+        failure_reason = ""
+        try:
+            raw, response = await chat.respond(
+                speaker="supervisor", messages=pair,
+                conversation_id=call_id, model=model, reasoning_effort=effort,
+                research_objective=objective,
+                repeated_text=("Heavy, attentive process supervision." if mode == "heavy"
+                               else "Light, restrained process supervision."),
+                session_supervision=True, return_metadata=True,
+            )
+            output = session_supervisor.parse_assessment(raw)
+            raw_usage = response.get("usage")
+            if isinstance(raw_usage, dict):
+                usage = {
+                    "input_tokens": raw_usage.get("input_tokens"),
+                    "output_tokens": raw_usage.get("output_tokens"),
+                }
+        except asyncio.CancelledError:
+            failure_reason = "Process review interrupted; provider usage is uncertain."
+            raise
+        except Exception as exc:  # noqa: BLE001 — optional review may fail independently
+            failure_reason = f"Independent process review unavailable ({type(exc).__name__})."
+        finally:
+            async with state_lock:
+                record = _read(path, session_id)
+                review = next(
+                    (row for row in record.get("supervisor_reviews", [])
+                     if row.get("id") == call_id), None
+                )
+                if review is None:
+                    raise ProjectError("Supervisor checkpoint missing; no replay permitted.")
+                settled = (
+                    usage is not None
+                    and type(usage.get("input_tokens")) is int
+                    and type(usage.get("output_tokens")) is int
+                )
+                review["finished_at"] = _now()
+                review["status"] = "completed" if output else "failed"
+                if output is not None:
+                    review["assessment"] = output
+                if failure_reason:
+                    review["reason"] = failure_reason
+                if settled:
+                    review["token_usage"] = usage
+                else:
+                    review["token_usage_status"] = "unavailable"
+                ledger = record.get("hard_budget_ledger")
+                if isinstance(ledger, dict):
+                    if settled:
+                        try:
+                            prices = TOKEN_PRICES_PER_MILLION.get(model)
+                            settle_after_response(
+                                ledger, call_id=call_id,
+                                input_tokens=usage["input_tokens"],
+                                output_tokens=usage["output_tokens"],
+                                input_price_per_million=max(
+                                    prices["input"], prices["cache_write"]
+                                ) if prices else None,
+                                output_price_per_million=prices["output"] if prices else None,
+                            )
+                        except BudgetExceeded:
+                            mark_unknown(ledger, call_id=call_id)
+                    else:
+                        mark_unknown(ledger, call_id=call_id)
+                record["tokens_reserved"] = max(
+                    0, int(record.get("tokens_reserved") or 0)
+                    - (input_bound + output_bound)
+                ) if settled else int(record.get("tokens_reserved") or 0)
+                if settled:
+                    record["tokens_used"] = int(record.get("tokens_used") or 0) + (
+                        usage["input_tokens"] + usage["output_tokens"]
+                    )
+                if cost_cap is not None and estimated_reserve is not None and settled:
+                    record["estimated_cost_reserved_usd"] = max(
+                        0.0, float(record.get("estimated_cost_reserved_usd") or 0)
+                        - estimated_reserve
+                    )
+                    estimate = _estimate_cost(model, usage)
+                    if estimate is not None and record.get("cost_status") == "available":
+                        record["estimated_cost_usd"] += estimate
+                _event(record, "supervisor.completed" if output else "supervisor.failed",
+                       "Independent process review saved." if output else
+                       "Independent process review unavailable; research is retained.",
+                       "supervisor")
+                _save(path, record)
+
+
 async def _portfolio_strategy_pipeline(
     session_id: str,
     path: str,
@@ -14733,17 +14947,27 @@ async def _portfolio_strategy_pipeline(
     role = "skeptic" if branch.get("pending_investigation") is not None else "investigator"
     try:
         if role == "skeptic":
-            return await _portfolio_role_call_with_recovery(
+            completed = await _portfolio_role_call_with_recovery(
                 session_id, path, strategy_id, role, cycle, semaphore, state_lock
             )
+            if completed:
+                await _portfolio_supervisor_call(
+                    session_id, path, strategy_id, cycle, state_lock
+                )
+            return completed
         if not await _portfolio_role_call_with_recovery(
             session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         ):
             return False
         role = "skeptic"
-        return await _portfolio_role_call_with_recovery(
+        completed = await _portfolio_role_call_with_recovery(
             session_id, path, strategy_id, role, cycle + 1, semaphore, state_lock
         )
+        if completed:
+            await _portfolio_supervisor_call(
+                session_id, path, strategy_id, cycle + 1, state_lock
+            )
+        return completed
     except Exception as exc:  # noqa: BLE001 — preserve completed sibling outputs
         from sigma.production_observability import safe_exception_trace
 
