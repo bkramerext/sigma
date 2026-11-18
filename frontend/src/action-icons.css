@@ -640,9 +640,7 @@ body[data-sigma-control-hover-hold] .workspace-page button.process-control:hover
   }
 
   .workspace-page .project-pane-heading:is(:hover, :focus-within) .project-pane-actions > button,
-  .workspace-page .strategies-heading-right:is(:hover, :focus-within) .strategy-heading-actions > button.sigma-heading-icon-action,
-  .workspace-page .strategies-heading-right .strategy-heading-actions:focus-within > button.sigma-heading-icon-action,
-  .workspace-page .workspace-pane-heading:has(> .strategies-heading-right):hover .strategy-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .strategies-pane-heading:is(:hover, :focus-within) .strategy-heading-actions > button.sigma-heading-icon-action,
   .workspace-page .sessions-pane-heading:is(:hover, :focus-within) .sessions-heading-actions > button.sigma-heading-icon-action,
   .workspace-page .papers-pane-heading:is(:hover, :focus-within) .papers-heading-actions > button.sigma-heading-icon-action,
   .workspace-page .papers-pane-heading:has(.paper-includes-dialog) .papers-heading-actions > button.sigma-heading-icon-action {
