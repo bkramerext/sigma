@@ -2036,6 +2036,7 @@ def research_session_log_download_view(session_id: str, path: str, format: str =
 
 
 class MockResearchStartRequest(OpenRequest):
+    session_settings: dict[str, Any] | None = None
     strategy_id: str
     idempotency_key: str
     expected_project_id: str
@@ -2069,6 +2070,7 @@ def mock_research_start_view(
         body.idempotency_key,
         scenario,
         body.continue_using_saved_type_settings,
+        body.session_settings,
     )
     project_collaboration.note_artifact_author(
         body.path, "session", result["id"], created_only=True
