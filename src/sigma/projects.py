@@ -2170,7 +2170,9 @@ def update_project_scratchpad(
 
     def edit(project: Project) -> Project:
         if project.scratchpad != baseline:
-            raise ProjectError("Scratchpad changed elsewhere. Reopen Project Settings before saving.")
+            raise ProjectError(
+                "Scratchpad changed elsewhere. Reopen Project Settings before saving."
+            )
         return replace(project, scratchpad=wanted)
 
     return _update_project(path, edit, _allow_project_edit=True)
