@@ -109,7 +109,7 @@ export default function SessionSettingsDialog({ settings, mode, onCancel, onAppl
       </label>
       <footer>
         <button type="button" className="session-settings-cancel" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="session-settings-apply" disabled={!valid}>{mode === 'start' ? 'Start session' : 'Save'}</button>
+        <button type="submit" className="session-settings-apply" disabled={!valid}>Save</button>
       </footer>
     </form>
   </dialog>;
