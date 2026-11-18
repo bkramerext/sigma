@@ -4305,6 +4305,25 @@ def _refresh_token_accounting(record: dict[str, Any]) -> None:
             compiler.get("usage_status") == "unknown"
         ):
             steps.append({"status": "interrupted"})
+    # The independent supervisor is a separately paid Session call, not a
+    # research role step. Its completed (even invalid) response must count
+    # against the same authoritative token total. Unknown usage stays unknown.
+    for review in record.get("supervisor_reviews", []):
+        if not isinstance(review, dict) or review.get("status") not in {
+            "completed",
+            "failed",
+            "interrupted",
+        }:
+            continue
+        usage = review.get("token_usage")
+        if (
+            isinstance(usage, dict)
+            and type(usage.get("input_tokens")) is int
+            and type(usage.get("output_tokens")) is int
+        ):
+            steps.append({"status": "completed", "token_usage": usage})
+        elif review.get("attempt_status") != "not_dispatched":
+            steps.append({"status": "interrupted"})
     # A provider can complete and report billable tokens even when the
     # returned answer fails a local content/acknowledgment check. Include
     # these securely metered failed attempts, but never infer token usage
