@@ -623,3 +623,39 @@ body[data-sigma-control-hover-hold] .workspace-page button.process-control:hover
   filter: none !important;
   cursor: default;
 }
+
+
+/* Top-level Project page actions behave like contextual message actions:
+   the existing icon slots stay in place, but the icons appear when the
+   pointer enters the section header. Keyboard focus and touch retain access.
+   Do not hide Save/Cancel text or controls for an open inclusion popover. */
+@media (hover: hover) and (pointer: fine) {
+  .workspace-page .project-pane-heading .project-pane-actions > button:not(.sigma-description-toolbar-action),
+  .workspace-page .strategies-heading-right .strategy-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .sessions-pane-heading .sessions-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .papers-pane-heading .papers-heading-actions > button.sigma-heading-icon-action {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms ease;
+  }
+
+  .workspace-page .project-pane-heading:is(:hover, :focus-within) .project-pane-actions > button,
+  .workspace-page .strategies-heading-right:is(:hover, :focus-within) .strategy-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .strategies-heading-right .strategy-heading-actions:focus-within > button.sigma-heading-icon-action,
+  .workspace-page .workspace-pane-heading:has(> .strategies-heading-right):hover .strategy-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .sessions-pane-heading:is(:hover, :focus-within) .sessions-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .papers-pane-heading:is(:hover, :focus-within) .papers-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .papers-pane-heading:has(.paper-includes-dialog) .papers-heading-actions > button.sigma-heading-icon-action {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-page .project-pane-heading .project-pane-actions > button,
+  .workspace-page .strategy-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .sessions-pane-heading .sessions-heading-actions > button.sigma-heading-icon-action,
+  .workspace-page .papers-pane-heading .papers-heading-actions > button.sigma-heading-icon-action {
+    transition: none;
+  }
+}
