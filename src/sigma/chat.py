@@ -4,11 +4,17 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 import httpx
 
-from sigma import chat_supervisor, cloud_research, cloud_workspaces, model_dispatch, session_supervisor
+from sigma import (
+    chat_supervisor,
+    cloud_research,
+    cloud_workspaces,
+    model_dispatch,
+    session_supervisor,
+)
 from sigma.model_catalog import CATALOG, DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, cloud_credential, models
 from sigma.plan_stream import completed, failure
@@ -175,6 +181,7 @@ def _response_text(raw: Any, model: str) -> str:
     return result
 
 
+@overload
 async def respond(
     *,
     speaker: Speaker,
@@ -186,8 +193,48 @@ async def respond(
     research_objective: str = "",
     supervisor_latched: bool = False,
     session_supervision: bool = False,
-    return_metadata: bool = False,
-) -> str | tuple[str, dict[str, Any]]:
+    external_session_billing: bool = False,
+    expected_mode: str | None = None,
+    expected_identity_hash: str | None = None,
+    return_raw_response: Literal[True],
+) -> dict[str, Any]: ...
+
+
+@overload
+async def respond(
+    *,
+    speaker: Speaker,
+    messages: list[dict[str, Any]],
+    conversation_id: str,
+    model: str,
+    reasoning_effort: str,
+    repeated_text: str = "",
+    research_objective: str = "",
+    supervisor_latched: bool = False,
+    session_supervision: bool = False,
+    external_session_billing: bool = False,
+    expected_mode: str | None = None,
+    expected_identity_hash: str | None = None,
+    return_raw_response: Literal[False] = False,
+) -> str: ...
+
+
+async def respond(
+    *,
+    speaker: Speaker,
+    messages: list[dict[str, Any]],
+    conversation_id: str,
+    model: str,
+    reasoning_effort: str,
+    repeated_text: str = "",
+    research_objective: str = "",
+    supervisor_latched: bool = False,
+    session_supervision: bool = False,
+    external_session_billing: bool = False,
+    expected_mode: str | None = None,
+    expected_identity_hash: str | None = None,
+    return_raw_response: bool = False,
+) -> str | dict[str, Any]:
     """Generate one bounded agent turn and account hosted sponsored usage."""
     if len(messages) > MAX_MESSAGES or not messages:
         raise ProjectError(
@@ -204,8 +251,16 @@ async def respond(
         raise ProjectError("Repeated text must be a string.")
     if session_supervision and speaker != "supervisor":
         raise ProjectError("Independent Session supervision requires the supervisor role.")
+    if external_session_billing and (not session_supervision or not return_raw_response):
+        raise ProjectError("Externally metered calls are permitted only for Session supervision.")
 
     credential = await auth_context()
+    if session_supervision and (
+        credential["mode"] != expected_mode
+        or hashlib.sha256(credential["identity"].encode()).hexdigest()
+        != expected_identity_hash
+    ):
+        raise ProjectError("The Session AI connection changed before supervisor dispatch.")
     is_personal = model_dispatch.uses_personal_worker(credential)
     if (not credential["token"] and not is_personal) or credential["status"] != "connected":
         raise ProjectError("Connect ChatGPT or select API-key billing before starting a chat.")
@@ -260,7 +315,7 @@ async def respond(
     attempt = None
     response_data: Mapping[str, Any] | None = None
     try:
-        if cloud_research.billing_enabled() and not is_personal:
+        if cloud_research.billing_enabled() and not is_personal and not external_session_billing:
             workspace = cloud_research._ledger_workspace()
             if workspace is None:
                 raise ProjectError("The sponsored chat workspace is unavailable.")
@@ -278,7 +333,8 @@ async def respond(
         )
         if personal_raw is not None:
             response_data = personal_raw
-            text = _response_text(personal_raw, model)
+            if not return_raw_response:
+                text = _response_text(personal_raw, model)
         else:
             async with (
                 asyncio.timeout(TIMEOUT_SECONDS),
@@ -317,10 +373,11 @@ async def respond(
                         failure(response.status_code, raw, credential["mode"], guard)
                 if isinstance(raw, dict):
                     response_data = raw
-                text = _response_text(raw, model)
+                if not return_raw_response:
+                    text = _response_text(raw, model)
         cloud_research.settle_provider_attempt(attempt, response_data)
-        if return_metadata:
-            return text, dict(response_data or {})
+        if return_raw_response:
+            return dict(response_data or {})
         return text
     except asyncio.CancelledError:
         raise
