@@ -47,3 +47,19 @@ test('concurrent Session turns group separately and newest completion appears fi
   assert.deepEqual(groups[0].entries.map(item => item.text), ['First x', 'Second x']);
   assert.equal(groups[0].label, 'Turn 1');
 });
+
+test('Human input attaches only to its explicit strategy and never to a concurrent peer', () => {
+  const entries = projectTranscript([
+    { seq: 1, timestamp: '2026-11-18T01:00:00Z', type: 'provider_request', request_id: 'x', role: 'investigator', round: 1, strategy_id: 'x' },
+    { seq: 2, timestamp: '2026-11-18T01:00:01Z', type: 'provider_response', request_id: 'x', response: { output_text: 'X hypothesis' } },
+    { seq: 3, timestamp: '2026-11-18T01:00:02Z', type: 'provider_request', request_id: 'y', role: 'investigator', round: 1, strategy_id: 'y' },
+    { seq: 4, timestamp: '2026-11-18T01:00:03Z', type: 'provider_response', request_id: 'y', response: { output_text: 'Y hypothesis' } },
+  ], [
+    { id: 'targeted', kind: 'guidance', text: 'Examine X', submitted_at: '2026-11-18T01:00:04Z', target_strategy_ids: ['x'] },
+    { id: 'untargeted', kind: 'guidance', text: 'For all', submitted_at: '2026-11-18T01:00:05Z', target_strategy_ids: ['x', 'y'] },
+  ]);
+  const groups = groupTranscriptTurns(entries);
+  assert.ok(groups.find(group => group.key === 'x:1').entries.some(entry => entry.text === 'Examine X'));
+  assert.ok(!groups.find(group => group.key === 'y:1').entries.some(entry => entry.text === 'Examine X'));
+  assert.ok(groups.find(group => group.label === 'Human').entries.some(entry => entry.text === 'For all'));
+});
