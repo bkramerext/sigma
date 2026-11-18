@@ -897,6 +897,7 @@ def test_brainstorm_second_participant_has_constructive_guidance() -> None:
     assert "co-investigator with independent intellectual" in brainstorm
     assert "required evidence-review schema" in brainstorm
 
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
