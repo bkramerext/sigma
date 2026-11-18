@@ -20,3 +20,23 @@
 .session-log-page .chat-history-human { border-left-color: #7c9dba; }
 .session-log-page .chat-history-supervisor { border-left-color: #8db27b; }
 .session-log-page .chat-history-other { border-left-color: #6e767c; }
+
+/* Match Brainstorm's newest-exchange-first grouping. Each saved paired slot
+   remains separate even when strategies finish out of order. */
+.session-log-page .session-transcript-events { display: grid; gap: .65rem; padding: 0; list-style: none; }
+.session-log-page .session-transcript-turn {
+  list-style: none; padding: .65rem .85rem; margin: 0; border-radius: 8px;
+  background: #211e1a; border: 1px solid #544636;
+}
+.session-log-page .session-transcript-turn-heading { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.session-log-page .session-transcript-turn-heading strong { color: #edc28e; }
+.session-log-page .session-transcript-turn-heading span,
+.session-log-page .session-transcript-turn-heading time { color: #b9afa2; font-size: 12px; }
+.session-log-page .session-transcript-turn-heading time { margin-left: auto; }
+.session-log-page .session-transcript-turn-entries { padding: 0; margin: .5rem 0 0; list-style: none; }
+.session-log-page .session-transcript-entry { margin: .35rem 0; }
+.session-log-page .session-transcript-plain {
+  white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; padding: .15rem .45rem .3rem 1.2rem;
+  margin: .35rem 0; font: inherit; line-height: 1.5;
+}
+.session-log-page .session-transcript-markdown :is(pre, table, .katex-display) { max-width: 100%; overflow-x: auto; }
