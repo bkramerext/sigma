@@ -7038,7 +7038,7 @@ async def start_session(
                     "Browser disconnected before research admission; no call was dispatched"
                 )
             limits = _session_start_limits(get_limits(view.path), expected_limits)
-            if limits.get("scheduler_version") == 2:
+            if session_settings is not None and limits.get("scheduler_version") == 2:
                 limits = _validate_limits(
                     {
                         **limits,
