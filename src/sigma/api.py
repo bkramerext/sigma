@@ -1687,6 +1687,32 @@ class ResearchEthosPreference(BaseModel):
     markdown: str | None
 
 
+class UserScratchpadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    entries: list[dict[str, str]]
+    expected: list[dict[str, str]]
+
+
+@app.get("/api/user-preferences/scratchpad")
+def user_scratchpad_view():
+    from sigma import user_scratchpad
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to view Scratchpad.")
+    return user_scratchpad.current()
+
+
+@app.put("/api/user-preferences/scratchpad")
+def update_user_scratchpad(body: UserScratchpadRequest):
+    from sigma import user_scratchpad
+
+    principal = cloud_auth.current_principal()
+    if principal is not None and principal.role == "guest":
+        raise HTTPException(403, "Sign in to edit Scratchpad.")
+    return user_scratchpad.save(body.entries, body.expected)
+
+
 @app.get("/api/user-preferences/research-ethos")
 def research_ethos_preference():
     from sigma import research_ethos

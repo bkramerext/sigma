@@ -2,11 +2,12 @@ import { createElement, useCallback, useEffect, useRef, useState, type ReactNode
 import DialogDismissButton from './DialogDismissButton';
 import ProjectTypesDialog, { type ProjectTypeRecord, type ProjectTypesSaveState } from './ProjectTypesDialog';
 import RenderedMarkdown from './RenderedMarkdown';
+import UserScratchpad, { type ScratchpadEntry } from './UserScratchpad';
 import SigmaSelect from './SigmaSelect';
 import { modelDisplayLabel } from './model-display';
 import './global-settings.css';
 
-type Tab = 'types' | 'model' | 'limits' | 'preferences' | 'ethos';
+type Tab = 'types' | 'model' | 'limits' | 'preferences' | 'ethos' | 'scratchpad';
 type ModelOption = { id: string; label: string; efforts: string[]; relative_cost: string; availability?: string };
 const effortTitles: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra High' };
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
@@ -36,6 +37,7 @@ const tabs: { id: Tab; title: string }[] = [
   { id: 'limits', title: 'Limits' },
   { id: 'preferences', title: 'Preferences' },
   { id: 'ethos', title: 'Research Ethos' },
+  { id: 'scratchpad', title: 'Scratchpad' },
 ];
 const headers = { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' };
 const settingsTabStorageKey = 'sigma-settings-current-tab';
@@ -123,6 +125,11 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const [ethosBusy, setEthosBusy] = useState(false);
   const [ethosError, setEthosError] = useState('');
   const [ethosCopied, setEthosCopied] = useState(false);
+  const [scratchpad, setScratchpad] = useState<ScratchpadEntry[]>([]);
+  const [scratchpadLoaded, setScratchpadLoaded] = useState(false);
+  const [scratchpadBusy, setScratchpadBusy] = useState(false);
+  const [scratchpadError, setScratchpadError] = useState('');
+  const savedScratchpad = useRef<ScratchpadEntry[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -183,6 +190,15 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       .then((value: { models?: ModelOption[] }) => {
         if (!controller.signal.aborted) { setModels(Array.isArray(value.models) ? value.models : []); setModelsUnavailable(false); }
       }).catch(() => { if (!controller.signal.aborted) setModelsUnavailable(true); });
+    void readJson('/api/user-preferences/scratchpad', controller.signal)
+      .then((value: { entries: ScratchpadEntry[] }) => {
+        if (controller.signal.aborted) return;
+        setScratchpad(value.entries);
+        savedScratchpad.current = value.entries;
+        setScratchpadLoaded(true);
+        setScratchpadError('');
+      })
+      .catch(cause => { if (!controller.signal.aborted) setScratchpadError(String(cause)); });
     // Ethos is optional to the other tabs. Its read failure must not make
     // unrelated model/limits/preferences unavailable.
     void readJson('/api/user-preferences/research-ethos')
@@ -211,6 +227,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const hasPrefChanges = prefsLoaded && savedPrefsSnapshot.current !== JSON.stringify(prefs);
   const hasOtherChanges = hasConfigChanges || hasPrefChanges;
   const hasChanges = typesSaveState.dirty || hasOtherChanges;
+  const scratchpadChanged = scratchpadLoaded && JSON.stringify(scratchpad) !== JSON.stringify(savedScratchpad.current);
   const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
     .every(field => Number.isInteger(Number(config.limits[field])) && Number(config.limits[field]) >= 1 && String(config.limits[field]).trim() !== '')
     && (['session_duration_minutes', 'maximum_input_tokens_per_session'] as const)
@@ -311,6 +328,26 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
     const handle = window.setTimeout(() => { void save(); }, 650);
     return () => window.clearTimeout(handle);
   }, [canSave, loaded, config, prefs, typesSaveState, error]);
+  async function saveScratchpad(): Promise<boolean> {
+    if (!scratchpadLoaded || scratchpadBusy || savedScratchpad.current === null) return false;
+    setScratchpadBusy(true);
+    setScratchpadError('');
+    try {
+      const result = await putJson('/api/user-preferences/scratchpad', {
+        entries: scratchpad, expected: savedScratchpad.current,
+      }) as { entries: ScratchpadEntry[] };
+      savedScratchpad.current = result.entries;
+      return true;
+    } catch (cause) {
+      setScratchpadError(cause instanceof Error ? cause.message : String(cause));
+      return false;
+    } finally { setScratchpadBusy(false); }
+  }
+  useEffect(() => {
+    if (!scratchpadChanged || scratchpadBusy || scratchpadError) return;
+    const timer = window.setTimeout(() => { void saveScratchpad(); }, 650);
+    return () => window.clearTimeout(timer);
+  }, [scratchpad, scratchpadChanged, scratchpadBusy, scratchpadError]);
   async function saveEthos(markdown: string | null) {
     if (ethosBusy) return;
     setEthosBusy(true); setEthosError('');
@@ -326,7 +363,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const changeTab = (next: Tab) => { setTab(next); setError(''); };
   // Close flushes the last valid change; it never rolls back a saved setting.
   const cancelAndClose = async () => {
-    if (busy || typesSaveState.busy || ethosBusy) return;
+    if (busy || typesSaveState.busy || ethosBusy || scratchpadBusy) return;
+    if (scratchpadChanged && !await saveScratchpad()) return;
     if (hasChanges) {
       if (!canSave) { setError('Finish or correct the current setting before closing.'); return; }
       if (await save()) onClose();
@@ -351,7 +389,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       <header className="settings-header">
         <h2 id="sigma-global-settings-title">User Settings</h2>
         <div className="settings-actions">
-          <DialogDismissButton label="Close Settings" disabled={busy || typesSaveState.busy || ethosBusy} onClick={() => void cancelAndClose()}/>
+          <DialogDismissButton label="Close Settings" disabled={busy || typesSaveState.busy || ethosBusy || scratchpadBusy} onClick={() => void cancelAndClose()}/>
         </div>
       </header>
       <nav className="settings-tabs" role="tablist" aria-label="Settings">
@@ -363,7 +401,9 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         <ProjectTypesDialog embedded onClose={() => {}} onSaveStateChange={onTypesSaveStateChange} saveHandleRef={typesSaveRef} renderIcon={(item: ProjectTypeRecord) => <ProjectTypeIcon item={item}/>} />
       </section>
       {tab !== 'types' && <div className="settings-body">
-        {!loaded && !error && <p role="status">Loading your settings…</p>}
+        {!loaded && !error && tab !== 'scratchpad' && <p role="status">Loading your settings…</p>}
+        {tab === 'scratchpad' && <UserScratchpad entries={scratchpad} onChange={setScratchpad} disabled={!scratchpadLoaded || scratchpadBusy}/>}
+        {tab === 'scratchpad' && scratchpadError && <p role="alert" className="error">{scratchpadError}</p>}
         {config && tab === 'model' && <fieldset disabled={busy} className="sigma-global-model-thinking">
           <div className="settings-model-row">
             <div>
