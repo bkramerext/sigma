@@ -14870,17 +14870,22 @@ async def _supervise_completed_pairs(session_id: str, path: str, state_lock: asy
             for item in record.get("supervisor_reviews", [])
             if isinstance(item, dict)
         }
-        slots = {
-            (step.get("strategy_id"), step.get("cycle"))
-            for step in record.get("steps", [])
-            if isinstance(step, dict)
-            and step.get("status") == "completed"
-            and step.get("role") == "skeptic"
-            and type(step.get("cycle")) is int
-            and isinstance(step.get("strategy_id"), str)
-        }
+        slots: set[tuple[str, int]] = set()
+        for step in record.get("steps", []):
+            if not isinstance(step, dict):
+                continue
+            strategy_id = step.get("strategy_id")
+            cycle = step.get("cycle")
+            if (
+                step.get("status") == "completed"
+                and step.get("role") == "skeptic"
+                and isinstance(strategy_id, str)
+                and isinstance(cycle, int)
+                and not isinstance(cycle, bool)
+            ):
+                slots.add((strategy_id, cycle))
         pending = sorted(
-            (str(strategy_id), int(cycle))
+            (strategy_id, cycle)
             for strategy_id, cycle in slots
             if f"{strategy_id}:{cycle}" not in reviews
             and _supervisor_pair_input(record, strategy_id, cycle) is not None
