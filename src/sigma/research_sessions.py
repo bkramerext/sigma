@@ -5978,9 +5978,7 @@ async def update_session_configuration(
                     }
                 )
             record["call_ceiling_cycles"] = max(reserved_turns, new_cycles)
-            record["supervisor_ceiling_calls"] = max(
-                supervisor_reserved, supervisor_target
-            )
+            record["supervisor_ceiling_calls"] = max(supervisor_reserved, supervisor_target)
             record["cycle_limit"] = new_cycles
             # Old snapshots retain their original divisor so prior research
             # labels never change. Newly created flat-turn Sessions remain
@@ -7788,9 +7786,7 @@ async def control_session(
                 ]
                 for review in interrupted_supervisors:
                     try:
-                        authorize_supervisor_recovery_after_unknown(
-                            ledger, call_id=review["id"]
-                        )
+                        authorize_supervisor_recovery_after_unknown(ledger, call_id=review["id"])
                     except BudgetExceeded:
                         # Existing role recovery and its conservative ledger
                         # guards remain authoritative for all other calls.
@@ -14832,7 +14828,9 @@ async def _portfolio_run_selected(
 
 
 
-def _supervisor_pair_input(record: dict[str, Any], strategy_id: str, cycle: int) -> list[dict[str, str]] | None:
+def _supervisor_pair_input(
+    record: dict[str, Any], strategy_id: str, cycle: int
+) -> list[dict[str, str]] | None:
     """Freeze only accepted research outputs for independent process review."""
     pair = {}
     for step in record.get("steps", []):
@@ -14847,15 +14845,16 @@ def _supervisor_pair_input(record: dict[str, Any], strategy_id: str, cycle: int)
     if len(pair) != 2:
         return None
     return [
-        {"speaker": "human", "text": "Observe this completed pair as a process supervisor. Do not contribute research."},
+        {
+            "speaker": "human",
+            "text": "Observe this completed pair as a process supervisor. Do not contribute research.",
+        },
         {"speaker": "ai_1", "text": json.dumps(pair["investigator"], ensure_ascii=False)[:12000]},
         {"speaker": "ai_2", "text": json.dumps(pair["skeptic"], ensure_ascii=False)[:12000]},
     ]
 
 
-async def _supervise_completed_pairs(
-    session_id: str, path: str, state_lock: asyncio.Lock
-) -> None:
+async def _supervise_completed_pairs(session_id: str, path: str, state_lock: asyncio.Lock) -> None:
     """Drain saved, accepted pairs before the next research wave, including after Resume."""
     async with state_lock:
         record = _read(path, session_id)
@@ -14888,9 +14887,7 @@ async def _supervise_completed_pairs(
         )
     for strategy_id, cycle in pending:
         try:
-            await _portfolio_supervisor_call(
-                session_id, path, strategy_id, cycle, state_lock
-            )
+            await _portfolio_supervisor_call(session_id, path, strategy_id, cycle, state_lock)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 — optional review cannot fail research
@@ -14962,10 +14959,9 @@ async def _portfolio_supervisor_call(
             pair = _supervisor_pair_input(record, strategy_id, cycle)
             if pair is None:
                 return
-            if (
-                credential["mode"] != record["mode"]
-                or _digest(credential["identity"]) != record.get("identity_hash")
-            ):
+            if credential["mode"] != record["mode"] or _digest(
+                credential["identity"]
+            ) != record.get("identity_hash"):
                 # Keep the accepted pair and require the usual stopped-Session
                 # provider rebind. Never silently select another payer.
                 reviews.append(
@@ -15034,7 +15030,9 @@ async def _portfolio_supervisor_call(
                         or cost_used + cost_held + cost_reserve > cost_cap
                     )
                 )
-                or (cloud_research.billing_enabled() and (cost_reserve is None or liability is None))
+                or (
+                    cloud_research.billing_enabled() and (cost_reserve is None or liability is None)
+                )
             )
             if insufficient:
                 reviews.append(
@@ -15110,9 +15108,7 @@ async def _portfolio_supervisor_call(
                     review["attempt_status"] = "not_dispatched"
                     review["finished_at"] = _now()
                     record["calls_used"] = max(0, record["calls_used"] - 1)
-                    record["tokens_reserved"] = max(
-                        0, record["tokens_reserved"] - token_reserve
-                    )
+                    record["tokens_reserved"] = max(0, record["tokens_reserved"] - token_reserve)
                     if cost_cap is not None and cost_reserve is not None:
                         record["estimated_cost_reserved_usd"] = max(
                             0.0, record["estimated_cost_reserved_usd"] - cost_reserve
@@ -15120,7 +15116,9 @@ async def _portfolio_supervisor_call(
                     _save(path, record)
                     return
             review["attempt_status"] = "reserved"
-            _event(record, "supervisor.started", "Independent process review reserved.", "supervisor")
+            _event(
+                record, "supervisor.started", "Independent process review reserved.", "supervisor"
+            )
             _save(path, record)
             expected_identity = str(record["identity_hash"])
             expected_mode = str(record["mode"])
@@ -15135,9 +15133,7 @@ async def _portfolio_supervisor_call(
             async with state_lock:
                 record = _read(path, session_id)
                 review = next(
-                    item
-                    for item in record["supervisor_reviews"]
-                    if item.get("id") == call_id
+                    item for item in record["supervisor_reviews"] if item.get("id") == call_id
                 )
                 review["attempt_status"] = "dispatched_unknown"
                 _save(path, record)
@@ -15173,19 +15169,22 @@ async def _portfolio_supervisor_call(
             failure_reason = "Process review interrupted; provider usage is uncertain."
             raise
         except Exception as exc:  # noqa: BLE001 — optional review cannot fail research
-            failure_reason = (
-                f"Independent process review unavailable ({type(exc).__name__})."
-            )
+            failure_reason = f"Independent process review unavailable ({type(exc).__name__})."
         finally:
             async with state_lock:
                 record = _read(path, session_id)
                 review = next(
-                    (item for item in record.get("supervisor_reviews", [])
-                     if item.get("id") == call_id),
+                    (
+                        item
+                        for item in record.get("supervisor_reviews", [])
+                        if item.get("id") == call_id
+                    ),
                     None,
                 )
                 if review is None:
-                    raise ProjectError("Supervisor checkpoint missing; call must never be replayed.")
+                    raise ProjectError(
+                        "Supervisor checkpoint missing; call must never be replayed."
+                    )
                 valid_usage = (
                     usage is not None
                     and type(usage.get("input_tokens")) is int
@@ -15220,12 +15219,7 @@ async def _portfolio_supervisor_call(
                                 input_tokens=usage["input_tokens"],
                                 output_tokens=usage["output_tokens"],
                                 input_price_per_million=(
-                                    max(prices["input"], prices["cache_write"])
-                                    if prices
-                                    else None
-                                ),
-                                output_price_per_million=(
-                                    prices["output"] if prices else None
+                                    max(prices["input"], prices["cache_write"]) if prices else None
                                 ),
                             )
                         except BudgetExceeded:
@@ -15240,9 +15234,7 @@ async def _portfolio_supervisor_call(
                             input_tokens=usage["input_tokens"] if valid_usage and usage else None,
                             output_tokens=usage["output_tokens"] if valid_usage and usage else None,
                             estimated_cost_usd=(
-                                _estimate_cost(model, usage)
-                                if valid_usage and usage
-                                else None
+                                _estimate_cost(model, usage) if valid_usage and usage else None
                             ),
                         )
                     except cloud_research.CloudResearchUnavailable:
@@ -15250,8 +15242,7 @@ async def _portfolio_supervisor_call(
                 if cost_cap is not None and cost_reserve is not None and valid_usage and usage:
                     record["estimated_cost_reserved_usd"] = max(
                         0.0,
-                        float(record.get("estimated_cost_reserved_usd") or 0)
-                        - cost_reserve,
+                        float(record.get("estimated_cost_reserved_usd") or 0) - cost_reserve,
                     )
                     estimate = _estimate_cost(model, usage)
                     if estimate is not None and record.get("cost_status") == "available":
