@@ -39,7 +39,6 @@ import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
 import GlobalModelPill from './GlobalModelPill';
 import ProjectDescriptionEditor, { type ProjectDescriptionDraft, type ProjectDescriptionEditorHandle } from './ProjectDescriptionEditor';
-import ProjectScratchpad, { type ScratchpadEntry } from './ProjectScratchpad';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // A failure while presenting historical research must never unmount the app.
@@ -134,7 +133,6 @@ type ProjectView = {
     problem: string;
     desired_outcomes: string;
     paper_requirements: string;
-    scratchpad?: ScratchpadEntry[];
     schema_version: number;
     backend_build_commit?: string | null;
     ai_model: string;
@@ -492,11 +490,11 @@ type CurrentQuestion = { id: string; text: string; status: string; actionable: b
 type CurrentUnderstanding = { version: number; project_id: string; session_count: number; project_status: string; scope_note: string; findings: CurrentFinding[]; current_finding_ids: string[]; obligations: CurrentQuestion[]; changes: { kind: string; text: string; source: EvidencePointer; earlier: EvidencePointer | null; caution: string }[]; next_investigations: { obligation_id: string; question: string; source: EvidencePointer; qualification: string }[]; failures: { session_id: string; session_number: number; status: string; note: string }[]; limitations: string[] };
 type ResearchLimits = { research_rounds: number; turns_per_round: number; scheduler_version: number; model_calls: number; session_duration_minutes: number | null; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null; maximum_input_tokens_per_session?: number | null; max_concurrent_sessions: string };
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
-type ProjectSettingsTab = 'main' | 'limits' | 'preferences' | 'scratchpad';
+type ProjectSettingsTab = 'main' | 'limits' | 'preferences';
 function savedProjectSettingsTab(): ProjectSettingsTab {
   try {
     const tab = window.localStorage.getItem('sigma.projectSettingsTab');
-    if (tab === 'limits' || tab === 'preferences' || tab === 'scratchpad') return tab;
+    if (tab === 'limits' || tab === 'preferences') return tab;
   } catch { /* Use the default tab when browser storage is unavailable. */ }
   return 'main';
 }
@@ -7581,7 +7579,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<ProjectSettingsTab>(savedProjectSettingsTab);
-  const [scratchpad, setScratchpad] = useState<ScratchpadEntry[]>(() => initial?.project.scratchpad ?? []);
   function changeSettingsTab(tab: ProjectSettingsTab) {
     setActiveTab(tab);
     try { window.localStorage.setItem('sigma.projectSettingsTab', tab); } catch { /* Keep this dialog usable when storage is unavailable. */ }
@@ -7693,7 +7690,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         difficulty: values.difficulty,
         show_advanced_outcome_details: values.show_advanced_outcome_details,
       };
-      let next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
+      const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
       // Unrelated settings changes must not rewrite historical v1 research limits.
       if (initial && loadedLimitDraft && JSON.stringify(limitDraft) !== JSON.stringify(loadedLimitDraft)) {
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
@@ -7731,16 +7728,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         setSavedExclusiveSections(exclusiveSections);
         window.dispatchEvent(new CustomEvent("sigma-section-layout-preference-changed", { detail: exclusiveSections }));
       }
-      if (initial && JSON.stringify(scratchpad) !== JSON.stringify(initial.project.scratchpad ?? [])) {
-        const response = await fetch('/api/projects/scratchpad', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-          body: JSON.stringify({ path: initial.path, entries: scratchpad, expected: initial.project.scratchpad ?? [] }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Scratchpad could not be saved.');
-        next = result as ProjectView;
-      }
       onSaved(next);
     }
     catch (error) { setError(errorMessage(error)); }
@@ -7751,11 +7738,10 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></> : <><button type="submit" disabled={busy || !canCreate}>{busy ? 'Creating…' : 'Create'}</button><DialogDismissButton label="Cancel project settings" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}/></>}</div></header>
       {!initial && <p className="settings-hint new-project-edit-note">Project name, Research category, and Research Subject are required. These can be edited later.</p>}
       {initial && <p className="settings-hint" id="project-settings-scope">Most changes take effect when a new research session starts. Existing sessions keep their research configuration; some limits can be adjusted when resuming.</p>}
-      {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences', 'scratchpad'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[3] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 3)) % 4]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
+      {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; changeSettingsTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => changeSettingsTab('main')}>Research</button>
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => changeSettingsTab('limits')}>Limits</button>
         <button type="button" role="tab" data-settings-tab="preferences" id="settings-tab-preferences" aria-selected={activeTab === 'preferences'} aria-controls="settings-panel-preferences" tabIndex={activeTab === 'preferences' ? 0 : -1} onClick={() => changeSettingsTab('preferences')}>Preferences</button>
-        <button type="button" role="tab" data-settings-tab="scratchpad" id="settings-tab-scratchpad" aria-selected={activeTab === 'scratchpad'} aria-controls="settings-panel-scratchpad" tabIndex={activeTab === 'scratchpad' ? 0 : -1} onClick={() => changeSettingsTab('scratchpad')}>Scratchpad</button>
       </div>}
       <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}>{initial && <p id="project-settings-help">Set this project’s research type and difficulty.</p>}
       <fieldset disabled={busy}>
@@ -7797,9 +7783,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         </>
       </fieldset>
       {!limitsLoaded && <p role="status">Loading research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
-    </section>}
-    {initial && <section id="settings-panel-scratchpad" className="settings-body" role="tabpanel" aria-labelledby="settings-tab-scratchpad" hidden={activeTab !== 'scratchpad'}>
-      <ProjectScratchpad entries={scratchpad} onChange={setScratchpad} disabled={busy}/>
     </section>}
     {initial && <section id="settings-panel-preferences" className="settings-body project-preferences-panel" role="tabpanel" aria-labelledby="settings-tab-preferences" hidden={activeTab !== 'preferences'}>
       <p>Project presentation and user-wide research execution preferences.</p>
