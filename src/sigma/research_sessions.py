@@ -922,7 +922,9 @@ def _session_configuration(raw: dict[str, Any] | None) -> dict[str, Any]:
     if type(rounds) is not int or not 1 <= rounds <= 60:
         raise ProjectError("Research rounds must be between 1 and 60")
     if type(turns) is not int or not 1 <= turns <= 20 or rounds * turns > 1200:
-        raise ProjectError("Turns per round must be between 1 and 20 within the configured call limit")
+        raise ProjectError(
+            "Turns per round must be between 1 and 20 within the configured call limit"
+        )
     return {
         "name": name.strip(),
         "brainstorm_mode": value.get("brainstorm_mode", False),
@@ -955,10 +957,14 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
     if not isinstance(branches, list) or not branches:
         return False
     active = [
-        branch for branch in branches
+        branch
+        for branch in branches
         if isinstance(branch, dict) and branch.get("status") in {"queued", "running"}
     ]
-    if not active or max(int(branch.get("cycle", 0)) for branch in active) + 1 < record["cycle_limit"]:
+    if (
+        not active
+        or max(int(branch.get("cycle", 0)) for branch in active) + 1 < record["cycle_limit"]
+    ):
         return False
     # The only change is a larger allowance in the existing Session budget.
     added_calls = 2 * len(branches)
@@ -975,7 +981,8 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
     record["call_limit"] += added_calls
     record["total_token_limit"] += added_calls * (
         _agent_dispatch_guard_bytes({"model": record.get("model", "")})
-        + 65_536 + int(record["output_token_limit"])
+        + 65_536
+        + int(record["output_token_limit"])
     )
     return True
 
@@ -5803,7 +5810,9 @@ async def update_session_configuration(
             else:
                 new_cycles = new_settings["research_rounds"] * new_settings["turns_per_round"]
             if new_cycles < old_cycles:
-                raise ProjectError("Saved research turns cannot be removed by reducing session limits")
+                raise ProjectError(
+                    "Saved research turns cannot be removed by reducing session limits"
+                )
             if record.get("status") in {"queued", "running"} and new_cycles > old_cycles:
                 raise ProjectError("Pause the session before changing its round or turn limits")
             extended = new_cycles > old_cycles or (
@@ -5815,16 +5824,15 @@ async def update_session_configuration(
                 ledger = record.get("hard_budget_ledger")
                 if isinstance(ledger, dict):
                     try:
-                        increase_call_limit(
-                            ledger, int(ledger.get("call_limit", 0)) + added_calls
-                        )
+                        increase_call_limit(ledger, int(ledger.get("call_limit", 0)) + added_calls)
                     except BudgetExceeded as exc:
                         raise ProjectError(str(exc)) from exc
                 record["cycle_limit"] = new_cycles
                 record["call_limit"] += added_calls
                 record["total_token_limit"] += added_calls * (
                     _agent_dispatch_guard_bytes({"model": record.get("model", "")})
-                    + 65_536 + int(record["output_token_limit"])
+                    + 65_536
+                    + int(record["output_token_limit"])
                 )
                 record.setdefault("call_limit_adjustments", []).append(
                     {
@@ -5842,10 +5850,7 @@ async def update_session_configuration(
                 record["research_round_limit"] = new_settings["research_rounds"]
                 record["turns_per_round"] = new_settings["turns_per_round"]
             record["session_settings"] = new_settings
-            if (
-                extended
-                and record.get("status") in {"completed", "ended", "failed"}
-            ):
+            if extended and record.get("status") in {"completed", "ended", "failed"}:
                 record["settings_extended"] = True
                 # Inactive time since the previous completion is not consumed by
                 # the explicitly authorized new Session research allowance.
@@ -7044,7 +7049,8 @@ async def start_session(
                         **limits,
                         "research_rounds": frozen_session_settings["research_rounds"],
                         "turns_per_round": frozen_session_settings["turns_per_round"],
-                        "model_calls": 2 * frozen_session_settings["research_rounds"]
+                        "model_calls": 2
+                        * frozen_session_settings["research_rounds"]
                         * frozen_session_settings["turns_per_round"],
                     }
                 )
@@ -7059,7 +7065,8 @@ async def start_session(
                     or existing.get("strategy_id") != strategy_id
                     or existing.get("strategy_ids", [existing.get("strategy_id")]) != selected_ids
                     or existing.get("browser_presence_required", False) != browser_presence_required
-                    or _session_configuration(existing.get("session_settings")) != frozen_session_settings
+                    or _session_configuration(existing.get("session_settings"))
+                    != frozen_session_settings
                 ):
                     raise ProjectError(
                         "Idempotency key is already bound to a different research request"
@@ -11779,7 +11786,8 @@ def _commit_portfolio_review(
         isinstance(settings, dict)
         and settings.get("brainstorm_mode") is True
         and settings.get("single_round_unlimited_turns") is True
-        and decision in {
+        and decision
+        in {
             "stop_productive_conclusion",
             "stop_decisive_counterexample",
             "stop_no_progress",
@@ -11789,11 +11797,15 @@ def _commit_portfolio_review(
             next_question
             or str(output.get("next_question") or "").strip()
             or next(
-                (str(item).strip() for item in output.get("remaining_obligations", [])
-                 if str(item).strip()), ""
+                (
+                    str(item).strip()
+                    for item in output.get("remaining_obligations", [])
+                    if str(item).strip()
+                ),
+                ""
             )
             or "Independently explore another question about the research objective, "
-               "without treating previous tentative conclusions as established."
+            "without treating previous tentative conclusions as established."
         )
         decision = "continue"
 
@@ -13912,8 +13924,7 @@ def _protocol_completion_recovery_plan(
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Plan explicit continuation from terminal, incomplete research without replaying calls."""
     if record.get("status") not in {"ended", "failed", "paused", "stopped"} and not (
-        record.get("status") == "completed"
-        and record.get("settings_extended") is True
+        record.get("status") == "completed" and record.get("settings_extended") is True
     ):
         return None, "Only a terminal incomplete session needs protocol completion recovery."
     branches = record.get("strategy_runs")
