@@ -26,6 +26,12 @@
       "kind": "strategy.created",
       "timestamp": "2026-11-08T16:00:00+00:00",
       "strategy_id": "df55b8d3-f12c-4c31-98af-68e4ad8cb697"
+    },
+    {
+      "sequence": 5,
+      "kind": "strategy.created",
+      "timestamp": "2026-11-18T23:36:30.756Z",
+      "strategy_id": "f7190db0-d271-41cb-a925-d36fcd6a5b1f"
     }
   ],
   "strategies": [
@@ -64,13 +70,26 @@
       "summary": "Develop and stress-test a new structural constraint on the nontrivial zeros.",
       "provenance": null,
       "enabled": true
+    },
+    {
+      "id": "f7190db0-d271-41cb-a925-d36fcd6a5b1f",
+      "title": "Quantitative Weil Spectral Detection of Off-Line Zeros",
+      "approach": "Use the localized Weil-operator arguments in the November 17–18 SIGMA transcript as candidate mathematics to verify, not as established theorems. Fix the exact explicit-formula normalization, including archimedean, prime-power and pole terms, and distinguish the even, odd and full test spaces. Independently audit the supported logarithmic form realization, the two-margin strict-monotonicity argument, and the proposed correspondence between off-critical zero pairs and negative eigenvalue directions; check primary mathematical literature before claiming novelty.\n\nAssume hypothetically that ρ = 1/2 + δ + iγ is a zero with δ > 0. Try to construct a negative localized Weil-form witness in [-R,R] and make the detection radius R effective in δ, |γ|, multiplicity, zero separation and interference from all other zeros. Quantify the conditioning of translated Fourier samples and the contribution of critical-line zeros; do not silently assume finitely many off-line zeros. Prove a usable bound or find a counterexample to the proposed detection mechanism.\n\nIndependently seek a prime-side lower bound for the localized lowest eigenvalue, or an arithmetic upper bound on its negative index, strong enough to contradict the hypothetical witness and yield a genuinely new zero-free restriction. The transcript's elementary bound λ₁(R) ≥ -C exp(R) only recovers the known critical strip; an improved exponent must follow from a proved arithmetic estimate, not from compact resolvent, translation symmetry, or strict monotonicity. A subexponential lower bound is itself RH-equivalent and cannot be assumed or relabeled as progress.\n\nPrioritize one decisive, quantitatively stated lemma and attack it adversarially. Use reproducible numerical tests only to falsify or calibrate claims, never as proof. Record precisely what is independently proved, conditional, already known, refuted, or unresolved. The objective remains to eliminate every δ > 0 (or certify a genuine counterexample), not merely to redescribe what an off-line zero would do to the spectrum.",
+      "author_kind": "human",
+      "created_at": "2026-11-18T23:36:30.756Z",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Seek an effective Weil-spectral witness and an independent arithmetic bound that excludes off-line zeros.",
+      "provenance": null,
+      "enabled": true
     }
   ],
   "investigation_type": "mathematical",
   "active_order": [
     "0264f791-ec24-4d59-954b-6e5ea897bb75",
     "e4eb2f04-a5b9-4b9c-a5e2-5d8aebd3560f",
-    "df55b8d3-f12c-4c31-98af-68e4ad8cb697"
+    "df55b8d3-f12c-4c31-98af-68e4ad8cb697",
+    "f7190db0-d271-41cb-a925-d36fcd6a5b1f"
   ],
   "difficulty": "hard",
   "desired_outcomes": "**Primary objective:** Discover a complete, unconditional proof or a rigorously certified counterexample to the Riemann Hypothesis. Do not substitute partial progress, numerical evidence, or an equivalent reformulation for a resolution.\n\n**Independent positive outcome — novel mathematical discovery:** Any genuinely new, mathematically sound and significant theorem, proof, method, identity, bound, construction, or structural insight discovered during the investigation is a positive research outcome in its own right, even if it does not resolve the Riemann Hypothesis.\n\nActively recognize and preserve such discoveries. Clearly identify their mathematical contribution, supporting argument, novelty relative to known results, assumptions, limitations, and outstanding verification requirements. Recommend sufficiently substantiated original results for standalone publication rather than allowing them to be buried in an unsuccessful attempt to solve the larger problem.\n\nA discovery need not be directly applicable to RH to be valuable. Unexpected results in related mathematical fields may warrant independent investigation and publication. Do not label an unverified or previously known result as a novel discovery.\n\n**Research disposition:**\n- Seek conceptual breakthroughs rather than defaulting to incremental refinement of familiar techniques.\n- Explore radically different mathematical representations and connections when they offer a concrete mechanism for progress.\n- Challenge hidden assumptions about which methods are necessary, possible, or promising.\n- Favor precise, surprising, falsifiable ideas over lengthy speculative discussions.\n- Attempt to derive results, construct counterexamples, or perform discriminating computations rather than repeatedly proposing future work.\n- Recognize quickly when an approach is circular, equivalent to the original unsolved obligation, already exhausted, or blocked by a known result. Record the obstruction and redirect.\n- Preserve genuine partial discoveries, but never confuse their significance with proof of the overall hypothesis.\n\n**Continuous strategic evolution:**\n\nEvery Investigator/Skeptic cycle should contribute to both the present investigation and the next generation of research strategies.\n\nRecord:\n1. The strongest new mathematical insight or candidate mechanism, including its exact assumptions.\n2. What was established, refuted, conditionally derived, computationally supported, or left unverified.\n3. The most consequential remaining obstruction and the best attempted attack on it.\n4. Any unexpected connection, new representation, or alternative method deserving independent investigation.\n5. The precise next mathematical question or experiment most likely to resolve uncertainty.\n6. Whether the strategy should continue, change direction, be abandoned, or inspire a distinct successor strategy—and why.\n\nMake these findings concrete, evidence-linked, and reusable by **Infer strategy #n**. Identify promising strategy forks explicitly, including the proposed successor's distinct objective, motivating evidence, known obstacles, and first decisive test. Preserve negative results so successor strategies do not unknowingly repeat failed work.\n\nThe Skeptic must attack mathematical validity aggressively without suppressing unconventional thinking. An unfamiliar argument is not an invalid argument. A convincing argument is not necessarily a correct one.\n\nWhen a line of investigation fails, extract the maximum useful information from that failure and move toward a materially different approach.\n\nSuccess is measured by genuine advances toward resolving the hypothesis **and by independently valuable original mathematical discoveries**, not research volume, apparent consensus, or the number of strategies explored.",
