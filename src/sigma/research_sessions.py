@@ -5207,7 +5207,8 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                         "Saved interrupted supervisor call has no matching reservation"
                     )
                 else:
-                    mark_unknown(ledger, call_id=call_id)
+                    if isinstance(call_id, str):
+                        mark_unknown(ledger, call_id=call_id)
             _event(
                 record,
                 "supervisor.interrupted",
@@ -14880,7 +14881,7 @@ async def _supervise_completed_pairs(session_id: str, path: str, state_lock: asy
             and isinstance(step.get("strategy_id"), str)
         }
         pending = sorted(
-            (strategy_id, cycle)
+            (str(strategy_id), int(cycle))
             for strategy_id, cycle in slots
             if f"{strategy_id}:{cycle}" not in reviews
             and _supervisor_pair_input(record, strategy_id, cycle) is not None
@@ -15069,6 +15070,7 @@ async def _portfolio_supervisor_call(
                     )
                     _save(path, record)
                     return
+                reservation["purpose"] = "supervisor"
             else:
                 reservation = None
             review = {
@@ -15189,8 +15191,8 @@ async def _portfolio_supervisor_call(
                     usage is not None
                     and type(usage.get("input_tokens")) is int
                     and type(usage.get("output_tokens")) is int
-                    and usage["input_tokens"] >= 0
-                    and usage["output_tokens"] >= 0
+                    and int(usage["input_tokens"] or 0) >= 0
+                    and int(usage["output_tokens"] or 0) >= 0
                 )
                 review["status"] = "completed" if assessment else "failed"
                 review["finished_at"] = _now()
@@ -15216,8 +15218,8 @@ async def _portfolio_supervisor_call(
                             settle_after_response(
                                 ledger,
                                 call_id=call_id,
-                                input_tokens=usage["input_tokens"],
-                                output_tokens=usage["output_tokens"],
+                                input_tokens=int(usage["input_tokens"] or 0),
+                                output_tokens=int(usage["output_tokens"] or 0),
                                 input_price_per_million=(
                                     max(prices["input"], prices["cache_write"]) if prices else None
                                 ),
