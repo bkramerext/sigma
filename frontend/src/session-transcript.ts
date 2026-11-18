@@ -135,3 +135,34 @@ export function projectTranscript(events: TranscriptEvent[], interventions: Tran
   return entries.sort((left, right) => left.timestamp.localeCompare(right.timestamp)
     || left.sequence - right.sequence || left.id.localeCompare(right.id));
 }
+
+export type TranscriptTurnGroup = {
+  key: string; label: string; latestTimestamp: string; entries: TranscriptEntry[];
+};
+
+/** Group flat, durable paired-slot events by turn and show newest turns first.
+ * Concurrent strategies retain their own turn identities; within a turn the
+ * Investigator and Skeptic messages remain chronologically ordered.
+ */
+export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurnGroup[] {
+  const groups = new Map<string, TranscriptTurnGroup>();
+  let lastTurn: string | null = null;
+  for (const entry of [...entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp)
+    || a.sequence - b.sequence)) {
+    const hasTurn = typeof entry.round === 'number' && entry.round > 0;
+    const key = hasTurn ? `${entry.strategyId ?? 'session'}:${entry.round}`
+      : entry.role === 'human' && lastTurn ? lastTurn : `event:${entry.id}`;
+    if (hasTurn) lastTurn = key;
+    const label = hasTurn ? `Turn ${entry.round}` : entry.role === 'human' && lastTurn
+      ? groups.get(key)?.label ?? 'Human' : 'Session activity';
+    const existing = groups.get(key);
+    if (existing) {
+      existing.entries.push(entry);
+      if (entry.timestamp > existing.latestTimestamp) existing.latestTimestamp = entry.timestamp;
+    } else {
+      groups.set(key, { key, label, latestTimestamp: entry.timestamp, entries: [entry] });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.latestTimestamp.localeCompare(a.latestTimestamp)
+    || b.key.localeCompare(a.key));
+}
