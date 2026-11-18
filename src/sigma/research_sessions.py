@@ -14828,7 +14828,6 @@ async def _portfolio_run_selected(
     )
 
 
-
 def _supervisor_pair_input(
     record: dict[str, Any], strategy_id: str, cycle: int
 ) -> list[dict[str, str]] | None:
