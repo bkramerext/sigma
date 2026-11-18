@@ -5805,6 +5805,32 @@ async def update_session_configuration(
                 raise ProjectError("This historical session does not have adjustable paired turns")
             old_settings = _session_configuration(record.get("session_settings"))
             old_cycles = int(record.get("cycle_limit", 0))
+            completed_any = any(
+                step.get("status") == "completed"
+                and step.get("role") in {"investigator", "skeptic"}
+                for step in record.get("steps", [])
+                if isinstance(step, dict)
+            )
+            prior_unlimited = old_settings["single_round_unlimited_turns"]
+            next_unlimited = new_settings["single_round_unlimited_turns"]
+            if completed_any and prior_unlimited and not next_unlimited:
+                raise ProjectError(
+                    "A single-round session with saved turns cannot be converted to multiple rounds"
+                )
+            if completed_any and next_unlimited and not prior_unlimited and record["research_round_limit"] > 1:
+                raise ProjectError(
+                    "A session with multiple completed rounds cannot be converted to a single round"
+                )
+            if (
+                completed_any
+                and not prior_unlimited
+                and not next_unlimited
+                and new_settings["turns_per_round"] != record["turns_per_round"]
+            ):
+                raise ProjectError(
+                    "Turns per round cannot be changed after research has been saved; "
+                    "increase the number of rounds instead"
+                )
             if new_settings["single_round_unlimited_turns"]:
                 new_cycles = max(old_cycles, new_settings["turns_per_round"])
             else:
@@ -13930,7 +13956,11 @@ def _uncredited_transient_failures(record: dict[str, Any]) -> int:
     already_extended = sum(
         max(0, item.get("additional_calls", 0))
         for item in record.get("call_limit_adjustments", [])
-        if isinstance(item, dict) and type(item.get("additional_calls", 0)) is int
+        if isinstance(item, dict)
+        and type(item.get("additional_calls", 0)) is int
+        # Research the user explicitly added is not a replacement attempt and
+        # must never consume credit for recovering a transient failed request.
+        and item.get("purpose") != "user changed Session research rounds/turns"
     )
     return max(0, transient_attempts - already_extended)
 
