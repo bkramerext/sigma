@@ -5263,6 +5263,7 @@ def mock_session(
     idempotency_key: str,
     scenario: str,
     continue_using_saved_type_settings: bool = False,
+    session_settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a queued UI fixture through the normal session storage layer.
 
@@ -5271,6 +5272,7 @@ def mock_session(
     """
     if scenario not in {"completed", "failed", "provider-error", "exhausted"}:
         raise ProjectError("Unknown mock research scenario")
+    frozen_session_settings = _session_configuration(session_settings)
     view, _guard = _snapshot(path)
     from sigma import project_types
 
@@ -5331,6 +5333,7 @@ def mock_session(
         }[scenario]
         record = {
             "schema_version": 1,
+            "session_settings": frozen_session_settings,
             "id": run_id,
             "created_by": project_collaboration.collaborator_identity(view.path),
             "session_number": number,
