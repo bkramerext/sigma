@@ -50,9 +50,9 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 120px);
   }
 }
-.sigma-global-settings .settings-tabs { display: flex; flex-wrap: wrap; padding: 12px 24px 0; gap: 8px; }
+.sigma-global-settings .settings-tabs { display: flex; flex-wrap: wrap; padding: 12px 24px 0; gap: 15px; }
 .sigma-global-settings .settings-tabs button {
-  background: transparent; border: 0; padding: 5px 6px 8px; min-height: 28px;
+  background: transparent; border: 0; padding: 5px 10px 8px; min-height: 28px;
   color: var(--sigma-copper-foreground); cursor: pointer; font: 13px Inter, sans-serif;
 }
 .sigma-global-settings .settings-tabs button[aria-selected="true"] { border-bottom: 2px solid var(--sigma-copper-foreground); }
