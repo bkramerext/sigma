@@ -1,8 +1,6 @@
 """Local browser adapter. Launch on 127.0.0.1; never bind to a public interface."""
 
 import asyncio
-from io import BytesIO
-from zipfile import ZIP_DEFLATED, ZipFile
 import json
 import logging
 import os
@@ -12,11 +10,13 @@ import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from dataclasses import asdict, replace
+from io import BytesIO
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import quote, urlencode
 from uuid import UUID, uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import (
