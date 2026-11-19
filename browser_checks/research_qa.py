@@ -75,6 +75,18 @@ with sync_playwright() as playwright:
         timeout=20000,
     )
     page.get_by_role("button", name="New session").click()
+    # This deterministic Q/A fixture contains one research pair. Keep the new
+    # global 20-turn default while explicitly limiting this test run to one.
+    page.locator(".sessions-pane-heading").get_by_role(
+        "button", name="Settings", exact=True
+    ).click()
+    session_settings = page.get_by_role("dialog", name="Session Settings")
+    expect(session_settings).to_be_visible()
+    turns_input = session_settings.locator("#session-settings-turns")
+    expect(turns_input).to_have_value("20")
+    turns_input.fill("1")
+    session_settings.get_by_role("button", name="Close Session Settings").click()
+    expect(session_settings).not_to_be_visible()
     page.get_by_role("button", name="Start Session").click()
     expect(page.locator("li[data-session-id]").first.locator(".session-status")).to_have_text(
         "ended", timeout=30000
