@@ -1,6 +1,10 @@
 /* The Session transcript uses Brainstorm's simple conversation-card layout.
    Rich diagnostics remain in the saved Session record, not in this reading view. */
-.session-log-page.session-conversation-page { background: #101315; }
+.session-log-page.session-conversation-page {
+  min-height: 0;
+  padding: 16px clamp(1rem, 3vw, 3rem) 40px;
+  background: transparent;
+}
 .session-log-page.session-conversation-page header.session-transcript-page-header {
   position: static;
   padding: 0 0 4px;
@@ -122,7 +126,7 @@
 .session-log-page .session-transcript-events {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
+  gap: 28px;
   max-height: none;
   margin: 0;
   padding: 0;
@@ -148,25 +152,25 @@
 .session-log-page .session-transcript-turn-entries {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  gap: 8px;
   min-width: 0;
   margin: 0;
   padding: 0;
-  border: 1px solid #343331;
-  border-radius: 6px;
-  background: #1d1d1c;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   list-style: none;
-  overflow: hidden;
+  overflow: visible;
 }
 .session-log-page .session-transcript-turn-entries > .session-transcript-entry + .session-transcript-entry {
-  border-top: 1px solid #33312f;
+  border-top: 0;
 }
 .session-log-page .session-transcript-entry {
   box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
   margin: 0;
-  padding: 7px 11px;
+  padding: 5px 3px;
   border: 0;
   border-radius: 0;
   background: transparent;
