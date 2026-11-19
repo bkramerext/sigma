@@ -927,6 +927,24 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             assert not compilation_page_errors, compilation_page_errors
             compilation_context.close()
 
+            # The Session page is a Project subview. Its controls must be the
+            # same React actions used by the existing Project session row.
+            session_row = page.locator(f'li[data-session-id="{session["id"]}"]')
+            expect(session_row.locator(".session-log-open-link")).to_be_visible()
+            session_row.locator(".session-log-open-link").click()
+            expect(page).to_have_url(re.compile(r"/session\\?"))
+            logo = page.get_by_role("link", name="Go back to project page")
+            expect(logo).to_have_attribute("href", re.compile(r"/project\\?"))
+            expect(page.locator("#session-page-controls").get_by_role(
+                "button", name=f"Resume Session {session['session_number']}"
+            )).to_be_visible(timeout=15000)
+            expect(page.locator(".session-transcript-turn-entries")).to_have_count(
+                page.locator(".session-transcript-turn").count()
+            )
+            logo.click()
+            expect(page).to_have_url(re.compile(r"/project\\?"))
+            expect(page.get_by_role("heading", name="Strategies")).to_be_visible()
+
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors
             browser.close()
