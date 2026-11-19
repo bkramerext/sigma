@@ -1,42 +1,224 @@
-/* Session Transcript reuses the existing Session log page and its durable data. */
-.session-log-page .session-transcript-toolbar { align-items: center; gap: .7rem; }
-.session-log-page .session-transcript-filters { display: flex; flex: 1 1 auto; align-items: center; flex-wrap: wrap; column-gap: .8rem; row-gap: .25rem; border: 0; padding: 0; margin: 0; min-width: 0; }
-.session-log-page .session-transcript-filters legend { float: left; padding: 0; margin: 0 .6rem 0 0; }
-.session-log-page .session-transcript-toggle-all { min-height: 28px; padding: .2rem .35rem; border: 0; background: transparent; font-weight: 650; }
-.session-log-page .session-transcript-filters label { display: inline-flex; align-items: center; gap: .35rem; padding: 0; white-space: nowrap; cursor: pointer; }
-.session-log-page .session-transcript-filters input { accent-color: #bf955f; width: 15px; height: 15px; margin: 0; }
-.session-log-page .session-transcript-events { max-height: calc(100vh - 220px); }
-.session-log-page .session-transcript-entry { border: 1px solid #534331; border-left: 3px solid #876743; border-radius: 5px; margin: .65rem 0; padding: .75rem 1rem; }
-.session-log-page .session-transcript-entry-heading { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin-bottom: .35rem; }
-.session-log-page .session-transcript-entry-heading span { color: #b9afa2; font-size: 12px; }
-.session-log-page .session-transcript-entry-heading time { color: #b9afa2; font-size: 12px; margin-left: auto; }
-.session-log-page .session-transcript-entry .chat-disclosure-button { display: inline-flex; align-items: center; gap: .45rem; padding: .15rem .25rem; min-height: 28px; border: 0; background: transparent; font: inherit; color: var(--sigma-copper-foreground); }
-.session-log-page .session-transcript-entry .disclosure-chevron { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none; transition: transform .15s ease; }
-.session-log-page .session-transcript-entry .disclosure-chevron.is-expanded { transform: rotate(90deg); }
-.session-log-page .session-transcript-entry .session-transcript-markdown { max-width: 100ch; overflow-wrap: anywhere; padding: .1rem .45rem .25rem 1.2rem; }
-.session-log-page .session-transcript-markdown p { margin: .5rem 0; }
-.session-log-page .session-transcript-markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-.session-log-page .session-transcript-provider-details { margin: .5rem 0 0 1.2rem; font-size: 12px; }
-.session-log-page .chat-history-human { border-left-color: #7c9dba; }
-.session-log-page .chat-history-supervisor { border-left-color: #8db27b; }
-.session-log-page .chat-history-other { border-left-color: #6e767c; }
+/* The Session transcript uses Brainstorm's simple conversation-card layout.
+   Rich diagnostics remain in the saved Session record, not in this reading view. */
+.session-log-page.session-conversation-page { background: #101315; }
+.session-log-page .session-transcript-page-header { padding-bottom: 12px; }
+.session-log-page .session-transcript-page-header > p { margin: 4px 0 8px; }
+.session-log-page .session-transcript-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  min-height: 34px;
+  padding: 0;
+  margin: 0;
+}
+.session-log-page .session-transcript-toolbar > :is(button, a) {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  line-height: 0;
+}
+.session-log-page .session-transcript-toolbar > :is(button, a) svg {
+  box-sizing: border-box;
+  display: block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.session-log-page .session-transcript-toolbar > .session-transcript-markdown-toggle svg {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 20px;
+  color: inherit;
+}
+.session-log-page .session-transcript-markdown-toggle .markdown-logo path { fill: currentColor; }
+.session-log-page .session-transcript-toolbar > :is(button, a):is(:hover, :focus-visible) {
+  color: #fff2e9;
+  background: var(--copper-gradient);
+  border-color: #ac7054;
+}
+.session-log-page .session-transcript-toolbar > :is(button, a):disabled { opacity: .5; cursor: default; }
+.session-log-page .session-transcript-toolbar > .session-transcript-markdown-toggle.is-active { color: #f2c48d; }
 
-/* Match Brainstorm's newest-exchange-first grouping. Each saved paired slot
-   remains separate even when strategies finish out of order. */
-.session-log-page .session-transcript-events { display: grid; gap: .65rem; padding: 0; list-style: none; }
-.session-log-page .session-transcript-turn {
-  list-style: none; padding: .65rem .85rem; margin: 0; border-radius: 8px;
-  background: #211e1a; border: 1px solid #544636;
+.session-log-page .session-transcript-conversation { margin: 18px 0 30px; min-width: 0; }
+.session-log-page .session-transcript-conversation > h2 {
+  margin: 0 0 12px;
+  color: var(--sigma-copper-foreground);
+  font: 600 17px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
 }
-.session-log-page .session-transcript-turn-heading { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
-.session-log-page .session-transcript-turn-heading strong { color: #edc28e; }
-.session-log-page .session-transcript-turn-heading span,
-.session-log-page .session-transcript-turn-heading time { color: #b9afa2; font-size: 12px; }
-.session-log-page .session-transcript-turn-heading time { margin-left: auto; }
-.session-log-page .session-transcript-turn-entries { padding: 0; margin: .5rem 0 0; list-style: none; }
-.session-log-page .session-transcript-entry { margin: .35rem 0; }
+.session-log-page .session-transcript-events {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 17px;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  list-style: none;
+}
+.session-log-page .session-transcript-events > .session-transcript-turn {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  list-style: none;
+}
+.session-log-page .session-transcript-turn-entries {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.session-log-page .session-transcript-entry {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 12px 15px;
+  border: 0;
+  border-left: 3px solid #8d754f;
+  border-radius: 0 7px 7px 0;
+  background: #211e1a;
+  color: #e5ded3;
+  list-style: none;
+}
+.session-log-page .session-transcript-entry.chat-history-investigator { border-left-color: #7d9caa; }
+.session-log-page .session-transcript-entry.chat-history-skeptic { border-left-color: #c28b5c; }
+.session-log-page .session-transcript-entry.chat-history-human { border-left-color: #a891bf; }
+.session-log-page .session-transcript-entry.chat-history-supervisor { border-left-color: #8cad9f; }
+.session-log-page .session-transcript-entry-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  margin: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: #f2c48d;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button strong {
+  color: inherit;
+  font-size: .86rem;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button:hover:not(:disabled) {
+  color: #ffe0ae;
+  background: transparent;
+  border: 0;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button .disclosure-chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 150ms ease;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button .disclosure-chevron.is-expanded { transform: rotate(90deg); }
+.session-log-page .session-transcript-entry .session-transcript-entry-copy {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+}
+.session-log-page .session-transcript-entry-copy svg { width: 16px; height: 16px; }
+.session-log-page .session-transcript-entry-copy:hover:not(:disabled) { color: #ffe0ae; background: #302418; border-color: #82694b; }
+.session-log-page .session-transcript-entry-heading time {
+  margin-left: auto;
+  color: #a69d92;
+  font-size: .73rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.session-log-page .session-transcript-entry [hidden] { display: none; }
 .session-log-page .session-transcript-plain {
-  white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; padding: .15rem .45rem .3rem 1.2rem;
-  margin: .35rem 0; font: inherit; line-height: 1.5;
+  max-width: 100%;
+  max-height: none;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-x: auto;
+  background: transparent;
+  color: #e5ded3;
+  font: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
+.session-log-page .session-transcript-markdown {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+.session-log-page .session-transcript-markdown > :first-child { margin-top: 0; }
+.session-log-page .session-transcript-markdown > :last-child { margin-bottom: 0; }
+.session-log-page .session-transcript-markdown p { margin: 7px 0; }
 .session-log-page .session-transcript-markdown :is(pre, table, .katex-display) { max-width: 100%; overflow-x: auto; }
+.session-log-page .session-transcript-pagination {
+  margin: 14px 0 0;
+  color: #a69d92;
+  font-size: .83rem;
+}
+.session-log-page .session-transcript-pagination p { margin: 0 0 8px; }
+.session-log-page .session-transcript-pagination button {
+  min-height: 33px;
+  padding: 6px 11px;
+  border: 1px solid #817363;
+  border-radius: 6px;
+  background: #28231e;
+  color: #e6d2bd;
+  font: inherit;
+}
+.session-log-page .session-transcript-pagination button:hover { background: #383026; }
+@media (max-width: 550px) {
+  .session-log-page .session-transcript-entry-heading time { flex-basis: 100%; margin-left: 4px; }
+}
