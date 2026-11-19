@@ -2282,14 +2282,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }, [runningSession, busy, readError]);
   const effectiveDurationMinutes = limits?.session_duration_minutes ?? null;
   const startTurns = pendingStartSettings?.turn_limit
-    ?? (limits ? limits.research_rounds * (limits.turns_per_round ?? 3) : 9);
+    ?? 20;
   const startStrategies = confirmStart ? pendingStrategyIds.length : eligible.length;
   const startSummary = limits ? (pendingStartSettings?.unlimited_turns
     ? `Unlimited paired turns × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'}`
     : `${startTurns} paired ${startTurns === 1 ? 'turn' : 'turns'} × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'} = ${startTurns * 2 * startStrategies} maximum agent calls`) : undefined;
   useEffect(() => {
     onControlsChange({
-      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), configure: () => setSettingsDialog({ mode: 'start', initial: pendingStartSettings ?? defaultSessionSettings(limits) }), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), configure: () => setSettingsDialog({ mode: 'start', initial: pendingStartSettings ?? defaultSessionSettings() }), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
       confirmationSummary: startSummary,
       // Match the backend's queued/running slot count. The server remains
       // authoritative when another browser starts a session concurrently.
