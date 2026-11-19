@@ -114,14 +114,19 @@ export function projectTranscript(events: TranscriptEvent[], interventions: Tran
       });
       continue;
     }
-    // Display the complete human text from the saved Session, not this short event.
-    if (event.type === 'session_event' && event.event_kind === 'intervention.accepted') continue;
-    entries.push({
-      id: 'event-' + event.seq, timestamp: event.timestamp,
-      role: roleOf(event.role), title: String(event.event_kind ?? event.type).replaceAll('_', ' '),
-      text: String(event.message ?? event.status ?? ''), round: event.round,
-      strategyId: event.strategy_id, sequence: event.seq,
-    });
+    // Lifecycle/validation/step events are audit metadata, not agent replies.
+    // They often carry investigator/skeptic roles and previously appeared as
+    // repeated AI #1 / AI #2 cards within the same turn.
+    // Keep the actual Supervisor assessment, not its completion status event.
+    if (event.type === 'session_event' && event.event_kind === 'supervisor.review'
+      && roleOf(event.role) === 'supervisor') {
+      entries.push({
+        id: 'event-' + event.seq, timestamp: event.timestamp,
+        role: 'supervisor', title: 'Supervisor',
+        text: String(event.message ?? ''), round: event.round,
+        strategyId: event.strategy_id, sequence: event.seq,
+      });
+    }
   }
   interventions.forEach((intervention, index) => {
     if (!intervention.id || !intervention.submitted_at) return;
@@ -132,7 +137,27 @@ export function projectTranscript(events: TranscriptEvent[], interventions: Tran
       strategyId: intervention.target_strategy_ids?.length === 1 ? intervention.target_strategy_ids[0] : undefined,
     });
   });
-  return entries.sort((left, right) => left.timestamp.localeCompare(right.timestamp)
+  // A turn has one accepted reply per agent. Retry/failed attempts remain in
+  // the complete saved log, while the reading view prefers the last successful
+  // response (or the last interrupted attempt if no reply completed).
+  const bySlot = new Map<string, TranscriptEntry>();
+  const unpaired: TranscriptEntry[] = [];
+  for (const entry of entries) {
+    if (!['investigator', 'skeptic'].includes(entry.role)
+      || !entry.strategyId || !entry.round || entry.round < 1) {
+      unpaired.push(entry);
+      continue;
+    }
+    const slot = `${entry.strategyId}:${entry.round}:${entry.role}`;
+    const earlier = bySlot.get(slot);
+    const successful = (value: TranscriptEntry) =>
+      value.id.startsWith('response-') && value.title !== 'Provider failure';
+    if (!earlier || (successful(entry) && !successful(earlier))
+      || (successful(entry) === successful(earlier) && entry.sequence > earlier.sequence))
+      bySlot.set(slot, entry);
+  }
+  return [...unpaired, ...bySlot.values()].sort((left, right) =>
+    left.timestamp.localeCompare(right.timestamp)
     || left.sequence - right.sequence || left.id.localeCompare(right.id));
 }
 
