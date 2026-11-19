@@ -368,3 +368,38 @@
   cursor: default;
 }
 .session-page-control-error { color: #edbc77; margin: 10px 3rem; }
+
+/* The Project workspace remains mounted so Session uses its real controls.
+   Hide the underlying panes, never duplicate their control handlers. */
+.session-workspace .workspace-content > :not(.session-log-page) { display: none !important; }
+.session-workspace .session-page-header-actions .session-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.session-workspace .brainstorm-header-copy h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+.session-workspace .session-page-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.session-workspace .session-page-close svg { width: 18px; height: 18px; }
+.session-workspace .session-page-close:is(:hover, :focus-visible) {
+  border-color: #82694b;
+  color: #ffe0ae;
+  background: #302418;
+}
