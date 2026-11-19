@@ -15259,7 +15259,22 @@ async def _portfolio_supervisor_call(
                 if assessment is not None:
                     # Append the actual process observation to the existing
                     # transcript stream, preserving strategy/turn attribution.
-                    observation = str(assessment["assessment"])[:1000]
+                    dimension_labels = {
+                        "objective_alignment": "Objective alignment",
+                        "substantive_advancement": "Substantive advancement",
+                        "evidence_validation": "Evidence & validation",
+                        "research_health": "Research health",
+                    }
+                    scores = assessment.get("dimensions", {})
+                    dimension_text = "\n".join(
+                        f"{label}: {float(scores[key]):.1f}/10.0"
+                        for key, label in dimension_labels.items()
+                        if key in scores
+                    )
+                    observation = (
+                        str(assessment["assessment"])[:1000]
+                        + ("\n\n" + dimension_text if dimension_text else "")
+                    )
                     candidate = (
                         " Unverified breakthrough candidate: "
                         + str(assessment["breakthrough_detail"])[:1200]
