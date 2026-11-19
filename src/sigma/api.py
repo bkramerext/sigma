@@ -2083,8 +2083,8 @@ def export_project_session_logs(path: str, selection: Literal["latest", "all"]):
                 body,
                 media_type="text/plain; charset=utf-8",
                 headers={
-                "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
-            },
+                    "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+                },
             )
         archive = BytesIO()
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as zipped:
