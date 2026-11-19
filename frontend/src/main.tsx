@@ -2568,9 +2568,11 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
-  const [exportType, setExportType] = useState<'text' | 'html' | 'bundle'>(demo ? 'text' : 'bundle');
+  const [exportType, setExportType] = useState<'text' | 'html' | 'bundle' | 'latest-log' | 'all-logs'>(demo ? 'text' : 'bundle');
   const isReport = exportType === 'text' || exportType === 'html';
+  const isLog = exportType === 'latest-log' || exportType === 'all-logs';
   const reportFormat = exportType === 'text' ? 'txt' : 'html';
+  const extension = exportType === 'bundle' ? 'json' : exportType === 'all-logs' ? 'zip' : exportType === 'latest-log' ? 'log' : reportFormat;
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -2588,28 +2590,26 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
     event.preventDefault();
     if (submitting.current) return;
     const chosen = filename.trim();
-    const stem = chosen.replace(/\.(json|txt|html|tex|pdf)$/i, '');
+    const stem = chosen.replace(/\.(json|txt|html|tex|pdf|log|zip)$/i, '');
     if (!stem || stem === '.' || stem === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(stem)) {
       setError('Enter a filename stem without path separators or reserved characters.');
       return;
     }
-    const extension = exportType === 'bundle' ? 'json' : reportFormat;
     const downloadName = `${stem}.${extension}`;
-    const opened = openInTab && exportType !== 'bundle' ? window.open('about:blank', '_blank') : null;
+    const opened = openInTab && !isLog && exportType !== 'bundle' ? window.open('about:blank', '_blank') : null;
     if (opened) opened.opener = null;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const route = demo ? '/api/cloud-demo/report' : (exportType === 'bundle' ? '/api/projects/export' : '/api/projects/export/report');
-      const query = new URLSearchParams({ ...(!demo ? { path } : {}), ...(isReport ? { format: reportFormat } : {}) });
+      const route = demo ? '/api/cloud-demo/report' : exportType === 'bundle' ? '/api/projects/export' : isLog ? '/api/projects/export/session-logs' : '/api/projects/export/report';
+      const query = new URLSearchParams({ ...(!demo ? { path } : {}), ...(isReport ? { format: reportFormat } : {}), ...(isLog ? { selection: exportType === 'latest-log' ? 'latest' : 'all' } : {}) });
       const suffix = query.toString();
       const response = await fetch(`${route}${suffix ? `?${suffix}` : ''}`, { cache: 'no-store' });
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
       }
-      let content: string;
-      content = await response.text();
-      if (opened && !opened.closed) {
+      const content = isLog ? await response.blob() : await response.text();
+      if (opened && !opened.closed && typeof content === 'string') {
         if (exportType === 'html') opened.document.open(), opened.document.write(content), opened.document.close();
         else {
           opened.document.title = `${title} — ${exportType === 'bundle' ? 'Project file' : 'Research Report'}`;
@@ -2619,13 +2619,13 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
           opened.document.body.replaceChildren(pre);
         }
       }
-      const mimeType = exportType === 'bundle' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
-      const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+      const mimeType = exportType === 'bundle' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : exportType === 'all-logs' ? 'application/zip' : 'text/plain;charset=utf-8';
+      const url = URL.createObjectURL(typeof content === 'string' ? new Blob([content], { type: mimeType }) : content);
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
       document.body.appendChild(link); link.click(); link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      if (openInTab && exportType !== 'bundle' && (!opened || opened.closed)) {
+      if (openInTab && !isLog && exportType !== 'bundle' && (!opened || opened.closed)) {
         setError('The browser blocked or closed the new tab. The file was still downloaded.');
       } else onCancel();
     } catch (cause) { if (opened && !opened.closed) opened.close(); setError(errorMessage(cause)); }
@@ -2647,12 +2647,14 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
           {!demo && <label><input type="radio" name="export-type" value="bundle" checked={exportType === 'bundle'} onChange={() => setExportType('bundle')}/> Importable project bundle</label>}
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text report</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
+          {!demo && <label><input type="radio" name="export-type" value="latest-log" checked={exportType === 'latest-log'} onChange={() => setExportType('latest-log')}/> Latest session log</label>}
+          {!demo && <label><input type="radio" name="export-type" value="all-logs" checked={exportType === 'all-logs'} onChange={() => setExportType('all-logs')}/> All session logs (ZIP)</label>}
         </fieldset>
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
-          onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex|pdf)$/i, '')); setError(''); }}/>
-          <span aria-hidden="true">.{exportType === 'bundle' ? 'json' : reportFormat}</span></div>
-        {exportType !== 'bundle' && <label className="export-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>}
+          onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex|pdf|log|zip)$/i, '')); setError(''); }}/>
+          <span aria-hidden="true">.{extension}</span></div>
+        {!isLog && exportType !== 'bundle' && <label className="export-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
     </form>
