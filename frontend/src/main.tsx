@@ -9958,9 +9958,7 @@ function App() {
   const cloud = useCloudIdentity();
   const [openedView, setOpenedView] = useState<ProjectView | null>(null);
   const [openedFromCache, setOpenedFromCache] = useState(false);
-  const [sessionPageState, setSessionPageState] = useState<import('./SessionLogPage').SessionState | null>(null);
-  const [sessionControlBusy, setSessionControlBusy] = useState(false);
-  const [sessionControlError, setSessionControlError] = useState('');
+
   const [artworkDecoded, setArtworkDecoded] = useState(projectArtworkReady);
   const [artworkError, setArtworkError] = useState('');
   const cacheScope = projectCacheScope(cloud);
@@ -10168,38 +10166,13 @@ function App() {
       event.preventDefault();
       navigate(back);
     };
-    const isRunning = sessionPageState?.status === 'running' || sessionPageState?.status === 'queued';
-    const canResume = sessionPageState && ['stopped', 'paused', 'failed', 'ended'].includes(sessionPageState.status);
-    const control = async (action: 'stop' | 'resume') => {
-      if (!sessionId || !path || sessionControlBusy) return;
-      setSessionControlBusy(true); setSessionControlError('');
-      try {
-        const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/control`, {
-          method: 'POST', cache: 'no-store',
-          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-          body: JSON.stringify({ path, action, ...(action === 'stop' ? { request_only: true } : { browser_presence_required: true }) }),
-        });
-        const value = await response.json();
-        if (!response.ok) throw new Error(value.detail ?? value.error ?? 'Session control failed.');
-        setSessionPageState(current => current ? { ...current, status: value.status ?? current.status } : current);
-      } catch (cause) {
-        setSessionControlError(errorMessage(cause));
-      } finally { setSessionControlBusy(false); }
-    };
-    const title = sessionPageState
-      ? `Session ${sessionPageState.number}${sessionPageState.session_settings?.name ? ' · ' + sessionPageState.session_settings.name : ''}`
-      : 'Session';
-    const actions = <span className="session-page-header-actions">
-      {canResume && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Resume session" data-tooltip="Resume session" disabled={sessionControlBusy} onClick={() => { void control('resume'); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
-      {isRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session" data-tooltip="Stop session" disabled={sessionControlBusy} onClick={() => { void control('stop'); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
-      <button type="button" className="session-page-close" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => navigate(back)}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
-    </span>;
-    return <div className="workspace-page brainstorm-workspace session-workspace">
-      <Header goHome={returnProject} homeHref={back} close={{ action: () => navigate(back), busy: false }} projectArtwork chatPage sessionPage sessionTitle={title} sessionActions={actions}/>
-      {sessionControlError && <p role="alert" className="session-page-control-error">{sessionControlError}</p>}
-      <SessionLogPage key={sessionId} onSessionChange={setSessionPageState}/>
+    return <main className="workspace-page session-workspace">
+      <ResearchDisplayBoundary key={location} label="Session workspace"><ProjectScreen
+        path={path} sessionPageId={sessionId} onViewChange={rememberProject}
+        onClose={() => navigate(back)} goHome={returnProject}
+      /></ResearchDisplayBoundary>
       <FloatingTooltip/>
-    </div>;
+    </main>;
   }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
