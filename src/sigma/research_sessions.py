@@ -15267,9 +15267,8 @@ async def _portfolio_supervisor_call(
                         for key, label in dimension_labels.items()
                         if key in scores
                     )
-                    observation = (
-                        str(assessment["assessment"])[:1000]
-                        + ("\n\n" + dimension_text if dimension_text else "")
+                    observation = str(assessment["assessment"])[:1000] + (
+                        "\n\n" + dimension_text if dimension_text else ""
                     )
                     candidate = (
                         " Unverified breakthrough candidate: "
