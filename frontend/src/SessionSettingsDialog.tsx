@@ -112,12 +112,12 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
           </label>
         </div>
         <div className="session-settings-field session-settings-supervisor">
-          <label htmlFor="session-settings-supervisor">Supervisor mode</label>
-          <SigmaSelect id="session-settings-supervisor" ariaLabel="Supervisor mode"
+          <label htmlFor="session-settings-supervisor">Steering level</label>
+          <SigmaSelect id="session-settings-supervisor" ariaLabel="Steering level"
             value={draft.supervisor_mode}
             options={[{ value: 'none', label: 'None' }, { value: 'light', label: 'Light' }, { value: 'heavy', label: 'Heavy' }]}
             onChange={value => setDraft(current => ({ ...current, supervisor_mode: value as SupervisorMode }))}/>
-          <small className="session-settings-supervisor-help">Light gently nudges clarity when needed; Heavy watches more actively for drift and repetition. Neither directs the research.</small>
+          <small className="session-settings-supervisor-help">The Supervisor always observes. None offers no nudges; Light gently prompts clarity; Heavy watches more actively for drift and repetition. Neither directs the research.</small>
         </div>
         <label className="session-settings-check session-settings-brainstorm">
           <span><input type="checkbox" checked={draft.brainstorm_mode}
