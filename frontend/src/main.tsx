@@ -2348,6 +2348,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         {sessionControls.confirming ? sessionControls.starting
           ? null // The pending Session row owns the one visible green pulse.
           : <>
+          <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.configure}>Settings</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
         </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={sessionControls.play}><CirclePlusIcon/></button>}
