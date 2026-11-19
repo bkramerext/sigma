@@ -108,7 +108,7 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
           <label className="session-settings-check session-settings-unlimited">
             <input type="checkbox" checked={draft.unlimited_turns}
               onChange={event => setDraft(current => ({ ...current, unlimited_turns: event.target.checked }))}/>
-            Unlimited turns
+            Unlimited
           </label>
         </div>
         <div className="session-settings-field session-settings-supervisor">
@@ -117,6 +117,7 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
             value={draft.supervisor_mode}
             options={[{ value: 'none', label: 'None' }, { value: 'light', label: 'Light' }, { value: 'heavy', label: 'Heavy' }]}
             onChange={value => setDraft(current => ({ ...current, supervisor_mode: value as SupervisorMode }))}/>
+          <small className="session-settings-supervisor-help">Light gently nudges clarity when needed; Heavy watches more actively for drift and repetition. Neither directs the research.</small>
         </div>
         <label className="session-settings-check session-settings-brainstorm">
           <span><input type="checkbox" checked={draft.brainstorm_mode}
