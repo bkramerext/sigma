@@ -1,4 +1,5 @@
-import { useRef, useState, useEffect, type FormEvent } from 'react';
+import { useRef, useState, useEffect } from 'react';
+import DialogDismissButton from './DialogDismissButton';
 import SigmaSelect from './SigmaSelect';
 import './session-settings.css';
 
@@ -21,37 +22,64 @@ export function defaultSessionSettings(limits?: { research_rounds: number; turns
   };
 }
 
-export default function SessionSettingsDialog({ settings, mode, minTurns = 0, onCancel, onApply }: {
+/** Save valid edits as they are made; the X also flushes the last pending change. */
+export default function SessionSettingsDialog({ settings, mode, minTurns = 0, onClose, onApply }: {
   settings: SessionSettings;
   mode: 'start' | 'edit';
   minTurns?: number;
-  onCancel: () => void;
+  onClose: (next: SessionSettings) => void;
   onApply: (next: SessionSettings) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<SessionSettings>({ ...settings });
   const [turns, setTurns] = useState(String(settings.turn_limit));
+  const lastSubmitted = useRef(JSON.stringify({ ...settings, name: settings.name.trim() }));
+  const onApplyRef = useRef(onApply);
+  onApplyRef.current = onApply;
+  const latest = useRef(draft);
+  latest.current = draft;
+
   useEffect(() => {
     const element = dialog.current;
     if (!element) return;
     element.showModal();
     return () => { if (element.open) element.close(); };
   }, []);
-  const parsedTurns = Number(turns);
-  const valid = (draft.unlimited_turns || (Number.isInteger(parsedTurns)
-    && parsedTurns >= Math.max(1, minTurns) && parsedTurns <= 1200))
-    && draft.name.length <= 200;
-  const commit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!valid) return;
-    onApply({ ...draft, turn_limit: draft.unlimited_turns
-      ? Math.max(1, minTurns, Number.isInteger(parsedTurns) ? parsedTurns : 1)
-      : parsedTurns, name: draft.name.trim() });
+
+  useEffect(() => {
+    const next = { ...draft, name: draft.name.trim() };
+    const serialized = JSON.stringify(next);
+    if (serialized === lastSubmitted.current) return;
+    const timer = window.setTimeout(() => {
+      lastSubmitted.current = serialized;
+      onApplyRef.current(next);
+    }, mode === 'edit' ? 500 : 150);
+    return () => window.clearTimeout(timer);
+  }, [draft, mode]);
+
+  const close = () => {
+    const next = { ...latest.current, name: latest.current.name.trim() };
+    const serialized = JSON.stringify(next);
+    if (serialized !== lastSubmitted.current) {
+      lastSubmitted.current = serialized;
+      onApplyRef.current(next);
+    }
+    onClose(next);
   };
-  return <dialog ref={dialog} className="project-settings-dialog session-settings-dialog" aria-labelledby="session-settings-title"
-    onCancel={event => { event.preventDefault(); onCancel(); }}>
-    <form onSubmit={commit}>
-      <header className="session-settings-header"><h2 id="session-settings-title">Session Settings</h2></header>
+  const minAllowedTurns = Math.max(1, minTurns);
+  const updateTurns = (value: string) => {
+    setTurns(value);
+    const parsed = Number(value);
+    if (value.trim() && Number.isInteger(parsed) && parsed >= minAllowedTurns && parsed <= 1200)
+      setDraft(current => ({ ...current, turn_limit: parsed }));
+  };
+  return <dialog ref={dialog} className="project-settings-dialog session-settings-dialog"
+    aria-labelledby="session-settings-title" onCancel={event => { event.preventDefault(); close(); }}>
+    <form onSubmit={event => { event.preventDefault(); close(); }}>
+      <header className="settings-header session-settings-header">
+        <h2 id="session-settings-title">Session Settings</h2>
+        <DialogDismissButton label="Close Session Settings" onClick={close}/>
+      </header>
       <div className="session-settings-body">
         <label className="session-settings-field" htmlFor="session-settings-name">
           <span>Session name (optional)</span>
@@ -61,9 +89,10 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
         <div className="session-settings-turn-row">
           <label className="session-settings-field session-settings-turn-limit" htmlFor="session-settings-turns">
             <span>Turns</span>
-            <input id="session-settings-turns" type="number" min={Math.max(1, minTurns)} max={1200} step={1}
+            <input id="session-settings-turns" type="number" min={minAllowedTurns} max={1200} step={1}
               disabled={draft.unlimited_turns} value={turns}
-              onChange={event => setTurns(event.target.value)}/>
+              onChange={event => updateTurns(event.target.value)}
+              onBlur={() => setTurns(String(draft.turn_limit))}/>
           </label>
           <label className="session-settings-check session-settings-unlimited">
             <input type="checkbox" checked={draft.unlimited_turns}
@@ -85,10 +114,6 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
           <small>Two investigators instead of an investigator/skeptic pair.</small>
         </label>
       </div>
-      <footer>
-        <button type="button" className="session-settings-cancel" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="session-settings-apply" disabled={!valid}>{mode === 'start' ? 'Save' : 'Save'}</button>
-      </footer>
     </form>
   </dialog>;
 }
