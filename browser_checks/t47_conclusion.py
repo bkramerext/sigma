@@ -414,9 +414,24 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     assert settings_bounds and settings_bounds["height"] < 470, settings_bounds
                     expect(settings_dialog.get_by_role("button", name="Save")).to_have_count(0)
                     expect(settings_dialog.get_by_role("button", name="Cancel")).to_have_count(0)
-                    expect(
-                        settings_dialog.get_by_role("combobox", name="Supervisor mode")
-                    ).to_be_visible()
+                    supervisor = settings_dialog.get_by_role("combobox", name="Supervisor mode")
+                    expect(supervisor).to_be_visible()
+                    expect(settings_dialog.get_by_text("Unlimited", exact=True)).to_be_visible()
+                    expect(settings_dialog.get_by_text("Light gently nudges clarity")).to_be_visible()
+                    turns_input = settings_dialog.locator("#session-settings-turns")
+                    assert turns_input.evaluate(
+                        "el => el.getBoundingClientRect().width <= 90"
+                    ), "Turn input should stay compact"
+                    assert supervisor.evaluate(
+                        "el => getComputedStyle(el).paddingLeft === '11px'"
+                    ), "Supervisor selected value must align with Turns input"
+                    supervisor.click()
+                    option = page.get_by_role("option", name="Light")
+                    expect(option).to_be_visible()
+                    assert option.evaluate(
+                        "el => getComputedStyle(el).paddingLeft === '11px'"
+                    ), "Supervisor options must align with the selected value"
+                    supervisor.click()
                     settings_dialog.get_by_role("button", name="Close Session Settings").click()
                     expect(settings_dialog).to_have_count(0)
                 expect(prelude).to_contain_text("0 reported completed of 0 identified executions")
