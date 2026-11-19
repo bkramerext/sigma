@@ -7188,15 +7188,10 @@ async def start_session(
                     "Browser disconnected before research admission; no call was dispatched"
                 )
             limits = _session_start_limits(get_limits(view.path), expected_limits)
-            flat_turn_protocol = limits.get("scheduler_version") == 2 and (
-                session_settings is not None or expected_limits is None
-            )
-            if flat_turn_protocol:
-                # Ordinary new Sessions receive the global 20-turn default,
-                # including callers that bypass Session Settings. Explicit
-                # version-2 expected limits remain authoritative for API
-                # callers and scheduler-parity fixtures.
-
+            if session_settings is not None and limits.get("scheduler_version") == 2:
+                # The new UI always supplies its flat turn count, defaulting to
+                # 20. Historical callers that omit Session Settings retain
+                # their explicit project limits and scheduler semantics.
                 turn_limit = frozen_session_settings["turn_limit"]
                 limits = {
                     **limits,
@@ -7288,7 +7283,7 @@ async def start_session(
                 "schema_version": 1,
                 **(
                     {"session_settings": frozen_session_settings}
-                    if flat_turn_protocol or session_settings is not None
+                    if session_settings is not None
                     else {}
                 ),
                 **(
@@ -7296,7 +7291,7 @@ async def start_session(
                         "scheduler_version": 2,
                         "turns_per_round": limits["turns_per_round"],
                         "research_round_limit": limits["research_rounds"],
-                        **({"turns_are_flat": True} if flat_turn_protocol else {}),
+                        **({"turns_are_flat": True} if session_settings is not None else {}),
                     }
                     if paired_scheduler
                     else {}
