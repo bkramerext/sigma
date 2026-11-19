@@ -204,6 +204,18 @@ export default function SessionLogPage() {
   );
   const shownGroups = allGroups.slice(0, visibleGroupCount);
   const hiddenGroups = allGroups.length - shownGroups.length;
+  const strategyIds = [...new Set(allGroups.flatMap(group =>
+    group.entries.map(entry => entry.strategyId).filter((id): id is string => !!id)))].sort();
+  const strategySuffix = (group: (typeof allGroups)[number]) => {
+    const id = group.entries.find(entry => entry.strategyId)?.strategyId;
+    return id && strategyIds.length > 1 ? ` · Strategy ${strategyIds.indexOf(id) + 1}` : '';
+  };
+  const closeTranscript = () => {
+    // Opened by SessionLogButton in a separate script-created tab.
+    window.close();
+    // Browser-created/directly navigated tabs cannot always be closed by JS.
+    if (!window.closed) window.location.assign(`/?${new URLSearchParams({ path })}`);
+  };
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     return Number.isNaN(date.getTime()) ? timestamp : new Intl.DateTimeFormat(undefined, {
@@ -219,7 +231,14 @@ export default function SessionLogPage() {
   };
   return <main className="session-log-page session-conversation-page">
     <header className="session-transcript-page-header">
-      <h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1>
+      <div className="session-transcript-title-row">
+        <h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1>
+        <button type="button" className="session-transcript-close" aria-label="Close transcript"
+          data-tooltip="Close transcript" onClick={closeTranscript}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.6" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
+        </button>
+      </div>
       <p>Research conversation · {session?.status ?? 'loading'}{session?.session_settings?.brainstorm_mode ? ' · Brainstorm mode' : ''}</p>
     </header>
     {(error || markdownError) && <p role="alert">{error || markdownError}</p>}
@@ -245,6 +264,9 @@ export default function SessionLogPage() {
       <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
         aria-label="Conversation history">
         {shownGroups.map(group => <li key={group.key} className="session-transcript-turn">
+          <h3 className="session-transcript-turn-heading">
+            {group.label}{strategySuffix(group)}
+          </h3>
           <ol className="session-transcript-turn-entries">
             {group.entries.map(entry => {
               const expanded = expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry);
