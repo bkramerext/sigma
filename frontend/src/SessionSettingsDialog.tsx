@@ -28,7 +28,7 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
   mode: 'start' | 'edit';
   minTurns?: number;
   onClose: (next: SessionSettings) => void;
-  onApply: (next: SessionSettings) => void;
+  onApply: (next: SessionSettings) => void | Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<SessionSettings>({ ...settings });
@@ -37,6 +37,7 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
   const lastSubmitted = useRef(initialSettings.current);
   const onApplyRef = useRef(onApply);
   onApplyRef.current = onApply;
+  const closing = useRef(false);
   const latest = useRef(draft);
   latest.current = draft;
 
@@ -58,17 +59,23 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
     return () => window.clearTimeout(timer);
   }, [draft, mode]);
 
-  const close = () => {
-    const next = { ...latest.current, name: latest.current.name.trim() };
-    const serialized = JSON.stringify(next);
-    // Flush the final value even when a background save was already queued:
-    // the last request is authoritative and survives closing the dialog.
-    if (serialized !== lastSubmitted.current ||
-      (mode === 'edit' && serialized !== initialSettings.current)) {
-      lastSubmitted.current = serialized;
-      onApplyRef.current(next);
+  const close = async () => {
+    if (closing.current) return;
+    closing.current = true;
+    try {
+      const next = { ...latest.current, name: latest.current.name.trim() };
+      const serialized = JSON.stringify(next);
+      // Queue the final snapshot behind earlier auto-saves, and wait before
+      // exposing Resume; it must not run using stale Session settings.
+      if (serialized !== lastSubmitted.current ||
+        (mode === 'edit' && serialized !== initialSettings.current)) {
+        lastSubmitted.current = serialized;
+        await onApplyRef.current(next);
+      }
+      onClose(next);
+    } finally {
+      closing.current = false;
     }
-    onClose(next);
   };
   const minAllowedTurns = Math.max(1, minTurns);
   const updateTurns = (value: string) => {
@@ -78,11 +85,11 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
       setDraft(current => ({ ...current, turn_limit: parsed }));
   };
   return <dialog ref={dialog} className="project-settings-dialog session-settings-dialog"
-    aria-labelledby="session-settings-title" onCancel={event => { event.preventDefault(); close(); }}>
+    aria-labelledby="session-settings-title" onCancel={event => { event.preventDefault(); void close(); }}>
     <form onSubmit={event => event.preventDefault()}>
       <header className="settings-header session-settings-header">
         <h2 id="session-settings-title">Session Settings</h2>
-        <DialogDismissButton label="Close Session Settings" onClick={close}/>
+        <DialogDismissButton label="Close Session Settings" onClick={() => { void close(); }}/>
       </header>
       <div className="session-settings-body">
         <label className="session-settings-field" htmlFor="session-settings-name">
