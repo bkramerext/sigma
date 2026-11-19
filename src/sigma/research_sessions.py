@@ -922,7 +922,7 @@ def _session_configuration(
     if type(name) is not str or len(name) > 200:
         raise ProjectError("Session name must be at most 200 characters")
     if type(mode) is not str or mode not in {"none", "light", "heavy"}:
-        raise ProjectError("Supervisor mode must be None, Light, or Heavy")
+        raise ProjectError("Steering level must be None, Light, or Heavy")
     for key in ("brainstorm_mode", "unlimited_turns", "single_round_unlimited_turns"):
         if key in value and type(value[key]) is not bool:
             raise ProjectError("Session configuration checkboxes must be boolean")
@@ -984,7 +984,7 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
     reserved_turns = int(record.get("call_ceiling_cycles", record["cycle_limit"]))
     pair_calls = 2 * len(branches) if next_limit > reserved_turns else 0
     supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
-    supervisor_enabled = settings.get("supervisor_mode") in {"light", "heavy"}
+    supervisor_enabled = True
     supervisor_target = next_limit * len(branches) if supervisor_enabled else 0
     added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
     added_calls = pair_calls + added_supervisor_calls
@@ -5950,7 +5950,7 @@ async def update_session_configuration(
             supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
             supervisor_target = (
                 new_cycles * branches_count
-                if new_settings["supervisor_mode"] in {"light", "heavy"}
+                if isinstance(new_settings, dict)
                 else 0
             )
             added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
@@ -7259,7 +7259,7 @@ async def start_session(
             supervisor_ceiling_calls = (
                 limits["research_rounds"] * limits["turns_per_round"] * len(selected_ids)
                 if paired_scheduler
-                and frozen_session_settings["supervisor_mode"] in {"light", "heavy"}
+                and session_settings is not None
                 else 0
             )
             call_ceiling = (
@@ -14862,7 +14862,7 @@ async def _supervise_completed_pairs(session_id: str, path: str, state_lock: asy
         if (
             record.get("status") not in {"running", "queued"}
             or not isinstance(settings, dict)
-            or settings.get("supervisor_mode") not in {"light", "heavy"}
+            or settings.get("supervisor_mode") not in {"none", "light", "heavy"}
         ):
             return
         reviews = {
@@ -14953,7 +14953,7 @@ async def _portfolio_supervisor_call(
             record = _read(path, session_id)
             settings = record.get("session_settings")
             mode = settings.get("supervisor_mode") if isinstance(settings, dict) else "none"
-            if mode not in {"light", "heavy"} or record["status"] not in {
+            if mode not in {"none", "light", "heavy"} or record["status"] not in {
                 "running",
                 "queued",
             }:
