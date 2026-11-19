@@ -665,6 +665,7 @@ def test_session_log_download_route_content_and_name() -> None:
 def test_project_session_log_exports_latest_and_all() -> None:
     from io import BytesIO
     from zipfile import ZipFile
+
     from sigma import api
 
     older = "11000000-0000-4000-8000-000000000001"
@@ -675,15 +676,22 @@ def test_project_session_log_exports_latest_and_all() -> None:
         {"id": older, "session_number": 2, "updated_at": "2026-11-19"},
     ]
     records = {
-        older: {"events": [{"seq": 1, "type": "session_event", "message": "older diagnostic"}],
-                "session": {"number": 2, "status": "stopped"},
-                "project_title": "Test", "saved_short_name": "Test",
-                "reference_preparation": session_log.reference_preparation_summary({})},
-        newer: {"events": [{"seq": 1, "type": "session_event", "message": "newer diagnostic"}],
-                "session": {"number": 9, "status": "completed"},
-                "project_title": "Test", "saved_short_name": "Test",
-                "reference_preparation": session_log.reference_preparation_summary({})},
+        older: {
+            "events": [{"seq": 1, "type": "session_event", "message": "older diagnostic"}],
+            "session": {"number": 2, "status": "stopped"},
+            "project_title": "Test",
+            "saved_short_name": "Test",
+            "reference_preparation": session_log.reference_preparation_summary({}),
+        },
+        newer: {
+            "events": [{"seq": 1, "type": "session_event", "message": "newer diagnostic"}],
+            "session": {"number": 9, "status": "completed"},
+            "project_title": "Test",
+            "saved_short_name": "Test",
+            "reference_preparation": session_log.reference_preparation_summary({}),
+        },
     }
+
     def read(_path: str, session_id: str, _after: int = 0) -> dict:
         return records[session_id]
 
