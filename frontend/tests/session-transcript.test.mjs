@@ -96,3 +96,26 @@ test('Supervisor groups after its paired agents and the newest exchange displays
   assert.deepEqual(groups[1].entries.map(entry => entry.role), ['investigator', 'skeptic', 'supervisor']);
   assert.deepEqual(groups[1].entries.map(entry => entry.text), ['AI one reply', 'AI two reply', 'Process-only assessment']);
 });
+
+test('reading view keeps one accepted reply per turn and omits audit chatter', () => {
+  const entries = projectTranscript([
+    { seq: 1, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'first', role: 'investigator', round: 1, strategy_id: 'x' },
+    { seq: 2, timestamp: '2026-11-18T01:00:02Z', type: 'provider_failure', request_id: 'first', provider_error: 'transient failure' },
+    { seq: 3, timestamp: '2026-11-18T01:00:03Z', type: 'session_event', role: 'investigator', event_kind: 'call.started', round: 1, message: 'Call started' },
+    { seq: 4, timestamp: '2026-11-18T01:00:04Z', type: 'provider_request', request_id: 'retry', role: 'investigator', round: 1, strategy_id: 'x' },
+    { seq: 5, timestamp: '2026-11-18T01:00:05Z', type: 'provider_response', request_id: 'retry', response: { output_text: 'Substantive AI one result' } },
+    { seq: 6, timestamp: '2026-11-18T01:00:06Z', type: 'session_event', role: 'investigator', event_kind: 'call.completed', round: 1, message: 'Call accepted' },
+    { seq: 7, timestamp: '2026-11-18T01:00:07Z', type: 'provider_request', request_id: 'peer', role: 'skeptic', round: 1, strategy_id: 'x' },
+    { seq: 8, timestamp: '2026-11-18T01:00:08Z', type: 'provider_response', request_id: 'peer', response: { output_text: 'Substantive AI two result' } },
+    { seq: 9, timestamp: '2026-11-18T01:00:09Z', type: 'session_event', role: 'supervisor', event_kind: 'supervisor.completed', round: 1, message: 'Supervisor completed' },
+    { seq: 10, timestamp: '2026-11-18T01:00:10Z', type: 'session_event', role: 'supervisor', event_kind: 'supervisor.review', round: 1, strategy_id: 'x', message: 'Process check' },
+  ]);
+  assert.deepEqual(entries.map(entry => entry.text), [
+    'Substantive AI one result', 'Substantive AI two result', 'Process check',
+  ]);
+  const turns = groupTranscriptTurns(entries);
+  assert.deepEqual(turns.map(group => group.label), ['Turn 1']);
+  assert.deepEqual(turns[0].entries.map(entry => entry.role), [
+    'investigator', 'skeptic', 'supervisor',
+  ]);
+});
