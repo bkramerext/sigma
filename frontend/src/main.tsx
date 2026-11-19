@@ -2329,7 +2329,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }}
       onApply={next => {
         if (settingsDialog.mode === 'start') setPendingStartSettings(next);
-        else if (settingsDialog.sessionId) void saveSessionSettings(settingsDialog.sessionId, next);
+        else if (settingsDialog.sessionId) return saveSessionSettings(settingsDialog.sessionId, next);
       }}/>}
     <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} anchorSnapshot={resumePlayAnchorSnapshot.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
