@@ -88,9 +88,7 @@ def parse_assessment(raw: str) -> dict[str, Any]:
         not isinstance(dimensions, dict)
         or set(dimensions) != expected_dimensions
         or any(
-            type(value) not in (int, float)
-            or not math.isfinite(value)
-            or not 0 <= value <= 10
+            type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 10
             for value in dimensions.values()
         )
     ):
@@ -124,7 +122,9 @@ def parse_assessment(raw: str) -> dict[str, Any]:
         raise ProjectError("Non-breakthrough assessments cannot contain a candidate.")
     return {
         "assessment": assessment.strip(),
-        "dimensions": {key: round(float(dimensions[key]), 1) for key in sorted(expected_dimensions)},
+        "dimensions": {
+            key: round(float(dimensions[key]), 1) for key in sorted(expected_dimensions)
+        },
         "action": action,
         "recipient": recipient,
         "guidance": guidance.strip(),
