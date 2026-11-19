@@ -2026,10 +2026,10 @@ def _session_diagnostic_export(path: str, session_id: str) -> tuple[str, str]:
     except (ProjectError, OSError, ValueError):
         related = []
     if related:
-        body += "\\n## Exportable UI diagnostics\\n\\n"
+        body += "\n## Exportable UI diagnostics\n\n"
         for item in related:
             body += (
-                f"- {item['timestamp']} · {item['code']} · {item['id']}: {item['message']}\\n"
+                f"- {item['timestamp']} · {item['code']} · {item['id']}: {item['message']}\n"
             )
     filename = session_log.export_filename(
         result["saved_short_name"], result["project_title"], result["session"]["number"]
@@ -2054,7 +2054,7 @@ def research_session_log_download_view(session_id: str, path: str, format: str =
         return Response(
             body,
             media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=\\\"{ascii_name}\\\"; filename*=UTF-8''{quote(filename)}"},
+            headers={"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"},
         )
     except (ProjectError, ValueError, OSError) as exc:
         raise HTTPException(404, "Session log not found or access denied.") from exc
@@ -2077,7 +2077,7 @@ def export_project_session_logs(path: str, selection: Literal["latest", "all"]):
             return Response(
                 body,
                 media_type="text/plain; charset=utf-8",
-                headers={"Content-Disposition": f"attachment; filename=\\\"{ascii_name}\\\"; filename*=UTF-8''{quote(filename)}"},
+                headers={"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"},
             )
         archive = BytesIO()
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as zipped:
