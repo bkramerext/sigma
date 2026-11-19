@@ -15167,6 +15167,11 @@ async def _portfolio_supervisor_call(
             # assessment does not make a completed, metered response uncertain.
             text = chat._response_text(raw, model)
             assessment = session_supervisor.parse_assessment(text)
+            # Observation-only steering never delivers model-suggested guidance.
+            if mode == "none":
+                assessment["action"] = "continue"
+                assessment["recipient"] = None
+                assessment["guidance"] = ""
         except asyncio.CancelledError:
             failure_reason = "Process review interrupted; provider usage is uncertain."
             raise
