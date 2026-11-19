@@ -1918,7 +1918,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }
 
   async function start(selectedSettings?: SessionSettings) {
-    const sessionSettings = selectedSettings ?? pendingStartSettings;
+    const sessionSettings = selectedSettings ?? pendingStartSettings ?? defaultSessionSettings();
     if (guest) { setConfirmStart(false); setGuestSessionCard(true); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
