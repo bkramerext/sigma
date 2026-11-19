@@ -145,6 +145,11 @@ export function convertibleTranscriptEntry(entry: TranscriptEntry): boolean {
     entry.text !== 'The response text was not retained in this historical log.';
 }
 
+/** Brainstorm's canonical disclosure state: only Supervisor guidance starts open. */
+export function transcriptDefaultExpanded(entry: Pick<TranscriptEntry, 'role'>): boolean {
+  return entry.role === 'supervisor';
+}
+
 export type TranscriptTurnGroup = {
   key: string; label: string; latestTimestamp: string; entries: TranscriptEntry[];
 };
