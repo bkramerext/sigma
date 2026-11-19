@@ -404,6 +404,19 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(pause_notice).to_contain_text("Next:")
                 expect(outcome.locator(".research-pause-guidance")).to_have_count(0)
                 expect(row.get_by_role("button", name="Resume")).to_be_visible()
+                if session is sessions[0]:
+                    # Session Settings is content-height, auto-saving and X-only.
+                    # Guard against the former stretched grid with huge blank gaps.
+                    row.locator("button.session-settings-action").click()
+                    settings_dialog = page.get_by_role("dialog", name="Session Settings")
+                    expect(settings_dialog).to_be_visible()
+                    settings_bounds = settings_dialog.bounding_box()
+                    assert settings_bounds and settings_bounds["height"] < 470, settings_bounds
+                    expect(settings_dialog.get_by_role("button", name="Save")).to_have_count(0)
+                    expect(settings_dialog.get_by_role("button", name="Cancel")).to_have_count(0)
+                    expect(settings_dialog.get_by_role("combobox", name="Supervisor mode")).to_be_visible()
+                    settings_dialog.get_by_role("button", name="Close Session Settings").click()
+                    expect(settings_dialog).to_have_count(0)
                 expect(prelude).to_contain_text("0 reported completed of 0 identified executions")
                 expect(prelude).to_contain_text(
                     "No local Python or Sage computation is recorded for this session."
