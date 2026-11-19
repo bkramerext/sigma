@@ -661,6 +661,53 @@ def test_session_log_download_route_content_and_name() -> None:
     assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers["content-disposition"]
 
 
+
+def test_project_session_log_exports_latest_and_all() -> None:
+    from io import BytesIO
+    from zipfile import ZipFile
+    from sigma import api
+
+    older = "11000000-0000-4000-8000-000000000001"
+    newer = "22000000-0000-4000-8000-000000000002"
+    # The older session was resumed more recently; creation order still wins.
+    sessions = [
+        {"id": newer, "session_number": 9, "updated_at": "2026-11-18"},
+        {"id": older, "session_number": 2, "updated_at": "2026-11-19"},
+    ]
+    records = {
+        older: {"events": [{"seq": 1, "type": "session_event", "message": "older diagnostic"}],
+                "session": {"number": 2, "status": "stopped"},
+                "project_title": "Test", "saved_short_name": "Test",
+                "reference_preparation": session_log.reference_preparation_summary({})},
+        newer: {"events": [{"seq": 1, "type": "session_event", "message": "newer diagnostic"}],
+                "session": {"number": 9, "status": "completed"},
+                "project_title": "Test", "saved_short_name": "Test",
+                "reference_preparation": session_log.reference_preparation_summary({})},
+    }
+    def read(_path: str, session_id: str, _after: int = 0) -> dict:
+        return records[session_id]
+
+    with (
+        patch.object(api, "inspect_project"),
+        patch.object(api.research_sessions, "list_sessions", return_value=sessions),
+        patch.object(api.session_log, "read", side_effect=read),
+        patch.object(api.project_diagnostics, "read", return_value=[]),
+    ):
+        latest = api.export_project_session_logs("/fixture", "latest")
+        assert latest.media_type == "text/plain; charset=utf-8"
+        assert b"newer diagnostic" in latest.body
+        assert b"older diagnostic" not in latest.body
+
+        all_logs = api.export_project_session_logs("/fixture", "all")
+        assert all_logs.media_type == "application/zip"
+        with ZipFile(BytesIO(all_logs.body)) as archive:
+            names = archive.namelist()
+            assert len(names) == 2
+            assert len(set(names)) == 2
+            assert any("older diagnostic" in archive.read(name).decode() for name in names)
+            assert any("newer diagnostic" in archive.read(name).decode() for name in names)
+
+
 def test_session_status_and_correlated_errors_match_export() -> None:
     from sigma import api
 
