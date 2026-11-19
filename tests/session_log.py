@@ -961,6 +961,7 @@ def test_supervisor_response_validation_and_process_guidance() -> None:
     from sigma.projects import ProjectError
 
     answer = {
+        "dimensions": {"objective_alignment": 4.0, "substantive_advancement": 2.5, "evidence_validation": 1.0, "research_health": 5.0},
         "assessment": "The agents have clarified their own assumptions.",
         "action": "nudge",
         "recipient": "ai_2",
@@ -969,6 +970,14 @@ def test_supervisor_response_validation_and_process_guidance() -> None:
         "breakthrough_detail": "",
     }
     assert session_supervisor.parse_assessment(json.dumps(answer)) == answer
+    bad_scores = dict(answer)
+    bad_scores["dimensions"] = {**answer["dimensions"], "evidence_validation": 11.0}
+    try:
+        session_supervisor.parse_assessment(json.dumps(bad_scores))
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("An out-of-range dimension score was accepted")
     assert "State the uncertainty" in research_sessions._role_instructions(
         "skeptic",
         {
