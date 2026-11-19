@@ -936,9 +936,11 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(page).to_have_url(re.compile(r"/session\\?"))
             logo = page.get_by_role("link", name="Go back to project page")
             expect(logo).to_have_attribute("href", re.compile(r"/project\\?"))
-            expect(page.locator("#session-page-controls").get_by_role(
-                "button", name=f"Resume Session {session['session_number']}"
-            )).to_be_visible(timeout=15000)
+            expect(
+                page.locator("#session-page-controls").get_by_role(
+                    "button", name=f"Resume Session {session['session_number']}"
+                )
+            ).to_be_visible(timeout=15000)
             expect(page.locator(".session-transcript-turn-entries")).to_have_count(
                 page.locator(".session-transcript-turn").count()
             )
