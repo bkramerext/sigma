@@ -718,6 +718,9 @@ def test_session_status_and_correlated_errors_match_export() -> None:
 def test_flat_turn_settings_convert_legacy_rounds_without_relabeling() -> None:
     from sigma import research_sessions
 
+    # Global default applies to new Sessions only; legacy snapshots stay intact.
+    assert research_sessions._session_configuration(None)["turn_limit"] == 20
+    assert research_sessions._session_configuration({})["turn_limit"] == 20
     legacy = research_sessions._session_configuration({"research_rounds": 3, "turns_per_round": 3})
     assert legacy["turn_limit"] == 9
     assert not legacy["unlimited_turns"]
