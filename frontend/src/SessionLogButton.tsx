@@ -14,5 +14,8 @@ export default function SessionLogButton({ sessionId, sessionNumber, path }: {
     onClick={event => openReusableTab(event, `sigma-log:${path}:${sessionId}`)}
     target="_blank"
     rel="noopener noreferrer"
-  ><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 6h8M13 12h8M13 18h8M3 6h1M8 6h1M3 12h1M8 12h1M3 18h1M8 18h1"/></svg></a>;
+  ><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 2.5H6a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-11z"/>
+    <path d="M14 2.5v6h6M8 13h8M8 17h6"/>
+  </svg></a>;
 }
