@@ -396,15 +396,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert conclusion.locator("summary").inner_text().strip() == "Conclusion"
                 prelude = outcome.locator(".outcome-evidence-prelude")
                 expect(prelude).to_be_visible()
-                pause_notice = outcome.locator(".research-pause-guidance")
+                # A lifecycle notice appears only by the Session metadata.
+                # Do not repeat the Stopped/Paused guidance inside Outcome.
+                pause_notice = row.locator(".session-summary .stopped-session-guidance")
                 expect(pause_notice).to_be_visible()
-                expect(pause_notice).to_contain_text("Paused")
-                expect(pause_notice).to_contain_text(
-                    "A dispatched provider request may still consume allowance."
-                )
-                expect(pause_notice).to_contain_text(
-                    "Resume when you are ready for new provider work."
-                )
+                expect(pause_notice).to_contain_text("Stopped")
+                expect(pause_notice).to_contain_text("Next:")
+                expect(outcome.locator(".research-pause-guidance")).to_have_count(0)
                 expect(row.get_by_role("button", name="Resume")).to_be_visible()
                 expect(prelude).to_contain_text("0 reported completed of 0 identified executions")
                 expect(prelude).to_contain_text(
@@ -607,9 +605,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             page.reload()
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
-            expect(row.locator(".research-pause-guidance")).to_contain_text(
-                "Resume when you are ready for new provider work."
-            )
+            expect(row.locator(".session-summary .stopped-session-guidance")).to_be_visible()
+            expect(row.locator(".session-outcome .research-pause-guidance")).to_have_count(0)
             expect(row.locator(".advanced-outcome-hint")).to_contain_text(
                 "Want more detail? Turn on Advanced Outcome to see the full research findings and evidence."
             )
