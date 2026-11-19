@@ -661,7 +661,6 @@ def test_session_log_download_route_content_and_name() -> None:
     assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers["content-disposition"]
 
 
-
 def test_project_session_log_exports_latest_and_all() -> None:
     from io import BytesIO
     from zipfile import ZipFile
