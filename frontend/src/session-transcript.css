@@ -3,7 +3,7 @@
 .session-log-page.session-conversation-page { background: #101315; }
 .session-log-page .session-transcript-page-header { padding-bottom: 12px; }
 .session-log-page .session-transcript-page-header > p { margin: 4px 0 8px; }
-.session-log-page .session-transcript-toolbar {
+.session-log-page.session-conversation-page header > .session-transcript-toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -12,7 +12,7 @@
   padding: 0;
   margin: 0;
 }
-.session-log-page .session-transcript-toolbar > :is(button, a) {
+.session-log-page.session-conversation-page header .session-transcript-toolbar > :is(button, a) {
   box-sizing: border-box;
   display: inline-flex;
   flex: 0 0 34px;
@@ -31,7 +31,7 @@
   color: var(--sigma-copper-foreground);
   line-height: 0;
 }
-.session-log-page .session-transcript-toolbar > :is(button, a) svg {
+.session-log-page.session-conversation-page header .session-transcript-toolbar > :is(button, a) svg {
   box-sizing: border-box;
   display: block;
   flex: 0 0 20px;
@@ -39,20 +39,20 @@
   height: 20px;
   margin: 0;
 }
-.session-log-page .session-transcript-toolbar > .session-transcript-markdown-toggle svg {
+.session-log-page.session-conversation-page header .session-transcript-toolbar > .session-transcript-markdown-toggle svg {
   flex: 0 0 24px;
   width: 24px;
   height: 20px;
   color: inherit;
 }
 .session-log-page .session-transcript-markdown-toggle .markdown-logo path { fill: currentColor; }
-.session-log-page .session-transcript-toolbar > :is(button, a):is(:hover, :focus-visible) {
+.session-log-page.session-conversation-page header .session-transcript-toolbar > :is(button, a):is(:hover, :focus-visible) {
   color: #fff2e9;
   background: var(--copper-gradient);
   border-color: #ac7054;
 }
-.session-log-page .session-transcript-toolbar > :is(button, a):disabled { opacity: .5; cursor: default; }
-.session-log-page .session-transcript-toolbar > .session-transcript-markdown-toggle.is-active { color: #f2c48d; }
+.session-log-page.session-conversation-page header .session-transcript-toolbar > :is(button, a):disabled { opacity: .5; cursor: default; }
+.session-log-page.session-conversation-page header .session-transcript-toolbar > .session-transcript-markdown-toggle.is-active { color: #f2c48d; }
 
 .session-log-page .session-transcript-conversation { margin: 18px 0 30px; min-width: 0; }
 .session-log-page .session-transcript-conversation > h2 {
