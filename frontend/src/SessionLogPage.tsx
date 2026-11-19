@@ -53,6 +53,7 @@ export default function SessionLogPage() {
   const conversionWorker = useRef(false);
   const conversionAbort = useRef<AbortController | null>(null);
   const markdownEnabled = useRef(false);
+  const selectedMarkdownEntries = useRef(new Set<string>());
   const [markdownError, setMarkdownError] = useState('');
   const [error, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
@@ -135,6 +136,12 @@ export default function SessionLogPage() {
       try {
         while (conversionQueue.current.length && markdownEnabled.current) {
           const entry = conversionQueue.current.shift()!;
+          // An entry may have been deselected while another paid conversion ran.
+          // Do not dispatch formatting for a row the user has switched off.
+          if (!selectedMarkdownEntries.current.has(entry.id)) {
+            conversionQueued.current.delete(entry.id);
+            continue;
+          }
           const controller = new AbortController();
           conversionAbort.current = controller;
           try {
@@ -189,6 +196,7 @@ export default function SessionLogPage() {
       setExpandedEntries(current => ({ ...current, [entry.id]: true }));
     }
     markdownEnabled.current = next.size > 0;
+    selectedMarkdownEntries.current = next;
     setMarkdownEntries(next);
     if (!next.size) {
       conversionAbort.current?.abort();
