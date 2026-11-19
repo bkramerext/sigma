@@ -10095,7 +10095,7 @@ function App() {
     const timer = window.setInterval(() => void heartbeat(), 15000);
     return () => { controller.abort(); window.clearInterval(timer); };
   }, [cloud?.enabled, cloud?.authenticated, cloud?.user?.role, cloud?.account?.workspace?.id]);
-  const presencePath = route.pathname === '/project' && !route.searchParams.has('qa_browser')
+  const presencePath = ['/project', '/session'].includes(route.pathname) && !route.searchParams.has('qa_browser')
     ? route.searchParams.get('path') : null;
   useEffect(() => {
     // Server-side heartbeat tracks this project page, including background tabs.
