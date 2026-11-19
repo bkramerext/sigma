@@ -984,8 +984,7 @@ def _grow_unlimited_session_turns(record: dict[str, Any]) -> bool:
     reserved_turns = int(record.get("call_ceiling_cycles", record["cycle_limit"]))
     pair_calls = 2 * len(branches) if next_limit > reserved_turns else 0
     supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
-    supervisor_enabled = True
-    supervisor_target = next_limit * len(branches) if supervisor_enabled else 0
+    supervisor_target = next_limit * len(branches)
     added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
     added_calls = pair_calls + added_supervisor_calls
     ledger = record.get("hard_budget_ledger")
@@ -5948,11 +5947,7 @@ async def update_session_configuration(
             extra_turns = max(0, new_cycles - reserved_turns)
             branches_count = len(record.get("strategy_runs", []))
             supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
-            supervisor_target = (
-                new_cycles * branches_count
-                if isinstance(new_settings, dict)
-                else 0
-            )
+            supervisor_target = new_cycles * branches_count
             added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
             added_calls = 2 * extra_turns * branches_count + added_supervisor_calls
             ledger = record.get("hard_budget_ledger")
@@ -7258,8 +7253,7 @@ async def start_session(
             paired_scheduler = limits.get("scheduler_version") == 2
             supervisor_ceiling_calls = (
                 limits["research_rounds"] * limits["turns_per_round"] * len(selected_ids)
-                if paired_scheduler
-                and session_settings is not None
+                if paired_scheduler and session_settings is not None
                 else 0
             )
             call_ceiling = (
@@ -15154,6 +15148,8 @@ async def _portfolio_supervisor_call(
                     "Heavy, attentive process supervision."
                     if mode == "heavy"
                     else "Light, restrained process supervision."
+                    if mode == "light"
+                    else "Observation only; never inject nudges, redirects or guidance."
                 ),
                 session_supervision=True,
                 external_session_billing=True,
