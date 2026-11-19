@@ -6505,8 +6505,8 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -6585,9 +6585,9 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : chatPage ? null : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
       {chatPage && <div className="brainstorm-header-copy">
-        <p className="chat-eyebrow">Open conversation</p>
-        <h1>Brainstorm</h1>
-        <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>
+        <p className="chat-eyebrow">{sessionPage ? 'Research session' : 'Open conversation'}</p>
+        <h1>{sessionPage ? sessionTitle || 'Session' : 'Brainstorm'}{sessionPage && sessionActions}</h1>
+        {!sessionPage && <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>}
       </div>}
     </div>
     <div ref={headerPillsRef} className="header-controls">
@@ -9940,6 +9940,9 @@ function App() {
   const cloud = useCloudIdentity();
   const [openedView, setOpenedView] = useState<ProjectView | null>(null);
   const [openedFromCache, setOpenedFromCache] = useState(false);
+  const [sessionPageState, setSessionPageState] = useState<import('./SessionLogPage').SessionState | null>(null);
+  const [sessionControlBusy, setSessionControlBusy] = useState(false);
+  const [sessionControlError, setSessionControlError] = useState('');
   const [artworkDecoded, setArtworkDecoded] = useState(projectArtworkReady);
   const [artworkError, setArtworkError] = useState('');
   const cacheScope = projectCacheScope(cloud);
@@ -10137,6 +10140,47 @@ function App() {
       return <main className="workspace-page"><p role="status">Brainstorm requires a signed-in SIGMA member account.</p><a href="/api/cloud-auth/login?return_to=%2Fbrainstorm">Sign in with Google</a><a href="/">Return to SIGMA</a></main>;
     }
     return <div className="workspace-page brainstorm-workspace"><Header goHome={goHome} close={{ action: () => navigate('/'), busy: false }} projectArtwork chatPage/><ChatPage/><FloatingTooltip/></div>;
+  }
+  if (url.pathname === '/session') {
+    const sessionId = url.searchParams.get('session_log') ?? '';
+    const path = url.searchParams.get('path') ?? '';
+    const back = projectUrl(path);
+    const returnProject = (event: MouseEvent<HTMLAnchorElement>) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      navigate(back);
+    };
+    const isRunning = sessionPageState?.status === 'running' || sessionPageState?.status === 'queued';
+    const canResume = sessionPageState && ['stopped', 'paused', 'failed', 'ended'].includes(sessionPageState.status);
+    const control = async (action: 'stop' | 'resume') => {
+      if (!sessionId || !path || sessionControlBusy) return;
+      setSessionControlBusy(true); setSessionControlError('');
+      try {
+        const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/control`, {
+          method: 'POST', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+          body: JSON.stringify({ path, action, ...(action === 'stop' ? { request_only: true } : { browser_presence_required: true }) }),
+        });
+        const value = await response.json();
+        if (!response.ok) throw new Error(value.detail ?? value.error ?? 'Session control failed.');
+        setSessionPageState(current => current ? { ...current, status: value.status ?? current.status } : current);
+      } catch (cause) {
+        setSessionControlError(errorMessage(cause));
+      } finally { setSessionControlBusy(false); }
+    };
+    const title = sessionPageState
+      ? `Session ${sessionPageState.number}${sessionPageState.session_settings?.name ? ' · ' + sessionPageState.session_settings.name : ''}`
+      : 'Session';
+    const actions = <span className="session-page-header-actions">
+      {canResume && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Resume session" data-tooltip="Resume session" disabled={sessionControlBusy} onClick={() => { void control('resume'); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button>}
+      {isRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session" data-tooltip="Stop session" disabled={sessionControlBusy} onClick={() => { void control('stop'); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
+    </span>;
+    return <div className="workspace-page brainstorm-workspace session-workspace">
+      <Header goHome={returnProject} close={{ action: () => navigate(back), busy: false }} projectArtwork chatPage sessionPage sessionTitle={title} sessionActions={actions}/>
+      {sessionControlError && <p role="alert" className="session-page-control-error">{sessionControlError}</p>}
+      <SessionLogPage key={sessionId} onSessionChange={setSessionPageState}/>
+      <FloatingTooltip/>
+    </div>;
   }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
@@ -11294,4 +11338,4 @@ function TermsOfServicePage() {
 
 
 installRequestErrorToasts();
-createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : window.location.pathname === '/tos' ? <TermsOfServicePage/> : new URLSearchParams(window.location.search).has('session_log') ? <SessionLogPage/> : <><CloudAuthGate/><RequestErrorToasts/></>);
+createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : window.location.pathname === '/tos' ? <TermsOfServicePage/> : <><CloudAuthGate/><RequestErrorToasts/></>);
