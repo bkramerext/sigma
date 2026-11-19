@@ -33,7 +33,8 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
   const dialog = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<SessionSettings>({ ...settings });
   const [turns, setTurns] = useState(String(settings.turn_limit));
-  const lastSubmitted = useRef(JSON.stringify({ ...settings, name: settings.name.trim() }));
+  const initialSettings = useRef(JSON.stringify({ ...settings, name: settings.name.trim() }));
+  const lastSubmitted = useRef(initialSettings.current);
   const onApplyRef = useRef(onApply);
   onApplyRef.current = onApply;
   const latest = useRef(draft);
@@ -60,7 +61,10 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
   const close = () => {
     const next = { ...latest.current, name: latest.current.name.trim() };
     const serialized = JSON.stringify(next);
-    if (serialized !== lastSubmitted.current) {
+    // Flush the final value even when a background save was already queued:
+    // the last request is authoritative and survives closing the dialog.
+    if (serialized !== lastSubmitted.current ||
+      (mode === 'edit' && serialized !== initialSettings.current)) {
       lastSubmitted.current = serialized;
       onApplyRef.current(next);
     }
@@ -75,7 +79,7 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
   };
   return <dialog ref={dialog} className="project-settings-dialog session-settings-dialog"
     aria-labelledby="session-settings-title" onCancel={event => { event.preventDefault(); close(); }}>
-    <form onSubmit={event => { event.preventDefault(); close(); }}>
+    <form onSubmit={event => event.preventDefault()}>
       <header className="settings-header session-settings-header">
         <h2 id="session-settings-title">Session Settings</h2>
         <DialogDismissButton label="Close Session Settings" onClick={close}/>
