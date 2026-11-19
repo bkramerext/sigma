@@ -705,6 +705,18 @@ with sync_playwright() as playwright:
     bounds = start_button.bounding_box()
     assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390, bounds
     page.set_viewport_size({"width": 1440, "height": 1000})
+    # New Sessions default to 20 turns. This deterministic project-type
+    # fixture intentionally exercises the shorter historical 9-turn protocol.
+    page.locator(".strategy-process-controls").get_by_role(
+        "button", name="Session settings"
+    ).click()
+    settings_dialog = page.get_by_role("dialog", name="Session Settings")
+    expect(settings_dialog).to_be_visible()
+    turn_input = settings_dialog.locator("#session-settings-turns")
+    expect(turn_input).to_have_value("20")
+    turn_input.fill("9")
+    settings_dialog.get_by_role("button", name="Close Session Settings").click()
+    expect(settings_dialog).not_to_be_visible()
     start_button.click()
     row = page.locator(".session-row").filter(has_text="Session 1")
     expect(row).to_be_visible(timeout=15000)
