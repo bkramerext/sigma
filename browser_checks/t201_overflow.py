@@ -93,7 +93,8 @@ with sync_playwright() as playwright:
     first = json.loads(read_file(path, new_files[0]))
     assert first["session_number"] == 2
     assert first["strategy_id"] == info["strategy"]
-    assert first["calls_used"] == 2 and first["artifacts"]
+    # The always-on Supervisor may reserve its independent review call after the pair.
+    assert 2 <= first["calls_used"] <= 3 and first["artifacts"]
     assert first["prior_session_obligations_omitted"] >= 1
     assert first["prior_session_obligation_omitted_ids_by_strategy"][info["strategy"]]
     manifest = first["steps"][0]["context_manifest"]
