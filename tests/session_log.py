@@ -1136,6 +1136,7 @@ def main() -> None:
         test_session_log_filename_short_name_fallback_and_sanitization()
         test_saved_reference_diagnostics_and_markdown_export()
         test_session_log_download_route_content_and_name()
+        test_project_session_log_exports_latest_and_all()
         test_session_status_and_correlated_errors_match_export()
         test_flat_turn_settings_convert_legacy_rounds_without_relabeling()
         test_complete_transcript_export_groups_turns_newest_first()
