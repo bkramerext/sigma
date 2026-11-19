@@ -10169,7 +10169,7 @@ function App() {
       event.preventDefault();
       navigate(back);
     };
-    return <main className="workspace-page session-workspace">
+    return <main className="workspace-page brainstorm-workspace session-workspace">
       <ResearchDisplayBoundary key={location} label="Session workspace"><ProjectScreen
         path={path} sessionPageId={sessionId} onViewChange={rememberProject}
         onClose={() => navigate(back)} goHome={returnProject}
