@@ -896,7 +896,7 @@ def _session_start_limits(
 
 
 def _session_configuration(
-    raw: dict[str, Any] | None, *, default_turn_limit: int = 9
+    raw: dict[str, Any] | None, *, default_turn_limit: int = 20
 ) -> dict[str, Any]:
     """Use flat paired-turn limits while accepting old rounds/turns snapshots.
 
