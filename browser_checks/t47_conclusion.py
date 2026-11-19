@@ -414,7 +414,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     assert settings_bounds and settings_bounds["height"] < 470, settings_bounds
                     expect(settings_dialog.get_by_role("button", name="Save")).to_have_count(0)
                     expect(settings_dialog.get_by_role("button", name="Cancel")).to_have_count(0)
-                    expect(settings_dialog.get_by_role("combobox", name="Supervisor mode")).to_be_visible()
+                    expect(
+                        settings_dialog.get_by_role("combobox", name="Supervisor mode")
+                    ).to_be_visible()
                     settings_dialog.get_by_role("button", name="Close Session Settings").click()
                     expect(settings_dialog).to_have_count(0)
                 expect(prelude).to_contain_text("0 reported completed of 0 identified executions")
