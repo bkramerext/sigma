@@ -9,6 +9,45 @@
   background: transparent;
 }
 .session-log-page.session-conversation-page .session-transcript-page-header > p { margin: 3px 0 0; }
+.session-log-page.session-conversation-page .session-transcript-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  min-width: 0;
+}
+.session-log-page.session-conversation-page .session-transcript-title-row h1 {
+  min-width: 0;
+  margin: 0;
+}
+.session-log-page.session-conversation-page .session-transcript-title-row > .session-transcript-close {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.session-log-page.session-conversation-page .session-transcript-close svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+.session-log-page.session-conversation-page .session-transcript-close:is(:hover, :focus-visible) {
+  background: #302418;
+  border-color: #82694b;
+  color: #ffe0ae;
+}
 .session-log-page.session-conversation-page .session-transcript-conversation {
   margin: 16px 0 30px;
   min-width: 0;
@@ -83,7 +122,7 @@
 .session-log-page .session-transcript-events {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 17px;
+  gap: 20px;
   max-height: none;
   margin: 0;
   padding: 0;
@@ -100,32 +139,40 @@
   background: transparent;
   list-style: none;
 }
+.session-log-page .session-transcript-turn-heading {
+  margin: 0 0 6px;
+  padding: 0 3px;
+  color: #bfb4a5;
+  font: 600 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+}
 .session-log-page .session-transcript-turn-entries {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 3px;
+  gap: 0;
   min-width: 0;
   margin: 0;
   padding: 0;
+  border: 1px solid #343331;
+  border-radius: 6px;
+  background: #1d1d1c;
   list-style: none;
+  overflow: hidden;
+}
+.session-log-page .session-transcript-turn-entries > .session-transcript-entry + .session-transcript-entry {
+  border-top: 1px solid #33312f;
 }
 .session-log-page .session-transcript-entry {
   box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
   margin: 0;
-  padding: 12px 15px;
+  padding: 7px 11px;
   border: 0;
-  border-left: 3px solid #8d754f;
-  border-radius: 0 7px 7px 0;
-  background: #211e1a;
+  border-radius: 0;
+  background: transparent;
   color: #e5ded3;
   list-style: none;
 }
-.session-log-page .session-transcript-entry.chat-history-investigator { border-left-color: #7d9caa; }
-.session-log-page .session-transcript-entry.chat-history-skeptic { border-left-color: #c28b5c; }
-.session-log-page .session-transcript-entry.chat-history-human { border-left-color: #a891bf; }
-.session-log-page .session-transcript-entry.chat-history-supervisor { border-left-color: #8cad9f; }
 .session-log-page .session-transcript-entry-heading {
   display: flex;
   flex-wrap: wrap;
