@@ -955,7 +955,7 @@ function ProviderInputAuditDisclosure({ audit }: { audit: NonNullable<ResearchSt
   </details>;
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, guest, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved, dismissedStatusNotice, onDismissStatusNotice }: {
+function ResearchSessionContents({ path, session, expanded, busy, guest, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
   path: string;
   session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean; guest: boolean;
   onEnableAdvancedOutcome: () => Promise<void>;
@@ -963,14 +963,7 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   onViewPriorSession: (id: string) => void;
   onForkFromFindings: (session: ResearchSession) => void;
   onInterventionSaved: (sessionId: string) => Promise<void>;
-  dismissedStatusNotice: boolean; onDismissStatusNotice: () => void;
 }) {
-  const cloud = useCloudIdentity();
-  const usageCopy = providerUsageLimitCopy(
-    session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted',
-    session.mode === 'chatgpt',
-  );
-  const usageSponsored = session.cloud_sponsored === true || cloud?.funding.selectedConnection === 'sponsored' || cloud?.target === 'hosted';
   const [markdownSections, setMarkdownSections] = useState<OutcomeMarkdownSection[]>(() =>
     containsMathNotation(session.outcome.conclusion || '') ? ['conclusion'] : []);
   const [convertedBlocks, setConvertedBlocks] = useState<Record<string, FormattedOutcomeBlock>>({});
@@ -1026,42 +1019,6 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
   const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
   const provenance = session.outcome.execution_provenance;
   const runMetrics = session.outcome.metrics?.operational ?? [];
-  const budgetDenied = session.steps.some(step => step.failure_kind === 'budget_denied');
-  const budgetReason = session.strategy_runs?.find(branch =>
-    /allowance|inference[- ]spend|cost reserve|cost limit|global spend|token budget|capacity|funding/i.test(branch.reason ?? '')
-  )?.reason;
-  const compilation = session.outcome.source_material?.compilation;
-  const compilerAttempted = !!compilation?.started_at;
-  const budgetNotice = budgetDenied
-    ? session.calls_used === 0
-      ? compilerAttempted
-        ? 'No Investigator or Skeptic call was made. Reference compilation may have consumed AI usage; see Research Standards for its status.'
-        : 'No Investigator or Skeptic call was dispatched. Check the funding denial below.'
-      : 'Research stopped because another provider call could not be funded. Findings are preserved.'
-    : '';
-  const independentFailure = session.steps.some(step => step.status === 'failed'
-    && !!step.failure_kind && !['provider_limited', 'provider_rate_limited'].includes(step.failure_kind));
-  const accountUsageLimited = session.provider_usage_limited === true
-    && ['failed', 'ended', 'paused', 'stopped'].includes(session.status);
-  // Display one primary stop cause; leave per-strategy failures in the Session Log.
-  // This also corrects historical sessions whose saved message used legacy v1
-  // cycle terminology despite running under the v2 scheduler.
-  const usageLimitStopMessage = usageCopy.description;
-  const usageLimitImpact = `${session.protocol_completed_calls ?? 0} of ${session.protocol_target_calls ?? session.call_limit} research calls completed; ${session.artifacts.length} findings recorded.`;
-  const separateFailureNote = independentFailure
-    ? 'Other earlier research failures are recorded separately in the Session Log.'
-    : '';
-  const statusHeading = accountUsageLimited ? usageCopy.title : budgetDenied
-    ? session.calls_used === 0 ? 'Insufficient research funds' : 'Research funding limit reached'
-    : session.status === 'paused' ? 'Paused'
-      : session.status === 'stopped' ? 'Stopped'
-        : session.status === 'failed' ? 'Error' : 'Ended';
-  const statusNextStep = accountUsageLimited
-    ? (usageSponsored ? 'Try Resume again in a few hours.' : usageCopy.next)
-    : session.next_step_guidance
-    || (session.termination_reason_code === 'research_completed_early' ? 'Review the findings and rationale; the configured turn count was an upper limit, not a target.'
-      : budgetDenied ? 'Review the available research allowance before starting another session.'
-        : 'Review activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.');
   const zeroPythonRuns = runMetrics.some(item => item.label === 'Python runs by status' && item.value === '0 executions');
   const zeroSageRuns = runMetrics.some(item => item.label === 'SageMath runs by status' && item.value === '0 executions');
   const noSavedLocalComputations = (provenance && provenance.records.length === 0 && provenance.unidentified_count === 0)
@@ -1258,12 +1215,6 @@ function ResearchSessionContents({ path, session, expanded, busy, guest, advance
       {conversionProgress && <p className="outcome-markdown-progress" role="status">{conversionProgress}</p>}
       {conversionError && <p className="outcome-conclusion-format-error" role="alert">{conversionError}</p>}
       {showComputationProvenance && provenancePrelude}
-      {!dismissedStatusNotice && (budgetDenied || session.status === 'paused' || session.status === 'stopped' || session.status === 'failed' || !!session.next_step_guidance || !!session.termination_reason_code) && <SessionNotice number={session.session_number} onDismiss={onDismissStatusNotice} title={statusHeading} kind="research-pause-guidance" ariaLabel="Session status and next steps">
-        {accountUsageLimited ? <><p>{usageLimitStopMessage}</p><p>{usageLimitImpact}</p>{separateFailureNote && <p>{separateFailureNote}</p>}</>
-          : budgetDenied ? <><p>{budgetNotice}</p>{(session.message || budgetReason) && <p>{session.message || budgetReason}</p>}</>
-          : !!session.message && <p>{session.message}</p>}
-        <p>{statusNextStep}</p>
-      </SessionNotice>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><div className="outcome-summary-title"><span className="outcome-summary-kicker">{resultLabel}</span></div>
           {simpleOutcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
@@ -2488,7 +2439,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 {!pendingAction && strategyLiveStatusLines(item).length > 5 && <small className="session-progress-inline">and {strategyLiveStatusLines(item).length - 5} others</small>}
               </div>
             </div>
-            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} guest={guest} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy || !canControl} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved} dismissedStatusNotice={Boolean(sessionControlFailures[item.id]) || dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismissStatusNotice={() => dismissSessionNotice(sessionNoticeKey(item))}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
+            {sessionExpanded ? <ResearchDisplayBoundary label={`Session ${item.session_number}`}><ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} guest={guest} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy || !canControl} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/></ResearchDisplayBoundary> : <div id={`session-content-${item.id}`} hidden/>}
           </li></SessionRenderBoundary>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use <span className="sr-only">Play</span><svg className="sessions-empty-play-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg> in Strategies to start one.</p>}
