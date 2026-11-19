@@ -6505,7 +6505,7 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+function Header({ goHome, homeHref = '/', close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
@@ -6577,7 +6577,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   }, [projectTitle, hasActivity, projectArtwork]);
   return <header className={`${projectArtwork ? 'site-header project-art-header' : 'site-header'}${chatPage ? ' chat-site-header' : ''}`}>
     <div className="brand-block">
-      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
+      <a href={homeHref} className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="Go back to home page" data-tooltip="Go back to home page" data-tooltip-follow-cursor="true"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? (close && !chatPage) && <div className="project-title-line">{projectTitle && <><div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType} snapshot={projectView?.project.project_type_snapshot}/>}{hasActivity
         ? <button type="button" ref={activeTitleRef} className="project-header-title project-header-title-action" data-tooltip-follow-cursor="true" aria-label={`${researchRunning ? 'Scroll to running session' : paperRunning || paperQueued ? 'Scroll to Papers' : 'Open Research Q/A'} in ${projectTitle}`} onClick={onActivityClick ?? (() => window.dispatchEvent(new Event(researchRunning ? 'sigma-reveal-running-session' : paperRunning || paperQueued ? 'sigma-reveal-papers' : 'sigma-reveal-qa')))}><span className="project-header-title-text"><span className="project-header-title-label">{projectTitle}</span><span className="research-running-indicator-frame" aria-hidden="true" data-tooltip={activeRunLabels.length ? activeRunLabels.join('\n') : researchRunning ? 'Session' : paperRunning || paperQueued ? 'Paper' : 'Answer'} data-tooltip-activity="true"><span className={`research-running-indicator${queuedOnly ? " paper-queued-indicator" : ""}`}/></span></span></button>
         : onIdleProjectTitleClick
@@ -10176,7 +10176,7 @@ function App() {
       {isRunning && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label="Stop session" data-tooltip="Stop session" disabled={sessionControlBusy} onClick={() => { void control('stop'); }}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
     </span>;
     return <div className="workspace-page brainstorm-workspace session-workspace">
-      <Header goHome={returnProject} close={{ action: () => navigate(back), busy: false }} projectArtwork chatPage sessionPage sessionTitle={title} sessionActions={actions}/>
+      <Header goHome={returnProject} homeHref={back} close={{ action: () => navigate(back), busy: false }} projectArtwork chatPage sessionPage sessionTitle={title} sessionActions={actions}/>
       {sessionControlError && <p role="alert" className="session-page-control-error">{sessionControlError}</p>}
       <SessionLogPage key={sessionId} onSessionChange={setSessionPageState}/>
       <FloatingTooltip/>
