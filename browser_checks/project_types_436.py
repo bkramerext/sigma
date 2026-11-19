@@ -707,8 +707,8 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 1440, "height": 1000})
     # New Sessions default to 20 turns. This deterministic project-type
     # fixture intentionally exercises the shorter historical 9-turn protocol.
-    page.locator(".strategy-process-controls").get_by_role(
-        "button", name="Session settings"
+    page.locator(".sessions-pane-heading").get_by_role(
+        "button", name="Settings", exact=True
     ).click()
     settings_dialog = page.get_by_role("dialog", name="Session Settings")
     expect(settings_dialog).to_be_visible()
