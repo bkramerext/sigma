@@ -926,7 +926,8 @@ def test_unlimited_turn_growth_does_not_extend_finished_branches() -> None:
         "scheduler_version": 2,
         "cycle_limit": 2,
         "call_ceiling_cycles": 2,
-        "call_limit": 4,
+        "call_limit": 6,
+        "supervisor_ceiling_calls": 2,
         "total_token_limit": 1000000,
         "output_token_limit": 256,
         "model": "gpt-6",
@@ -935,13 +936,14 @@ def test_unlimited_turn_growth_does_not_extend_finished_branches() -> None:
     }
     assert research_sessions._grow_unlimited_session_turns(record)
     assert record["cycle_limit"] == 3
-    assert record["call_limit"] == 6
+    assert record["call_limit"] == 9
+    assert record["supervisor_ceiling_calls"] == 3
     assert record["turns_per_round"] == 3
     assert not research_sessions._grow_unlimited_session_turns(record)
     record["strategy_runs"][0]["status"] = "ended"
     record["strategy_runs"][0]["cycle"] = 3
     assert not research_sessions._grow_unlimited_session_turns(record)
-    assert record["call_limit"] == 6
+    assert record["call_limit"] == 9
 
 
 def test_brainstorm_second_participant_has_constructive_guidance() -> None:
