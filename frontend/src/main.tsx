@@ -6604,7 +6604,7 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
     </div>
     <div ref={headerPillsRef} className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    {close && projectView && onProjectUpdated ? <>
+    {close && projectView && onProjectUpdated && !sessionPage ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : chatPage
@@ -6619,7 +6619,7 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
           </div>
         </>
       : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>} 
-    {close && projectView && <div className="sigma-header-model-column">
+    {close && projectView && !sessionPage && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
         {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
         <div className="sigma-header-about-model-anchor">
@@ -6654,8 +6654,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: {
-  children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+function WorkspaceFrame({ children, goHome, homeHref, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, sessionPage = false, sessionTitle, sessionActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: {
+  children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
+  sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
@@ -6669,7 +6670,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick} onActivityClick={onActivityClick}/>
+    <Header goHome={goHome} homeHref={homeHref} close={close} sessionPage={sessionPage} chatPage={sessionPage} sessionTitle={sessionTitle} sessionActions={sessionActions} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick} onActivityClick={onActivityClick}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -9065,8 +9066,8 @@ function runningFavicon(color: 'green' | 'yellow' = 'green'): () => void {
   };
 }
 
-function ProjectScreen({ path, initialView, revalidateCached = false, onViewChange, onClose, goHome }: {
-  path: string; initialView?: ProjectView; revalidateCached?: boolean;
+function ProjectScreen({ path, initialView, revalidateCached = false, onViewChange, onClose, goHome, sessionPageId }: {
+  path: string; initialView?: ProjectView; revalidateCached?: boolean; sessionPageId?: string;
   onViewChange: (view: ProjectView) => void;
   onClose: () => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
@@ -9076,6 +9077,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   // Anonymous visitors may edit their isolated, expiring sandbox.
   const readOnlyGuest = false;
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
+  const [sessionPageState, setSessionPageState] = useState<import("./SessionLogPage").SessionState | null>(null);
   useEffect(() => { if (view) onViewChange(view); }, [view, onViewChange]);
   const [advancedOutcomeGlobal, setAdvancedOutcomeGlobal] = useState(false);
   const [guestAdvancedOutcome, setGuestAdvancedOutcome] = useState(false);
@@ -9760,7 +9762,10 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
 
     </div>
   </div>;
-  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView} >
+  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView}
+    sessionPage={!!sessionPageId} homeHref={sessionPageId ? projectUrl(path) : '/'}
+    sessionTitle={sessionPageState ? `Session ${sessionPageState.number}${sessionPageState.session_settings?.name ? ' · ' + sessionPageState.session_settings.name : ''}` : 'Session'}
+    sessionActions={sessionPageId ? <span id="session-page-controls" className="session-page-header-actions"/> : undefined}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
@@ -9879,7 +9884,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     {guestPlayOpen && <GuestFeatureDialog title="Research sessions"
       message="A session needs at least one enabled strategy, which you can write manually. With member access and ChatGPT, Sessions coordinate Investigator and Skeptic turns across selected strategies, recording findings, objections, evidence and unanswered questions. Example sessions can be explored without executing a model."
       onClose={() => setGuestPlayOpen(false)}/>}
-    <ResearchWorkspace collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.session} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
+    <ResearchWorkspace sessionPageId={sessionPageId} collaborationRevision={sharedActivity?.shared ? sharedActivity.revision : undefined} artifactAuthors={sharedActivity?.artifact_authors?.session} viewerEmail={sharedActivity?.you} projectOwnerEmail={sharedActivity?.owner} path={view.path} projectId={project.id} strategies={strategies} nextStrategyOrdinal={view.project.strategies.length + 1} missingType={missingProjectType} safeSavedTypeSettings={safeSavedTypeSettings} savedTypeName={savedTypeSnapshot?.name ?? project.investigation_type} onChooseReplacement={() => { if (enterMode('project-settings')) setProjectEditing(true); }} onInferredStrategy={(next, id) => { setView(next); showStrategy(id); setAnnouncement('Inferred strategy saved and added to Strategies.'); }} advancedOutcomeDetails={guest ? guestAdvancedOutcome : advancedOutcomeGlobal} onEnableAdvancedOutcome={async () => {
       if (guest) { setGuestAdvancedOutcome(true); return; }
       if (advancedOutcomeGlobal) return;
       const response = await fetch('/api/user-preferences/research-settings', {
@@ -9920,6 +9925,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
       </li>)}</ol>
       <p className="hint">Opening and inspecting a project leave its history unchanged.</p>
     </details>}
+    {sessionPageId && <SessionLogPage key={sessionPageId} onSessionChange={setSessionPageState}/>}
   </WorkspaceFrame>;
 }
 
