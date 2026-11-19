@@ -1602,6 +1602,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
   const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
+  // Serialize auto-saves so a slower earlier request cannot overwrite newer edits.
+  const sessionSettingsSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const [pendingStartSettings, setPendingStartSettings] = useState<SessionSettings | null>(null);
   const [guestSessionCard, setGuestSessionCard] = useState(false);
   const [confirmMissingType, setConfirmMissingType] = useState(false);
@@ -2211,32 +2213,30 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     }
   }
 
-  async function saveSessionSettings(sessionId: string, settings: SessionSettings) {
-    setBusy(true);
-    try {
-      const response = await fetch(
-        `/api/projects/research-sessions/${encodeURIComponent(sessionId)}/settings`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-          body: JSON.stringify({ path, settings }),
-        },
-      );
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Session settings could not be saved.');
-      const saved = sessionForDisplay(result);
-      if (saved) setSessions(current => current.map(item => item.id === sessionId ? saved : item));
-      setSettingsDialog(null);
-      void load(sessionId).catch(reportReadFailure);
-    } catch (cause) {
-      // Use the existing Session error region, not a new toast, confirmation
-      // popup or notification type.
-      const message = errorMessage(cause);
-      setError(message);
-      void recordClientError(message, 'session_settings', sessionId);
-    } finally {
-      setBusy(false);
-    }
+  function saveSessionSettings(sessionId: string, settings: SessionSettings) {
+    const snapshot = { ...settings };
+    sessionSettingsSaveQueue.current = sessionSettingsSaveQueue.current.catch(() => {}).then(async () => {
+      try {
+        const response = await fetch(
+          `/api/projects/research-sessions/${encodeURIComponent(sessionId)}/settings`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+            body: JSON.stringify({ path, settings: snapshot }),
+          },
+        );
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Session settings could not be saved.');
+        const saved = sessionForDisplay(result);
+        if (saved) setSessions(current => current.map(item => item.id === sessionId ? saved : item));
+        setError('');
+      } catch (cause) {
+        const message = errorMessage(cause);
+        setError(message);
+        void recordClientError(message, 'session_settings', sessionId);
+      }
+    });
+    return sessionSettingsSaveQueue.current;
   }
 
   function existingSessionSettings(session: ResearchSession): SessionSettings {
@@ -2320,15 +2320,16 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     {settingsDialog && <SessionSettingsDialog key={settingsDialog.sessionId ?? 'new-session'}
       settings={settingsDialog.initial} mode={settingsDialog.mode} minTurns={settingsDialog.minTurns ?? 0}
-      onCancel={() => setSettingsDialog(null)}
-      onApply={next => {
+      onClose={next => {
         if (settingsDialog.mode === 'start') {
           setPendingStartSettings(next);
-          setSettingsDialog(null);
           setConfirmStart(true);
-        } else if (settingsDialog.sessionId) {
-          void saveSessionSettings(settingsDialog.sessionId, next);
         }
+        setSettingsDialog(null);
+      }}
+      onApply={next => {
+        if (settingsDialog.mode === 'start') setPendingStartSettings(next);
+        else if (settingsDialog.sessionId) void saveSessionSettings(settingsDialog.sessionId, next);
       }}/>}
     <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} anchorSnapshot={resumePlayAnchorSnapshot.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
