@@ -6598,7 +6598,10 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
         : chatPage ? null : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
       {chatPage && <div className="brainstorm-header-copy">
         <p className="chat-eyebrow">{sessionPage ? 'Research session' : 'Open conversation'}</p>
-        <h1>{sessionPage ? sessionTitle || 'Session' : 'Brainstorm'}{sessionPage && sessionActions}</h1>
+        <h1>{sessionPage ? sessionTitle || 'Session' : 'Brainstorm'}{sessionPage && sessionActions}
+          {sessionPage && <button type="button" className="session-page-close" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => close?.action()}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
+          </button>}</h1>
         {!sessionPage && <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>}
       </div>}
     </div>
@@ -9526,7 +9529,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
   const frame = {
-    goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null,
+    goHome, close: sessionPageId ? { action: onClose, busy: false } : { action: close, busy: closing }, connectionDisabled: activeMode !== null,
     // A queued Session still belongs to Sessions when clicking the activity title.
     // Color is decided separately from the authoritative active/queued run list.
     researchRunning: (researchRunning && ![...optimisticStoppedRuns].some(key => key.startsWith('session:'))) || visibleActiveRuns.some(run => run.kind === 'session'),
