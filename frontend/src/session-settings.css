@@ -141,15 +141,15 @@
 }
 /* The popup is promoted to the browser's top layer; give its options the
    same horizontal inset as the Turns field and the selected value. */
-.sigma-select-options[aria-label="Supervisor mode"] {
+.sigma-select-options[aria-label="Steering level"] {
   padding: 4px 0;
 }
-.sigma-select-options[aria-label="Supervisor mode"] [role="option"] {
+.sigma-select-options[aria-label="Steering level"] [role="option"] {
   justify-content: flex-start;
   padding: 6px 11px;
   text-align: left;
 }
-.sigma-select-options[aria-label="Supervisor mode"] [role="option"] > span {
+.sigma-select-options[aria-label="Steering level"] [role="option"] > span {
   padding: 0;
   margin: 0;
   text-align: left;
