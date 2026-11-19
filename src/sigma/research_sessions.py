@@ -7188,10 +7188,10 @@ async def start_session(
                     "Browser disconnected before research admission; no call was dispatched"
                 )
             limits = _session_start_limits(get_limits(view.path), expected_limits)
-            if session_settings is not None and limits.get("scheduler_version") == 2:
-                # The old settings validator still protects global cost, time,
-                # token and concurrency constraints. A flat paired-turn count is
-                # the already-supported cycle budget, not a second scheduler.
+            if limits.get("scheduler_version") == 2:
+                # Every new paired Session uses the flat turn budget, including
+                # callers that start without first opening Session Settings.
+                # Explicit saved historical Sessions are never rewritten.
                 turn_limit = frozen_session_settings["turn_limit"]
                 limits = {
                     **limits,
@@ -7283,7 +7283,7 @@ async def start_session(
                 "schema_version": 1,
                 **(
                     {"session_settings": frozen_session_settings}
-                    if session_settings is not None
+                    if paired_scheduler or session_settings is not None
                     else {}
                 ),
                 **(
@@ -7291,7 +7291,7 @@ async def start_session(
                         "scheduler_version": 2,
                         "turns_per_round": limits["turns_per_round"],
                         "research_round_limit": limits["research_rounds"],
-                        **({"turns_are_flat": True} if session_settings is not None else {}),
+                        "turns_are_flat": True,
                     }
                     if paired_scheduler
                     else {}
