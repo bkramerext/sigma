@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, convertibleTranscriptEntry, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
-type SessionState = { number: number; status: string; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
+type SessionState = { number: number; status: string; session_settings?: { brainstorm_mode?: boolean }; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
 function displayError(error: unknown): string {
   return error instanceof Error ? error.message : 'The session transcript could not be loaded.';
 }
@@ -44,7 +44,7 @@ export default function SessionLogPage() {
   const [projectId, setProjectId] = useState('');
   const [interventions, setInterventions] = useState<TranscriptIntervention[]>([]);
   const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
-  const [renderMarkdown, setRenderMarkdown] = useState(false);
+  const [markdownEntries, setMarkdownEntries] = useState<Set<string>>(() => new Set());
   const [seenMarkdownEntries, setSeenMarkdownEntries] = useState<Set<string>>(() => new Set());
   const [formattedEntries, setFormattedEntries] = useState<Record<string, { source: string; body: string }>>({});
   const formattedEntriesRef = useRef<Record<string, { source: string; body: string }>>({});
@@ -55,32 +55,9 @@ export default function SessionLogPage() {
   const markdownEnabled = useRef(false);
   const [markdownError, setMarkdownError] = useState('');
   const [error, setError] = useState('');
-  const [copyError, setCopyError] = useState('');
-  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied'>('idle');
-  const copyTimer = useRef<number | null>(null);
   const list = useRef<HTMLOListElement>(null);
   const [visibleGroupCount, setVisibleGroupCount] = useState(20);
   const downloadUrl = `/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log/download?${new URLSearchParams({ path, format: 'transcript' })}`;
-  const copyLog = async () => {
-    if (copyState === 'copying') return;
-    if (copyTimer.current !== null) { window.clearTimeout(copyTimer.current); copyTimer.current = null; }
-    setCopyState('copying');
-    setCopyError('');
-    try {
-      // Never copy the filtered or incrementally loaded preview. Download and
-      // Copy fetch the exact same full, current server-rendered export.
-      const response = await fetch(downloadUrl, { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
-      if (!response.ok) throw new Error('Could not fetch the complete session transcript.');
-      await navigator.clipboard.writeText(await response.text());
-      setCopyState('copied');
-      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-      copyTimer.current = window.setTimeout(() => { setCopyState('idle'); copyTimer.current = null; }, 1600);
-    } catch {
-      setCopyState('idle');
-      setCopyError('Could not copy the session transcript. Check clipboard permissions and try again.');
-    }
-  };
-  useEffect(() => () => { if (copyTimer.current !== null) window.clearTimeout(copyTimer.current); }, []);
   useEffect(() => {
     if (!sessionId || !path) { setError('Session transcript link is incomplete.'); return; }
     let alive = true;
@@ -118,7 +95,7 @@ export default function SessionLogPage() {
   // A long historical transcript must not trigger hundreds of paid conversions
   // merely because the user enabled Markdown.
   useEffect(() => {
-    if (!renderMarkdown || !list.current || typeof IntersectionObserver === 'undefined') return;
+    if (!markdownEntries.size || !list.current || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(changes => {
       const newlySeen = changes.filter(change => change.isIntersecting);
       if (!newlySeen.length) return;
@@ -133,18 +110,19 @@ export default function SessionLogPage() {
     }, { root: null });
     list.current.querySelectorAll('[data-transcript-entry]').forEach(node => observer.observe(node));
     return () => observer.disconnect();
-  }, [renderMarkdown, events, expandedEntries, visibleGroupCount]);
+  }, [markdownEntries, events, expandedEntries, visibleGroupCount]);
 
   // The existing Markdown action formats saved provider text with the same
   // metered converter as other SIGMA research blocks. The original transcript
   // and Copy/Download remain byte-for-byte unchanged. Only accepted, visible
   // transcript content is queued; never send arbitrary browser-authored text.
   useEffect(() => {
-    if (!renderMarkdown || !projectId) return;
+    if (!markdownEntries.size || !projectId) return;
     const entries = projectTranscript(events, interventions).filter(entry =>
+      markdownEntries.has(entry.id) &&
       seenMarkdownEntries.has(entry.id) &&
       entry.role !== 'other' &&
-      (expandedEntries[entry.id] ?? !['investigator', 'skeptic'].includes(entry.role)) &&
+      (expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry)) &&
       convertibleTranscriptEntry(entry));
     for (const entry of entries) {
       if (formattedEntriesRef.current[entry.id]?.source === entry.text || conversionQueued.current.has(entry.id)) continue;
@@ -201,13 +179,18 @@ export default function SessionLogPage() {
       }
     };
     void drain();
-  }, [renderMarkdown, events, interventions, projectId, path, sessionId, expandedEntries, seenMarkdownEntries]);
+  }, [markdownEntries, events, interventions, projectId, path, sessionId, expandedEntries, seenMarkdownEntries]);
 
-  const toggleMarkdown = () => {
-    const next = !renderMarkdown;
-    markdownEnabled.current = next;
-    setRenderMarkdown(next);
-    if (!next) {
+  const toggleEntryMarkdown = (entry: TranscriptEntry) => {
+    const next = new Set(markdownEntries);
+    if (next.has(entry.id)) next.delete(entry.id);
+    else {
+      next.add(entry.id);
+      setExpandedEntries(current => ({ ...current, [entry.id]: true }));
+    }
+    markdownEnabled.current = next.size > 0;
+    setMarkdownEntries(next);
+    if (!next.size) {
       conversionAbort.current?.abort();
       conversionQueue.current = [];
       conversionQueued.current = new Set(Object.keys(formattedEntriesRef.current));
@@ -227,45 +210,46 @@ export default function SessionLogPage() {
       month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
     }).format(date);
   };
+  const entryName = (entry: TranscriptEntry): string => {
+    if (entry.role === 'investigator') return 'AI #1';
+    if (entry.role === 'skeptic') return 'AI #2';
+    if (entry.role === 'supervisor') return 'Supervisor';
+    if (entry.role === 'human') return 'Human';
+    return entry.title;
+  };
   return <main className="session-log-page session-conversation-page">
     <header className="session-transcript-page-header">
-      <h1>{projectTitle || shortName}, Session {session?.number ?? '…'} — Transcript</h1>
-      <p>Research conversation · {session?.status ?? 'loading'}</p>
-      <div className="session-log-toolbar session-transcript-toolbar" aria-label="Transcript actions">
-        <button type="button"
-          className={'session-log-toolbar-icon session-transcript-markdown-toggle' + (renderMarkdown ? ' is-active' : '')}
-          aria-label={renderMarkdown ? 'Show plain transcript' : 'Render transcript as Markdown'}
-          aria-pressed={renderMarkdown}
-          data-tooltip={renderMarkdown ? 'Show plain text' : 'Render as Markdown'}
-          onClick={toggleMarkdown}>
-          <svg className="markdown-logo" aria-hidden="true" width="24" height="20" viewBox="20 25 160 78">
-            <path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"/>
-            <path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z"/>
-          </svg>
-        </button>
-        <button type="button" className="session-log-toolbar-icon text-copy-button"
-          aria-label="Copy complete transcript" data-tooltip={copyState === 'copied' ? 'Copied' : 'Copy complete transcript'}
-          disabled={copyState === 'copying'} onClick={() => { void copyLog(); }}>
-          {copyState === 'copied'
-            ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg>
-            : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}
-        </button>
-        <a className="session-log-toolbar-icon session-log-download" href={downloadUrl}
-          aria-label="Download complete transcript" data-tooltip="Download complete transcript">
-          <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </a>
-      </div>
+      <h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1>
+      <p>Research conversation · {session?.status ?? 'loading'}{session?.session_settings?.brainstorm_mode ? ' · Brainstorm mode' : ''}</p>
     </header>
-    {copyState === 'copied' && <p role="status" className="session-log-copy-status">Copied transcript to clipboard.</p>}
-    {copyError && <p role="alert" className="session-log-copy-error">{copyError}</p>}
     {(error || markdownError) && <p role="alert">{error || markdownError}</p>}
     <section className="session-transcript-conversation" aria-label="Transcript">
-      <h2>Transcript</h2>
-      <ol ref={list} className="session-log-events session-transcript-events" aria-label="Conversation history">
+      <h2 className="session-transcript-heading">
+        <button type="button" className="chat-disclosure-button session-transcript-reset"
+          aria-controls="session-transcript-history"
+          data-tooltip="Restore default transcript expansion"
+          onClick={() => setExpandedEntries({})}>
+          <svg aria-hidden="true" className="disclosure-chevron is-expanded" viewBox="0 0 12 12">
+            <path d="m4 2 4 4-4 4"/>
+          </svg>
+          Transcript
+        </button>
+        <a className="session-transcript-download" href={downloadUrl}
+          aria-label="Download complete transcript" data-tooltip="Download complete transcript">
+          <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13"
+              stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </a>
+      </h2>
+      <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
+        aria-label="Conversation history">
         {shownGroups.map(group => <li key={group.key} className="session-transcript-turn">
           <ol className="session-transcript-turn-entries">
             {group.entries.map(entry => {
-              const expanded = expandedEntries[entry.id] ?? !['investigator', 'skeptic'].includes(entry.role);
+              const expanded = expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry);
+              const name = entryName(entry);
+              const asMarkdown = markdownEntries.has(entry.id);
               return <li key={entry.id} data-transcript-entry={entry.id}
                 className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
                 <div className="session-transcript-entry-heading">
@@ -275,13 +259,23 @@ export default function SessionLogPage() {
                     <svg aria-hidden="true" className={'disclosure-chevron' + (expanded ? ' is-expanded' : '')} viewBox="0 0 12 12">
                       <path d="m4 2 4 4-4 4"/>
                     </svg>
-                    <strong>{entry.title}</strong>
+                    <strong>{name}</strong>
                   </button>
-                  <CopyTranscriptEntryButton title={entry.title} text={entry.text}/>
-                  <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>
+                  <button type="button" className={'session-transcript-entry-markdown' + (asMarkdown ? ' is-active' : '')}
+                    aria-label={asMarkdown ? `Show ${name} as plain text` : `Render ${name} as Markdown`}
+                    aria-pressed={asMarkdown}
+                    data-tooltip={asMarkdown ? 'Show plain text' : 'Render as Markdown'}
+                    onClick={() => toggleEntryMarkdown(entry)}>
+                    <svg className="markdown-logo" aria-hidden="true" viewBox="20 25 160 78">
+                      <path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"/>
+                      <path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z"/>
+                    </svg>
+                  </button>
+                  <CopyTranscriptEntryButton title={name} text={entry.text}/>
+                  {entry.timestamp && <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>}
                 </div>
                 <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
-                  {expanded && (renderMarkdown
+                  {expanded && (asMarkdown
                     ? <div className="session-transcript-markdown"><RenderedMarkdown body={formattedEntries[entry.id]?.source === entry.text ? formattedEntries[entry.id].body : entry.text}/></div>
                     : <pre className="session-transcript-plain">{entry.text}</pre>)}
                 </div>
@@ -291,7 +285,7 @@ export default function SessionLogPage() {
         </li>)}
       </ol>
       {hiddenGroups > 0 && <div className="session-transcript-pagination">
-        <p>Showing the latest {shownGroups.length} of {allGroups.length} exchanges. The complete record remains available through Copy and Download.</p>
+        <p>Showing the latest {shownGroups.length} of {allGroups.length} exchanges. The complete record remains available for download.</p>
         <button type="button" onClick={() => setVisibleGroupCount(current => current + 20)}>
           Show {Math.min(hiddenGroups, 20)} earlier
         </button>
