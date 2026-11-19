@@ -58,7 +58,6 @@ export default function SessionLogPage() {
   const [error, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
   const [visibleGroupCount, setVisibleGroupCount] = useState(20);
-  const downloadUrl = `/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log/download?${new URLSearchParams({ path, format: 'transcript' })}`;
   useEffect(() => {
     if (!sessionId || !path) { setError('Session transcript link is incomplete.'); return; }
     let alive = true;
@@ -261,13 +260,6 @@ export default function SessionLogPage() {
           </svg>
           Transcript
         </button>
-        <a className="session-transcript-download" href={downloadUrl}
-          aria-label="Download complete transcript" data-tooltip="Download complete transcript">
-          <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
-            <path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13"
-              stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </a>
       </h2>
       <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
         aria-label="Conversation history">
