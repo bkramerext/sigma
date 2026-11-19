@@ -5,7 +5,7 @@ import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, con
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
-type SessionState = { number: number; status: string; session_settings?: { brainstorm_mode?: boolean }; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
+export type SessionState = { number: number; status: string; session_settings?: { brainstorm_mode?: boolean; name?: string }; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
 function displayError(error: unknown): string {
   return error instanceof Error ? error.message : 'The session transcript could not be loaded.';
 }
@@ -31,7 +31,7 @@ function CopyTranscriptEntryButton({ title, text }: { title: string; text: strin
   </button>;
 }
 
-export default function SessionLogPage() {
+export default function SessionLogPage({ onSessionChange }: { onSessionChange?: (session: SessionState) => void }) {
   const params = new URLSearchParams(window.location.search);
   const sessionId = params.get('session_log') ?? '';
   const path = params.get('path') ?? '';
@@ -76,7 +76,7 @@ export default function SessionLogPage() {
         fresh.forEach(event => seen.current.add(event.seq));
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
-        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); setInterventions(data.interventions ?? []); setError('');
+        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); onSessionChange?.(data.session); setInterventions(data.interventions ?? []); setError('');
       } catch (cause) { if (alive) setError(displayError(cause)); }
       finally {
         fetching = false;
@@ -217,12 +217,6 @@ export default function SessionLogPage() {
     const id = group.entries.find(entry => entry.strategyId)?.strategyId;
     return id && strategyIds.length > 1 ? ` · Strategy ${strategyIds.indexOf(id) + 1}` : '';
   };
-  const closeTranscript = () => {
-    // Opened by SessionLogButton in a separate script-created tab.
-    window.close();
-    // Browser-created/directly navigated tabs cannot always be closed by JS.
-    if (!window.closed) window.location.assign(`/?${new URLSearchParams({ path })}`);
-  };
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     return Number.isNaN(date.getTime()) ? timestamp : new Intl.DateTimeFormat(undefined, {
@@ -238,14 +232,6 @@ export default function SessionLogPage() {
   };
   return <main className="session-log-page session-conversation-page">
     <header className="session-transcript-page-header">
-      <div className="session-transcript-title-row">
-        <h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1>
-        <button type="button" className="session-transcript-close" aria-label="Close transcript"
-          data-tooltip="Close transcript" onClick={closeTranscript}>
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2.6" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
-        </button>
-      </div>
       <p>Research conversation · {session?.status ?? 'loading'}{session?.session_settings?.brainstorm_mode ? ' · Brainstorm mode' : ''}</p>
     </header>
     {(error || markdownError) && <p role="alert">{error || markdownError}</p>}
@@ -307,7 +293,7 @@ export default function SessionLogPage() {
         </li>)}
       </ol>
       {hiddenGroups > 0 && <div className="session-transcript-pagination">
-        <p>Showing the latest {shownGroups.length} of {allGroups.length} exchanges. The complete record remains available for download.</p>
+        <p>Showing the latest {shownGroups.length} of {allGroups.length} exchanges. Older turns are hidden from this view.</p>
         <button type="button" onClick={() => setVisibleGroupCount(current => current + 20)}>
           Show {Math.min(hiddenGroups, 20)} earlier
         </button>
