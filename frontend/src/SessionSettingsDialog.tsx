@@ -18,7 +18,7 @@ export function defaultSessionSettings(limits?: { research_rounds: number; turns
     supervisor_mode: 'none',
     unlimited_turns: false,
     brainstorm_mode: false,
-    turn_limit: (limits?.research_rounds ?? 3) * (limits?.turns_per_round ?? 3),
+    turn_limit: limits ? limits.research_rounds * limits.turns_per_round : 20,
   };
 }
 
