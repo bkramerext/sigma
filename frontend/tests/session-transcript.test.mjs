@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { projectTranscript, groupTranscriptTurns, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry } from '../src/session-transcript.ts';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry } from '../src/session-transcript.ts';
 
 test('response entries use completion order and retain full provider-authored output', () => {
   const entries = projectTranscript([
@@ -73,4 +73,26 @@ test('Markdown conversion excludes provider failures and short or unavailable re
     { seq: 5, timestamp: '2026-11-18T01:00:04Z', type: 'session_event', event_kind: 'supervisor.review', role: 'supervisor', message: 'The agents should make their assumptions clearer before drawing conclusions.' },
   ]);
   assert.deepEqual(rows.filter(convertibleTranscriptEntry).map(entry => entry.id), ['response-ok', 'event-5']);
+});
+
+test('Brainstorm-style transcript starts with only Supervisor expanded', () => {
+  for (const role of ['investigator', 'skeptic', 'human', 'other'])
+    assert.equal(transcriptDefaultExpanded({ role }), false);
+  assert.equal(transcriptDefaultExpanded({ role: 'supervisor' }), true);
+});
+
+test('Supervisor groups after its paired agents and the newest exchange displays first', () => {
+  const entries = projectTranscript([
+    { seq: 1, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'a1', role: 'investigator', round: 1, strategy_id: 'x' },
+    { seq: 2, timestamp: '2026-11-18T01:00:02Z', type: 'provider_response', request_id: 'a1', response: { output_text: 'AI one reply' } },
+    { seq: 3, timestamp: '2026-11-18T01:00:03Z', type: 'provider_request', request_id: 'a2', role: 'skeptic', round: 1, strategy_id: 'x' },
+    { seq: 4, timestamp: '2026-11-18T01:00:04Z', type: 'provider_response', request_id: 'a2', response: { output_text: 'AI two reply' } },
+    { seq: 5, timestamp: '2026-11-18T01:00:05Z', type: 'session_event', event_kind: 'supervisor.review', role: 'supervisor', round: 1, strategy_id: 'x', message: 'Process-only assessment' },
+    { seq: 6, timestamp: '2026-11-18T01:00:06Z', type: 'provider_request', request_id: 'b1', role: 'investigator', round: 2, strategy_id: 'x' },
+    { seq: 7, timestamp: '2026-11-18T01:00:07Z', type: 'provider_response', request_id: 'b1', response: { output_text: 'Next exchange' } },
+  ]);
+  const groups = groupTranscriptTurns(entries);
+  assert.deepEqual(groups.map(group => group.key), ['x:2', 'x:1']);
+  assert.deepEqual(groups[1].entries.map(entry => entry.role), ['investigator', 'skeptic', 'supervisor']);
+  assert.deepEqual(groups[1].entries.map(entry => entry.text), ['AI one reply', 'AI two reply', 'Process-only assessment']);
 });
