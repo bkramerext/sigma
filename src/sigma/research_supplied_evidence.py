@@ -71,7 +71,7 @@ def _fetch_url_once(url: str) -> tuple[bytes, str, str]:
                     raise ValueError(f"http_{status}")
                 if response.getheader("Content-Encoding", "identity").lower() != "identity":
                     raise ValueError("unsupported_compression")
-                content_type = (response.getheader("Content-Type") or "").lower().split(";")[0]
+                content_type = (response.getheader("Content-Type") or "").lower().split(";")[0].strip()
                 if content_type not in _SUPPORTED_MEDIA_TYPES:
                     raise ValueError("unsupported_media_type")
                 declared = response.getheader("Content-Length")
@@ -116,9 +116,7 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
             retryable = isinstance(exc, (OSError, TimeoutError, http.client.HTTPException))
             if isinstance(exc, ValueError):
                 reason = str(exc)
-                retryable = any(
-                    reason == f"http_{status}" for status in _TRANSIENT_HTTP_STATUSES
-                )
+                retryable = any(reason == f"http_{status}" for status in _TRANSIENT_HTTP_STATUSES)
             if not retryable or attempt == len(_RETRY_DELAYS_SECONDS):
                 raise
             time.sleep(_RETRY_DELAYS_SECONDS[attempt])
@@ -168,10 +166,7 @@ def read_link(url: str, fetched: tuple[bytes, str, str] | None = None) -> dict:
             incomplete_extract=truncated,
             reason=None,
         )
-    except (
-        ValueError, OSError, TimeoutError, ssl.SSLError,
-        http.client.HTTPException, project_evidence.ProjectError,
-    ) as exc:
+    except (ValueError, OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
         result["reason"] = str(exc)[:160] or type(exc).__name__
     return result
 

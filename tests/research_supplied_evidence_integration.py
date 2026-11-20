@@ -369,9 +369,17 @@ def check_robust_link_retrieval() -> None:
 
     def fake_http(content_type: str, payload: bytes):
         endpoint = (
-            "example.org", "example.org", 80, "/reconstruction.pdf",
-            (research_supplied_evidence.socket.AF_INET, research_supplied_evidence.socket.SOCK_STREAM,
-             0, "", ("93.184.216.34", 80)),
+            "example.org",
+            "example.org",
+            80,
+            "/reconstruction.pdf",
+            (
+                research_supplied_evidence.socket.AF_INET,
+                research_supplied_evidence.socket.SOCK_STREAM,
+                0,
+                "",
+                ("93.184.216.34", 80),
+            ),
         )
         with (
             patch.object(
