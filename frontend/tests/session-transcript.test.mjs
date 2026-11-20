@@ -119,3 +119,16 @@ test('reading view keeps one accepted reply per turn and omits audit chatter', (
     'investigator', 'skeptic', 'supervisor',
   ]);
 });
+
+
+test('strategy groups display in ascending order despite concurrent completion timestamps', () => {
+  const entries = [
+    { id: 's2', timestamp: '2026-11-20T06:23:17Z', role: 'skeptic', round: 1, strategyId: 'strategy-2', sequence: 1 },
+    { id: 's3', timestamp: '2026-11-20T06:23:17Z', role: 'skeptic', round: 1, strategyId: 'strategy-3', sequence: 2 },
+    { id: 's1-turn2', timestamp: '2026-11-20T06:23:18Z', role: 'investigator', round: 2, strategyId: 'strategy-1', sequence: 3 },
+    { id: 's1-turn1', timestamp: '2026-11-20T06:23:16Z', role: 'skeptic', round: 1, strategyId: 'strategy-1', sequence: 4 },
+  ];
+  assert.deepEqual(groupTranscriptTurns(entries).map(group => group.key), [
+    'strategy-1:2', 'strategy-1:1', 'strategy-2:1', 'strategy-3:1',
+  ]);
+});
