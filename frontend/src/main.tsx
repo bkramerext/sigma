@@ -9666,10 +9666,10 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     const byId = new Map(project.strategies.map(strategy => [strategy.id, strategy]));
     return (previewOrder ?? project.active_order).map(id => byId.get(id)!);
   }, [view, previewOrder]);
-  if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state project-opening-state" aria-live="polite">{error ? <>
+  if (!view) return <WorkspaceFrame {...frame} sessionPage={!!sessionPageId} homeHref={sessionPageId ? projectUrl(path) : '/'}><div className="workspace-state project-opening-state" aria-live="polite">{error ? <>
     <h1 ref={heading} tabIndex={-1}>Project unavailable</h1><p role="alert" className="error">{error}</p>
     <p>Close this project to choose another directory.</p>
-  </> : <p className="intro">Opening project…</p>}</div></WorkspaceFrame>;
+  </> : <p className="intro">{sessionPageId ? 'Opening session…' : 'Opening project…'}</p>}</div></WorkspaceFrame>;
   const project = view.project;
   const headingStrategies = project.strategies.filter(strategy => !strategy.removed_at);
   const headingDisabledCount = headingStrategies.filter(strategy => !strategy.enabled).length;
