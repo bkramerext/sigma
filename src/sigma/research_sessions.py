@@ -101,6 +101,11 @@ MAX_AGENT_CONTEXT_BYTES = 256_000
 # mandatory evidence after compaction would otherwise stop a saved session.
 # This counts UTF-8 bytes, not the provider's token context window.
 MAX_AGENT_DISPATCH_HEADROOM_BYTES = 512_000
+# The previously fixed 60k-character aggregate source cap blocked complete
+# research papers even when the selected model could receive their full text.
+# Do not silently truncate: every dispatch still enforces the independent,
+# model-aware UTF-8 byte guard above before any provider call.
+MAX_SUPPLIED_EVIDENCE_CHARACTERS = 400_000
 MAX_CONTEXT_ARTIFACTS = 24
 MAX_CONCLUSION_CHARACTERS = 20_000
 MAX_CONTEXT_STRATEGIES = 24
@@ -16190,7 +16195,9 @@ def _strict_compilation_block_reason(record: dict[str, Any]) -> str | None:
     )
 
 
-def _bounded_supplied_evidence(sources: list[dict], limit: int = 60000) -> list[dict]:
+def _bounded_supplied_evidence(
+    sources: list[dict], limit: int = MAX_SUPPLIED_EVIDENCE_CHARACTERS
+) -> list[dict]:
     """Supply complete extracts or reject the session before role dispatch."""
     total = sum(len(str(source.get("excerpt") or "")) for source in sources)
     if total > limit:
@@ -16487,10 +16494,17 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     stage["finished_at"] = _now()
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material unavailable"
-                    names = [
-                        str(item.get("filename") or item.get("url") or item["id"])
-                        for item in unavailable
-                    ]
+                    names = []
+                    for item in unavailable:
+                        name = str(item.get("filename") or item.get("url") or item["id"])
+                        if item.get("reason"):
+                            detail = str(item["reason"])
+                        elif item.get("incomplete_extract"):
+                            detail = "incomplete_extract"
+                        else:
+                            detail = "unavailable"
+                        detail = detail.replace(chr(10), " ").replace(chr(13), " ")[:120]
+                        names.append(f"{name} ({detail})")
                     record["message"] = (
                         f"Cannot research with incomplete Source Material: "
                         f"{', '.join(names[:4])}."
