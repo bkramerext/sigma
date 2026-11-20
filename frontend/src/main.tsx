@@ -2103,7 +2103,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     void control('resume', target);
   }
 
-  function revealSession(id: string, collapsePrevious = false, focusOutcome = false) {
+  function revealSession(id: string, collapsePrevious = false, focusOutcome = false, alignTop = false) {
     onSectionOpened();
     setExpanded(true);
     window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
@@ -2122,11 +2122,11 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           const target = targetNode.getBoundingClientRect();
           const frame = viewport.getBoundingClientRect();
           viewport.scrollTo({
-            top: viewport.scrollTop + target.top - frame.top - (focusOutcome ? 20 : (viewport.clientHeight - target.height) / 2),
+            top: viewport.scrollTop + target.top - frame.top - (focusOutcome || alignTop ? 20 : (viewport.clientHeight - target.height) / 2),
             behavior: 'smooth',
           });
         } else {
-          targetNode.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+          targetNode.scrollIntoView({ block: focusOutcome || alignTop ? 'start' : 'center', inline: 'nearest', behavior: 'smooth' });
         }
         row.classList.add('citation-highlight');
         window.setTimeout(() => row.classList.remove('citation-highlight'), 2400);
@@ -2310,7 +2310,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     if (!revealId) return;
     initialRevealSessionId.current = null;
     if (activeSession?.id === revealId) onRevealNewSession();
-    revealSession(revealId, true, new URLSearchParams(window.location.search).get('reveal_session') === revealId);
+    // Return navigation lands on the Session header, not its (potentially tall) Outcome.
+    revealSession(revealId, true, false, true);
   }, [activeSession?.id, onRevealNewSession, sessions.length]);
 
   const stoppingSessionId = pendingSessionAction?.action === 'stop' || pendingSessionAction?.action === 'pause'
