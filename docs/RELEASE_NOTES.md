@@ -424,3 +424,17 @@ The hosted Personal connection was exercised by the operator on the real product
 SIGMA remains experimental. Research findings, generated citations and papers, and editorial scores require independent review.
 
 **Release boundary:** Version metadata is 0.4.3. The accepted production build is merged `main` SHA `613b14156adf8b0a0856ce2eda3cac2cf89d9b07` (PR #886, including #885). The operator approved production acceptance on November 17, 2026. See [Deployment History](DEPLOYMENT_HISTORY.md) for the guarded cutover and health checks.
+
+
+## Version 0.4.4 — Unified Session Research Experience
+*Release candidate · November 20, 2026 · Production deployment pending*
+
+The Brainstorm research workflow is folded into durable project Sessions. Sessions retain per-turn Brainstorm/paired role semantics, display Supervisor assessments and interventions, support configurable turns, and provide a dedicated live transcript page with navigation back to the expanded Project session.
+
+- **Unified Session workflow.** Project Sessions support alternating investigators and Supervisor coaching, with per-turn role labels and a consistent transcript presentation.
+- **Improved transcript navigation.** Live turn indicators, status links, aligned role actions, and Session/Project return navigation make research easier to follow while it runs.
+- **Readable mathematical research.** Session Markdown displays embedded JSON as fenced code, artifact identifiers as inline code, and better-sized mathematical parentheses where fractions appear.
+- **Portable research logs.** Individual diagnostic exports use Markdown filenames; the all-sessions ZIP contains Markdown files.
+- **Consistent interface.** Session headers reuse Project account, model, About, and Settings controls. Start/Stop/Settings behavior, loading labels, and responsive spacing have been refined.
+
+**Status:** Version metadata prepared on PR #909. Release is **not deployed** until the PR is merged, required exact-SHA CI passes, and the guarded production deployment and smoke checks complete.

@@ -705,6 +705,22 @@ with sync_playwright() as playwright:
     bounds = start_button.bounding_box()
     assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390, bounds
     page.set_viewport_size({"width": 1440, "height": 1000})
+
+    # Start no longer has a separate top-level Settings action. Keep this
+    # deterministic fixture's historical nine-turn limit at the API boundary,
+    # while exercising the unchanged real Start button and admission flow.
+    def nine_turn_start(route):
+        payload = route.request.post_data_json
+        payload["session_settings"]["turn_limit"] = 9
+        headers = {**route.request.headers, "origin": BASE_URL}
+        response = route.fetch(
+            url=route.request.url.replace(BASE_URL, FIXTURE_URL),
+            headers=headers,
+            post_data=json.dumps(payload),
+        )
+        route.fulfill(response=response)
+
+    page.route("**/api/projects/research-sessions/start", nine_turn_start)
     start_button.click()
     row = page.locator(".session-row").filter(has_text="Session 1")
     expect(row).to_be_visible(timeout=15000)

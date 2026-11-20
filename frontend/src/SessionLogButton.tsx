@@ -1,18 +1,22 @@
-import { openReusableTab } from './reusable-tabs';
-
-export default function SessionLogButton({ sessionId, sessionNumber, path }: {
+export default function SessionLogButton({ sessionId, sessionNumber, path, indicator = false, active = false }: {
   sessionId: string;
   sessionNumber: number;
   path: string;
+  indicator?: boolean;
+  active?: boolean;
 }) {
   const query = new URLSearchParams({ session_log: sessionId, path });
+  const url = `/session?${query}`;
   return <a
-    className="text-view-link text-view-icon workspace-icon-button session-log-open-link"
-    aria-label={`View Session ${sessionNumber} log`}
-    data-tooltip="View session log"
-    href={`/?${query}`}
-    onClick={event => openReusableTab(event, `sigma-log:${path}:${sessionId}`)}
-    target="_blank"
-    rel="noopener noreferrer"
-  ><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M13 6h8M13 12h8M13 18h8M3 6h1M8 6h1M3 12h1M8 12h1M3 18h1M8 18h1"/></svg></a>;
+    className={indicator ? "session-status-navigation-indicator" : "text-view-link text-view-icon workspace-icon-button session-log-open-link"}
+    aria-label={`Open Session ${sessionNumber} page`}
+    data-tooltip="Open session"
+    href={url}
+    onClick={event => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      window.history.pushState(null, "", url);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }}
+  >{indicator ? active ? <span className="research-running-indicator" aria-hidden="true"/> : <i aria-hidden="true"/> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M13 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7"/><path d="M14 3.5h6.5V10M20.5 3.5l-9 9"/></svg>}</a>;
 }

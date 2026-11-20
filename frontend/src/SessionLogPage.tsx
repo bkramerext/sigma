@@ -1,22 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
-import SigmaSelect from './SigmaSelect';
+import RenderedMarkdown from './RenderedMarkdown';
+import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
-type SessionState = { number: number; status: string; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
-type ReferencePreparation = {
-  selected_count: number | null;
-  verified_count: number;
-  references: { title: string; url: string; retrieval_status: string; reason?: string | null; http_status?: number | null; excerpt_present: boolean; excerpt_integrity?: boolean | null; content_hash_recorded?: boolean }[];
-  compiler: { status: string; attempt_count: number; reason?: string | null; source_hash_match?: boolean | null; retrieved_excerpts_used: string; attempts: { number?: number; status?: string; failure_type?: string; http_status?: number | null; error_code?: string; validation_failure?: string; usage_status?: string; token_usage?: { input_tokens?: number; output_tokens?: number } | null; retry_decision?: string; reason?: string | null }[] };
-  guidance_disposition: string;
-  strategy_count?: number | null;
-};
+export type SessionState = { number: number; status: string; session_settings?: { brainstorm_mode?: boolean; name?: string }; current_action?: string; termination_reason_code?: string; reason?: string; message?: string };
 function displayError(error: unknown): string {
-  return error instanceof Error ? error.message : 'The session log could not be loaded.';
+  return error instanceof Error ? error.message : 'The session transcript could not be loaded.';
 }
 
-export default function SessionLogPage() {
+function CopyTranscriptEntryButton({ title, text }: { title: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => { setCopied(false); timer.current = null; }, 1600);
+    } catch { setCopied(false); }
+  };
+  return <button type="button" className="session-transcript-entry-copy"
+    aria-label={copied ? `Copied ${title}` : `Copy ${title}`}
+    data-tooltip={copied ? 'Copied' : ['Investigator', 'Skeptic'].includes(title) ? 'Copy text' : `Copy ${title}`} disabled={!text} onClick={() => { void copy(); }}>
+    {copied
+      ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg>
+      : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}
+  </button>;
+}
+
+export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { onSessionChange?: (session: SessionState) => void; resetSignal?: number }) {
   const params = new URLSearchParams(window.location.search);
   const sessionId = params.get('session_log') ?? '';
   const path = params.get('path') ?? '';
@@ -24,41 +39,30 @@ export default function SessionLogPage() {
   const cursor = useRef(0);
   const seen = useRef(new Set<number>());
   const [session, setSession] = useState<SessionState | null>(null);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [shortName, setShortName] = useState('Research Project');
   const [projectTitle, setProjectTitle] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [following, setFollowing] = useState(true);
-  const [jumpVisible, setJumpVisible] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-  const [error, setError] = useState('');
-  const [copyError, setCopyError] = useState('');
-  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied'>('idle');
-  const copyTimer = useRef<number | null>(null);
-  const [referencePreparation, setReferencePreparation] = useState<ReferencePreparation | null>(null);
+  const [projectId, setProjectId] = useState('');
+  const [interventions, setInterventions] = useState<TranscriptIntervention[]>([]);
+  const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
+  // The Session title is the sole reset control for canonical expansion.
+  useEffect(() => { setExpandedEntries({}); }, [resetSignal]);
+  const [markdownEntries, setMarkdownEntries] = useState<Set<string>>(() => new Set());
+  const [seenMarkdownEntries, setSeenMarkdownEntries] = useState<Set<string>>(() => new Set());
+  const [formattedEntries, setFormattedEntries] = useState<Record<string, { source: string; body: string }>>({});
+  const formattedEntriesRef = useRef<Record<string, { source: string; body: string }>>({});
+  const conversionQueue = useRef<TranscriptEntry[]>([]);
+  const conversionQueued = useRef(new Set<string>());
+  const conversionWorker = useRef(false);
+  const conversionAbort = useRef<AbortController | null>(null);
+  const markdownEnabled = useRef(false);
+  const selectedMarkdownEntries = useRef(new Set<string>());
+  const [, setMarkdownError] = useState('');
+  const [, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
-  const downloadUrl = `/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log/download?${new URLSearchParams({ path })}`;
-  const copyLog = async () => {
-    if (copyState === 'copying') return;
-    if (copyTimer.current !== null) { window.clearTimeout(copyTimer.current); copyTimer.current = null; }
-    setCopyState('copying');
-    setCopyError('');
-    try {
-      // Never copy the filtered or incrementally loaded preview. Download and
-      // Copy fetch the exact same full, current server-rendered export.
-      const response = await fetch(downloadUrl, { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' } });
-      if (!response.ok) throw new Error('Could not fetch the complete session log.');
-      await navigator.clipboard.writeText(await response.text());
-      setCopyState('copied');
-      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
-      copyTimer.current = window.setTimeout(() => { setCopyState('idle'); copyTimer.current = null; }, 1600);
-    } catch {
-      setCopyState('idle');
-      setCopyError('Could not copy the session log. Check clipboard permissions and try again.');
-    }
-  };
-  useEffect(() => () => { if (copyTimer.current !== null) window.clearTimeout(copyTimer.current); }, []);
+  const [visibleTurnCount, setVisibleTurnCount] = useState(20);
   useEffect(() => {
-    if (!sessionId || !path) { setError('Session log link is incomplete.'); return; }
+    if (!sessionId || !path) { setError('Session transcript link is incomplete.'); return; }
     let alive = true;
     let timer = 0;
     let fetching = false;
@@ -68,15 +72,15 @@ export default function SessionLogPage() {
       try {
         const query = new URLSearchParams({ path, after: String(cursor.current) });
         const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin', headers: { 'X-Sigma-Error-Handled': 'true' } });
-        if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session log.' : 'This session log is unavailable or access was denied.');
-        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; session: SessionState; reference_preparation?: ReferencePreparation };
+        if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session transcript.' : 'This session transcript is unavailable or access was denied.');
+        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; project_id?: string; session: SessionState; interventions?: TranscriptIntervention[] };
         if (!alive) return;
         const fresh = data.events.filter(event => !seen.current.has(event.seq));
         fresh.forEach(event => seen.current.add(event.seq));
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
-        setShortName(data.short_name); setProjectTitle(data.project_title); setSession(data.session); setReferencePreparation(data.reference_preparation ?? null); setError('');
-      } catch (cause) { if (alive) setError(displayError(cause)); }
+        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); onSessionChange?.(data.session); setInterventions(data.interventions ?? []); setError(''); setInitialLoadComplete(true);
+      } catch (cause) { if (alive) { setError(displayError(cause)); setInitialLoadComplete(true); } }
       finally {
         fetching = false;
         if (alive) timer = window.setTimeout(() => { void refresh(); }, 1000);
@@ -90,75 +94,227 @@ export default function SessionLogPage() {
     const title = `${shortName}, Session ${session.number}`;
     document.title = title;
   }, [projectTitle, shortName, session]);
-  useEffect(() => { if (following && list.current) list.current.scrollTop = list.current.scrollHeight; }, [events, following]);
-  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
-  const compilationLabel = referencePreparation?.compiler.status === 'completed' ? 'succeeded' : ['fallback', 'interrupted', 'failed'].includes(referencePreparation?.compiler.status ?? '') ? 'failed/degraded' : referencePreparation?.compiler.status ?? 'unknown/not recorded';
-  const calls = new Map<string, SessionLogEvent>();
-  for (const event of events) if (event.request_id && event.type === 'provider_response' || event.request_id && event.type === 'provider_failure') calls.set(event.request_id, event);
-  const shown = events.filter(event => {
-    if (['provider_response', 'provider_failure'].includes(event.type)) return false;
-    if (filter === 'all') return true;
-    if (filter === 'investigator' || filter === 'skeptic') return event.role === filter || event.type === 'provider_request' && event.role === filter;
-    if (filter === 'provider') return event.type.startsWith('provider_');
-    if (filter === 'session_event') return event.type === 'session_event';
-    return event.type === filter;
-  });
-  const updateScrollState = () => {
-    const node = list.current;
-    if (!node) return;
-    const atBottom = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
-    setJumpVisible(!atBottom);
-    if (atBottom) setFollowing(true);
-    else setFollowing(false);
-  };
-  const jumpToEnd = () => {
-    const node = list.current;
-    if (node) node.scrollTop = node.scrollHeight;
-    setFollowing(true);
-    setJumpVisible(false);
-  };
-  return <main className="session-log-page">
-    <header><h1>{projectTitle || shortName}, Session {session?.number ?? '…'}</h1><p>Live provider traffic and operational events · {session?.status ?? 'loading'}</p><div className="session-log-toolbar"><label className="session-log-show">Show <SigmaSelect ariaLabel="Show events" value={filter} onChange={setFilter}
-      options={[{ value: 'all', label: 'All events' }, { value: 'investigator', label: 'Investigator' },
-        { value: 'skeptic', label: 'Skeptic' }, { value: 'provider', label: 'Provider calls' },
-        { value: 'session_event', label: 'Session events' }]}/></label> {jumpVisible && <button className="session-log-secondary-action" type="button" onClick={jumpToEnd}>Jump to end</button>}
-      <button type="button" className="session-log-toolbar-icon workspace-icon-button text-copy-button" aria-label="Copy log to clipboard" data-tooltip={copyState === 'copied' ? 'Copied' : 'Copy log to clipboard'} disabled={copyState === 'copying'} onClick={() => { void copyLog(); }}>{copyState === 'copied' ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>
-      <a className="session-log-toolbar-icon workspace-icon-button session-log-download" href={downloadUrl} aria-label="Download session log" data-tooltip="Download session log"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></a>
-    </div></header>
-    {copyState === 'copied' && <p role="status" className="session-log-copy-status">Copied log to clipboard.</p>}
-    {copyError && <p role="alert" className="session-log-copy-error">{copyError}</p>}
-    {error && <p role="alert">{error}</p>}
-    {session && ['paused', 'stopped', 'failed', 'ended', 'completed'].includes(session.status) && <section aria-label="Saved session status" className="session-log-reference-summary">
-      <p><strong>Status:</strong> {session.status} · <strong>Stage:</strong> {session.current_action || 'not recorded'} · <strong>Reason code:</strong> {session.termination_reason_code || 'not recorded'}</p>
-      <p>{session.reason || session.message || 'No stop reason recorded.'}</p>
-    </section>}
-    {referencePreparation && <section className={`session-log-reference-summary${['fallback', 'interrupted', 'failed', 'skipped', 'disabled'].includes(referencePreparation.compiler.status) || referencePreparation.compiler.source_hash_match === false || referencePreparation.references.some(ref => ref.retrieval_status !== 'retrieved' || ref.excerpt_integrity !== true) ? ' session-log-reference-degraded' : ''}`} aria-label="Research reference preparation">
-      <p><strong>Research references:</strong> {referencePreparation.selected_count ?? 'unknown/not recorded'} selected · {referencePreparation.verified_count} retrieved with verified excerpts · Compilation {compilationLabel} ({referencePreparation.compiler.attempt_count}/3 attempts) · {referencePreparation.guidance_disposition}</p>
-      {referencePreparation.selected_count !== null && referencePreparation.verified_count < referencePreparation.selected_count && <p className="session-log-reference-warning" role="alert">Some selected methodology references were not retrieved with verified excerpts.</p>}
-      {referencePreparation.compiler.reason && referencePreparation.compiler.status !== 'completed' && <p className="session-log-reference-warning" role="alert">{referencePreparation.compiler.reason}</p>}
-      <details><summary>Reference sources and compilation diagnostics</summary>
-        <ul>{referencePreparation.references.map((ref, index) => <li key={index}>
-          <strong>{ref.title}</strong> · {/^https?:\/\//.test(ref.url) ? <a href={ref.url} target="_blank" rel="noopener noreferrer">{ref.url}</a> : (ref.url || 'URL unknown/not recorded')}
-          <div>Retrieval: {ref.retrieval_status} · HTTP {ref.http_status ?? 'unknown/not recorded'} · Reason: {ref.reason ?? 'none recorded'} · Excerpt: {ref.excerpt_present ? 'present' : 'absent'} · Excerpt integrity: {ref.excerpt_integrity === true ? 'verified' : ref.excerpt_integrity === false ? 'invalid/missing hash' : 'unknown/not recorded'}</div>
-        </li>)}</ul>
-        <p>Compiler used retrieved excerpts: {referencePreparation.compiler.retrieved_excerpts_used}.</p>
-        {referencePreparation.compiler.source_hash_match === false && <p role="alert" className="session-log-reference-warning">Compiled source snapshot hash mismatch.</p>}
-        <ol>{referencePreparation.compiler.attempts.map((attempt, index) => <li key={index}>Attempt {attempt.number ?? index + 1}: {attempt.status ?? 'unknown'} · HTTP {attempt.http_status ?? 'unknown/not recorded'} · Code {attempt.error_code ?? 'unknown/not recorded'} · Failure {attempt.failure_type ?? 'none'} · Validation {attempt.validation_failure ?? 'none'} · Usage {attempt.usage_status ?? 'unknown/not recorded'}{attempt.token_usage ? ` (${attempt.token_usage.input_tokens ?? '?'} input / ${attempt.token_usage.output_tokens ?? '?'} output tokens)` : ''} · Retry {attempt.retry_decision ?? 'unknown/not recorded'}{attempt.reason && <div>{attempt.reason}</div>}</li>)}</ol>
-      </details>
-    </section>}
-    <ol ref={list} onScroll={updateScrollState} className="session-log-events" aria-live="polite">{shown.map(event => {
-      const paired = event.request_id ? calls.get(event.request_id) : undefined;
-      if (event.type === 'provider_request') {
-        const elapsed = Math.max(0, Math.floor((now - Date.parse(event.timestamp)) / 1000));
-        const duration = typeof paired?.duration_seconds === 'number' ? `${paired.duration_seconds}s` : `in flight · ${elapsed}s`;
-        return <li key={`call-${event.request_id}`}><details><summary><time>{new Date(event.timestamp).toLocaleTimeString()}</time> · Round {String(event.round ?? '—')} · {String(event.role ?? 'Agent')} · {String(event.status ?? 'request')} · {duration} · {event.request_id}</summary><h2>Sent request</h2>{Array.isArray(event.peer_evidence_available) && event.peer_evidence_available.length > 0 && <p>Cross-strategy evidence available: {event.peer_evidence_available.join(', ')}. Included in this actual request: {Array.isArray(event.peer_evidence_in_actual_request) ? event.peer_evidence_in_actual_request.join(', ') || 'none' : 'not recorded'}.</p>}<pre>{JSON.stringify(event.request, null, 2)}</pre>{paired ? <><h2>{paired.type === 'provider_failure' ? 'Failure' : 'Provider response'}</h2><p>Response received <time>{new Date(paired.timestamp).toLocaleTimeString()}</time></p><pre>{JSON.stringify(paired.type === 'provider_failure' ? paired.provider_error : paired.response, null, 2)}</pre>{typeof paired.response_wire === 'string' && <details><summary>Raw provider response</summary><pre>{paired.response_wire}</pre></details>}<p>Model {String(event.model ?? 'unknown')} · {String(paired.duration_seconds ?? '—')}s · Usage {JSON.stringify(paired.usage ?? {})} · Estimated cost ${String(paired.estimated_cost_usd ?? 'unavailable')}</p></> : <p>Waiting for provider response…</p>}</details></li>;
+  // Queue formatting only after a transcript row has entered the scroll viewport.
+  // A long historical transcript must not trigger hundreds of paid conversions
+  // merely because the user enabled Markdown.
+  useEffect(() => {
+    if (!markdownEntries.size || !list.current || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(changes => {
+      const newlySeen = changes.filter(change => change.isIntersecting);
+      if (!newlySeen.length) return;
+      setSeenMarkdownEntries(current => {
+        const next = new Set(current);
+        for (const change of newlySeen) {
+          const id = change.target.getAttribute('data-transcript-entry');
+          if (id) next.add(id);
+        }
+        return next.size === current.size ? current : next;
+      });
+    }, { root: null });
+    list.current.querySelectorAll('[data-transcript-entry]').forEach(node => observer.observe(node));
+    return () => observer.disconnect();
+  }, [markdownEntries, events, expandedEntries, visibleTurnCount]);
+
+  // The existing Markdown action formats saved provider text with the same
+  // metered converter as other SIGMA research blocks. The original transcript
+  // and Copy/Download remain byte-for-byte unchanged. Only accepted, visible
+  // transcript content is queued; never send arbitrary browser-authored text.
+  useEffect(() => {
+    if (!markdownEntries.size || !projectId) return;
+    const entries = projectTranscript(events, interventions).filter(entry =>
+      markdownEntries.has(entry.id) &&
+      seenMarkdownEntries.has(entry.id) &&
+      entry.role !== 'other' &&
+      (expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry)) &&
+      convertibleTranscriptEntry(entry));
+    for (const entry of entries) {
+      if (formattedEntriesRef.current[entry.id]?.source === entry.text || conversionQueued.current.has(entry.id)) continue;
+      conversionQueued.current.add(entry.id);
+      conversionQueue.current.push(entry);
+    }
+    if (conversionWorker.current || !conversionQueue.current.length) return;
+    conversionWorker.current = true;
+    const drain = async () => {
+      try {
+        while (conversionQueue.current.length && markdownEnabled.current) {
+          const entry = conversionQueue.current.shift()!;
+          // An entry may have been deselected while another paid conversion ran.
+          // Do not dispatch formatting for a row the user has switched off.
+          if (!selectedMarkdownEntries.current.has(entry.id)) {
+            conversionQueued.current.delete(entry.id);
+            continue;
+          }
+          const controller = new AbortController();
+          conversionAbort.current = controller;
+          try {
+            const settingsResponse = await fetch(
+              `/api/projects/proposals/config?${new URLSearchParams({ path, purpose: 'markdown' })}`,
+              { signal: controller.signal, cache: 'no-store' },
+            );
+            const settings = await settingsResponse.json();
+            if (!settingsResponse.ok || !settings.available || !settings.binding)
+              throw new Error(settings.message ?? 'Markdown formatting is unavailable.');
+            const response = await fetch('/api/projects/text/convert', {
+              method: 'POST', signal: controller.signal,
+              headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+              body: JSON.stringify({
+                path, scope: 'session-transcript', session_id: sessionId,
+                field_path: `event.${entry.sequence}`, target: 'markdown',
+                expected_digest: 'server-snapshot',
+                expected_project_id: projectId, expected_binding: settings.binding,
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok || typeof result.body !== 'string')
+              throw new Error(result.error ?? result.detail ?? 'Transcript Markdown formatting failed.');
+            if (!controller.signal.aborted && markdownEnabled.current) {
+              const next = { ...formattedEntriesRef.current, [entry.id]: { source: entry.text, body: result.body } };
+              formattedEntriesRef.current = next;
+              setFormattedEntries(next);
+              setMarkdownError('');
+            }
+          } catch (cause) {
+            if (!controller.signal.aborted) {
+              setMarkdownError(displayError(cause));
+              conversionQueue.current = [];
+              break;
+            }
+          } finally {
+            if (conversionAbort.current === controller) conversionAbort.current = null;
+          }
+        }
+      } finally {
+        conversionWorker.current = false;
       }
-      if (event.request_id) return null;
-      const eventText = event.type === 'cross_strategy_artifact_availability'
-        ? `${String(event.source_artifact_id ?? 'Artifact')} from ${String(event.source_strategy_id ?? 'a strategy')} is ${String(event.availability ?? 'available')} for ${String(event.target_strategy_id ?? 'the receiving strategy')}.`
-        : `${String(event.event_kind ?? event.type)}: ${String(event.message ?? event.status ?? '')}`;
-      return <li key={`event-${event.seq}`}><time>{new Date(event.timestamp).toLocaleTimeString()}</time> · {eventText}</li>;
-    })}</ol>
+    };
+    void drain();
+  }, [markdownEntries, events, interventions, projectId, path, sessionId, expandedEntries, seenMarkdownEntries]);
+
+  const toggleEntryMarkdown = (entry: TranscriptEntry) => {
+    const next = new Set(markdownEntries);
+    if (next.has(entry.id)) next.delete(entry.id);
+    else {
+      next.add(entry.id);
+      setExpandedEntries(current => ({ ...current, [entry.id]: true }));
+    }
+    markdownEnabled.current = next.size > 0;
+    selectedMarkdownEntries.current = next;
+    setMarkdownEntries(next);
+    if (!next.size) {
+      conversionAbort.current?.abort();
+      conversionQueue.current = [];
+      conversionQueued.current = new Set(Object.keys(formattedEntriesRef.current));
+      setSeenMarkdownEntries(new Set());
+      setMarkdownError('');
+    }
+  };
+  useEffect(() => () => { conversionAbort.current?.abort(); }, []);
+  const allGroups = groupTranscriptTurns(
+    projectTranscript(events, interventions).filter(entry => entry.role !== 'other'),
+  );
+  const { shownGroups, remainingTurns } = paginateTranscriptTurns(allGroups, visibleTurnCount);
+  const activeTurnKey = ['running', 'queued'].includes(session?.status ?? '')
+    ? allGroups.find(group => group.entries.some(entry => typeof entry.round === 'number' && entry.round > 0))?.key
+    : undefined;
+  const strategyIds = [...new Set(allGroups.flatMap(group =>
+    group.entries.map(entry => entry.strategyId).filter((id): id is string => !!id)))].sort();
+  const strategySuffix = (group: (typeof allGroups)[number]) => {
+    const id = group.entries.find(entry => entry.strategyId)?.strategyId;
+    return id ? ` · Strategy ${strategyIds.indexOf(id) + 1}` : '';
+  };
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return Number.isNaN(date.getTime()) ? timestamp : new Intl.DateTimeFormat(undefined, {
+      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
+    }).format(date);
+  };
+  const entryName = (entry: TranscriptEntry): string => {
+    return transcriptRoleLabel(entry.role, entry.brainstormMode === true) || entry.title;
+  };
+  if (!initialLoadComplete) return <main className="session-log-page session-conversation-page"><div className="workspace-state project-opening-state session-opening-state" role="status" aria-live="polite"><p className="intro">Opening session…</p></div></main>;
+  return <main className="session-log-page session-conversation-page">
+    {!session && <div className="workspace-state project-opening-state session-opening-state" role="alert"><p className="error">Session unavailable. The transcript could not be loaded.</p></div>}
+    <section className="session-transcript-conversation" aria-label="Transcript">
+      <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
+        aria-label="Conversation history">
+        {shownGroups.map(group => <li key={group.key} className={"session-transcript-turn" + (group.entries.some(entry => entry.brainstormMode === true && (entry.role === "investigator" || entry.role === "skeptic")) ? " is-brainstorm-turn" : "")}>
+          <h3 className="session-transcript-turn-heading">
+            <span>{group.label}{strategySuffix(group)}{group.latestTimestamp && <> · <time dateTime={group.latestTimestamp}>{formatTimestamp(group.latestTimestamp)}</time></>}</span>
+            {group.key === activeTurnKey && <a
+              className="research-running-indicator-frame session-transcript-current-turn"
+              href={`/project?${new URLSearchParams({ path, reveal_session: sessionId })}`}
+              aria-label="Show session in project" data-tooltip="Show session in project"
+              onClick={event => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                window.history.pushState(null, '', event.currentTarget.href);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}>
+              <span className="research-running-indicator"/>
+            </a>}
+          </h3>
+          <ol className="session-transcript-turn-entries">
+            {group.entries.map(entry => {
+              const expanded = expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry);
+              const name = entryName(entry);
+              const asMarkdown = markdownEntries.has(entry.id);
+              const supervisor = entry.role === 'supervisor' ? supervisorDisplay(entry.text) : null;
+              const formatted = formattedEntries[entry.id]?.source === entry.text ? formattedEntries[entry.id].body : entry.text;
+              const formattedSupervisor = supervisor?.scores ? supervisorDisplay(formatted) : null;
+              // A converter may rephrase the rating block; fall back to the saved
+              // observation so a formatted view never repeats scores as prose.
+              const visibleText = supervisor?.scores
+                ? formattedSupervisor?.scores ? formattedSupervisor.body : supervisor.body
+                : formatted;
+              return <li key={entry.id} data-transcript-entry={entry.id}
+                className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
+                <div className="session-transcript-entry-heading">
+                  {entry.pending
+                    ? <span className="chat-disclosure-button session-transcript-pending-heading">
+                        <svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12">
+                          <path d="m4 2 4 4-4 4"/>
+                        </svg>
+                        <strong>{name}</strong>
+                      </span>
+                    : <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
+                        aria-controls={'transcript-entry-' + entry.id}
+                        onClick={() => setExpandedEntries(current => ({ ...current, [entry.id]: !expanded }))}>
+                        <svg aria-hidden="true" className={'disclosure-chevron' + (expanded ? ' is-expanded' : '')} viewBox="0 0 12 12">
+                          <path d="m4 2 4 4-4 4"/>
+                        </svg>
+                        <strong>{name}</strong>
+                      </button>}
+                  {entry.pending && <small className="session-transcript-pending">Awaiting response…</small>}
+                  {!entry.pending && <button type="button" className={'session-transcript-entry-markdown' + (asMarkdown ? ' is-active' : '')}
+                    aria-label={asMarkdown ? `Show ${name} as plain text` : `Render ${name} as Markdown`}
+                    aria-pressed={asMarkdown}
+                    data-tooltip={asMarkdown ? 'Show plain text' : 'Render as Markdown'}
+                    onClick={() => toggleEntryMarkdown(entry)}>
+                    <svg className="markdown-logo" aria-hidden="true" viewBox="20 25 140 78">
+                      <path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"/>
+                      <path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z"/>
+                    </svg>
+                  </button>}
+                  {!entry.pending && <CopyTranscriptEntryButton title={name} text={entry.text}/>}
+                </div>
+                {supervisor?.scores && <small className="session-transcript-supervisor-scores">
+                  Objective alignment {supervisor.scores.alignment}{supervisor.scores.originality !== undefined && <> · Originality {supervisor.scores.originality}</>} · Substantive advancement {supervisor.scores.advancement} · Evidence &amp; validation {supervisor.scores.evidence} · Research health {supervisor.scores.health}
+                </small>}
+                {!entry.pending && <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
+                  {expanded && (asMarkdown
+                    ? <div className="session-transcript-markdown"><RenderedMarkdown body={formatTranscriptMarkdown(visibleText)} collapsibleSections/></div>
+                    : <pre className="session-transcript-plain">{supervisor?.body ?? entry.text}</pre>)}
+                </div>}
+              </li>;
+            })}
+          </ol>
+        </li>)}
+      </ol>
+      {remainingTurns > 0 && <div className="session-transcript-pagination">
+        <button type="button" className="text-view-link" onClick={() => setVisibleTurnCount(current => current + 20)}>
+          Show more turns
+        </button>
+      </div>}
+    </section>
   </main>;
 }
-

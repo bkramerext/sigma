@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import socket
 import subprocess
 import tempfile
@@ -396,16 +397,46 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert conclusion.locator("summary").inner_text().strip() == "Conclusion"
                 prelude = outcome.locator(".outcome-evidence-prelude")
                 expect(prelude).to_be_visible()
-                pause_notice = outcome.locator(".research-pause-guidance")
+                # A lifecycle notice appears only by the Session metadata.
+                # Do not repeat the Stopped/Paused guidance inside Outcome.
+                pause_notice = row.locator(".session-summary .stopped-session-guidance")
                 expect(pause_notice).to_be_visible()
-                expect(pause_notice).to_contain_text("Paused")
-                expect(pause_notice).to_contain_text(
-                    "A dispatched provider request may still consume allowance."
-                )
-                expect(pause_notice).to_contain_text(
-                    "Resume when you are ready for new provider work."
-                )
+                expect(pause_notice).to_contain_text("Stopped")
+                expect(pause_notice).to_contain_text("Next:")
+                expect(outcome.locator(".research-pause-guidance")).to_have_count(0)
                 expect(row.get_by_role("button", name="Resume")).to_be_visible()
+                if session is sessions[0]:
+                    # Session Settings is content-height, auto-saving and X-only.
+                    # Guard against the former stretched grid with huge blank gaps.
+                    row.locator("button.session-settings-action").click()
+                    settings_dialog = page.get_by_role("dialog", name="Session Settings")
+                    expect(settings_dialog).to_be_visible()
+                    settings_bounds = settings_dialog.bounding_box()
+                    assert settings_bounds and settings_bounds["height"] < 470, settings_bounds
+                    expect(settings_dialog.get_by_role("button", name="Save")).to_have_count(0)
+                    expect(settings_dialog.get_by_role("button", name="Cancel")).to_have_count(0)
+                    supervisor = settings_dialog.get_by_role("combobox", name="Steering level")
+                    expect(supervisor).to_be_visible()
+                    expect(settings_dialog.get_by_text("Unlimited", exact=True)).to_be_visible()
+                    expect(
+                        settings_dialog.get_by_text("Light gently prompts clarity", exact=False)
+                    ).to_be_visible()
+                    turns_input = settings_dialog.locator("#session-settings-turns")
+                    assert turns_input.evaluate("el => el.getBoundingClientRect().width <= 90"), (
+                        "Turn input should stay compact"
+                    )
+                    assert supervisor.evaluate(
+                        "el => getComputedStyle(el).paddingLeft === '11px'"
+                    ), "Supervisor selected value must align with Turns input"
+                    supervisor.click()
+                    option = page.get_by_role("option", name="Light")
+                    expect(option).to_be_visible()
+                    assert option.evaluate("el => getComputedStyle(el).paddingLeft === '11px'"), (
+                        "Supervisor options must align with the selected value"
+                    )
+                    supervisor.click()
+                    settings_dialog.get_by_role("button", name="Close Session Settings").click()
+                    expect(settings_dialog).to_have_count(0)
                 expect(prelude).to_contain_text("0 reported completed of 0 identified executions")
                 expect(prelude).to_contain_text(
                     "No local Python or Sage computation is recorded for this session."
@@ -607,9 +638,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             page.reload()
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
-            expect(row.locator(".research-pause-guidance")).to_contain_text(
-                "Resume when you are ready for new provider work."
-            )
+            expect(row.locator(".session-summary .stopped-session-guidance")).to_be_visible()
+            expect(row.locator(".session-outcome .research-pause-guidance")).to_have_count(0)
             expect(row.locator(".advanced-outcome-hint")).to_contain_text(
                 "Want more detail? Turn on Advanced Outcome to see the full research findings and evidence."
             )
@@ -897,6 +927,26 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 )
             assert not compilation_page_errors, compilation_page_errors
             compilation_context.close()
+
+            # The Session page is a Project subview. Its controls must be the
+            # same React actions used by the existing Project session row.
+            session_row = page.locator(f'li[data-session-id="{session["id"]}"]')
+            expect(session_row.locator(".session-log-open-link")).to_be_visible()
+            session_row.locator(".session-log-open-link").click()
+            expect(page).to_have_url(re.compile(r"/session\\?"))
+            logo = page.get_by_role("link", name="Go back to project page")
+            expect(logo).to_have_attribute("href", re.compile(r"/project\\?"))
+            expect(
+                page.locator("#session-page-controls").get_by_role(
+                    "button", name=f"Resume Session {session['session_number']}"
+                )
+            ).to_be_visible(timeout=15000)
+            expect(page.locator(".session-transcript-turn-entries")).to_have_count(
+                page.locator(".session-transcript-turn").count()
+            )
+            logo.click()
+            expect(page).to_have_url(re.compile(r"/project\\?"))
+            expect(page.get_by_role("heading", name="Strategies")).to_be_visible()
 
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors

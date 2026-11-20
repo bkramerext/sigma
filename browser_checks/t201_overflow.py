@@ -40,6 +40,17 @@ with sync_playwright() as playwright:
     page.goto(base_url + "/project?path=" + quote(str(path), safe=""))
     expect(page.get_by_role("heading", name="T201 overflow fixture")).to_be_visible()
 
+    # The Sessions heading no longer has a Settings action. Preserve the
+    # fixture's single-pair execution limit at the API boundary.
+    def one_pair_start(route):
+        payload = route.request.post_data_json
+        payload["session_settings"]["turn_limit"] = 1
+        headers = {**route.request.headers, "origin": base_url}
+        response = route.fetch(headers=headers, post_data=json.dumps(payload))
+        route.fulfill(response=response)
+
+    page.route("**/api/projects/research-sessions/start", one_pair_start)
+
     page.get_by_role("button", name="New session").click()
     expect(
         page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session")
@@ -80,7 +91,8 @@ with sync_playwright() as playwright:
     first = json.loads(read_file(path, new_files[0]))
     assert first["session_number"] == 2
     assert first["strategy_id"] == info["strategy"]
-    assert first["calls_used"] == 2 and first["artifacts"]
+    # The always-on Supervisor may reserve its independent review call after the pair.
+    assert 2 <= first["calls_used"] <= 3 and first["artifacts"]
     assert first["prior_session_obligations_omitted"] >= 1
     assert first["prior_session_obligation_omitted_ids_by_strategy"][info["strategy"]]
     manifest = first["steps"][0]["context_manifest"]

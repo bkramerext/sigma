@@ -1,0 +1,557 @@
+/* The Session transcript uses Brainstorm's simple conversation-card layout.
+   Rich diagnostics remain in the saved Session record, not in this reading view. */
+.session-log-page.session-conversation-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 12px 0 28px;
+  background: transparent;
+}
+/* The transcript uses the full available workspace width rather than
+   inheriting the Project pane's large horizontal gutters. */
+.workspace-page.session-workspace .workspace-content { padding: 0 8px 28px; }
+.session-log-page.session-conversation-page .session-transcript-conversation {
+  margin: 2px 0 8px;
+  min-width: 0;
+}
+.session-log-page .session-transcript-events {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  list-style: none;
+}
+.session-log-page .session-transcript-events > .session-transcript-turn {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  list-style: none;
+}
+.session-log-page .session-transcript-events > .session-transcript-turn + .session-transcript-turn {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #314252;
+}
+.session-log-page .session-transcript-turn-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0;
+  color: #bfb4a5;
+  font: 600 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.session-log-page .session-transcript-turn-entries {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  list-style: none;
+  overflow: visible;
+}
+.session-log-page .session-transcript-turn-entries > .session-transcript-entry + .session-transcript-entry {
+  border-top: 0;
+}
+.session-log-page .session-transcript-entry {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #e5ded3;
+  list-style: none;
+}
+.session-log-page .session-transcript-entry-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  /* Default role column fits Investigator; Brainstorm turns widen it below. */
+  flex: 0 0 116px;
+  width: 116px;
+  white-space: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 26px;
+  margin: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: #f2c48d;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* A per-turn shared column sized to the Co-investigator label, without
+   adding extra space before Markdown compared with the normal Investigator row. */
+.session-log-page .session-transcript-turn.is-brainstorm-turn .chat-disclosure-button {
+  flex-basis: 140px;
+  width: 140px;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button strong {
+  color: inherit;
+  font-size: .86rem;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button:hover:not(:disabled) {
+  color: #ffe0ae;
+  background: transparent;
+  border: 0;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button .disclosure-chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 150ms ease;
+}
+.session-log-page .session-transcript-entry .chat-disclosure-button .disclosure-chevron.is-expanded { transform: rotate(90deg); }
+.session-log-page .session-transcript-entry .session-transcript-entry-markdown {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  min-height: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 3px 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.session-log-page .session-transcript-entry-markdown svg.markdown-logo {
+  display: block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 18px;
+  fill: currentColor;
+}
+.session-log-page .session-transcript-entry-markdown .markdown-logo path { fill: currentColor; }
+.session-log-page .session-transcript-entry-markdown.is-active { color: #f2c48d; }
+.session-log-page .session-transcript-entry-markdown:hover:not(:disabled) {
+  color: #ffe0ae;
+  background: #302418;
+  border-color: #82694b;
+}
+.session-log-page .session-transcript-entry .session-transcript-entry-copy {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+}
+.session-log-page .session-transcript-entry-copy svg { width: 16px; height: 16px; }
+.session-log-page .session-transcript-entry-copy:hover:not(:disabled) { color: #ffe0ae; background: #302418; border-color: #82694b; }
+.session-log-page .session-transcript-turn-heading time {
+  color: #a69d92;
+  font: inherit;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.session-log-page .session-transcript-supervisor-scores {
+  display: block;
+  margin: 1px 0 5px 24px;
+  color: #a69d92;
+  font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.session-log-page .session-transcript-supervisor-scores span { color: #8c98a3; }
+.session-log-page .session-transcript-entry .session-transcript-pending-heading {
+  cursor: default;
+}
+.session-log-page .session-transcript-pending-heading .disclosure-chevron {
+  visibility: hidden;
+}
+.session-log-page .session-transcript-pending {
+  color: #a69d92;
+  font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.session-log-page .session-transcript-entry [hidden] { display: none; }
+.session-log-page .session-transcript-plain {
+  max-width: calc(100% - 24px);
+  max-height: none;
+  margin: 3px 0 0 24px;
+  padding: 0;
+  overflow-x: auto;
+  background: transparent;
+  color: #e5ded3;
+  font: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.session-log-page .session-transcript-markdown {
+  min-width: 0;
+  max-width: calc(100% - 24px);
+  margin: 3px 0 0 24px;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+.session-log-page .session-transcript-markdown > :first-child { margin-top: 0; }
+.session-log-page .session-transcript-markdown > :last-child { margin-bottom: 0; }
+.session-log-page .session-transcript-markdown p { margin: 7px 0; }
+.session-log-page .session-transcript-markdown :is(pre, table, .katex-display) { max-width: 100%; overflow-x: auto; }
+/* Markdown code fences are collapsed on first view, independent of the
+   transcript entry disclosure and without rewriting saved Markdown. */
+.session-log-page .session-transcript-markdown .markdown-collapsible-code {
+  max-width: 100%;
+  margin: 12px 0;
+  border: 1px solid #40576a;
+  border-radius: 6px;
+  background: #0a1117;
+  overflow: hidden;
+}
+.session-log-page .session-transcript-markdown .markdown-collapsible-code > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  color: var(--sigma-copper-foreground);
+  font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  list-style: none;
+}
+.session-log-page .session-transcript-markdown .markdown-collapsible-code > summary::-webkit-details-marker { display: none; }
+.session-log-page .session-transcript-markdown .markdown-code-chevron {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform .12s ease;
+}
+.session-log-page .session-transcript-markdown .markdown-collapsible-code[open] .markdown-code-chevron {
+  transform: rotate(45deg);
+}
+.session-log-page .session-transcript-markdown .markdown-collapsible-code > pre {
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid #40576a;
+  overflow-x: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-log-page .session-transcript-markdown .markdown-code-chevron { transition: none; }
+}
+.session-log-page .session-transcript-pagination { margin: 14px 0 0; }
+.session-log-page .session-transcript-pagination button.text-view-link {
+  display: inline;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  font: 400 13px Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.session-log-page .session-transcript-pagination button.text-view-link:hover:not(:disabled) {
+  color: var(--sigma-copper-foreground);
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Session belongs within the Project navigation hierarchy. */
+.session-workspace .brainstorm-header-copy h1 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.session-page-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* 9px flex gap + 12.6px inset = 21.6px, 20% less than the prior 27px. */
+/* 9px heading gap + 7.2px inset = 16.2px, 25% tighter than 21.6px. */
+.session-workspace .brainstorm-header-copy h1 .session-page-header-actions { margin-left: 7.2px; }
+/* Keep a reserved activity slot so Play/Stop/Settings/Close never move
+   when the green heartbeat appears or disappears. */
+.session-workspace .brainstorm-header-copy h1 .session-page-title-and-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.session-workspace .brainstorm-header-copy h1 .session-title-activity-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 24px;
+}
+.session-workspace .brainstorm-header-copy h1 .session-title-activity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  margin: 0;
+}
+.session-workspace .session-title-activity .research-running-indicator { margin: 0; }
+.session-workspace .session-page-header-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.session-workspace .session-page-header-actions svg {
+  width: 18px;
+  height: 18px;
+}
+.session-workspace .session-page-header-actions button:is(:hover, :focus-visible) {
+  background: #302418;
+  border-color: #82694b;
+  color: #ffe0ae;
+}
+.session-workspace .session-page-header-actions button:disabled {
+  opacity: .55;
+  cursor: default;
+}
+.session-page-control-error { color: #edbc77; margin: 10px 3rem; }
+
+/* The Project workspace remains mounted so Session uses its real controls.
+   Hide the underlying panes, never duplicate their control handlers. */
+.session-workspace .workspace-content > :not(.session-log-page) { display: none !important; }
+.session-workspace .session-page-header-actions .session-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.session-workspace .brainstorm-header-copy h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+}
+.session-workspace .session-page-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--sigma-copper-foreground);
+  cursor: pointer;
+}
+.session-workspace .session-page-close svg { width: 20px; height: 20px; }
+/* Close uses the same shared workspace-icon-button hover/focus treatment as Session settings. */
+
+/* The Session title replaces the redundant Transcript heading as the reset. */
+.session-workspace .brainstorm-header-copy h1 .session-page-title-reset {
+  display: inline;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-workspace .brainstorm-header-copy h1 .session-page-title-reset:hover {
+  border-color: transparent;
+  background: transparent;
+  color: #ffe0ae;
+}
+.session-workspace .brainstorm-header-copy h1 .session-page-title-reset:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
+
+/* The visible active turn uses the same heartbeat as Session and Project. */
+/* Override the generic Session-log link's 36px minimum and padding:
+   the dot must never increase the turn heading's line box. */
+.session-workspace .session-log-page .session-transcript-current-turn {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 12px;
+  width: 12px;
+  min-width: 0;
+  height: 12px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  text-decoration: none;
+}
+.session-workspace .session-log-page .session-transcript-current-turn,
+.session-workspace .session-log-page .session-transcript-current-turn:hover,
+.session-workspace .session-log-page .session-transcript-current-turn:focus {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.session-log-page .session-transcript-current-turn:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+.session-log-page .session-transcript-current-turn .research-running-indicator { margin: 0; }
+
+/* The Session loading state shares Project's label style and top inset.
+   Offset the transcript's normal padding only while its loading text is shown. */
+.session-workspace .session-log-page:has(.session-opening-state) {
+  padding-top: 0;
+}
+
+/* A Session is a Project view: keep the Project's exact two-column pill grid.
+   The title retains its Session layout, but the right controls must not use
+   Brainstorm's shorter independent pill arrangement. */
+.workspace-page.brainstorm-workspace.session-workspace .project-art-header.chat-site-header .header-controls {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  align-items: start;
+  justify-content: end;
+  justify-self: end;
+  align-self: center;
+  gap: var(--identity-pill-gap);
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  width: max-content;
+  min-width: 0;
+  margin-left: auto;
+  padding: 0;
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace.session-workspace .project-art-header.chat-site-header .header-controls {
+    transform: translateX(16px);
+  }
+}
+
+/* Preserve the Session heading's original leftward placement beside the
+   SIGMA artwork. Do not shrink the header grid: that shifts the heading
+   instead of fixing the obstruction. The artwork is decorative; the complete
+   title must paint above it, even where the two visually overlap. */
+@media (min-width: 1201px) {
+  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+    margin-left: calc(min(29vw, 270px) - min(29vw, 470px) - 40px);
+  }
+}
+@media (min-width: 701px) and (max-width: 1200px) {
+  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+    margin-left: calc(min(29vw, 270px) - min(29vw, 330px) - 28px);
+  }
+}
+.workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+  position: relative;
+  z-index: 5;
+  overflow: visible;
+}
+/* The image and its container must remain behind the overlapping heading. */
+.workspace-page.session-workspace .project-art-header.chat-site-header .project-header-art {
+  z-index: 0;
+}
+
+/* Session Markdown disclosures are attached to actual section headings rather
+   than inserting an extra "JSON code" panel. Each section is closed initially. */
+.session-log-page .session-transcript-markdown .markdown-collapsible-section {
+  margin: 12px 0;
+  min-width: 0;
+}
+.session-log-page .session-transcript-markdown .markdown-section-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+  cursor: pointer;
+  color: #e5ded3;
+  font-weight: 700;
+}
+.session-log-page .session-transcript-markdown .markdown-section-summary::-webkit-details-marker { display: none; }
+.session-log-page .session-transcript-markdown .markdown-section-title { min-width: 0; }
+.session-log-page .session-transcript-markdown .markdown-section-chevron {
+  align-self: center;
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--sigma-copper-foreground);
+  border-bottom: 2px solid var(--sigma-copper-foreground);
+  transform: rotate(-45deg);
+}
+.session-log-page .session-transcript-markdown .markdown-collapsible-section[open] > .markdown-section-summary > .markdown-section-chevron {
+  transform: rotate(45deg);
+}
+.session-log-page .session-transcript-markdown .markdown-section-body {
+  min-width: 0;
+  padding-left: 18px;
+}
+.session-log-page .session-transcript-markdown .markdown-section-body > :first-child { margin-top: 8px; }
+.session-log-page .session-transcript-markdown .markdown-section-body pre {
+  max-width: 100%;
+  overflow-x: auto;
+}

@@ -1,9 +1,11 @@
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { escapeUnmatchedInlineDollars } from './markdown-dollars';
+import { sizeFractionParentheses } from './math-parentheses';
+import { collapsibleMarkdownSections } from './markdown-sections';
 import 'katex/dist/katex.min.css';
 
 type MarkdownNode = {
@@ -193,6 +195,21 @@ function semanticMath(): (tree: MarkdownNode) => void {
   };
 }
 
+/** KaTeX defaults to fixed-size parentheses, even around stacked fractions.
+ * Modify only the render tree's math nodes; keep source text unchanged. */
+function sizedMathParentheses(): (tree: MarkdownNode) => void {
+  return tree => {
+    const visit = (node: MarkdownNode): void => {
+      if ((node.type === 'inlineMath' || node.type === 'math') && typeof node.value === 'string') {
+        node.value = sizeFractionParentheses(node.value);
+        return;
+      }
+      for (const child of node.children ?? []) visit(child);
+    };
+    visit(tree);
+  };
+}
+
 /** Normalize legacy TeX delimiters and safely close block math at paragraph boundaries. */
 export function markdownWithMathDelimiters(body: string): string {
   const code = /(^|\n)([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n[ \t]*\3[^\n]*(?=\n|$)|(`+)[^`\n]*\4/g;
@@ -248,7 +265,7 @@ export function markdownWithMathDelimiters(body: string): string {
   }).join('\n');
 }
 
-export default function RenderedMarkdown({ body, citationProjectPath, citationUrls = [], questionHeadingAction }: { body: string; citationProjectPath?: string; citationUrls?: string[]; questionHeadingAction?: ReactNode }) {
+export default function RenderedMarkdown({ body, citationProjectPath, citationUrls = [], questionHeadingAction, collapsibleCodeBlocks = false, collapsibleSections = false }: { body: string; citationProjectPath?: string; citationUrls?: string[]; questionHeadingAction?: ReactNode; collapsibleCodeBlocks?: boolean; collapsibleSections?: boolean }) {
   const allowedCitationUrls = new Set(citationUrls);
   const urlTransform = (url: string) => {
     if (url.startsWith('#')) return url;
@@ -282,11 +299,21 @@ export default function RenderedMarkdown({ body, citationProjectPath, citationUr
       return allowedCitationUrls.has(destination) ? destination : '';
     } catch { return ''; }
   };
-  return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath]}
-    rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, errorColor: '#c8d3dc' }]]}
+  return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath, sizedMathParentheses]}
+    rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, errorColor: '#c8d3dc' }], ...(collapsibleSections ? [collapsibleMarkdownSections] : [])]}
     urlTransform={urlTransform}
     components={{
       img: () => null,
+      pre: ({ node: _node, children, ...props }) => {
+        if (!collapsibleCodeBlocks) return <pre {...props}>{children}</pre>;
+        const codeClass = isValidElement<{ className?: string }>(children) ? children.props.className ?? '' : '';
+        const language = codeClass.match(/(?:^|\s)language-([a-z0-9_+-]+)/i)?.[1];
+        const label = language ? language.toUpperCase() : 'Code';
+        return <details className="markdown-collapsible-code">
+          <summary><span className="markdown-code-chevron" aria-hidden="true"/><span>{label} code</span></summary>
+          <pre {...props}>{children}</pre>
+        </details>;
+      },
       // Markdown link titles must use SIGMA's tooltip; never emit a native HTML title.
       a: ({ title, ...props }) => <a {...props} data-tooltip={title} />,
       h2: ({ children }) => {

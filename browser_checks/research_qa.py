@@ -75,6 +75,16 @@ with sync_playwright() as playwright:
         timeout=20000,
     )
     page.get_by_role("button", name="New session").click()
+
+    # The removed top-level Settings action is not available during Start.
+    # Limit this deterministic one-pair fixture through request interception;
+    # the actual Start Session UI and backend admission path are still exercised.
+    def one_pair_start(route):
+        payload = route.request.post_data_json
+        payload["session_settings"]["turn_limit"] = 1
+        route.continue_(post_data=json.dumps(payload))
+
+    page.route("**/api/projects/research-sessions/start", one_pair_start)
     page.get_by_role("button", name="Start Session").click()
     expect(page.locator("li[data-session-id]").first.locator(".session-status")).to_have_text(
         "ended", timeout=30000

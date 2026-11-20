@@ -62,7 +62,7 @@
 }
 .workspace-page .project-art-header .brand-block { position: relative; flex: 1 1 auto; align-items: flex-start; gap: 16px; }
 /* Show the logo and wire field, leaving the source image untouched. */
-.workspace-page .project-header-art { position: relative; z-index: 0; align-items: flex-start; width: min(29vw, 330px); aspect-ratio: 25 / 8; overflow: hidden; margin: -15px 0 0 -32px; }
+.workspace-page .project-header-art { position: relative; z-index: 0; align-items: flex-start; width: min(29vw, 270px); aspect-ratio: 25 / 8; overflow: hidden; margin: -15px 0 0 -32px; }
 .workspace-page .project-header-art img { display: block; width: 100%; height: auto; }
 .workspace-page .expansion {
   margin: 0;
@@ -194,6 +194,14 @@
 .workspace-page .strategy-dialog::backdrop { background: #000a; }
 .workspace-page .strategy-dialog h2 { color: var(--sigma-copper-foreground); }
 .workspace-page .workspace-state { padding-top: 40px; }
+/* Project and Session share the same loading-label typography and inset. */
+.workspace-page .workspace-state.project-opening-state,
+.workspace-page .workspace-state.session-opening-state { padding-top: 10px; }
+.workspace-page .workspace-state.project-opening-state .intro,
+.workspace-page .workspace-state.session-opening-state .intro {
+  margin: 0;
+  color: var(--workspace-muted);
+}
 .workspace-page .workspace-state .intro { color: var(--workspace-muted); }
 .workspace-page a { color: var(--sigma-copper-foreground); }
 .workspace-page :focus-visible { outline: 2px solid #edbc77; outline-offset: 4px; }
@@ -531,7 +539,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 }
 
 /* A dedicated icon track provides a true hanging indent on wrapped project titles. */
-.workspace-page .project-header-title-row { display: grid; grid-template-columns: 26px minmax(0,1fr); align-items: start; gap: 6px; width: 100%; }
+.workspace-page .project-header-title-row { display: grid; grid-template-columns: 26px minmax(0,1fr); align-items: start; gap: 2px; width: 100%; }
 .workspace-page .project-header-title-row .research-type-icon {
   grid-column: 1;
   align-self: start;
@@ -589,7 +597,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   height: 1em;
   margin: 0;
 }
-@media (max-width:700px) { .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0,1fr); gap: 5px; } }
+@media (max-width:700px) { .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0,1fr); gap: 2px; } }
 
 
 /* Hover numbered session titles without recoloring the entire disclosure. */
@@ -648,6 +656,13 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 .workspace-page .project-art-header .header-controls > .sigma-header-model-column {
   grid-area: model-column;
   pointer-events: auto;
+}
+/* Align both header rows to the wider Model pill. The Settings icon's
+   trailing edge must coincide with the model's trailing edge, not stop at
+   the narrower intrinsic width of About + Settings. */
+.workspace-page .project-art-header .sigma-header-about-model-anchor .sigma-header-first-row {
+  width: 100%;
+  justify-content: space-between;
 }
 .workspace-page .project-art-header .sigma-header-first-row > .about-action {
   width: auto;

@@ -836,7 +836,7 @@ def export_filename(saved_short_name: str | None, project_title: str, session_nu
         *{f"LPT{i}" for i in range(1, 10)},
     }:
         stem += "_project"
-    return f"{stem}.session_{session_number}.log"
+    return f"{stem}.session_{session_number}.md"
 
 
 def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
@@ -1098,6 +1098,150 @@ def markdown_export(
     return "\n".join(output).rstrip() + "\n"
 
 
+def transcript_markdown_export(
+    events: list[dict[str, Any]],
+    interventions: list[dict[str, Any]],
+    session: dict[str, Any],
+    title: str,
+) -> str:
+    """Project durable provider and human records into a complete readable transcript.
+
+    This is an export view, never a competing authoritative research record.
+    Preserve retention notices and show newest turns first; preserve author
+    order inside each paired turn.
+    """
+    requests = {
+        str(event["request_id"]): event
+        for event in events
+        if event.get("type") == "provider_request" and event.get("request_id")
+    }
+    responded = {
+        str(event["request_id"])
+        for event in events
+        if event.get("type") in {"provider_response", "provider_failure"}
+        and event.get("request_id")
+    }
+    rows: list[tuple[str, int, str | None, str, str]] = []
+    # Intervention target metadata is used solely for grouping, never to alter
+    # the retained Human content.
+    human_targets: dict[int, str] = {}
+    for event in events:
+        kind = event.get("type")
+        stamp = str(event.get("timestamp") or "")
+        sequence = int(event.get("seq") or 0)
+        if kind in {"provider_response", "provider_failure"}:
+            request = requests.get(str(event.get("request_id") or ""), {})
+            role = _event_role_label(request or event)
+            turn = request.get("round", event.get("round", "—"))
+            strategy = request.get("strategy_id", event.get("strategy_id"))
+            message = (
+                _readable_response(event.get("response"))
+                if kind == "provider_response"
+                else str(
+                    event.get("provider_error") or event.get("message") or "Provider call failed."
+                )
+            )
+            group_key = f"{strategy or 'session'}:{turn}"
+            group_label = f"Turn {turn}" + (f" · Strategy {strategy}" if strategy else "")
+            rows.append(
+                (
+                    stamp,
+                    sequence,
+                    group_key,
+                    group_label,
+                    f"### {role}\n\n*{stamp}*\n\n"
+                    + _markdown_payload(message or "Historical reply text unavailable.", role),
+                )
+            )
+        elif kind == "provider_request":
+            if str(event.get("request_id")) not in responded:
+                turn = event.get("round", "—")
+                strategy = event.get("strategy_id")
+                group_key = f"{strategy or 'session'}:{turn}"
+                group_label = f"Turn {turn}" + (f" · Strategy {strategy}" if strategy else "")
+                rows.append(
+                    (
+                        stamp,
+                        sequence,
+                        group_key,
+                        group_label,
+                        (
+                            f"### {_event_role_label(event)} · Request pending\n\n"
+                            f"*{stamp}*\n\nAwaiting response."
+                        ),
+                    )
+                )
+        elif kind == "session_event" and event.get("event_kind") == "intervention.accepted":
+            # The full Human text is projected from the Session below.
+            continue
+        else:
+            label = str(event.get("event_kind") or kind or "Session event").replace("_", " ")
+            message = str(event.get("message") or event.get("reason") or event.get("status") or "")
+            rows.append(
+                (
+                    stamp,
+                    sequence,
+                    None,
+                    "Session activity",
+                    f"### {label}\n\n*{stamp}*\n\n{_markdown_payload(message, label)}",
+                )
+            )
+    for index, intervention in enumerate(interventions):
+        if not isinstance(intervention, dict) or not intervention.get("submitted_at"):
+            continue
+        stamp = str(intervention["submitted_at"])
+        label = str(intervention.get("kind") or "intervention")
+        message = str(intervention.get("text") or "")
+        human_sequence = len(events) + index + 1
+        targets = intervention.get("target_strategy_ids")
+        if isinstance(targets, list) and len(targets) == 1 and isinstance(targets[0], str):
+            human_targets[human_sequence] = targets[0]
+        rows.append(
+            (
+                stamp,
+                human_sequence,
+                None,
+                "Human",
+                f"### Human · {label}\n\n*{stamp}*\n\n" + _markdown_payload(message, "Human"),
+            )
+        )
+    # A Human message between two agent pairs belongs with the preceding
+    # exchange. Other system events remain independently attributed.
+    groups: dict[str, dict[str, Any]] = {}
+    latest_turn_by_strategy: dict[str, str] = {}
+    for stamp, sequence, group_key, label, message in sorted(
+        rows, key=lambda item: (item[0], item[1])
+    ):
+        if group_key is not None and not group_key.startswith("event:"):
+            strategy_id = group_key.rsplit(":", 1)[0]
+            if strategy_id != "session":
+                latest_turn_by_strategy[strategy_id] = group_key
+        elif label == "Human":
+            target = human_targets.get(sequence)
+            group_key = latest_turn_by_strategy.get(target) if target else None
+        if group_key is None:
+            group_key = f"event:{sequence}"
+        group = groups.setdefault(group_key, {"label": label, "entries": [], "latest": stamp})
+        group["entries"].append((stamp, sequence, message))
+        group["latest"] = max(group["latest"], stamp)
+    output = [
+        f"# {title}, Session {session.get('number', '—')} — Transcript",
+        "",
+        "Newest turns first, with entries chronological within each turn.",
+        "Unavailable historical content is never reconstructed.",
+        "",
+    ]
+    for group in sorted(groups.values(), key=lambda item: item["latest"], reverse=True):
+        output.append(f"## {group['label']}")
+        output.append("")
+        for _stamp, _sequence, message in sorted(group["entries"]):
+            output.append(message)
+            output.append("")
+    if not groups:
+        output.append("No transcript entries are recorded.")
+    return "\n".join(output).rstrip() + "\n"
+
+
 def _next_sequence(path: Path) -> int:
     events, _ = _frames(path)
     return (events[-1].get("seq", len(events)) if events else 0) + 1
@@ -1150,11 +1294,32 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
         "short_name": short_name,
         "saved_short_name": short_name if has_saved_short_name else None,
         "reference_preparation": reference_preparation_summary(session),
+        # Human inputs are already part of the authorized saved Session record.
+        # Project them alongside the append-only provider log without a second store.
+        "interventions": [
+            {
+                "id": item.get("id", ""),
+                "text": _redact(item.get("text", "")),
+                "kind": _redact(item.get("kind", "")),
+                "submitted_at": item.get("submitted_at", ""),
+                "target_strategy_ids": _redact(item.get("target_strategy_ids", [])),
+                "target_roles": _redact(item.get("target_roles", [])),
+            }
+            for item in session.get("interventions", [])
+            if isinstance(item, dict)
+        ],
         "project_title": view.project.title,
+        "project_id": view.project.id,
         "session": {
             "id": session_id,
             "number": session.get("session_number"),
             "status": session.get("status"),
+            "session_settings": {
+                "name": (session.get("session_settings") or {}).get("name", ""),
+                "brainstorm_mode": (session.get("session_settings") or {}).get(
+                    "brainstorm_mode", False
+                ),
+            },
             "current_action": _redact(str(session.get("current_action") or "")[:300]),
             "termination_reason_code": _redact(
                 str(session.get("termination_reason_code") or "")[:120]

@@ -10,11 +10,13 @@ import sqlite3
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from dataclasses import asdict, replace
+from io import BytesIO
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import quote, urlencode
 from uuid import UUID, uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import (
@@ -667,8 +669,13 @@ class ResearchStartRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
     expected_limits: dict[str, Any] | None = None
+    session_settings: dict[str, Any] | None = None
     continue_using_saved_type_settings: bool = False
     browser_presence_required: bool = Field(default=False, strict=True)
+
+
+class SessionSettingsRequest(OpenRequest):
+    settings: dict[str, Any]
 
 
 class ResearchControlRequest(OpenRequest):
@@ -2001,40 +2008,52 @@ def research_session_log_view(session_id: str, path: str, after: int = 0):
         raise HTTPException(404, "Session log not found or access denied.") from exc
 
 
-@app.get("/api/projects/research-sessions/{session_id}/log/download")
-def research_session_log_download_view(session_id: str, path: str):
+def _session_diagnostic_export(path: str, session_id: str) -> tuple[str, str]:
+    """Export the existing canonical session log, including correlated UI diagnostics."""
+    result = session_log.read(path, session_id, 0)
+    body = session_log.markdown_export(
+        result["events"],
+        result["session"],
+        result["project_title"],
+        result["reference_preparation"],
+    )
+    # Only include diagnostic records explicitly correlated with this session.
     try:
-        result = session_log.read(path, session_id, 0)  # Reuse project/session ownership checks.
-        body = session_log.markdown_export(
-            result["events"],
-            result["session"],
-            result["project_title"],
-            result["reference_preparation"],
-        )
-        # Same sanitized project diagnostic records appear in readable session
-        # exports when explicitly correlated to this session. Do not import
-        # pre-session errors into unrelated historical session logs.
-        try:
-            related = [
-                item
-                for item in project_diagnostics.read(path)
-                if item.get("session_id") == session_id
-            ]
-        except (ProjectError, OSError, ValueError):
-            # Diagnostic storage failure must never make the session log unavailable.
-            related = []
-        if related:
-            body += "\n## Exportable UI diagnostics\n\n"
-            for item in related:
-                body += (
-                    f"- {item['timestamp']} · {item['code']} · {item['id']}: {item['message']}\n"
-                )
-        filename = session_log.export_filename(
-            result["saved_short_name"], result["project_title"], result["session"]["number"]
-        )
-        # RFC 5987 preserves readable Unicode while the ASCII fallback keeps
-        # Content-Disposition safe for Latin-1 HTTP headers and older browsers.
-        ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "project.log"
+        related = [
+            item for item in project_diagnostics.read(path) if item.get("session_id") == session_id
+        ]
+    except (ProjectError, OSError, ValueError):
+        related = []
+    if related:
+        body += "\n## Exportable UI diagnostics\n\n"
+        for item in related:
+            body += f"- {item['timestamp']} · {item['code']} · {item['id']}: {item['message']}\n"
+    filename = session_log.export_filename(
+        result["saved_short_name"], result["project_title"], result["session"]["number"]
+    )
+    return body, filename
+
+
+@app.get("/api/projects/research-sessions/{session_id}/log/download")
+def research_session_log_download_view(session_id: str, path: str, format: str = "log"):
+    try:
+        if format == "transcript":
+            result = session_log.read(path, session_id, 0)
+            body = session_log.transcript_markdown_export(
+                result["events"],
+                result["interventions"],
+                result["session"],
+                result["project_title"],
+            )
+            filename = (
+                session_log.export_filename(
+                    result["saved_short_name"], result["project_title"], result["session"]["number"]
+                ).removesuffix(".md")
+                + ".transcript.md"
+            )
+        else:
+            body, filename = _session_diagnostic_export(path, session_id)
+        ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "project.md"
         return Response(
             body,
             media_type="text/markdown; charset=utf-8",
@@ -2046,7 +2065,44 @@ def research_session_log_download_view(session_id: str, path: str):
         raise HTTPException(404, "Session log not found or access denied.") from exc
 
 
+@app.get("/api/projects/export/session-logs")
+def export_project_session_logs(path: str, selection: Literal["latest", "all"]):
+    """Download the newest session log or a ZIP of every session's full diagnostic log."""
+    try:
+        inspect_project(path)
+        sessions = research_sessions.list_sessions(path)
+        if not sessions:
+            raise HTTPException(404, "No session logs are available for this project.")
+        # Session number tracks creation order; resuming an older session does not
+        # make it the latest session. Never select by updated_at.
+        sessions.sort(key=lambda session: (int(session["session_number"]), str(session["id"])))
+        if selection == "latest":
+            body, filename = _session_diagnostic_export(path, sessions[-1]["id"])
+            ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "session.md"
+            return Response(
+                body,
+                media_type="text/markdown; charset=utf-8",
+                headers={
+                    "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+                },
+            )
+        archive = BytesIO()
+        with ZipFile(archive, "w", compression=ZIP_DEFLATED) as zipped:
+            for session in sessions:
+                body, filename = _session_diagnostic_export(path, session["id"])
+                # Unique even when legacy sessions share the same number/title.
+                zipped.writestr(f"{session['session_number']}-{session['id'][:8]}-{filename}", body)
+        return Response(
+            archive.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="session-logs.zip"'},
+        )
+    except (ProjectError, ValueError, OSError, KeyError, TypeError) as exc:
+        raise HTTPException(404, "Session logs not found or access denied.") from exc
+
+
 class MockResearchStartRequest(OpenRequest):
+    session_settings: dict[str, Any] | None = None
     strategy_id: str
     idempotency_key: str
     expected_project_id: str
@@ -2080,6 +2136,7 @@ def mock_research_start_view(
         body.idempotency_key,
         scenario,
         body.continue_using_saved_type_settings,
+        body.session_settings,
     )
     project_collaboration.note_artifact_author(
         body.path, "session", result["id"], created_only=True
@@ -2102,6 +2159,7 @@ async def research_start_view(body: ResearchStartRequest):
             body.strategy_ids,
             body.continue_using_saved_type_settings,
             body.browser_presence_required,
+            body.session_settings,
         )
     except ProjectError as exc:
         safe_message = project_diagnostics.sanitize(str(exc))
@@ -2139,6 +2197,16 @@ async def research_start_view(body: ResearchStartRequest):
         "session.start_ack duration_ms=%.1f", (perf_counter() - admission_started) * 1000
     )
     return result
+
+
+@app.put("/api/projects/research-sessions/{session_id}/settings")
+async def research_session_settings_view(session_id: str, body: SessionSettingsRequest):
+    project_collaboration.require_execution_operator(
+        body.path, "session", session_id, "Research session"
+    )
+    return await research_sessions.update_session_configuration(
+        body.path, session_id, body.settings
+    )
 
 
 @app.post("/api/projects/research-sessions/{session_id}/control")

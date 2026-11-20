@@ -456,7 +456,7 @@ def check_supervisor() -> None:
             }
         )
     )
-    assert candidate["score"] == 10.0
+    assert candidate["score"] == 4.9  # A breakthrough flag never forces a numeric milestone.
     invalidation = chat_supervisor.parse_assessment(
         json.dumps(
             {

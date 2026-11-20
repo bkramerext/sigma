@@ -1,12 +1,12 @@
 {
   "name": "sigma-browser",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
-    "test:source-material": "node --experimental-strip-types --test tests/source-material-error.test.mjs tests/markdown-dollars.test.mjs tests/paper-publication-handoff.test.mjs tests/paper-completion-transition.test.mjs tests/paper-score-action.test.mjs tests/session-removal-request.test.mjs tests/resume-authorization-position.test.mjs tests/session-validation-diagnostics.test.mjs tests/paper-score-handoff.test.mjs tests/paper-generation-error.test.mjs",
+    "test:source-material": "node --experimental-strip-types --test tests/source-material-error.test.mjs tests/markdown-dollars.test.mjs tests/paper-publication-handoff.test.mjs tests/paper-completion-transition.test.mjs tests/paper-score-action.test.mjs tests/session-removal-request.test.mjs tests/resume-authorization-position.test.mjs tests/session-validation-diagnostics.test.mjs tests/paper-score-handoff.test.mjs tests/paper-generation-error.test.mjs tests/session-transcript.test.mjs tests/math-parentheses.test.mjs tests/markdown-sections.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

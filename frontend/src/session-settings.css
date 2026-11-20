@@ -1,0 +1,198 @@
+/* Session Settings uses Project Settings' copper typography, inputs and dismiss X.
+   Unlike a tabbed project editor, this short form must remain content-height. */
+.project-settings-dialog.session-settings-dialog {
+  box-sizing: border-box;
+  width: min(430px, calc(100vw - 32px));
+  min-width: 0;
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #9d784c;
+  border-radius: 8px;
+  background: #07111e;
+  color: #dce7f0;
+  box-shadow: 0 24px 80px #000a;
+  font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.project-settings-dialog.session-settings-dialog > form {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+  max-height: calc(100dvh - 34px);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-header {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 58px;
+  padding: 14px 50px 12px 22px;
+  margin: 0;
+  border-bottom: 1px solid #35404a;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-header h2 {
+  width: auto;
+  margin: 0;
+  color: var(--sigma-copper-foreground);
+  font: 400 24px/1.25 Georgia, serif;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-body {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  min-height: 0;
+  max-height: calc(100dvh - 94px);
+  padding: 16px 22px 20px;
+  margin: 0;
+  overflow-y: auto;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-field > :is(span, label) {
+  display: block;
+  margin: 0;
+  color: var(--sigma-copper-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-field input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 39px;
+  min-height: 39px;
+  margin: 0;
+  padding: 7px 11px;
+  border: 1px solid #667079;
+  border-radius: 5px;
+  background: #030b14;
+  color: #e3edf6;
+  font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.session-settings-dialog .session-settings-field input:disabled { opacity: .55; }
+.project-settings-dialog.session-settings-dialog .session-settings-turn-row {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px 20px;
+  margin: 0;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-turn-limit { width: 84px; max-width: 84px; }
+/* Keep numeric validation and keyboard entry, but hide browser steppers. */
+.project-settings-dialog.session-settings-dialog #session-settings-turns {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.project-settings-dialog.session-settings-dialog #session-settings-turns::-webkit-inner-spin-button,
+.project-settings-dialog.session-settings-dialog #session-settings-turns::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-check {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 9px;
+  width: fit-content;
+  min-height: 20px;
+  margin: 0;
+  color: #dce7f0;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-check input[type="checkbox"] {
+  box-sizing: border-box;
+  display: block;
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: #bc8b66;
+}
+.session-settings-dialog .session-settings-unlimited { min-height: 39px; }
+.project-settings-dialog.session-settings-dialog .session-settings-supervisor > .sigma-select {
+  width: 112px;
+  max-width: 100%;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-supervisor .sigma-select-trigger {
+  width: 100%;
+  min-height: 39px;
+  padding: 7px 11px;
+  justify-content: flex-start;
+  text-align: left;
+  background: #030b14;
+  color: #e3edf6;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-supervisor .sigma-select-trigger > span {
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+/* The popup is promoted to the browser's top layer; give its options the
+   same horizontal inset as the Turns field and the selected value. */
+.sigma-select-options[aria-label="Steering level"] {
+  padding: 4px 0;
+}
+.sigma-select-options[aria-label="Steering level"] [role="option"] {
+  justify-content: flex-start;
+  padding: 6px 11px;
+  text-align: left;
+}
+.sigma-select-options[aria-label="Steering level"] [role="option"] > span {
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-supervisor-help {
+  display: block;
+  margin: 2px 0 0;
+  color: #aab9c7;
+  font: 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-brainstorm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-brainstorm > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.project-settings-dialog.session-settings-dialog .session-settings-brainstorm small {
+  margin: 0 0 0 25px;
+  color: #aab9c7;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.project-settings-dialog.session-settings-dialog :is(button, input):focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
+}
+@media (max-width: 560px) {
+  .project-settings-dialog.session-settings-dialog .session-settings-header { padding: 14px 48px 12px 18px; }
+  .project-settings-dialog.session-settings-dialog .session-settings-body { padding: 15px 18px 18px; }
+}
