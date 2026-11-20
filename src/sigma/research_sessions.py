@@ -15302,8 +15302,23 @@ async def _portfolio_supervisor_call(
                         for key, label in dimension_labels.items()
                         if key in scores
                     )
-                    observation = str(assessment["assessment"])[:1000] + (
-                        "\n\n" + dimension_text if dimension_text else ""
+                    recipient_labels = {
+                        "ai_1": "AI #1",
+                        "ai_2": "AI #2",
+                        "both": "both investigators",
+                    }
+                    if assessment["action"] == "continue":
+                        intervention_text = "No intervention."
+                    else:
+                        recipient_label = recipient_labels[assessment["recipient"]]
+                        intervention_text = (
+                            f"Intervention to {recipient_label}: "
+                            f"{assessment['guidance']}"
+                        )
+                    observation = (
+                        str(assessment["assessment"])[:1000]
+                        + "\n\n" + intervention_text
+                        + ("\n\n" + dimension_text if dimension_text else "")
                     )
                     candidate = (
                         " Unverified breakthrough candidate: "
