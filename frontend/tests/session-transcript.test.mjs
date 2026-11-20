@@ -204,3 +204,22 @@ test('Transcript pagination reveals twenty turn numbers at a time without splitt
   assert.equal(last.shownGroups.length, 135);
   assert.equal(last.remainingTurns, 0);
 });
+
+test('Transcript role labels retain the mode at each historical provider dispatch', () => {
+  const ordinary = { instructions: 'Regular paired research instructions.' };
+  const brainstorm = { instructions: 'BRAINSTORM MODE: You and your peer are two co-investigators. Independently explore.' };
+  const entries = projectTranscript([
+    { seq: 1, type: 'provider_request', request_id: 'old', role: 'skeptic', round: 3,
+      strategy_id: 's', timestamp: '2026-11-20T01:00:00Z', request: ordinary },
+    { seq: 2, type: 'provider_response', request_id: 'old', timestamp: '2026-11-20T01:00:02Z',
+      response: { output_text: 'Earlier ordinary mode answer' } },
+    { seq: 3, type: 'provider_request', request_id: 'new', role: 'skeptic', round: 4,
+      strategy_id: 's', timestamp: '2026-11-20T01:00:03Z', request: brainstorm },
+    { seq: 4, type: 'provider_response', request_id: 'new', timestamp: '2026-11-20T01:00:04Z',
+      response: { output_text: 'Later brainstorm mode answer' } },
+    { seq: 5, type: 'provider_request', request_id: 'pending', role: 'skeptic', round: 5,
+      strategy_id: 's', timestamp: '2026-11-20T01:00:05Z', brainstorm_mode: false, request: brainstorm },
+  ]);
+  assert.deepEqual(entries.map(entry => [entry.round, transcriptRoleLabel(entry.role, entry.brainstormMode === true)]),
+    [[3, 'Skeptic'], [4, 'Investigator'], [5, 'Skeptic']]);
+});
