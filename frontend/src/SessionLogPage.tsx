@@ -24,7 +24,7 @@ function CopyTranscriptEntryButton({ title, text }: { title: string; text: strin
   };
   return <button type="button" className="session-transcript-entry-copy"
     aria-label={copied ? `Copied ${title}` : `Copy ${title}`}
-    data-tooltip={copied ? 'Copied' : `Copy ${title}`} disabled={!text} onClick={() => { void copy(); }}>
+    data-tooltip={copied ? 'Copied' : ['Investigator', 'Skeptic'].includes(title) ? 'Copy text' : `Copy ${title}`} disabled={!text} onClick={() => { void copy(); }}>
     {copied
       ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4 4L19 6"/></svg>
       : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}
