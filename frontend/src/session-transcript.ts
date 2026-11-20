@@ -6,6 +6,15 @@ export type TranscriptEvent = {
   event_kind?: string; message?: string; response?: unknown; provider_error?: unknown;
   request?: unknown; status?: string; [key: string]: unknown;
 };
+/** Session wire roles remain unchanged; Brainstorm only changes the displayed title. */
+export function transcriptRoleLabel(role: TranscriptRole, brainstormMode: boolean): string {
+  if (role === 'investigator') return 'Investigator';
+  if (role === 'skeptic') return brainstormMode ? 'Investigator' : 'Skeptic';
+  if (role === 'supervisor') return 'Supervisor';
+  if (role === 'human') return 'Human';
+  return '';
+}
+
 export type TranscriptIntervention = {
   id: string; text: string; kind: string; submitted_at: string;
   target_strategy_ids?: string[]; target_roles?: string[];
