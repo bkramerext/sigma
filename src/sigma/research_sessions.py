@@ -15318,7 +15318,8 @@ async def _portfolio_supervisor_call(
                         )
                     observation = (
                         str(assessment["assessment"])[:1000]
-                        + "\n\n" + intervention_text
+                        + "\n\n"
+                        + intervention_text
                         + ("\n\n" + dimension_text if dimension_text else "")
                     )
                     candidate = (
