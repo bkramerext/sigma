@@ -194,6 +194,9 @@
 .workspace-page .strategy-dialog::backdrop { background: #000a; }
 .workspace-page .strategy-dialog h2 { color: var(--sigma-copper-foreground); }
 .workspace-page .workspace-state { padding-top: 40px; }
+/* The loading label starts on the same top edge as the Project heading. */
+.workspace-page .workspace-state.project-opening-state { padding-top: 10px; }
+.workspace-page .workspace-state.project-opening-state .intro { margin: 0; }
 .workspace-page .workspace-state .intro { color: var(--workspace-muted); }
 .workspace-page a { color: var(--sigma-copper-foreground); }
 .workspace-page :focus-visible { outline: 2px solid #edbc77; outline-offset: 4px; }
