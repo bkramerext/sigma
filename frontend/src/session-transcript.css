@@ -424,3 +424,27 @@
 .session-workspace .session-log-page:has(.session-opening-state) {
   padding-top: 0;
 }
+
+/* A Session is a Project view: keep the Project's exact two-column pill grid.
+   The title retains its Session layout, but the right controls must not use
+   Brainstorm's shorter independent pill arrangement. */
+.workspace-page.brainstorm-workspace.session-workspace .project-art-header.chat-site-header .header-controls {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  align-items: start;
+  justify-content: end;
+  justify-self: end;
+  align-self: center;
+  gap: var(--identity-pill-gap);
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  width: max-content;
+  min-width: 0;
+  margin-left: auto;
+  padding: 0;
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace.session-workspace .project-art-header.chat-site-header .header-controls {
+    transform: translateX(16px);
+  }
+}
