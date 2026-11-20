@@ -31,7 +31,7 @@ function CopyTranscriptEntryButton({ title, text }: { title: string; text: strin
   </button>;
 }
 
-export default function SessionLogPage({ onSessionChange }: { onSessionChange?: (session: SessionState) => void }) {
+export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { onSessionChange?: (session: SessionState) => void; resetSignal?: number }) {
   const params = new URLSearchParams(window.location.search);
   const sessionId = params.get('session_log') ?? '';
   const path = params.get('path') ?? '';
@@ -44,6 +44,8 @@ export default function SessionLogPage({ onSessionChange }: { onSessionChange?: 
   const [projectId, setProjectId] = useState('');
   const [interventions, setInterventions] = useState<TranscriptIntervention[]>([]);
   const [expandedEntries, setExpandedEntries] = useState<Record<string, boolean>>({});
+  // The Session title is the sole reset control for canonical expansion.
+  useEffect(() => { setExpandedEntries({}); }, [resetSignal]);
   const [markdownEntries, setMarkdownEntries] = useState<Set<string>>(() => new Set());
   const [seenMarkdownEntries, setSeenMarkdownEntries] = useState<Set<string>>(() => new Set());
   const [formattedEntries, setFormattedEntries] = useState<Record<string, { source: string; body: string }>>({});
@@ -215,7 +217,7 @@ export default function SessionLogPage({ onSessionChange }: { onSessionChange?: 
     group.entries.map(entry => entry.strategyId).filter((id): id is string => !!id)))].sort();
   const strategySuffix = (group: (typeof allGroups)[number]) => {
     const id = group.entries.find(entry => entry.strategyId)?.strategyId;
-    return id && strategyIds.length > 1 ? ` · Strategy ${strategyIds.indexOf(id) + 1}` : '';
+    return id ? ` · Strategy ${strategyIds.indexOf(id) + 1}` : '';
   };
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -236,22 +238,11 @@ export default function SessionLogPage({ onSessionChange }: { onSessionChange?: 
     </header>
     {(error || markdownError) && <p role="alert">{error || markdownError}</p>}
     <section className="session-transcript-conversation" aria-label="Transcript">
-      <h2 className="session-transcript-heading">
-        <button type="button" className="chat-disclosure-button session-transcript-reset"
-          aria-controls="session-transcript-history"
-          data-tooltip="Restore default transcript expansion"
-          onClick={() => setExpandedEntries({})}>
-          <svg aria-hidden="true" className="disclosure-chevron is-expanded" viewBox="0 0 12 12">
-            <path d="m4 2 4 4-4 4"/>
-          </svg>
-          Transcript
-        </button>
-      </h2>
       <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
         aria-label="Conversation history">
         {shownGroups.map(group => <li key={group.key} className="session-transcript-turn">
           <h3 className="session-transcript-turn-heading">
-            {group.label}{strategySuffix(group)}
+            {group.label}{strategySuffix(group)}{group.latestTimestamp && <> · <time dateTime={group.latestTimestamp}>{formatTimestamp(group.latestTimestamp)}</time></>}
           </h3>
           <ol className="session-transcript-turn-entries">
             {group.entries.map(entry => {
@@ -280,7 +271,6 @@ export default function SessionLogPage({ onSessionChange }: { onSessionChange?: 
                     </svg>
                   </button>
                   <CopyTranscriptEntryButton title={name} text={entry.text}/>
-                  {entry.timestamp && <time dateTime={entry.timestamp}>{formatTimestamp(entry.timestamp)}</time>}
                 </div>
                 <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                   {expanded && (asMarkdown
