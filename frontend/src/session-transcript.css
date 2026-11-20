@@ -108,10 +108,11 @@
   text-align: left;
   cursor: pointer;
 }
-/* One shared column width across all entries of a Brainstorm turn. */
+/* A per-turn shared column sized to the Co-investigator label, without
+   adding extra space before Markdown compared with the normal Investigator row. */
 .session-log-page .session-transcript-turn.is-brainstorm-turn .chat-disclosure-button {
-  flex-basis: 154px;
-  width: 154px;
+  flex-basis: 140px;
+  width: 140px;
 }
 .session-log-page .session-transcript-entry .chat-disclosure-button strong {
   color: inherit;
