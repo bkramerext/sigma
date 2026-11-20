@@ -255,14 +255,14 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 4px;
 }
 .session-page-header-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.session-workspace .brainstorm-header-copy h1 .session-page-header-actions { margin-left: 12px; }
+.session-workspace .brainstorm-header-copy h1 .session-page-header-actions { margin-left: 18px; }
 .session-workspace .brainstorm-header-copy h1 .session-title-activity {
   display: inline-flex;
   align-items: center;
