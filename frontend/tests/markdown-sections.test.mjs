@@ -30,7 +30,7 @@ test('section headings own their content, including fenced JSON, with no separat
   assert.equal(assumptions.children[1].children[0].tagName, 'ul');
 });
 
-test('nested headings remain nested; headings without content are not wrapped', () => {
+test('nested headings remain nested; headings without content are removed', () => {
   const tree = { type: 'root', children: [
     node('h2', 'Main'),
     node('p', 'Introduction'),
@@ -39,11 +39,10 @@ test('nested headings remain nested; headings without content are not wrapped', 
     node('h2', 'Another'),
   ] };
   collapsibleMarkdownSections()(tree);
-  assert.equal(tree.children.length, 2);
+  assert.equal(tree.children.length, 1);
   assert.equal(tree.children[0].children[1].children[0].tagName, 'p');
   assert.equal(tree.children[0].children[1].children[1].tagName, 'details');
   assert.equal(tree.children[0].children[1].children[1].children[1].children[0].tagName, 'pre');
-  assert.equal(tree.children[1].tagName, 'h2');
 });
 
 test('content before first heading and standalone code remain unchanged', () => {
@@ -52,4 +51,39 @@ test('content before first heading and standalone code remain unchanged', () => 
   const tree = { type: 'root', children: [paragraph, code] };
   collapsibleMarkdownSections()(tree);
   assert.deepEqual(tree.children, [paragraph, code]);
+});
+
+test('Claim stays visible; null, blank and empty-valued sections disappear', () => {
+  const tree = { type: 'root', children: [
+    node('h4', 'Claim'),
+    node('p', 'The main result remains readable.'),
+    node('h4', 'Method'),
+    node('p', 'A derivation follows.'),
+    node('h4', 'Python code'),
+    node('p', 'null'),
+    node('h4', 'Sage code'),
+    { type: 'element', tagName: 'pre', children: [node('code', 'null')] },
+    node('h4', 'Prior session failure attempt ids'),
+    node('h4', 'Empty collection'),
+    node('p', '[]'),
+    node('h4', 'Evidence status'),
+    node('p', 'Unverified'),
+  ] };
+  collapsibleMarkdownSections()(tree);
+  assert.deepEqual(tree.children.map(section => section.tagName), ['h4', 'p', 'details', 'details']);
+  assert.equal(tree.children[0].children[0].value, 'Claim');
+  assert.equal(tree.children[1].children[0].value, 'The main result remains readable.');
+  assert.equal(tree.children[2].children[0].children[1].children[0].value, 'Method');
+  assert.equal(tree.children[3].children[0].children[1].children[0].value, 'Evidence status');
+  assert.equal(tree.children[2].properties.open, undefined);
+});
+
+test('genuine code including null checks is preserved', () => {
+  const tree = { type: 'root', children: [
+    node('h4', 'Python code'),
+    { type: 'element', tagName: 'pre', children: [node('code', 'if value is None:\\n    print(value)')] },
+  ] };
+  collapsibleMarkdownSections()(tree);
+  assert.equal(tree.children.length, 1);
+  assert.equal(tree.children[0].children[1].children[0].tagName, 'pre');
 });
