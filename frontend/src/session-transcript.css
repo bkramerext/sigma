@@ -496,6 +496,10 @@
    Session-only styling here now that the standalone page and stylesheet are
    gone. Match the Project title's artwork column instead of overlapping it. */
 .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+  /* The artwork pseudo-element extends beyond its grid column. Render the
+     Session title above it, as the Project title already does. */
+  position: relative;
+  z-index: 2;
   min-width: 0;
   padding-top: 6px;
 }
