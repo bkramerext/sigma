@@ -19,7 +19,7 @@
 .session-log-page .session-transcript-events {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  gap: 0;
   max-height: none;
   margin: 0;
   padding: 0;
@@ -35,6 +35,11 @@
   border-radius: 0;
   background: transparent;
   list-style: none;
+}
+.session-log-page .session-transcript-events > .session-transcript-turn + .session-transcript-turn {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #314252;
 }
 .session-log-page .session-transcript-turn-heading {
   margin: 0;
@@ -177,12 +182,25 @@
 }
 .session-log-page .session-transcript-supervisor-scores {
   display: block;
-  margin: 1px 0 4px 30px;
+  margin: 1px 0 5px 30px;
   color: #a69d92;
   font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 .session-log-page .session-transcript-supervisor-scores span { color: #8c98a3; }
+.session-log-page .session-transcript-pending-heading {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  margin-left: 31px;
+  color: #f2c48d;
+  font: inherit;
+}
+.session-log-page .session-transcript-pending-heading strong { font-size: .86rem; }
+.session-log-page .session-transcript-pending {
+  color: #a69d92;
+  font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+}
 .session-log-page .session-transcript-entry [hidden] { display: none; }
 .session-log-page .session-transcript-plain {
   max-width: 100%;
@@ -273,7 +291,7 @@
 .session-workspace .session-page-header-actions .session-heading-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
 }
 .session-workspace .brainstorm-header-copy h1 {
   display: flex;
