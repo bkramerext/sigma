@@ -965,6 +965,7 @@ def test_supervisor_response_validation_and_process_guidance() -> None:
     answer = {
         "dimensions": {
             "objective_alignment": 4.0,
+            "originality": 3.0,
             "substantive_advancement": 2.5,
             "evidence_validation": 1.0,
             "research_health": 5.0,
