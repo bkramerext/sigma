@@ -1605,7 +1605,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
-  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
+  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit' | 'view'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
   // Serialize auto-saves so a slower earlier request cannot overwrite newer edits.
   const sessionSettingsSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const [pendingStartSettings, setPendingStartSettings] = useState<SessionSettings | null>(null);
@@ -2333,7 +2333,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }}
       onApply={next => {
         if (settingsDialog.mode === 'start') setPendingStartSettings(next);
-        else if (settingsDialog.sessionId) return saveSessionSettings(settingsDialog.sessionId, next);
+        else if (settingsDialog.mode === 'edit' && settingsDialog.sessionId) return saveSessionSettings(settingsDialog.sessionId, next);
       }}/>}
     <ResumeAuthorizationDialog request={resumeAuthorization} anchor={resumePlayAnchor.current} anchorSnapshot={resumePlayAnchorSnapshot.current} onAuthorize={() => answerResumeAuthorization(true)} onCancel={() => answerResumeAuthorization(false)}/>
     <dialog ref={missingTypeDialog} className="project-type-warning-dialog" role="alertdialog" aria-labelledby="missing-type-heading" onCancel={event => { event.preventDefault(); if (!busy) setConfirmMissingType(false); }}>
@@ -2411,9 +2411,10 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                   {!guest && canControl && <button type="button"
                     className="text-view-link text-view-icon workspace-icon-button session-settings-action"
                     aria-label={`Session ${item.session_number} settings`}
-                    data-tooltip="Session settings" disabled={busy || ['queued', 'running'].includes(item.status)}
+                    data-tooltip="Session settings" disabled={busy}
                     onClick={() => setSettingsDialog({
-                      mode: 'edit', sessionId: item.id, initial: existingSessionSettings(item),
+                      mode: ['queued', 'running'].includes(item.status) ? 'view' : 'edit',
+                      sessionId: item.id, initial: existingSessionSettings(item),
                       minTurns: Math.max(0,
                         ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
                           .map(step => step.cycle),
@@ -6517,8 +6518,8 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, homeHref = '/', close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
+function Header({ goHome, homeHref = '/', close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; onSessionTitleClick?: () => void; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -6598,7 +6599,9 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
         : chatPage ? null : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
       {chatPage && <div className="brainstorm-header-copy">
         <p className="chat-eyebrow">{sessionPage ? 'Research session' : 'Open conversation'}</p>
-        <h1>{sessionPage ? sessionTitle || 'Session' : 'Brainstorm'}{sessionPage && sessionActions}
+        <h1>{sessionPage ? <button type="button" className="session-page-title-reset"
+          aria-label="Restore default Session transcript expansion" data-tooltip="Restore transcript expansion"
+          onClick={onSessionTitleClick}>{sessionTitle || 'Session'}</button> : 'Brainstorm'}{sessionPage && sessionActions}
           {sessionPage && <button type="button" className="session-page-close" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => close?.action()}>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
           </button>}</h1>
@@ -6657,9 +6660,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, homeHref, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, sessionPage = false, sessionTitle, sessionActions, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: {
+function WorkspaceFrame({ children, goHome, homeHref, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, sessionPage = false, sessionTitle, sessionActions, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
-  sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode;
+  sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; onSessionTitleClick?: () => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
@@ -6673,7 +6676,7 @@ function WorkspaceFrame({ children, goHome, homeHref, close, projectTitle, proje
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} homeHref={homeHref} close={close} sessionPage={sessionPage} chatPage={sessionPage} sessionTitle={sessionTitle} sessionActions={sessionActions} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick} onActivityClick={onActivityClick}/>
+    <Header goHome={goHome} homeHref={homeHref} close={close} sessionPage={sessionPage} chatPage={sessionPage} sessionTitle={sessionTitle} sessionActions={sessionActions} onSessionTitleClick={onSessionTitleClick} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick} onActivityClick={onActivityClick}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -9081,6 +9084,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   const readOnlyGuest = false;
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [sessionPageState, setSessionPageState] = useState<import("./SessionLogPage").SessionState | null>(null);
+  const [transcriptResetSignal, setTranscriptResetSignal] = useState(0);
   useEffect(() => { if (view) onViewChange(view); }, [view, onViewChange]);
   const [advancedOutcomeGlobal, setAdvancedOutcomeGlobal] = useState(false);
   const [guestAdvancedOutcome, setGuestAdvancedOutcome] = useState(false);
@@ -9768,7 +9772,8 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView}
     sessionPage={!!sessionPageId} homeHref={sessionPageId ? projectUrl(path) : '/'}
     sessionTitle={sessionPageState ? `Session ${sessionPageState.number}${sessionPageState.session_settings?.name ? ' · ' + sessionPageState.session_settings.name : ''}` : 'Session'}
-    sessionActions={sessionPageId ? <span id="session-page-controls" className="session-page-header-actions"/> : undefined}>
+    sessionActions={sessionPageId ? <span id="session-page-controls" className="session-page-header-actions"/> : undefined}
+    onSessionTitleClick={sessionPageId ? () => setTranscriptResetSignal(current => current + 1) : undefined}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
         <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
@@ -9928,7 +9933,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
       </li>)}</ol>
       <p className="hint">Opening and inspecting a project leave its history unchanged.</p>
     </details>}
-    {sessionPageId && <SessionLogPage key={sessionPageId} onSessionChange={setSessionPageState}/>}
+    {sessionPageId && <SessionLogPage key={sessionPageId} resetSignal={transcriptResetSignal} onSessionChange={setSessionPageState}/>}
   </WorkspaceFrame>;
 }
 
