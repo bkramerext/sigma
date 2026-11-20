@@ -359,11 +359,7 @@
   cursor: pointer;
 }
 .session-workspace .session-page-close svg { width: 20px; height: 20px; }
-.session-workspace .session-page-close:is(:hover, :focus-visible) {
-  border-color: #ac7054;
-  color: var(--sigma-copper-foreground);
-  background: #3b3029;
-}
+/* Close uses the same shared workspace-icon-button hover/focus treatment as Session settings. */
 
 /* The Session title replaces the redundant Transcript heading as the reset. */
 .session-workspace .brainstorm-header-copy h1 .session-page-title-reset {
