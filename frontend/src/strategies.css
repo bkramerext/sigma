@@ -1504,3 +1504,11 @@
 }
 .workspace-page .session-status .session-status-navigation-indicator .research-running-indicator { margin: 0; }
 .workspace-page .session-status .session-status-navigation-indicator:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+
+/* Non-running lifecycle dots keep their status colors inside the link. */
+.workspace-page .session-status .session-status-navigation-indicator i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+}
