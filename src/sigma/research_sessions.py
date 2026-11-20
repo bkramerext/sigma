@@ -16492,8 +16492,12 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                         name = str(item.get("filename") or item.get("url") or item["id"])
                         detail = str(
                             item.get("reason")
-                            or ("incomplete_extract" if item.get("incomplete_extract") else "unavailable")
-                        ).replace("\\n", " ").replace("\\r", " ")[:120]
+                            or (
+                                "incomplete_extract"
+                                if item.get("incomplete_extract")
+                                else "unavailable"
+                            )
+                        ).replace(chr(10), " ").replace(chr(13), " ")[:120]
                         names.append(f"{name} ({detail})")
                     record["message"] = (
                         f"Cannot research with incomplete Source Material: "
