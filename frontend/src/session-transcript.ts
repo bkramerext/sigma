@@ -24,14 +24,23 @@ export type TranscriptEntry = {
   text: string; round?: number; strategyId?: string; sequence: number;
   request?: unknown; response?: unknown; pending?: boolean;
 };
-/** Separate the four saved Supervisor ratings for compact display without
- * rewriting the authoritative transcript, Copy text, or Download contents. */
-export function supervisorDisplay(text: string): { body: string; scores?: [string, string, string, string] } {
-  const pattern = /\r?\n\r?\nObjective alignment:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nSubstantive advancement:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nEvidence & validation:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nResearch health:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?(?=\s|$)/;
+/** Strip the scored metadata from the rendered assessment while retaining the
+ * saved text unmodified for Copy and Download. Old four-score reviews continue
+ * to display correctly when Originality was not yet recorded. */
+export type SupervisorScores = {
+  alignment: string; originality?: string; advancement: string; evidence: string; health: string;
+};
+export function supervisorDisplay(text: string): { body: string; scores?: SupervisorScores } {
+  const pattern = /\r?\n\r?\nObjective alignment:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\n(?:Originality:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\n)?Substantive advancement:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nEvidence & validation:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nResearch health:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?(?=\s|$)/;
   const match = pattern.exec(text);
   if (!match) return { body: text };
-  return { body: text.slice(0, match.index) + text.slice(match.index + match[0].length),
-    scores: [match[1], match[2], match[3], match[4]] };
+  return {
+    body: text.slice(0, match.index) + text.slice(match.index + match[0].length),
+    scores: {
+      alignment: match[1], ...(match[2] === undefined ? {} : { originality: match[2] }),
+      advancement: match[3], evidence: match[4], health: match[5],
+    },
+  };
 }
 
 function responseText(value: unknown): string {
@@ -197,6 +206,22 @@ export function transcriptDefaultExpanded(entry: Pick<TranscriptEntry, 'role'>):
 export type TranscriptTurnGroup = {
   key: string; label: string; latestTimestamp: string; entries: TranscriptEntry[];
 };
+
+/** Paginate by the actual turn number, keeping all concurrent strategies for
+ * a turn on the same page. Non-turn entries each occupy one pagination slot. */
+export function paginateTranscriptTurns(groups: TranscriptTurnGroup[], limit: number): {
+  shownGroups: TranscriptTurnGroup[]; remainingTurns: number;
+} {
+  const key = (group: TranscriptTurnGroup): string => {
+    const number = group.entries.find(entry =>
+      typeof entry.round === 'number' && Number.isInteger(entry.round) && entry.round > 0)?.round;
+    return number === undefined ? `event:${group.key}` : `turn:${number}`;
+  };
+  const keys = [...new Set(groups.map(key))];
+  const shown = new Set(keys.slice(0, limit));
+  return { shownGroups: groups.filter(group => shown.has(key(group))),
+    remainingTurns: keys.length - shown.size };
+}
 
 /** Group flat, durable paired-slot events by turn and show newest turns first.
  * Concurrent strategies retain their own turn identities; within a turn the
