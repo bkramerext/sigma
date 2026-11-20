@@ -2592,7 +2592,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   const isReport = exportType === 'text' || exportType === 'html';
   const isLog = exportType === 'latest-log' || exportType === 'all-logs';
   const reportFormat = exportType === 'text' ? 'txt' : 'html';
-  const extension = exportType === 'bundle' ? 'json' : exportType === 'all-logs' ? 'zip' : exportType === 'latest-log' ? 'log' : reportFormat;
+  const extension = exportType === 'bundle' ? 'json' : exportType === 'all-logs' ? 'zip' : exportType === 'latest-log' ? 'md' : reportFormat;
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -2610,7 +2610,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
     event.preventDefault();
     if (submitting.current) return;
     const chosen = filename.trim();
-    const stem = chosen.replace(/\.(json|txt|html|tex|pdf|log|zip)$/i, '');
+    const stem = chosen.replace(/\.(json|txt|html|tex|pdf|log|md|zip)$/i, '');
     if (!stem || stem === '.' || stem === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(stem)) {
       setError('Enter a filename stem without path separators or reserved characters.');
       return;
@@ -2672,7 +2672,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
         </fieldset>
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
-          onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex|pdf|log|zip)$/i, '')); setError(''); }}/>
+          onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex|pdf|log|md|zip)$/i, '')); setError(''); }}/>
           <span aria-hidden="true">.{extension}</span></div>
         {!isLog && exportType !== 'bundle' && <label className="export-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>}
         {error && <p className="error" role="alert">{error}</p>}
