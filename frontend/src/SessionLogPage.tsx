@@ -233,6 +233,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   };
   if (!initialLoadComplete) return <main className="session-log-page session-conversation-page"><div className="workspace-state project-opening-state session-opening-state" role="status" aria-live="polite"><p className="intro">Opening session…</p></div></main>;
   return <main className="session-log-page session-conversation-page">
+    {!session && <div className="workspace-state project-opening-state session-opening-state" role="alert"><p className="error">Session unavailable. The transcript could not be loaded.</p></div>}
     <section className="session-transcript-conversation" aria-label="Transcript">
       <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
         aria-label="Conversation history">
