@@ -6605,7 +6605,7 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
           : <span className="project-header-title">{projectTitle}</span>}</div>{projectActions}</>}</div>
         : chatPage ? null : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
       {chatPage && <div className="brainstorm-header-copy">
-        <p className="chat-eyebrow">{sessionPage ? 'Research session' : 'Open conversation'}</p>
+        <p className="chat-eyebrow">{sessionPage ? `Research session for ${projectTitle || 'project'}` : 'Open conversation'}</p>
         <h1>{sessionPage ? <span className="session-page-title-and-activity">
           <button type="button" className="session-page-title-reset"
             aria-label="Restore default Session transcript expansion" data-tooltip="Restore transcript expansion"
