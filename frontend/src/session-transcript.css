@@ -272,7 +272,7 @@
 .session-workspace .brainstorm-header-copy h1 .session-page-title-and-activity {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   min-width: 0;
 }
 .session-workspace .brainstorm-header-copy h1 .session-title-activity-slot {
@@ -393,6 +393,13 @@
   height: 16px;
   margin: 0;
   text-decoration: none;
+}
+.session-workspace .session-log-page .session-transcript-current-turn,
+.session-workspace .session-log-page .session-transcript-current-turn:hover,
+.session-workspace .session-log-page .session-transcript-current-turn:focus {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 .session-log-page .session-transcript-current-turn:focus-visible {
   outline: 2px solid #edbc77;
