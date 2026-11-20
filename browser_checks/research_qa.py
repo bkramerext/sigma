@@ -75,6 +75,7 @@ with sync_playwright() as playwright:
         timeout=20000,
     )
     page.get_by_role("button", name="New session").click()
+
     # The removed top-level Settings action is not available during Start.
     # Limit this deterministic one-pair fixture through request interception;
     # the actual Start Session UI and backend admission path are still exercised.
