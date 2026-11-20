@@ -96,6 +96,45 @@ export function readableTranscriptResponse(value: unknown): string {
     return '#### ' + label + '\n\n' + body;
   }).join('\n\n');
 }
+/** Presentation-only: fence nested JSON and inline-code artifact IDs. */
+export function formatTranscriptMarkdown(markdown: string): string {
+  const lines = markdown.split('\n');
+  const result: string[] = [];
+  let fence: string | null = null;
+  const guid = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const boundary = line.match(/^\s*(```+|~{3,})/);
+    if (boundary) {
+      if (fence === null) fence = boundary[1][0];
+      else if (fence === boundary[1][0]) fence = null;
+      result.push(line); continue;
+    }
+    if (fence !== null) { result.push(line); continue; }
+    if (/^\s*[\[{]\s*$/.test(line)) {
+      let candidate = '';
+      let end = i;
+      for (; end < Math.min(lines.length, i + 500); end++) {
+        candidate += (end === i ? '' : '\n') + lines[end];
+        if (!/^\s*[\]}]\s*$/.test(lines[end])) continue;
+        try {
+          const parsed: unknown = JSON.parse(candidate);
+          if (parsed !== null && typeof parsed === 'object') break;
+        } catch { /* Incomplete JSON: continue searching. */ }
+      }
+      if (end < lines.length && end < i + 500) {
+        result.push('```json', ...lines.slice(i, end + 1), '```');
+        i = end; continue;
+      }
+    }
+    // Protect existing inline code and keep GUIDs in prose unchanged.
+    result.push(line.split(/(`+[^`]*`+)/g).map(part =>
+      part.startsWith('`') ? part : part.replace(guid, id => '`' + id + '`')
+    ).join(''));
+  }
+  return result.join('\n');
+}
+
 function roleOf(value: unknown): TranscriptRole {
   const role = typeof value === 'string' ? value.toLowerCase() : '';
   return role === 'investigator' || role === 'skeptic' || role === 'supervisor' ? role : 'other';
