@@ -15310,10 +15310,9 @@ async def _portfolio_supervisor_call(
                     if assessment["action"] == "continue":
                         intervention_text = "No intervention."
                     else:
-                        recipient_label = recipient_labels[assessment["recipient"]]
+                        recipient_label = recipient_labels.get(str(assessment["recipient"]), "both investigators")
                         intervention_text = (
-                            f"Intervention to {recipient_label}: "
-                            f"{assessment['guidance']}"
+                            f"Intervention to {recipient_label}: {assessment['guidance']}"
                         )
                     observation = (
                         str(assessment["assessment"])[:1000]
