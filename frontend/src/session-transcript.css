@@ -450,17 +450,23 @@
   }
 }
 
-/* Align the Session title block with the Project title, using the same
-   starting position beside the artwork (slightly overlapping its field).
-   A negative grid-item margin enlarges only the title's available space:
-   the independent header pill column remains anchored in place. */
+/* Position the Session title in a real grid track beside the logo,
+   as the Project header does. A negative margin on the middle grid item
+   allowed its text to render underneath the artwork and be obscured.
+   Shrink only the artwork track: the pills remain in the rightmost track. */
 @media (min-width: 1201px) {
-  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
-    margin-left: calc(min(29vw, 270px) - min(29vw, 470px) - 40px);
+  .workspace-page.session-workspace .project-art-header.chat-site-header {
+    grid-template-columns: min(29vw, 270px) minmax(0, 1fr) max-content;
+    column-gap: 16px;
   }
 }
 @media (min-width: 701px) and (max-width: 1200px) {
-  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
-    margin-left: calc(min(29vw, 270px) - min(29vw, 330px) - 28px);
+  .workspace-page.session-workspace .project-art-header.chat-site-header {
+    grid-template-columns: min(29vw, 270px) minmax(0, 1fr);
   }
+}
+.workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+  position: relative;
+  z-index: 1;
+  margin-left: 0;
 }
