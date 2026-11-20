@@ -1495,3 +1495,12 @@
 .workspace-page .session-summary > .session-strategy-live-status .session-standards-guidance strong {
   color: var(--muted, #a7a7a7);
 }
+
+/* Active Session's lifecycle pulse doubles as its navigation link. */
+.workspace-page .session-status .session-status-navigation-indicator {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; flex: 0 0 18px;
+  border-radius: 50%; text-decoration: none;
+}
+.workspace-page .session-status .session-status-navigation-indicator .research-running-indicator { margin: 0; }
+.workspace-page .session-status .session-status-navigation-indicator:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
