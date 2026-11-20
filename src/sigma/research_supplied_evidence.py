@@ -71,7 +71,9 @@ def _fetch_url_once(url: str) -> tuple[bytes, str, str]:
                     raise ValueError(f"http_{status}")
                 if response.getheader("Content-Encoding", "identity").lower() != "identity":
                     raise ValueError("unsupported_compression")
-                content_type = (response.getheader("Content-Type") or "").lower().split(";")[0].strip()
+                content_type = (
+                    (response.getheader("Content-Type") or "").lower().split(";")[0].strip()
+                )
                 if content_type not in _SUPPORTED_MEDIA_TYPES:
                     raise ValueError("unsupported_media_type")
                 declared = response.getheader("Content-Length")
