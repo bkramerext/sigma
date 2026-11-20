@@ -6625,7 +6625,7 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
           </span>
         </span> : 'Brainstorm'}
           {sessionPage && sessionActions}
-          {sessionPage && <button type="button" className="session-page-close" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => close?.action()}>
+          {sessionPage && <button type="button" className="session-page-close workspace-icon-button" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => close?.action()}>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
           </button>}</h1>
         {!sessionPage && <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>}
