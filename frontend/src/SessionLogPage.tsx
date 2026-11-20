@@ -225,7 +225,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     }).format(date);
   };
   const entryName = (entry: TranscriptEntry): string => {
-    return transcriptRoleLabel(entry.role, session?.session_settings?.brainstorm_mode === true) || entry.title;
+    return transcriptRoleLabel(entry.role, entry.brainstormMode === true) || entry.title;
   };
   return <main className="session-log-page session-conversation-page">
     <section className="session-transcript-conversation" aria-label="Transcript">
