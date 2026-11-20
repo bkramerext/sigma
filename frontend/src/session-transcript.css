@@ -492,28 +492,143 @@
   }
 }
 
-/* Preserve the Session heading's original leftward placement beside the
-   SIGMA artwork. Do not shrink the header grid: that shifts the heading
-   instead of fixing the obstruction. The artwork is decorative; the complete
-   title must paint above it, even where the two visually overlap. */
+/* The former standalone Chat page owned these shared header rules. Keep the
+   Session-only styling here now that the standalone page and stylesheet are
+   gone. Match the Project title's artwork column instead of overlapping it. */
+.workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+  min-width: 0;
+  padding-top: 6px;
+}
+.workspace-page.session-workspace .chat-site-header .brainstorm-header-copy .chat-eyebrow {
+  margin: 0 0 4px;
+  color: #c99a66;
+  font-size: .78rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.workspace-page.session-workspace .chat-site-header .brainstorm-header-copy h1 {
+  margin: 0;
+  color: #f0e6d7;
+  font-size: clamp(1.45rem, 2vw, 2.1rem);
+  line-height: 1.2;
+}
+@media (min-width: 901px) {
+  .workspace-page.session-workspace .project-art-header.chat-site-header {
+    box-sizing: border-box;
+    height: auto;
+    min-height: 0;
+    padding-top: 13px;
+    padding-bottom: 13px;
+  }
+}
 @media (min-width: 1201px) {
-  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
-    margin-left: calc(min(29vw, 270px) - min(29vw, 470px) - 40px);
+  .workspace-page.session-workspace .project-art-header.chat-site-header {
+    display: grid;
+    /* Identical artwork width and gap to the Project title's flex row. */
+    grid-template-columns: min(29vw, 270px) minmax(0, 1fr) max-content;
+    gap: 16px;
+    align-items: start;
+  }
+  .workspace-page.session-workspace .chat-site-header .brand-block { display: contents; }
+  .workspace-page.session-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 270px);
+    justify-self: start;
+  }
+  .workspace-page.session-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.session-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 3;
+    grid-row: 1;
   }
 }
 @media (min-width: 701px) and (max-width: 1200px) {
-  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
-    margin-left: calc(min(29vw, 270px) - min(29vw, 330px) - 28px);
+  .workspace-page.session-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 270px) minmax(0, 1fr);
+    gap: 12px 16px;
+    align-items: start;
+  }
+  .workspace-page.session-workspace .chat-site-header .brand-block { display: contents; }
+  .workspace-page.session-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 270px);
+  }
+  .workspace-page.session-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.session-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
-.workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
-  position: relative;
-  z-index: 5;
-  overflow: visible;
+@media (max-width: 700px) {
+  .workspace-page.session-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(34vw, 175px) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .workspace-page.session-workspace .chat-site-header .brand-block { display: contents; }
+  .workspace-page.session-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    width: 100%;
+    margin-left: -20px;
+  }
+  .workspace-page.session-workspace .chat-site-header .brainstorm-header-copy { grid-column: 2; }
+  .workspace-page.session-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
-/* The image and its container must remain behind the overlapping heading. */
-.workspace-page.session-workspace .project-art-header.chat-site-header .project-header-art {
-  z-index: 0;
+.workspace-page.session-workspace .project-art-header .brainstorm-header-pill-stack {
+  grid-area: identity;
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: max-content max-content;
+  row-gap: var(--sigma-project-pill-row-gap);
+  justify-items: end;
+  align-items: start;
+  width: max-content;
+}
+.workspace-page.session-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection {
+  grid-area: auto;
+  position: relative;
+  contain: none;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+.workspace-page.session-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection > summary {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0 0 0 auto;
+}
+.workspace-page.session-workspace .project-art-header .brainstorm-header-model-column {
+  grid-area: model-column;
+  display: flex;
+  align-items: flex-start;
+  justify-content: end;
+  min-width: 0;
+  pointer-events: auto;
+}
+.workspace-page.session-workspace .project-art-header .brainstorm-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: 0;
+}
+.workspace-page.session-workspace .project-art-header .brainstorm-header-model-column .global-model-pill-position {
+  display: inline-flex;
+  position: static;
+  margin: 0;
 }
 
 /* Session Markdown disclosures are attached to actual section headings rather
