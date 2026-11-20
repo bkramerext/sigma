@@ -302,7 +302,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                 </small>}
                 {!entry.pending && <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                   {expanded && (asMarkdown
-                    ? <div className="session-transcript-markdown"><RenderedMarkdown body={formatTranscriptMarkdown(visibleText)} collapsibleCodeBlocks/></div>
+                    ? <div className="session-transcript-markdown"><RenderedMarkdown body={formatTranscriptMarkdown(visibleText)} collapsibleSections/></div>
                     : <pre className="session-transcript-plain">{supervisor?.body ?? entry.text}</pre>)}
                 </div>}
               </li>;
