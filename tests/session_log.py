@@ -1143,7 +1143,6 @@ def test_transcript_conversion_uses_server_saved_event_only() -> None:
             raise AssertionError("Unallowlisted source path was accepted")
 
 
-
 def test_running_session_settings_update_preserves_in_flight_slots() -> None:
     """Live edits keep accepted/in-flight work, and never obtain the idle-worker lock."""
     from contextlib import nullcontext
@@ -1175,10 +1174,20 @@ def test_running_session_settings_update_preserves_in_flight_slots() -> None:
         },
         "strategy_runs": [{"strategy_id": "first", "status": "running", "cycle": 2}],
         "steps": [
-            {"id": "accepted", "strategy_id": "first",
-             "role": "skeptic", "cycle": 1, "status": "completed"},
-            {"id": "in-flight", "strategy_id": "first",
-             "role": "investigator", "cycle": 2, "status": "running"},
+            {
+                "id": "accepted",
+                "strategy_id": "first",
+                "role": "skeptic",
+                "cycle": 1,
+                "status": "completed",
+            },
+            {
+                "id": "in-flight",
+                "strategy_id": "first",
+                "role": "investigator",
+                "cycle": 2,
+                "status": "running",
+            },
         ],
     }
     stored = {"record": deepcopy(original)}
@@ -1207,8 +1216,14 @@ def test_running_session_settings_update_preserves_in_flight_slots() -> None:
         patch.object(research_sessions, "_read", side_effect=read),
         patch.object(research_sessions, "_save_unlocked", side_effect=save),
         patch.object(research_sessions, "_project_manager_lock", return_value=nullcontext()),
-        patch.object(research_sessions, "_idle_worker_lock", side_effect=AssertionError("Live worker was fenced")),
-        patch.object(research_sessions, "_recover", side_effect=AssertionError("Running call was recovered")),
+        patch.object(
+            research_sessions,
+            "_idle_worker_lock",
+            side_effect=AssertionError("Live worker was fenced"),
+        ),
+        patch.object(
+            research_sessions, "_recover", side_effect=AssertionError("Running call was recovered")
+        ),
         patch.object(projects, "project_write_lock", return_value=nullcontext()),
         patch.object(research_sessions, "_event"),
         patch.object(research_sessions, "_public", side_effect=lambda record: deepcopy(record)),
@@ -1260,7 +1275,9 @@ def test_live_settings_recheck_latest_checkpoint_before_persisting() -> None:
         patch.object(research_sessions, "_read", side_effect=lambda *_: deepcopy(next(reads))),
         patch.object(research_sessions, "_project_manager_lock", return_value=nullcontext()),
         patch.object(projects, "project_write_lock", return_value=nullcontext()),
-        patch.object(research_sessions, "_save_unlocked", side_effect=AssertionError("Stale write")),
+        patch.object(
+            research_sessions, "_save_unlocked", side_effect=AssertionError("Stale write")
+        ),
     ):
         try:
             asyncio.run(
