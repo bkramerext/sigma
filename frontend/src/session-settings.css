@@ -95,6 +95,16 @@
   margin: 0;
 }
 .project-settings-dialog.session-settings-dialog .session-settings-turn-limit { width: 84px; max-width: 84px; }
+/* Keep numeric validation and keyboard entry, but hide browser steppers. */
+.project-settings-dialog.session-settings-dialog #session-settings-turns {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.project-settings-dialog.session-settings-dialog #session-settings-turns::-webkit-inner-spin-button,
+.project-settings-dialog.session-settings-dialog #session-settings-turns::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .project-settings-dialog.session-settings-dialog .session-settings-check {
   display: inline-flex;
   align-items: center;
