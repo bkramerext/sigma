@@ -157,11 +157,11 @@ test('strategy groups display in ascending order despite concurrent completion t
   ]);
 });
 
-test('Transcript uses paired role labels and Brainstorm displays two Investigators', () => {
+test('Transcript uses paired role labels and Brainstorm displays Co-investigators', () => {
   assert.equal(transcriptRoleLabel('investigator', false), 'Investigator');
   assert.equal(transcriptRoleLabel('skeptic', false), 'Skeptic');
-  assert.equal(transcriptRoleLabel('investigator', true), 'Investigator');
-  assert.equal(transcriptRoleLabel('skeptic', true), 'Investigator');
+  assert.equal(transcriptRoleLabel('investigator', true), 'Co-investigator');
+  assert.equal(transcriptRoleLabel('skeptic', true), 'Co-investigator');
   assert.equal(transcriptRoleLabel('supervisor', true), 'Supervisor');
   assert.equal(transcriptRoleLabel('human', false), 'Human');
 });
@@ -221,7 +221,7 @@ test('Transcript role labels retain the mode at each historical provider dispatc
       strategy_id: 's', timestamp: '2026-11-20T01:00:05Z', brainstorm_mode: false, request: brainstorm },
   ]);
   assert.deepEqual(entries.map(entry => [entry.round, transcriptRoleLabel(entry.role, entry.brainstormMode === true)]),
-    [[3, 'Skeptic'], [4, 'Investigator'], [5, 'Skeptic']]);
+    [[3, 'Skeptic'], [4, 'Co-investigator'], [5, 'Skeptic']]);
 });
 
 test('Markdown presentation fences nested JSON and formats artifact GUIDs', () => {
