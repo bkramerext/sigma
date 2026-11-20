@@ -325,7 +325,120 @@ async def check_role_dispatch_freezes_sources() -> None:
         assert "source_material_selection_history" not in record
 
 
+def check_robust_link_retrieval() -> None:
+    """Binary PDF hosts, permanent failures and transient retries, without real HTTP."""
+    url = "http://example.org/reconstruction.pdf"
+    pdf = (Path(__file__).parent / "fixtures/sigma-valid-sample-paper.pdf").read_bytes()
+
+    class FakeSocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def settimeout(self, _timeout):
+            pass
+
+        def connect(self, _address):
+            pass
+
+        def sendall(self, _request):
+            pass
+
+    class FakeResponse:
+        status = 200
+
+        def __init__(self, content_type: str, payload: bytes) -> None:
+            self.content_type = content_type
+            self.payload = payload
+
+        def begin(self):
+            pass
+
+        def getheader(self, name: str, default=None):
+            return {
+                "Content-Type": self.content_type,
+                "Content-Length": str(len(self.payload)),
+            }.get(name, default)
+
+        def read1(self, _limit):
+            chunk, self.payload = self.payload, b""
+            return chunk
+
+    def fake_http(content_type: str, payload: bytes):
+        endpoint = (
+            "example.org", "example.org", 80, "/reconstruction.pdf",
+            (research_supplied_evidence.socket.AF_INET, research_supplied_evidence.socket.SOCK_STREAM,
+             0, "", ("93.184.216.34", 80)),
+        )
+        with (
+            patch.object(
+                research_supplied_evidence.research_reference_content,
+                "_public_endpoint",
+                return_value=endpoint,
+            ),
+            patch.object(research_supplied_evidence.socket, "socket", return_value=FakeSocket()),
+            patch.object(
+                research_supplied_evidence.http.client,
+                "HTTPResponse",
+                return_value=FakeResponse(content_type, payload),
+            ),
+        ):
+            return research_supplied_evidence._fetch_url_once(url)
+
+    binary, media_type, resolved = fake_http("application/octet-stream", pdf)
+    assert binary == pdf and media_type == "application/pdf" and resolved == url
+    extracted = research_supplied_evidence.read_link(url, (binary, media_type, resolved))
+    assert extracted["status"] == "retrieved"
+    assert extracted["pages"] >= 1 and extracted["excerpt_sha256"]
+
+    try:
+        fake_http("application/octet-stream", b"<html>not a PDF</html>")
+    except ValueError as exc:
+        assert str(exc) == "binary_response_is_not_pdf"
+    else:
+        raise AssertionError("Non-PDF binary payload was accepted")
+
+    with (
+        patch.object(
+            research_supplied_evidence,
+            "_fetch_url_once",
+            side_effect=[ValueError("http_503"), (pdf, "application/pdf", url)],
+        ) as fetch,
+        patch.object(research_supplied_evidence.time, "sleep") as sleep,
+    ):
+        assert research_supplied_evidence._fetch_url(url)[0] == pdf
+        assert fetch.call_count == 2
+        sleep.assert_called_once()
+
+    with (
+        patch.object(
+            research_supplied_evidence, "_fetch_url_once", side_effect=ValueError("http_404")
+        ) as fetch,
+        patch.object(research_supplied_evidence.time, "sleep") as sleep,
+    ):
+        try:
+            research_supplied_evidence._fetch_url(url)
+        except ValueError as exc:
+            assert str(exc) == "http_404"
+        else:
+            raise AssertionError("Permanent 404 was retried or hidden")
+        fetch.assert_called_once()
+        sleep.assert_not_called()
+
+    with patch.object(
+        research_supplied_evidence.project_evidence,
+        "_extract",
+        side_effect=project_evidence.ProjectError("PDF cannot be inspected."),
+    ):
+        failed = research_supplied_evidence.read_link(url, (pdf, "application/pdf", url))
+    assert failed["status"] == "unavailable"
+    assert failed["reason"] == "PDF cannot be inspected."
+
+
 if __name__ == "__main__":
+    check_robust_link_retrieval()
     asyncio.run(check_barrier())
     asyncio.run(check_partial_resume())
     asyncio.run(check_edited_source_selection_resume(remove=False))
