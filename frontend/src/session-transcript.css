@@ -42,6 +42,9 @@
   border-top: 1px solid #314252;
 }
 .session-log-page .session-transcript-turn-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 0 0 8px;
   padding: 0;
   color: #bfb4a5;
@@ -369,9 +372,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 16px;
   width: 16px;
   height: 16px;
-  margin-left: 8px;
-  vertical-align: middle;
+  margin: 0;
+  text-decoration: none;
+}
+.session-log-page .session-transcript-current-turn:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 2px;
+  border-radius: 50%;
 }
 .session-log-page .session-transcript-current-turn .research-running-indicator { margin: 0; }
