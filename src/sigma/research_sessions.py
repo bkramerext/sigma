@@ -17,7 +17,7 @@ import weakref
 import zlib
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, nullcontext
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -5900,111 +5900,134 @@ def _reject_intervention(
 async def update_session_configuration(
     path: str, session_id: str, settings: dict[str, Any]
 ) -> dict[str, Any]:
-    """Edit only a stopped Session and keep the existing Resume operation."""
-    async with _session_state_lock(session_id):
-        with _project_manager_lock(path), _idle_worker_lock(path, session_id):
-            record = _recover(_read(path, session_id))
-            if record.get("scheduler_version") != 2:
-                raise ProjectError("This historical session has no adjustable paired turns")
-            if record.get("status") in {"queued", "running"}:
-                raise ProjectError("Stop the Session before editing its settings")
-            old_cycles = int(record["cycle_limit"])
-            current = _session_configuration(
-                record.get("session_settings"), default_turn_limit=old_cycles
-            )
-            new_settings = _session_configuration(settings, default_turn_limit=old_cycles)
-            executed_turns = max(
-                [0]
-                + [
-                    int(step["cycle"])
-                    for step in record.get("steps", [])
-                    if isinstance(step, dict)
-                    and step.get("role") in {"investigator", "skeptic"}
-                    and type(step.get("cycle")) is int
-                    and step["cycle"] > 0
-                ]
-                + [
-                    int(branch.get("cycle", 0))
-                    for branch in record.get("strategy_runs", [])
-                    if isinstance(branch, dict) and type(branch.get("cycle")) is int
-                ]
-            )
-            if new_settings["turn_limit"] < executed_turns:
-                raise ProjectError(
-                    "Turns cannot be lower than the number of turns already executed"
-                )
-            new_cycles = new_settings["turn_limit"]
-            if (
-                new_settings["unlimited_turns"]
-                and not current["unlimited_turns"]
-                and record.get("status") == "completed"
-                and new_cycles <= executed_turns
-            ):
-                # Authorize one more future paired slot. Subsequent turns are
-                # allocated lazily by the same scheduler.
-                new_cycles = executed_turns + 1
-            reserved_turns = int(record.get("call_ceiling_cycles", old_cycles))
-            extra_turns = max(0, new_cycles - reserved_turns)
-            branches_count = len(record.get("strategy_runs", []))
-            supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
-            supervisor_target = new_cycles * branches_count
-            added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
-            added_calls = 2 * extra_turns * branches_count + added_supervisor_calls
-            ledger = record.get("hard_budget_ledger")
-            if added_calls and isinstance(ledger, dict):
-                try:
-                    increase_call_limit(ledger, int(ledger.get("call_limit", 0)) + added_calls)
-                except BudgetExceeded as exc:
-                    raise ProjectError(str(exc)) from exc
-            if added_calls:
-                old_call_limit = record["call_limit"]
-                record["call_limit"] += added_calls
-                record["total_token_limit"] += added_calls * (
-                    _agent_dispatch_guard_bytes({"model": record.get("model", "")})
-                    + 65_536
-                    + int(record["output_token_limit"])
-                )
-                record.setdefault("call_limit_adjustments", []).append(
-                    {
-                        "at": _now(),
-                        "from": old_call_limit,
-                        "to": record["call_limit"],
-                        "additional_calls": added_calls,
-                        "purpose": "user changed Session turn limit",
-                    }
-                )
-            record["call_ceiling_cycles"] = max(reserved_turns, new_cycles)
-            record["supervisor_ceiling_calls"] = max(supervisor_reserved, supervisor_target)
-            record["cycle_limit"] = new_cycles
-            # Old snapshots retain their original divisor so prior research
-            # labels never change. Newly created flat-turn Sessions remain
-            # internally one round, however many turns the user configures.
-            if record.get("turns_are_flat"):
-                record["turns_per_round"] = new_cycles
-                record["research_round_limit"] = 1
-            else:
-                per_round = max(1, int(record.get("turns_per_round", 1)))
-                record["research_round_limit"] = math.ceil(new_cycles / per_round)
-            record["session_settings"] = new_settings
-            extended = new_cycles > old_cycles
-            if record.get("status") == "completed":
-                record["settings_extended"] = extended and new_cycles > executed_turns
-                if record["settings_extended"]:
-                    for branch in record.get("strategy_runs", []):
-                        if branch.get("status") == "completed":
-                            branch["status"] = "ended"
-            if extended and record.get("status") in {"completed", "ended", "failed"}:
-                duration = record.get("configured_duration_limit_minutes")
-                if type(duration) is int and duration > 0:
-                    record["deadline_at"] = (
-                        datetime.now(UTC) + timedelta(minutes=duration)
-                    ).isoformat()
-                record["stopped_at"] = _now()
-            record["updated_at"] = _now()
-            _event(record, "session.configuration_changed", "Session settings saved.")
-            _save(path, record)
-            return _public(record)
+    """Apply settings at safe worker boundaries without stopping research.
 
+    State-lock protects concurrent in-process provider dispatches. The project
+    write lock extends that protection to workers running in other processes.
+    Running calls are never cancelled or replayed by this operation.
+    """
+    from sigma.projects import project_write_lock
+
+    async with _session_state_lock(session_id):
+        with _project_manager_lock(path):
+            snapshot = _read(path, session_id)
+            active = snapshot.get("status") in {"queued", "running"}
+            # A running worker holds the worker lock for its entire lifetime.
+            # Only non-running Sessions need the existing idle-worker fence.
+            with (
+                nullcontext() if active else _idle_worker_lock(path, session_id)
+            ), (
+                project_write_lock(path)
+                if active and Path(path).suffix in {".sigma", ".json"}
+                else nullcontext()
+            ):
+                record = _read(path, session_id)
+                if not active:
+                    record = _recover(record)
+                if record.get("scheduler_version") != 2:
+                    raise ProjectError("This historical session has no adjustable paired turns")
+                old_cycles = int(record["cycle_limit"])
+                current = _session_configuration(
+                    record.get("session_settings"), default_turn_limit=old_cycles
+                )
+                new_settings = _session_configuration(settings, default_turn_limit=old_cycles)
+                executed_turns = max(
+                    [0]
+                    + [
+                        int(step["cycle"])
+                        for step in record.get("steps", [])
+                        if isinstance(step, dict)
+                        and step.get("role") in {"investigator", "skeptic"}
+                        and type(step.get("cycle")) is int
+                        and step["cycle"] > 0
+                    ]
+                    + [
+                        int(branch.get("cycle", 0))
+                        for branch in record.get("strategy_runs", [])
+                        if isinstance(branch, dict) and type(branch.get("cycle")) is int
+                    ]
+                )
+                if new_settings["turn_limit"] < executed_turns:
+                    raise ProjectError(
+                        "Turns cannot be lower than the number of turns already executed"
+                    )
+                new_cycles = new_settings["turn_limit"]
+                if (
+                    new_settings["unlimited_turns"]
+                    and not current["unlimited_turns"]
+                    and record.get("status") == "completed"
+                    and new_cycles <= executed_turns
+                ):
+                    # Authorize one more future paired slot. Subsequent turns are
+                    # allocated lazily by the same scheduler.
+                    new_cycles = executed_turns + 1
+                reserved_turns = int(record.get("call_ceiling_cycles", old_cycles))
+                extra_turns = max(0, new_cycles - reserved_turns)
+                branches_count = len(record.get("strategy_runs", []))
+                supervisor_reserved = int(record.get("supervisor_ceiling_calls", 0))
+                supervisor_target = new_cycles * branches_count
+                added_supervisor_calls = max(0, supervisor_target - supervisor_reserved)
+                added_calls = 2 * extra_turns * branches_count + added_supervisor_calls
+                ledger = record.get("hard_budget_ledger")
+                if added_calls and isinstance(ledger, dict):
+                    try:
+                        increase_call_limit(ledger, int(ledger.get("call_limit", 0)) + added_calls)
+                    except BudgetExceeded as exc:
+                        raise ProjectError(str(exc)) from exc
+                if added_calls:
+                    old_call_limit = record["call_limit"]
+                    record["call_limit"] += added_calls
+                    record["total_token_limit"] += added_calls * (
+                        _agent_dispatch_guard_bytes({"model": record.get("model", "")})
+                        + 65_536
+                        + int(record["output_token_limit"])
+                    )
+                    record.setdefault("call_limit_adjustments", []).append(
+                        {
+                            "at": _now(),
+                            "from": old_call_limit,
+                            "to": record["call_limit"],
+                            "additional_calls": added_calls,
+                            "purpose": "user changed Session turn limit",
+                        }
+                    )
+                record["call_ceiling_cycles"] = max(reserved_turns, new_cycles)
+                record["supervisor_ceiling_calls"] = max(supervisor_reserved, supervisor_target)
+                record["cycle_limit"] = new_cycles
+                # Old snapshots retain their original divisor so prior research
+                # labels never change. Newly created flat-turn Sessions remain
+                # internally one round, however many turns the user configures.
+                if record.get("turns_are_flat"):
+                    record["turns_per_round"] = new_cycles
+                    record["research_round_limit"] = 1
+                else:
+                    per_round = max(1, int(record.get("turns_per_round", 1)))
+                    record["research_round_limit"] = math.ceil(new_cycles / per_round)
+                record["session_settings"] = new_settings
+                extended = new_cycles > old_cycles
+                if record.get("status") == "completed":
+                    record["settings_extended"] = extended and new_cycles > executed_turns
+                    if record["settings_extended"]:
+                        for branch in record.get("strategy_runs", []):
+                            if branch.get("status") == "completed":
+                                branch["status"] = "ended"
+                if extended and record.get("status") in {"completed", "ended", "failed"}:
+                    duration = record.get("configured_duration_limit_minutes")
+                    if type(duration) is int and duration > 0:
+                        record["deadline_at"] = (
+                            datetime.now(UTC) + timedelta(minutes=duration)
+                        ).isoformat()
+                    record["stopped_at"] = _now()
+                record["updated_at"] = _now()
+                _event(record, "session.configuration_changed", "Session settings saved.")
+                # Active workers (including those in another process) checkpoint
+                # under the project write lock. Save our fresh snapshot inside the
+                # same lock so live edits cannot overwrite completed agent work.
+                if active and Path(path).suffix in {".sigma", ".json"}:
+                    _save_unlocked(path, record)
+                else:
+                    _save(path, record)
+                return _public(record)
 
 async def submit_intervention(
     path: str,
