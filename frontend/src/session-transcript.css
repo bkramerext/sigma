@@ -86,8 +86,8 @@
 .session-log-page .session-transcript-entry .chat-disclosure-button {
   box-sizing: border-box;
   display: inline-flex;
-  flex: 0 0 140px;
-  width: 140px;
+  flex: 0 0 116px;
+  width: 116px;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
@@ -134,7 +134,7 @@
   min-width: 28px;
   min-height: 26px;
   height: 26px;
-  margin: 0 0 0 12px;
+  margin: 0;
   padding: 3px 2px;
   border: 1px solid transparent;
   border-radius: 4px;
