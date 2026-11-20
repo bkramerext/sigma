@@ -450,23 +450,26 @@
   }
 }
 
-/* Position the Session title in a real grid track beside the logo,
-   as the Project header does. A negative margin on the middle grid item
-   allowed its text to render underneath the artwork and be obscured.
-   Shrink only the artwork track: the pills remain in the rightmost track. */
+/* Preserve the Session heading's original leftward placement beside the
+   SIGMA artwork. Do not shrink the header grid: that shifts the heading
+   instead of fixing the obstruction. The artwork is decorative; the complete
+   title must paint above it, even where the two visually overlap. */
 @media (min-width: 1201px) {
-  .workspace-page.session-workspace .project-art-header.chat-site-header {
-    grid-template-columns: min(29vw, 270px) minmax(0, 1fr) max-content;
-    column-gap: 16px;
+  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+    margin-left: calc(min(29vw, 270px) - min(29vw, 470px) - 40px);
   }
 }
 @media (min-width: 701px) and (max-width: 1200px) {
-  .workspace-page.session-workspace .project-art-header.chat-site-header {
-    grid-template-columns: min(29vw, 270px) minmax(0, 1fr);
+  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+    margin-left: calc(min(29vw, 270px) - min(29vw, 330px) - 28px);
   }
 }
 .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
   position: relative;
-  z-index: 1;
-  margin-left: 0;
+  z-index: 5;
+  overflow: visible;
+}
+/* The image and its container must remain behind the overlapping heading. */
+.workspace-page.session-workspace .project-art-header.chat-site-header .project-header-art {
+  z-index: 0;
 }
