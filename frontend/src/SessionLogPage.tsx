@@ -237,7 +237,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     <section className="session-transcript-conversation" aria-label="Transcript">
       <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
         aria-label="Conversation history">
-        {shownGroups.map(group => <li key={group.key} className="session-transcript-turn">
+        {shownGroups.map(group => <li key={group.key} className={"session-transcript-turn" + (group.entries.some(entry => entry.brainstormMode === true && (entry.role === "investigator" || entry.role === "skeptic")) ? " is-brainstorm-turn" : "")}>
           <h3 className="session-transcript-turn-heading">
             <span>{group.label}{strategySuffix(group)}{group.latestTimestamp && <> · <time dateTime={group.latestTimestamp}>{formatTimestamp(group.latestTimestamp)}</time></>}</span>
             {group.key === activeTurnKey && <a
@@ -267,7 +267,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                 ? formattedSupervisor?.scores ? formattedSupervisor.body : supervisor.body
                 : formatted;
               return <li key={entry.id} data-transcript-entry={entry.id}
-                className={'session-transcript-entry chat-history-entry chat-history-' + entry.role + (name === 'Co-investigator' ? ' is-brainstorm-co-investigator' : '')}>
+                className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
                 <div className="session-transcript-entry-heading">
                   {entry.pending
                     ? <span className="chat-disclosure-button session-transcript-pending-heading">
