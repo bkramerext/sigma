@@ -1605,7 +1605,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
-  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit' | 'view'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
+  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
   // Serialize auto-saves so a slower earlier request cannot overwrite newer edits.
   const sessionSettingsSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const [pendingStartSettings, setPendingStartSettings] = useState<SessionSettings | null>(null);
@@ -2398,6 +2398,21 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           const isOwner = attributionEnforced && viewerEmail === projectOwnerEmail;
           const canControl = !attributionEnforced || (creator ? creator === viewerEmail : isOwner);
           const canRemove = canControl || (isOwner && ['completed', 'ended'].includes(item.status));
+          const settingsControl = !guest && canControl && <button type="button"
+className="text-view-link text-view-icon workspace-icon-button session-settings-action"
+                    aria-label={`Session ${item.session_number} settings`}
+                    data-tooltip="Session settings" disabled={busy}
+                    onClick={() => setSettingsDialog({
+                      mode: 'edit',
+                      sessionId: item.id, initial: existingSessionSettings(item),
+                      minTurns: Math.max(0,
+                        ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
+                          .map(step => step.cycle),
+                        ...(item.strategy_runs ?? []).map(branch => branch.cycle ?? 0),
+                      ),
+                    })}>
+                    <SlidersSettingsIcon/>
+                  </button>;
           const runControls = <>
                   {!guest && canControl && (sessionOffersResume(item) || item.status === 'completed') && !(pendingSessionAction?.id === item.id && pendingSessionAction.action === 'resume') && <span className="session-resume-tooltip" data-tooltip={projectAtCapacity ? "Only one session at a time" : "Resume this session"}><button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={`Resume Session ${item.session_number}`} disabled={!sessionOffersResume(item) || busy || !!readError || projectAtCapacity} onClick={event => requestResume(item, event.currentTarget)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg></button></span>}
                   {!guest && canControl && (pendingAction === 'resume' || pendingAction === 'stop' || pendingAction === 'pause' || (!pendingAction && ['queued', 'running'].includes(item.status))) && <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control session-mini-process-control" aria-label={pendingAction === 'stop' || pendingAction === 'pause' ? `Stopping Session ${item.session_number}` : `Stop Session ${item.session_number}`} data-tooltip={`Stop Session ${item.session_number}`} disabled={pendingAction === 'stop' || pendingAction === 'pause' || (busy && pendingAction !== 'resume')} onClick={() => void control('stop', item)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg></button>}
@@ -2408,27 +2423,13 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session {item.session_number}{item.session_settings?.name ? ' · ' + item.session_settings.name : ''}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
                   {!sessionPageId && runControls}
-                  {!guest && canControl && <button type="button"
-                    className="text-view-link text-view-icon workspace-icon-button session-settings-action"
-                    aria-label={`Session ${item.session_number} settings`}
-                    data-tooltip="Session settings" disabled={busy}
-                    onClick={() => setSettingsDialog({
-                      mode: ['queued', 'running'].includes(item.status) ? 'view' : 'edit',
-                      sessionId: item.id, initial: existingSessionSettings(item),
-                      minTurns: Math.max(0,
-                        ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
-                          .map(step => step.cycle),
-                        ...(item.strategy_runs ?? []).map(branch => branch.cycle ?? 0),
-                      ),
-                    })}>
-                    <SlidersSettingsIcon/>
-                  </button>}
+                  {settingsControl}
                   {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove session ${item.session_number}?` : `Remove session ${item.session_number} and its saved work?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div>
                 {sessionPageId === item.id && sessionHeaderTarget && createPortal(
-                  <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>{runControls}</div>,
+                  <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>{runControls}{settingsControl}</div>,
                   sessionHeaderTarget,
                 )}
                 </div>
