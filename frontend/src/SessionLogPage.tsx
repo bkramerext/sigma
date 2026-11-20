@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -302,7 +302,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                 </small>}
                 {!entry.pending && <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                   {expanded && (asMarkdown
-                    ? <div className="session-transcript-markdown"><RenderedMarkdown body={visibleText}/></div>
+                    ? <div className="session-transcript-markdown"><RenderedMarkdown body={formatTranscriptMarkdown(visibleText)}/></div>
                     : <pre className="session-transcript-plain">{supervisor?.body ?? entry.text}</pre>)}
                 </div>}
               </li>;
