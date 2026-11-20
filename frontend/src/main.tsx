@@ -2424,7 +2424,7 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
                   {!sessionPageId && runControls}
                   {settingsControl}
-                  {!guest && !['queued', 'running'].includes(item.status) && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
+                  
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove session ${item.session_number}?` : `Remove session ${item.session_number} and its saved work?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div>
@@ -2433,7 +2433,13 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                   sessionHeaderTarget,
                 )}
                 </div>
-                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? statusLabel : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{(pendingAction === 'stop' || pendingAction === 'pause') ? statusLabel : statusLabel === 'running' || statusLabel === 'resuming' || statusLabel === 'stopped' ? <>{statusLabel}{!guest && ['running', 'resuming'].includes(statusLabel) ? <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path} indicator/> : <i aria-hidden="true"/>}</> : <>{!guest && statusLabel === 'queued' ? <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path} indicator/> : <i aria-hidden="true"/>}{statusLabel}</>}</span>
+                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? statusLabel : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{(() => {
+                  const dot = !guest
+                    ? <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path} indicator active={['running', 'resuming', 'queued'].includes(statusLabel)}/>
+                    : <i aria-hidden="true"/>;
+                  return ['running', 'resuming', 'stopped', 'stopping'].includes(statusLabel)
+                    ? <>{statusLabel}{dot}</> : <>{dot}{statusLabel}</>;
+                })()}</span>
                 {sessionControlFailures[item.id]
                   ? (!sessionControlFailures[item.id].dismissed && <SessionNotice key={`${item.id}:control:${sessionControlFailures[item.id].serial}`}
                       number={item.session_number}
