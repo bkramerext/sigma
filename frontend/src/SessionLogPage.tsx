@@ -236,8 +236,19 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
         aria-label="Conversation history">
         {shownGroups.map(group => <li key={group.key} className="session-transcript-turn">
           <h3 className="session-transcript-turn-heading">
-            {group.label}{strategySuffix(group)}{group.latestTimestamp && <> · <time dateTime={group.latestTimestamp}>{formatTimestamp(group.latestTimestamp)}</time></>}
-            {group.key === activeTurnKey && <span className="research-running-indicator-frame session-transcript-current-turn" role="img" aria-label="Current turn"><span className="research-running-indicator"/></span>}
+            <span>{group.label}{strategySuffix(group)}{group.latestTimestamp && <> · <time dateTime={group.latestTimestamp}>{formatTimestamp(group.latestTimestamp)}</time></>}</span>
+            {group.key === activeTurnKey && <a
+              className="research-running-indicator-frame session-transcript-current-turn"
+              href={`/project?${new URLSearchParams({ path, reveal_session: sessionId })}`}
+              aria-label="Show session in project" data-tooltip="Show session in project"
+              onClick={event => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                window.history.pushState(null, '', event.currentTarget.href);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}>
+              <span className="research-running-indicator"/>
+            </a>}
           </h3>
           <ol className="session-transcript-turn-entries">
             {group.entries.map(entry => {
