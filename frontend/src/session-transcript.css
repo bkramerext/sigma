@@ -9,54 +9,9 @@
   padding: 12px 0 28px;
   background: transparent;
 }
-.session-workspace .workspace-content { padding: 0; }
-.session-log-page.session-conversation-page header.session-transcript-page-header {
-  position: static;
-  padding: 0 0 4px;
-  margin: 0;
-  border-bottom: 0;
-  background: transparent;
-}
-.session-log-page.session-conversation-page .session-transcript-page-header > p { margin: 3px 0 0; }
-.session-log-page.session-conversation-page .session-transcript-title-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 9px;
-  min-width: 0;
-}
-.session-log-page.session-conversation-page .session-transcript-title-row h1 {
-  min-width: 0;
-  margin: 0;
-}
-.session-log-page.session-conversation-page .session-transcript-title-row > .session-transcript-close {
-  box-sizing: border-box;
-  display: inline-flex;
-  flex: 0 0 28px;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  min-height: 28px;
-  padding: 4px;
-  margin: 0;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--sigma-copper-foreground);
-  cursor: pointer;
-}
-.session-log-page.session-conversation-page .session-transcript-close svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-}
-.session-log-page.session-conversation-page .session-transcript-close:is(:hover, :focus-visible) {
-  background: #302418;
-  border-color: #82694b;
-  color: #ffe0ae;
-}
+/* The transcript uses the full available workspace width rather than
+   inheriting the Project pane's large horizontal gutters. */
+.workspace-page.session-workspace .workspace-content { padding: 0 8px 28px; }
 .session-log-page.session-conversation-page .session-transcript-conversation {
   margin: 2px 0 8px;
   min-width: 0;
@@ -238,7 +193,7 @@
   min-width: 28px;
   min-height: 26px;
   height: 26px;
-  margin: 0;
+  margin: 0 0 0 12px;
   padding: 3px 2px;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -287,6 +242,14 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.session-log-page .session-transcript-supervisor-scores {
+  display: block;
+  margin: 1px 0 4px 30px;
+  color: #a69d92;
+  font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.session-log-page .session-transcript-supervisor-scores span { color: #8c98a3; }
 .session-log-page .session-transcript-entry [hidden] { display: none; }
 .session-log-page .session-transcript-plain {
   max-width: 100%;
