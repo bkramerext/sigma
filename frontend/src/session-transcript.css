@@ -150,8 +150,8 @@
 }
 .session-log-page .session-transcript-entry-markdown svg.markdown-logo {
   display: block;
-  flex: 0 0 24px;
-  width: 24px;
+  flex: 0 0 20px;
+  width: 20px;
   height: 18px;
   fill: currentColor;
 }
