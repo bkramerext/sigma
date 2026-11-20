@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, paginateTranscriptTurns } from '../src/session-transcript.ts';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, paginateTranscriptTurns, formatTranscriptMarkdown } from '../src/session-transcript.ts';
 
 test('Supervisor ratings become one metadata line without changing saved or copied text', () => {
   const saved = [
@@ -222,4 +222,19 @@ test('Transcript role labels retain the mode at each historical provider dispatc
   ]);
   assert.deepEqual(entries.map(entry => [entry.round, transcriptRoleLabel(entry.role, entry.brainstormMode === true)]),
     [[3, 'Skeptic'], [4, 'Investigator'], [5, 'Skeptic']]);
+});
+
+test('Markdown presentation fences nested JSON and formats artifact GUIDs', () => {
+  const id = 'ebcaaf1f-f6d7-4d3e-9082-1fd352d5bf98';
+  const body = ['#### Reasoning steps', '', '[', '  {', '    "title": "Definitions",',
+    '    "basis_artifact_ids": ["' + id + '"]', '  }', ']', '',
+    '- Original artifact ' + id + ' is unavailable.',
+    '- Already formatted `' + id + '` remains.',
+  ].join('\n');
+  const output = formatTranscriptMarkdown(body);
+  assert.ok(output.includes('```json\n[\n  {'));
+  assert.ok(output.includes(']\n```\n'));
+  assert.ok(output.includes('- Original artifact `' + id + '` is unavailable.'));
+  assert.ok(output.includes('Already formatted `' + id + '` remains.'));
+  assert.equal(formatTranscriptMarkdown(output), output);
 });
