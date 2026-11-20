@@ -223,22 +223,29 @@
 .session-log-page .session-transcript-markdown > :last-child { margin-bottom: 0; }
 .session-log-page .session-transcript-markdown p { margin: 7px 0; }
 .session-log-page .session-transcript-markdown :is(pre, table, .katex-display) { max-width: 100%; overflow-x: auto; }
-.session-log-page .session-transcript-pagination {
-  margin: 14px 0 0;
-  color: #a69d92;
-  font-size: .83rem;
+.session-log-page .session-transcript-pagination { margin: 14px 0 0; }
+.session-log-page .session-transcript-pagination button.text-view-link {
+  display: inline;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--sigma-copper-foreground);
+  font: 400 13px Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-.session-log-page .session-transcript-pagination p { margin: 0 0 8px; }
-.session-log-page .session-transcript-pagination button {
-  min-height: 33px;
-  padding: 6px 11px;
-  border: 1px solid #817363;
-  border-radius: 6px;
-  background: #28231e;
-  color: #e6d2bd;
-  font: inherit;
+.session-log-page .session-transcript-pagination button.text-view-link:hover:not(:disabled) {
+  color: var(--sigma-copper-foreground);
+  background: transparent;
+  border-color: transparent;
 }
-.session-log-page .session-transcript-pagination button:hover { background: #383026; }
 
 /* Session belongs within the Project navigation hierarchy. */
 .session-workspace .brainstorm-header-copy h1 {
