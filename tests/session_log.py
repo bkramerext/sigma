@@ -509,22 +509,22 @@ def test_project_deletion_waits_for_read_and_cleans_logs(tmp_path: Path):
 def test_session_log_filename_short_name_fallback_and_sanitization() -> None:
     assert (
         session_log.export_filename("Xenopus Tadpoles", "Very Long Project Title", 12)
-        == "Xenopus_Tadpoles.session_12.log"
+        == "Xenopus_Tadpoles.session_12.md"
     )
     assert (
         session_log.export_filename(None, "Warp Drive Design", 3)
-        == "Warp_Drive_Design.session_3.log"
+        == "Warp_Drive_Design.session_3.md"
     )
     assert (
         session_log.export_filename("", "Nonconsecutive Subset Sums", 54)
-        == "Nonconsecutive_Subset_Sums.session_54.log"
+        == "Nonconsecutive_Subset_Sums.session_54.md"
     )
     assert (
-        session_log.export_filename(r"../COM1:\\bad?/..", "Ignored", 2) == "COM1_bad.session_2.log"
+        session_log.export_filename(r"../COM1:\\bad?/..", "Ignored", 2) == "COM1_bad.session_2.md"
     )
-    assert session_log.export_filename("CON", "Ignored", 1) == "CON_project.session_1.log"
-    assert session_log.export_filename("Étude / 数学", "Ignored", 9) == "Étude_数学.session_9.log"
-    assert session_log.export_filename("..//", "??", 7) == "project.session_7.log"
+    assert session_log.export_filename("CON", "Ignored", 1) == "CON_project.session_1.md"
+    assert session_log.export_filename("Étude / 数学", "Ignored", 9) == "Étude_数学.session_9.md"
+    assert session_log.export_filename("..//", "??", 7) == "project.session_7.md"
 
 
 def test_saved_reference_diagnostics_and_markdown_export() -> None:
@@ -642,7 +642,7 @@ def test_session_log_download_route_content_and_name() -> None:
     }
     with patch.object(api.session_log, "read", return_value=record):
         active = api.research_session_log_download_view("test-session-id", "/fixture")
-    assert 'filename="Tadpole_Research.session_7.log"' in active.headers["content-disposition"]
+    assert 'filename="Tadpole_Research.session_7.md"' in active.headers["content-disposition"]
     assert active.media_type is not None and active.media_type.startswith("text/markdown")
     assert b"## Research-reference preparation" in active.body
     assert b"still recording" in active.body
@@ -658,7 +658,7 @@ def test_session_log_download_route_content_and_name() -> None:
     record["saved_short_name"] = None
     with patch.object(api.session_log, "read", return_value=record):
         fallback = api.research_session_log_download_view("test-session-id", "/fixture")
-    assert 'filename="A_Long_Project_Name.session_7.log"' in fallback.headers["content-disposition"]
+    assert 'filename="A_Long_Project_Name.session_7.md"' in fallback.headers["content-disposition"]
 
 
 def test_project_session_log_exports_latest_and_all() -> None:
@@ -701,7 +701,8 @@ def test_project_session_log_exports_latest_and_all() -> None:
         patch.object(api.project_diagnostics, "read", return_value=[]),
     ):
         latest = api.export_project_session_logs("/fixture", "latest")
-        assert latest.media_type == "text/plain; charset=utf-8"
+        assert latest.media_type == "text/markdown; charset=utf-8"
+        assert 'filename="Test.session_9.md"' in latest.headers["content-disposition"]
         assert b"newer diagnostic" in latest.body
         assert b"older diagnostic" not in latest.body
 
@@ -711,6 +712,7 @@ def test_project_session_log_exports_latest_and_all() -> None:
             names = archive.namelist()
             assert len(names) == 2
             assert len(set(names)) == 2
+            assert all(name.endswith(".md") for name in names)
             assert any("older diagnostic" in archive.read(name).decode() for name in names)
             assert any("newer diagnostic" in archive.read(name).decode() for name in names)
 
