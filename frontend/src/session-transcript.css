@@ -182,7 +182,7 @@
 }
 .session-log-page .session-transcript-supervisor-scores {
   display: block;
-  margin: 1px 0 5px 30px;
+  margin: 1px 0 5px 24px;
   color: #a69d92;
   font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
@@ -200,9 +200,9 @@
 }
 .session-log-page .session-transcript-entry [hidden] { display: none; }
 .session-log-page .session-transcript-plain {
-  max-width: 100%;
+  max-width: calc(100% - 24px);
   max-height: none;
-  margin: 3px 0 0;
+  margin: 3px 0 0 24px;
   padding: 0;
   overflow-x: auto;
   background: transparent;
@@ -214,8 +214,8 @@
 }
 .session-log-page .session-transcript-markdown {
   min-width: 0;
-  max-width: 100%;
-  margin-top: 3px;
+  max-width: calc(100% - 24px);
+  margin: 3px 0 0 24px;
   overflow-wrap: anywhere;
   line-height: 1.55;
 }
