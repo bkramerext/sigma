@@ -300,7 +300,7 @@ export default function RenderedMarkdown({ body, citationProjectPath, citationUr
     } catch { return ''; }
   };
   return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath, sizedMathParentheses]}
-    rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, errorColor: '#c8d3dc' }]], ...(collapsibleSections ? [collapsibleMarkdownSections] : [])]}
+    rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, errorColor: '#c8d3dc' }], ...(collapsibleSections ? [collapsibleMarkdownSections] : [])]}
     urlTransform={urlTransform}
     components={{
       img: () => null,
