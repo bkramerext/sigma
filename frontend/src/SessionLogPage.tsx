@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -56,8 +56,8 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const conversionAbort = useRef<AbortController | null>(null);
   const markdownEnabled = useRef(false);
   const selectedMarkdownEntries = useRef(new Set<string>());
-  const [markdownError, setMarkdownError] = useState('');
-  const [error, setError] = useState('');
+  const [, setMarkdownError] = useState('');
+  const [, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
   const [visibleGroupCount, setVisibleGroupCount] = useState(20);
   useEffect(() => {
@@ -233,10 +233,6 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     return entry.title;
   };
   return <main className="session-log-page session-conversation-page">
-    <header className="session-transcript-page-header">
-      <p>Research conversation · {session?.status ?? 'loading'}{session?.session_settings?.brainstorm_mode ? ' · Brainstorm mode' : ''}</p>
-    </header>
-    {(error || markdownError) && <p role="alert">{error || markdownError}</p>}
     <section className="session-transcript-conversation" aria-label="Transcript">
       <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
         aria-label="Conversation history">
@@ -249,6 +245,14 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
               const expanded = expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry);
               const name = entryName(entry);
               const asMarkdown = markdownEntries.has(entry.id);
+              const supervisor = entry.role === 'supervisor' ? supervisorDisplay(entry.text) : null;
+              const formatted = formattedEntries[entry.id]?.source === entry.text ? formattedEntries[entry.id].body : entry.text;
+              const formattedSupervisor = supervisor?.scores ? supervisorDisplay(formatted) : null;
+              // A converter may rephrase the rating block; fall back to the saved
+              // observation so a formatted view never repeats scores as prose.
+              const visibleText = supervisor?.scores
+                ? formattedSupervisor?.scores ? formattedSupervisor.body : supervisor.body
+                : formatted;
               return <li key={entry.id} data-transcript-entry={entry.id}
                 className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
                 <div className="session-transcript-entry-heading">
@@ -272,10 +276,13 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                   </button>
                   <CopyTranscriptEntryButton title={name} text={entry.text}/>
                 </div>
+                {supervisor?.scores && <small className="session-transcript-supervisor-scores">
+                  Alignment {supervisor.scores[0]} · Advancement {supervisor.scores[1]} · Evidence {supervisor.scores[2]} · Health {supervisor.scores[3]} <span>(/10)</span>
+                </small>}
                 <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                   {expanded && (asMarkdown
-                    ? <div className="session-transcript-markdown"><RenderedMarkdown body={formattedEntries[entry.id]?.source === entry.text ? formattedEntries[entry.id].body : entry.text}/></div>
-                    : <pre className="session-transcript-plain">{entry.text}</pre>)}
+                    ? <div className="session-transcript-markdown"><RenderedMarkdown body={visibleText}/></div>
+                    : <pre className="session-transcript-plain">{supervisor?.body ?? entry.text}</pre>)}
                 </div>
               </li>;
             })}
