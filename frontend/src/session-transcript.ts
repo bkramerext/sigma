@@ -4,7 +4,7 @@ export type TranscriptEvent = {
   seq: number; timestamp: string; type: string; request_id?: string;
   role?: string; round?: number; strategy_id?: string; step_id?: string;
   event_kind?: string; message?: string; response?: unknown; provider_error?: unknown;
-  request?: unknown; status?: string; [key: string]: unknown;
+  request?: unknown; brainstorm_mode?: boolean; status?: string; [key: string]: unknown;
 };
 /** Session wire roles remain unchanged; Brainstorm only changes the displayed title. */
 export function transcriptRoleLabel(role: TranscriptRole, brainstormMode: boolean): string {
@@ -22,7 +22,7 @@ export type TranscriptIntervention = {
 export type TranscriptEntry = {
   id: string; timestamp: string; role: TranscriptRole; title: string;
   text: string; round?: number; strategyId?: string; sequence: number;
-  request?: unknown; response?: unknown; pending?: boolean;
+  request?: unknown; response?: unknown; pending?: boolean; brainstormMode?: boolean;
 };
 /** Strip the scored metadata from the rendered assessment while retaining the
  * saved text unmodified for Copy and Download. Old four-score reviews continue
@@ -107,6 +107,16 @@ export const transcriptCategories: { value: TranscriptRole; label: string }[] = 
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'other', label: 'Other' },
 ];
+/** Dispatch-time configuration is authoritative. Historical requests predate the
+ * explicit mode field, but retain the exact prompt sent to the provider. */
+function brainstormAtDispatch(event: TranscriptEvent | undefined): boolean {
+  if (!event) return false;
+  if (typeof event.brainstorm_mode === 'boolean') return event.brainstorm_mode;
+  // Legacy provider requests have no mode flag; detect the exact established
+  // instructions marker instead of using today's mutable Session settings.
+  return event.request !== undefined &&
+    JSON.stringify(event.request).includes('BRAINSTORM MODE: You and your peer are two co-investigators.');
+}
 export function projectTranscript(events: TranscriptEvent[], interventions: TranscriptIntervention[] = []): TranscriptEntry[] {
   const requests = new Map<string, TranscriptEvent>();
   const responses = new Map<string, TranscriptEvent>();
@@ -130,6 +140,7 @@ export function projectTranscript(events: TranscriptEvent[], interventions: Tran
         text: text || 'The response text was not retained in this historical log.',
         round: request?.round ?? event.round, strategyId: request?.strategy_id ?? event.strategy_id,
         sequence: event.seq, request: request?.request, response: event.response,
+        brainstormMode: brainstormAtDispatch(request ?? event),
       });
       continue;
     }
@@ -139,6 +150,7 @@ export function projectTranscript(events: TranscriptEvent[], interventions: Tran
         role: roleOf(event.role), title: 'Provider request', text: 'Awaiting response…',
         round: event.round, strategyId: event.strategy_id, sequence: event.seq,
         request: event.request, pending: true,
+        brainstormMode: brainstormAtDispatch(event),
       });
       continue;
     }
