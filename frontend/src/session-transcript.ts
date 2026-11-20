@@ -8,8 +8,8 @@ export type TranscriptEvent = {
 };
 /** Session wire roles remain unchanged; Brainstorm only changes the displayed title. */
 export function transcriptRoleLabel(role: TranscriptRole, brainstormMode: boolean): string {
-  if (role === 'investigator') return 'Investigator';
-  if (role === 'skeptic') return brainstormMode ? 'Investigator' : 'Skeptic';
+  if (role === 'investigator') return brainstormMode ? 'Co-investigator' : 'Investigator';
+  if (role === 'skeptic') return brainstormMode ? 'Co-investigator' : 'Skeptic';
   if (role === 'supervisor') return 'Supervisor';
   if (role === 'human') return 'Human';
   return '';
