@@ -5,6 +5,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { escapeUnmatchedInlineDollars } from './markdown-dollars';
 import { sizeFractionParentheses } from './math-parentheses';
+import { collapsibleMarkdownSections } from './markdown-sections';
 import 'katex/dist/katex.min.css';
 
 type MarkdownNode = {
@@ -264,7 +265,7 @@ export function markdownWithMathDelimiters(body: string): string {
   }).join('\n');
 }
 
-export default function RenderedMarkdown({ body, citationProjectPath, citationUrls = [], questionHeadingAction, collapsibleCodeBlocks = false }: { body: string; citationProjectPath?: string; citationUrls?: string[]; questionHeadingAction?: ReactNode; collapsibleCodeBlocks?: boolean }) {
+export default function RenderedMarkdown({ body, citationProjectPath, citationUrls = [], questionHeadingAction, collapsibleCodeBlocks = false, collapsibleSections = false }: { body: string; citationProjectPath?: string; citationUrls?: string[]; questionHeadingAction?: ReactNode; collapsibleCodeBlocks?: boolean; collapsibleSections?: boolean }) {
   const allowedCitationUrls = new Set(citationUrls);
   const urlTransform = (url: string) => {
     if (url.startsWith('#')) return url;
@@ -299,7 +300,7 @@ export default function RenderedMarkdown({ body, citationProjectPath, citationUr
     } catch { return ''; }
   };
   return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath, sizedMathParentheses]}
-    rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, errorColor: '#c8d3dc' }]]}
+    rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, errorColor: '#c8d3dc' }]], ...(collapsibleSections ? [collapsibleMarkdownSections] : [])]}
     urlTransform={urlTransform}
     components={{
       img: () => null,
