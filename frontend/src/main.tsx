@@ -6633,7 +6633,7 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
     </div>
     <div ref={headerPillsRef} className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    {close && projectView && onProjectUpdated && !sessionPage ? <>
+    {close && projectView && onProjectUpdated ? <>
 
       <MockAuthSelector/><div className="identity-pill-stack project-identity-pill-stack sigma-header-account-column"><GoogleIdentityPill/>{showConnectionStatus && <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>}</div>
     </> : chatPage
@@ -6648,7 +6648,7 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
           </div>
         </>
       : showConnectionStatus && <ConnectionStatus cloudFunding={cloudFundingFor(cloud)} zeroAllowanceAction={<ReloadMeAction connectionPill/>}/>} 
-    {close && projectView && !sessionPage && <div className="sigma-header-model-column">
+    {close && projectView && <div className="sigma-header-model-column">
       <div className="sigma-header-secondary-row">
         {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin Settings</a>}
         <div className="sigma-header-about-model-anchor">
