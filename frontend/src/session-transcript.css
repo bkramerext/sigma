@@ -384,14 +384,21 @@
 }
 
 /* The visible active turn uses the same heartbeat as Session and Project. */
-.session-log-page .session-transcript-current-turn {
+/* Override the generic Session-log link's 36px minimum and padding:
+   the dot must never increase the turn heading's line box. */
+.session-workspace .session-log-page .session-transcript-current-turn {
   display: inline-flex;
+  box-sizing: border-box;
   align-items: center;
   justify-content: center;
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
+  flex: 0 0 12px;
+  width: 12px;
+  min-width: 0;
+  height: 12px;
+  min-height: 0;
   margin: 0;
+  padding: 0;
+  line-height: 0;
   text-decoration: none;
 }
 .session-workspace .session-log-page .session-transcript-current-turn,
