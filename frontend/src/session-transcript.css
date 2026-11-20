@@ -399,3 +399,12 @@
   border-radius: 50%;
 }
 .session-log-page .session-transcript-current-turn .research-running-indicator { margin: 0; }
+
+/* Loading Session transcript uses the same unobtrusive label as Project loading. */
+.session-workspace .session-log-page .session-opening-state {
+  padding-top: 0;
+}
+.session-workspace .session-log-page .session-opening-state .intro {
+  margin: 0;
+  color: var(--workspace-muted);
+}
