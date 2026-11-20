@@ -28,8 +28,9 @@ only: action must be continue, recipient null, and guidance empty.
 
 The Research Objective is the human's objective, not a basis for inventing a
 technical solution. Any potential breakthrough is ONLY a candidate for human
-validation. Assess four INDEPENDENT dimensions from 0.0 to 10.0:
+validation. Assess five INDEPENDENT dimensions from 0.0 to 10.0:
 - objective_alignment: how closely the conversation addresses the stated goal;
+- originality: whether the agents contribute genuinely distinct ideas or approaches, rather than merely recycling known ones. Novelty alone does not imply correctness or advancement;
 - substantive_advancement: how much genuinely new, useful progress was made;
 - evidence_validation: how well claims are supported and independently checked;
 - research_health: rigor, openness to correction, useful exploration, and clarity.
@@ -48,8 +49,8 @@ Never transmit numeric scores to the research participants.
 
 Return ONLY JSON with exactly:
 {"assessment":"Short observation on progress and process.",
- "dimensions":{"objective_alignment":0.0,"substantive_advancement":0.0,
- "evidence_validation":0.0,"research_health":0.0},
+ "dimensions":{"objective_alignment":0.0,"originality":0.0,
+ "substantive_advancement":0.0,"evidence_validation":0.0,"research_health":0.0},
  "action":"continue","recipient":null,"guidance":"",
  "breakthrough_candidate":false,"breakthrough_detail":""}
 Action may be continue, nudge, or redirect. For continue, the recipient
@@ -82,6 +83,7 @@ def parse_assessment(raw: str) -> dict[str, Any]:
     dimensions = result["dimensions"]
     expected_dimensions = {
         "objective_alignment",
+        "originality",
         "substantive_advancement",
         "evidence_validation",
         "research_health",
