@@ -334,11 +334,6 @@ def main() -> None:
         action="store_true",
         help="Open SIGMA in a browser tab after startup",
     )
-    ui_command.add_argument(
-        "--brainstorm",
-        action="store_true",
-        help="Open SIGMA Home with the Brainstorm pill visible (implies --navigate)",
-    )
     add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
     for command_parser in commands.choices.values():
         for action in command_parser._actions:
@@ -427,12 +422,11 @@ def main() -> None:
     if args.command == "start":
         sys.exit(
             run_ui(
-                navigate=args.navigate or args.brainstorm,
+                navigate=args.navigate,
                 signin=args.signin,
                 mock_auth=args.mock_auth,
                 sponsored=args.sponsored,
                 prod=args.prod,
-                **({"navigate_path": "/?brainstorm=1"} if args.brainstorm else {}),
             )
         )
     if args.command == "shutdown":
