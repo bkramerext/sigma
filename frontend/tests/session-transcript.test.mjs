@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry } from '../src/session-transcript.ts';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry, supervisorDisplay } from '../src/session-transcript.ts';
+
+test('Supervisor ratings become one metadata line without changing saved or copied text', () => {
+  const saved = 'The reasoning remains conditional; independent verification is needed.\\n\\n'
+    + 'Objective alignment: 2.0/10.0\\nSubstantive advancement: 2.5/10.0\\n'
+    + 'Evidence & validation: 5.0/10.0\\nResearch health: 8.0/10.0';
+  const source = saved.replaceAll('\\n', '\\n');
+  const result = supervisorDisplay(source);
+  assert.equal(result.body, 'The reasoning remains conditional; independent verification is needed.');
+  assert.deepEqual(result.scores, ['2.0', '2.5', '5.0', '8.0']);
+  assert.equal(source, saved.replaceAll('\\n', '\\n'));
+  assert.deepEqual(supervisorDisplay('Historical Supervisor note without scores'),
+    { body: 'Historical Supervisor note without scores' });
+  const withCandidate = supervisorDisplay(source + ' Unverified breakthrough candidate: needs checking.');
+  assert.equal(withCandidate.body, result.body + ' Unverified breakthrough candidate: needs checking.');
+  assert.deepEqual(withCandidate.scores, result.scores);
+});
 
 test('response entries use completion order and retain full provider-authored output', () => {
   const entries = projectTranscript([
