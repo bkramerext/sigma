@@ -112,6 +112,105 @@ async def check_partial_resume() -> None:
             assert "authoritative premises" in context["supplied_evidence_policy"]
 
 
+async def check_previously_blocked_192k_source_resumes() -> None:
+    """An old 60k-cap stop resumes using saved complete extracts, no refetch or paid call."""
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "large-literature.sigma"
+        view, strategy, credential, config = await setup(path)
+        link = project_evidence.add_link(str(path), "https://example.org/large-paper.pdf")
+        full_text = "Source text: " + ("A" * (192_711 - len("Source text: ")))
+        excerpt_sha = hashlib.sha256(full_text.encode("utf-8")).hexdigest()
+        reached_portfolio = asyncio.Event()
+
+        def compile_large_source(_path: str, source: dict, _session_id: str) -> dict:
+            assert source["id"] == f"uploaded-link:{link['id']}"
+            return {
+                **source,
+                "status": "retrieved",
+                "excerpt": full_text,
+                "excerpt_sha256": excerpt_sha,
+                "incomplete_extract": False,
+            }
+
+        async def portfolio(session_id: str, project_path: str) -> None:
+            record = research_sessions._read(project_path, session_id)
+            branch = record["strategy_runs"][0]
+            context = research_sessions._portfolio_context(record, branch, "investigator", 1)
+            assert context["uploaded_project_evidence"][0]["excerpt"] == full_text
+            # The source may exceed the normal 256 kB compaction target on
+            # other documents, but it must pass the reviewed Astra byte guard.
+            assert research_sessions._json_bytes(context) < research_sessions._agent_dispatch_guard_bytes(record)
+            reached_portfolio.set()
+
+        # Recreate the persisted Source Material failure of an already-started
+        # session using the historical cap, not a newly started session.
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(
+                research_sessions, "_ensure_reference_compilation",
+                new=AsyncMock(return_value=True),
+            ),
+            patch.object(research_sessions, "_portfolio_worker", new=portfolio),
+            patch.object(
+                research_supplied_evidence, "compile_entry", side_effect=compile_large_source
+            ) as compiled,
+            patch.object(
+                research_sessions, "_bounded_supplied_evidence",
+                side_effect=ValueError(
+                    "Source Material contains 192,711 extracted characters; "
+                    "the session supports at most 60,000."
+                ),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            paused = await wait_for(path, started["id"])
+            assert paused["status"] == "paused"
+            assert paused["supplied_evidence_compilation"]["status"] == "blocked"
+            assert paused["calls_used"] == 0
+            compiled.assert_called_once()
+
+        # With the raised limit, Resume MUST reuse the saved extract and reach
+        # the dispatch preflight without refetching or replacing any source.
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(
+                research_sessions, "_ensure_reference_compilation",
+                new=AsyncMock(return_value=True),
+            ),
+            patch.object(research_sessions, "_portfolio_worker", new=portfolio),
+            patch.object(
+                research_supplied_evidence, "compile_entry",
+                side_effect=AssertionError("Saved full source must not be fetched again"),
+            ),
+        ):
+            await research_sessions.control_session(str(path), started["id"], "resume")
+            await asyncio.wait_for(reached_portfolio.wait(), 15)
+
+        resumed = research_sessions._read(str(path), started["id"])
+        assert resumed["supplied_evidence_compilation"]["status"] == "completed"
+        assert resumed["uploaded_project_evidence"][0]["excerpt_sha256"] == excerpt_sha
+        assert resumed["calls_used"] == 0
+
+
+def check_increased_complete_source_limit() -> None:
+    """Allow complete literature up to the new ceiling and reject oversized inputs."""
+    limit = research_sessions.MAX_SUPPLIED_EVIDENCE_CHARACTERS
+    assert limit == 400_000
+    source = {"excerpt": "X" * limit}
+    assert research_sessions._bounded_supplied_evidence([source]) == [source]
+    try:
+        research_sessions._bounded_supplied_evidence([{"excerpt": "X" * (limit + 1)}])
+    except ValueError as exc:
+        assert "400,001" in str(exc)
+        assert "400,000" in str(exc)
+    else:
+        raise AssertionError("Oversized input was silently truncated or accepted")
+
+
 async def check_edited_source_selection_resume(*, remove: bool) -> None:
     """An oversized PDF/link portfolio must recover without a new session."""
     with TemporaryDirectory() as temporary:
@@ -125,7 +224,7 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
             ).read_bytes(),
         )
         link = project_evidence.add_link(str(path), "https://example.org/oversize.txt")
-        oversized_text = "A" * 80_000
+        oversized_text = "A" * (research_sessions.MAX_SUPPLIED_EVIDENCE_CHARACTERS + 1)
         real_compile = research_supplied_evidence.compile_entry
         compiled_ids: list[str] = []
 
@@ -167,7 +266,7 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
             assert paused["supplied_evidence_compilation"]["status"] == "blocked"
             assert "Source Material contains" in paused["message"]
             assert "extracted characters" in paused["message"]
-            assert "at most 60,000" in paused["message"]
+            assert "at most 400,000" in paused["message"]
             assert paused["calls_used"] == 0
             compiler.assert_not_awaited()
             assert compile_call.call_count == 2
@@ -223,7 +322,7 @@ async def check_edited_source_selection_resume(*, remove: bool) -> None:
         assert resumed["supplied_evidence_compilation"]["total"] == 1
         assert len(resumed["uploaded_project_evidence"]) == 1
         assert resumed["uploaded_project_evidence"][0]["id"] == f"uploaded-pdf:{attachment['id']}"
-        assert "80,000" not in resumed["uploaded_project_evidence"][0]["excerpt"]
+        assert "400,001" not in resumed["uploaded_project_evidence"][0]["excerpt"]
         assert resumed["calls_used"] == 0
         if remove:
             assert float(resumed["stopped_duration_seconds"]) > 80 * 60
@@ -247,7 +346,7 @@ async def check_remove_last_source_resume() -> None:
         path = Path(temporary) / "removed.sigma"
         view, strategy, credential, config = await setup(path)
         link = project_evidence.add_link(str(path), "https://example.org/giant.txt")
-        huge = "X" * 75_000
+        huge = "X" * (research_sessions.MAX_SUPPLIED_EVIDENCE_CHARACTERS + 1)
         done = asyncio.Event()
 
         async def portfolio(_session_id: str, _path: str) -> None:
@@ -463,7 +562,9 @@ def check_robust_link_retrieval() -> None:
 
 if __name__ == "__main__":
     check_robust_link_retrieval()
+    check_increased_complete_source_limit()
     asyncio.run(check_barrier())
+    asyncio.run(check_previously_blocked_192k_source_resumes())
     asyncio.run(check_partial_resume())
     asyncio.run(check_edited_source_selection_resume(remove=False))
     asyncio.run(check_edited_source_selection_resume(remove=True))
