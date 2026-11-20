@@ -89,8 +89,10 @@
 .session-log-page .session-transcript-entry .chat-disclosure-button {
   box-sizing: border-box;
   display: inline-flex;
-  flex: 0 0 116px;
-  width: 116px;
+  /* Shared label column, sized for the widest role: Co-investigator. */
+  flex: 0 0 154px;
+  width: 154px;
+  white-space: nowrap;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
@@ -105,13 +107,6 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-}
-/* Brainstorm uses a longer role label. Size just those labels to their text,
-   retaining the same 6px heading gap before the Markdown action. */
-.session-log-page .session-transcript-entry.is-brainstorm-co-investigator .chat-disclosure-button {
-  flex: 0 0 max-content;
-  width: max-content;
-  white-space: nowrap;
 }
 .session-log-page .session-transcript-entry .chat-disclosure-button strong {
   color: inherit;
