@@ -8709,6 +8709,10 @@ async def _call_provider(
             log_context,
             {
                 "type": "provider_request",
+                "brainstorm_mode": (
+                    isinstance(record.get("session_settings"), dict)
+                    and record["session_settings"].get("brainstorm_mode") is True
+                ),
                 "request_id": request_id,
                 "role": role,
                 "round": context.get("cycle", branch.get("cycle", record.get("cycle"))),
