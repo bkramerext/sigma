@@ -6606,20 +6606,24 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
         : chatPage ? null : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
       {chatPage && <div className="brainstorm-header-copy">
         <p className="chat-eyebrow">{sessionPage ? 'Research session' : 'Open conversation'}</p>
-        <h1>{sessionPage ? <button type="button" className="session-page-title-reset"
-          aria-label="Restore default Session transcript expansion" data-tooltip="Restore transcript expansion"
-          onClick={onSessionTitleClick}>{sessionTitle || 'Session'}</button> : 'Brainstorm'}
-          {sessionPage && ['running', 'queued'].includes(sessionActivityStatus ?? '') &&
-            <a className="research-running-indicator-frame session-title-activity session-activity-navigation"
-              href={sessionActivityHref} aria-label="Show session in project" data-tooltip="Show session in project"
-              onClick={event => {
-                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !sessionActivityHref) return;
-                event.preventDefault();
-                window.history.pushState(null, '', sessionActivityHref);
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              }}>
-              <span className="research-running-indicator"/>
-            </a>}
+        <h1>{sessionPage ? <span className="session-page-title-and-activity">
+          <button type="button" className="session-page-title-reset"
+            aria-label="Restore default Session transcript expansion" data-tooltip="Restore transcript expansion"
+            onClick={onSessionTitleClick}>{sessionTitle || 'Session'}</button>
+          <span className="session-title-activity-slot">
+            {['running', 'queued'].includes(sessionActivityStatus ?? '') &&
+              <a className="research-running-indicator-frame session-title-activity session-activity-navigation"
+                href={sessionActivityHref} aria-label="Show session in project" data-tooltip="Show session in project"
+                onClick={event => {
+                  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !sessionActivityHref) return;
+                  event.preventDefault();
+                  window.history.pushState(null, '', sessionActivityHref);
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }}>
+                <span className="research-running-indicator"/>
+              </a>}
+          </span>
+        </span> : 'Brainstorm'}
           {sessionPage && sessionActions}
           {sessionPage && <button type="button" className="session-page-close" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => close?.action()}>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
