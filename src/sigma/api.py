@@ -2048,12 +2048,12 @@ def research_session_log_download_view(session_id: str, path: str, format: str =
             filename = (
                 session_log.export_filename(
                     result["saved_short_name"], result["project_title"], result["session"]["number"]
-                ).removesuffix(".log")
+                ).removesuffix(".md")
                 + ".transcript.md"
             )
         else:
             body, filename = _session_diagnostic_export(path, session_id)
-        ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "project.log"
+        ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "project.md"
         return Response(
             body,
             media_type="text/markdown; charset=utf-8",
@@ -2078,10 +2078,10 @@ def export_project_session_logs(path: str, selection: Literal["latest", "all"]):
         sessions.sort(key=lambda session: (int(session["session_number"]), str(session["id"])))
         if selection == "latest":
             body, filename = _session_diagnostic_export(path, sessions[-1]["id"])
-            ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "session.log"
+            ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "session.md"
             return Response(
                 body,
-                media_type="text/plain; charset=utf-8",
+                media_type="text/markdown; charset=utf-8",
                 headers={
                     "Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
                 },
