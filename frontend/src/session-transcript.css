@@ -1,10 +1,15 @@
 /* The Session transcript uses Brainstorm's simple conversation-card layout.
    Rich diagnostics remain in the saved Session record, not in this reading view. */
 .session-log-page.session-conversation-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
   min-height: 0;
-  padding: 16px clamp(1rem, 3vw, 3rem) 40px;
+  margin: 0;
+  padding: 12px clamp(12px, 1vw, 24px) 28px;
   background: transparent;
 }
+.session-workspace .workspace-content { padding: 0; }
 .session-log-page.session-conversation-page header.session-transcript-page-header {
   position: static;
   padding: 0 0 4px;
@@ -53,7 +58,7 @@
   color: #ffe0ae;
 }
 .session-log-page.session-conversation-page .session-transcript-conversation {
-  margin: 16px 0 30px;
+  margin: 5px 0 14px;
   min-width: 0;
 }
 .session-log-page.session-conversation-page .session-transcript-heading {
@@ -126,7 +131,7 @@
 .session-log-page .session-transcript-events {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 6px;
   max-height: none;
   margin: 0;
   padding: 0;
@@ -144,7 +149,7 @@
   list-style: none;
 }
 .session-log-page .session-transcript-turn-heading {
-  margin: 0 0 3px;
+  margin: 0 0 1px;
   padding: 0 3px;
   color: #bfb4a5;
   font: 600 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
@@ -152,7 +157,7 @@
 .session-log-page .session-transcript-turn-entries {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -170,7 +175,7 @@
   min-width: 0;
   max-width: 100%;
   margin: 0;
-  padding: 2px 3px;
+  padding: 0 3px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -275,10 +280,10 @@
 }
 .session-log-page .session-transcript-entry-copy svg { width: 16px; height: 16px; }
 .session-log-page .session-transcript-entry-copy:hover:not(:disabled) { color: #ffe0ae; background: #302418; border-color: #82694b; }
-.session-log-page .session-transcript-entry-heading time {
-  margin-left: auto;
+.session-log-page .session-transcript-turn-heading time {
   color: #a69d92;
-  font-size: .73rem;
+  font: inherit;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -286,7 +291,7 @@
 .session-log-page .session-transcript-plain {
   max-width: 100%;
   max-height: none;
-  margin: 6px 0 0;
+  margin: 3px 0 0;
   padding: 0;
   overflow-x: auto;
   background: transparent;
@@ -299,7 +304,7 @@
 .session-log-page .session-transcript-markdown {
   min-width: 0;
   max-width: 100%;
-  margin-top: 6px;
+  margin-top: 3px;
   overflow-wrap: anywhere;
   line-height: 1.55;
 }
@@ -323,9 +328,6 @@
   font: inherit;
 }
 .session-log-page .session-transcript-pagination button:hover { background: #383026; }
-@media (max-width: 550px) {
-  .session-log-page .session-transcript-entry-heading time { flex-basis: 100%; margin-left: 4px; }
-}
 
 /* Session belongs within the Project navigation hierarchy. */
 .session-workspace .brainstorm-header-copy h1 {
@@ -402,4 +404,30 @@
   border-color: #82694b;
   color: #ffe0ae;
   background: #302418;
+}
+
+/* The Session title replaces the redundant Transcript heading as the reset. */
+.session-workspace .brainstorm-header-copy h1 .session-page-title-reset {
+  display: inline;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-workspace .brainstorm-header-copy h1 .session-page-title-reset:hover {
+  border-color: transparent;
+  background: transparent;
+  color: #ffe0ae;
+}
+.session-workspace .brainstorm-header-copy h1 .session-page-title-reset:focus-visible {
+  outline: 2px solid #edbc77;
+  outline-offset: 3px;
 }
