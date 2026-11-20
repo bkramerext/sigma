@@ -515,3 +515,43 @@
 .workspace-page.session-workspace .project-art-header.chat-site-header .project-header-art {
   z-index: 0;
 }
+
+/* Session Markdown disclosures are attached to actual section headings rather
+   than inserting an extra "JSON code" panel. Each section is closed initially. */
+.session-log-page .session-transcript-markdown .markdown-collapsible-section {
+  margin: 12px 0;
+  min-width: 0;
+}
+.session-log-page .session-transcript-markdown .markdown-section-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+  cursor: pointer;
+  color: #e5ded3;
+  font-weight: 700;
+}
+.session-log-page .session-transcript-markdown .markdown-section-summary::-webkit-details-marker { display: none; }
+.session-log-page .session-transcript-markdown .markdown-section-title { min-width: 0; }
+.session-log-page .session-transcript-markdown .markdown-section-chevron {
+  align-self: center;
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--sigma-copper-foreground);
+  border-bottom: 2px solid var(--sigma-copper-foreground);
+  transform: rotate(-45deg);
+}
+.session-log-page .session-transcript-markdown .markdown-collapsible-section[open] > .markdown-section-summary > .markdown-section-chevron {
+  transform: rotate(45deg);
+}
+.session-log-page .session-transcript-markdown .markdown-section-body {
+  min-width: 0;
+  padding-left: 18px;
+}
+.session-log-page .session-transcript-markdown .markdown-section-body > :first-child { margin-top: 8px; }
+.session-log-page .session-transcript-markdown .markdown-section-body pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
