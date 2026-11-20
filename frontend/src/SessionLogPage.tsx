@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -59,7 +59,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const [, setMarkdownError] = useState('');
   const [, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
-  const [visibleGroupCount, setVisibleGroupCount] = useState(20);
+  const [visibleTurnCount, setVisibleTurnCount] = useState(20);
   useEffect(() => {
     if (!sessionId || !path) { setError('Session transcript link is incomplete.'); return; }
     let alive = true;
@@ -211,8 +211,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const allGroups = groupTranscriptTurns(
     projectTranscript(events, interventions).filter(entry => entry.role !== 'other'),
   );
-  const shownGroups = allGroups.slice(0, visibleGroupCount);
-  const hiddenGroups = allGroups.length - shownGroups.length;
+  const { shownGroups, remainingTurns } = paginateTranscriptTurns(allGroups, visibleTurnCount);
   const strategyIds = [...new Set(allGroups.flatMap(group =>
     group.entries.map(entry => entry.strategyId).filter((id): id is string => !!id)))].sort();
   const strategySuffix = (group: (typeof allGroups)[number]) => {
@@ -281,7 +280,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                   {!entry.pending && <CopyTranscriptEntryButton title={name} text={entry.text}/>}
                 </div>
                 {supervisor?.scores && <small className="session-transcript-supervisor-scores">
-                  Objective alignment {supervisor.scores[0]} · Substantive advancement {supervisor.scores[1]} · Evidence &amp; validation {supervisor.scores[2]} · Research health {supervisor.scores[3]}
+                  Objective alignment {supervisor.scores.alignment}{supervisor.scores.originality !== undefined && <> · Originality {supervisor.scores.originality}</>} · Substantive advancement {supervisor.scores.advancement} · Evidence &amp; validation {supervisor.scores.evidence} · Research health {supervisor.scores.health}
                 </small>}
                 {!entry.pending && <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                   {expanded && (asMarkdown
@@ -293,10 +292,9 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
           </ol>
         </li>)}
       </ol>
-      {hiddenGroups > 0 && <div className="session-transcript-pagination">
-        <p>Showing the latest {shownGroups.length} of {allGroups.length} exchanges. Older turns are hidden from this view.</p>
-        <button type="button" onClick={() => setVisibleGroupCount(current => current + 20)}>
-          Show {Math.min(hiddenGroups, 20)} earlier
+      {remainingTurns > 0 && <div className="session-transcript-pagination">
+        <button type="button" className="text-view-link" onClick={() => setVisibleTurnCount(current => current + 20)}>
+          Show more turns
         </button>
       </div>}
     </section>
