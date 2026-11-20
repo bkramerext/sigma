@@ -188,15 +188,12 @@
   font-variant-numeric: tabular-nums;
 }
 .session-log-page .session-transcript-supervisor-scores span { color: #8c98a3; }
-.session-log-page .session-transcript-pending-heading {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  margin-left: 31px;
-  color: #f2c48d;
-  font: inherit;
+.session-log-page .session-transcript-entry .session-transcript-pending-heading {
+  cursor: default;
 }
-.session-log-page .session-transcript-pending-heading strong { font-size: .86rem; }
+.session-log-page .session-transcript-pending-heading .disclosure-chevron {
+  visibility: hidden;
+}
 .session-log-page .session-transcript-pending {
   color: #a69d92;
   font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
