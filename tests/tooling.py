@@ -273,29 +273,19 @@ def check_start_cli() -> None:
     launch.assert_called_once_with(
         navigate=False, signin=False, mock_auth=False, sponsored=False, prod=True
     )
-    for flags, prod in (
-        (["--brainstorm"], False),
-        (["--brainstorm", "--navigate"], False),
-        (["--brainstorm", "--prod"], True),
+    with (
+        patch("sys.argv", ["sigma", "start", "--navigate"]),
+        patch("sigma.cli.run_ui", return_value=0) as launch,
     ):
-        with (
-            patch("sys.argv", ["sigma", "start", *flags]),
-            patch("sigma.cli.run_ui", return_value=0) as launch,
-        ):
-            try:
-                cli_main()
-            except SystemExit as exc:
-                assert exc.code == 0
-            else:
-                raise AssertionError("start --brainstorm did not exit")
-        launch.assert_called_once_with(
-            navigate=True,
-            navigate_path="/?brainstorm=1",
-            signin=False,
-            mock_auth=False,
-            sponsored=False,
-            prod=prod,
-        )
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("start --navigate did not exit")
+    launch.assert_called_once_with(
+        navigate=True, signin=False, mock_auth=False, sponsored=False, prod=False
+    )
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
         try:
@@ -306,7 +296,7 @@ def check_start_cli() -> None:
             raise AssertionError("start --help did not exit")
     help_text = output.getvalue()
     assert "--nav" in help_text and "--navigate" in help_text
-    assert "--brainstorm" in help_text
+    assert "--brainstorm" not in help_text
     assert "--admin" not in help_text and "--google-auth" not in help_text
     output = StringIO()
     with patch("sys.argv", ["sigma", "start", "--admin"]), redirect_stderr(output):
@@ -513,35 +503,6 @@ def check_local_google_startup() -> None:
     assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
     assert "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL" not in frontend_env
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
-    assert frontend_env["VITE_SIGMA_LOCAL_BRAINSTORM"] == "false"
-
-
-def check_brainstorm_startup() -> None:
-    backend, frontend = Mock(), Mock()
-    backend.poll.return_value = frontend.poll.return_value = None
-    owner = MagicMock()
-    owner.__enter__.return_value.replacement_request.return_value = None
-    with (
-        patch.dict("os.environ", {"VITE_SIGMA_LOCAL_BRAINSTORM": "false"}, clear=True),
-        patch("sigma.ui.Instance", return_value=owner),
-        patch("sigma.ui.load_local_config"),
-        patch("sigma.ui.recover_orphans", return_value=[]),
-        patch("sigma.ui.stop_registered_instances", return_value=[]),
-        patch("pathlib.Path.is_dir", return_value=True),
-        patch("sigma.ui.shutil.which", return_value="npm"),
-        patch("sigma.ui.wait_for_ports"),
-        patch("sigma.ui.subprocess.Popen", side_effect=[backend, frontend]) as launch,
-        patch("sigma.ui.ready", return_value=True),
-        patch("sigma.ui.webbrowser.open", return_value=True) as open_browser,
-        patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
-        patch("sigma.ui.stop_servers"),
-    ):
-        assert run_ui(navigate=True, navigate_path="/?brainstorm=1") == 0
-    backend_env = launch.call_args_list[0].kwargs["env"]
-    frontend_env = launch.call_args_list[1].kwargs["env"]
-    assert backend_env["VITE_SIGMA_LOCAL_BRAINSTORM"] == "true"
-    assert frontend_env["VITE_SIGMA_LOCAL_BRAINSTORM"] == "true"
-    open_browser.assert_called_once_with("http://127.0.0.1:5173/?brainstorm=1", new=2)
 
 
 def check_sponsored_local_startup() -> None:
@@ -793,7 +754,6 @@ def main() -> None:
         check_command_help()
         check_ui()
         check_local_google_startup()
-        check_brainstorm_startup()
         check_sponsored_local_startup()
         check_local_google_setup_warning()
         check_partial_google_startup_remains_guest_without_admin()
