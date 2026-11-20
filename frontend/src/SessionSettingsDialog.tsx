@@ -25,12 +25,11 @@ export function defaultSessionSettings(limits?: { research_rounds: number; turns
 /** Save valid edits as they are made; the X also flushes the last pending change. */
 export default function SessionSettingsDialog({ settings, mode, minTurns = 0, onClose, onApply }: {
   settings: SessionSettings;
-  mode: 'start' | 'edit' | 'view';
+  mode: 'start' | 'edit';
   minTurns?: number;
   onClose: (next: SessionSettings) => void;
   onApply: (next: SessionSettings) => void | Promise<void>;
 }) {
-  const readOnly = mode === 'view';
   const dialog = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<SessionSettings>({ ...settings });
   const [turns, setTurns] = useState(String(settings.turn_limit));
@@ -52,19 +51,18 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
   useEffect(() => {
     const next = { ...draft, name: draft.name.trim() };
     const serialized = JSON.stringify(next);
-    if (readOnly || serialized === lastSubmitted.current) return;
+    if (serialized === lastSubmitted.current) return;
     const timer = window.setTimeout(() => {
       lastSubmitted.current = serialized;
       onApplyRef.current(next);
     }, mode === 'edit' ? 500 : 150);
     return () => window.clearTimeout(timer);
-  }, [draft, mode, readOnly]);
+  }, [draft, mode]);
 
   const close = async () => {
     if (closing.current) return;
     closing.current = true;
     try {
-      if (readOnly) { onClose(latest.current); return; }
       const next = { ...latest.current, name: latest.current.name.trim() };
       const serialized = JSON.stringify(next);
       // Queue the final snapshot behind earlier auto-saves, and wait before
@@ -96,19 +94,19 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
       <div className="session-settings-body">
         <label className="session-settings-field" htmlFor="session-settings-name">
           <span>Session name (optional)</span>
-          <input id="session-settings-name" type="text" maxLength={200} disabled={readOnly} value={draft.name}
+          <input id="session-settings-name" type="text" maxLength={200} value={draft.name}
             onChange={event => setDraft(current => ({ ...current, name: event.target.value }))}/>
         </label>
         <div className="session-settings-turn-row">
           <label className="session-settings-field session-settings-turn-limit" htmlFor="session-settings-turns">
             <span>Turns</span>
             <input id="session-settings-turns" type="number" min={minAllowedTurns} max={1200} step={1}
-              disabled={readOnly || draft.unlimited_turns} value={turns}
+              disabled={draft.unlimited_turns} value={turns}
               onChange={event => updateTurns(event.target.value)}
               onBlur={() => setTurns(String(draft.turn_limit))}/>
           </label>
           <label className="session-settings-check session-settings-unlimited">
-            <input type="checkbox" disabled={readOnly} checked={draft.unlimited_turns}
+            <input type="checkbox" checked={draft.unlimited_turns}
               onChange={event => setDraft(current => ({ ...current, unlimited_turns: event.target.checked }))}/>
             Unlimited
           </label>
@@ -116,13 +114,13 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
         <div className="session-settings-field session-settings-supervisor">
           <label htmlFor="session-settings-supervisor">Steering level</label>
           <SigmaSelect id="session-settings-supervisor" ariaLabel="Steering level"
-            value={draft.supervisor_mode} disabled={readOnly}
+            value={draft.supervisor_mode}
             options={[{ value: 'none', label: 'None' }, { value: 'light', label: 'Light' }, { value: 'heavy', label: 'Heavy' }]}
             onChange={value => setDraft(current => ({ ...current, supervisor_mode: value as SupervisorMode }))}/>
           <small className="session-settings-supervisor-help">The Supervisor always observes. None offers no nudges; Light gently prompts clarity; Heavy watches more actively for drift and repetition. Neither directs the research.</small>
         </div>
         <label className="session-settings-check session-settings-brainstorm">
-          <span><input type="checkbox" disabled={readOnly} checked={draft.brainstorm_mode}
+          <span><input type="checkbox" checked={draft.brainstorm_mode}
             onChange={event => setDraft(current => ({ ...current, brainstorm_mode: event.target.checked }))}/>
             Brainstorm mode</span>
           <small>Two investigators instead of an investigator/skeptic pair.</small>
