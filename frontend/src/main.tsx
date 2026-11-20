@@ -2401,7 +2401,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
           const settingsControl = !guest && canControl && <button type="button"
 className="text-view-link text-view-icon workspace-icon-button session-settings-action"
                     aria-label={`Session ${item.session_number} settings`}
-                    data-tooltip="Session settings" disabled={busy}
+                    data-tooltip="Session settings" disabled={busy && !['queued', 'running'].includes(item.status)}
                     onClick={() => setSettingsDialog({
                       mode: 'edit',
                       sessionId: item.id, initial: existingSessionSettings(item),
