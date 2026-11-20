@@ -39,6 +39,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const cursor = useRef(0);
   const seen = useRef(new Set<number>());
   const [session, setSession] = useState<SessionState | null>(null);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [shortName, setShortName] = useState('Research Project');
   const [projectTitle, setProjectTitle] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -78,8 +79,8 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
         fresh.forEach(event => seen.current.add(event.seq));
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
-        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); onSessionChange?.(data.session); setInterventions(data.interventions ?? []); setError('');
-      } catch (cause) { if (alive) setError(displayError(cause)); }
+        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); onSessionChange?.(data.session); setInterventions(data.interventions ?? []); setError(''); setInitialLoadComplete(true);
+      } catch (cause) { if (alive) { setError(displayError(cause)); setInitialLoadComplete(true); } }
       finally {
         fetching = false;
         if (alive) timer = window.setTimeout(() => { void refresh(); }, 1000);
@@ -230,6 +231,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const entryName = (entry: TranscriptEntry): string => {
     return transcriptRoleLabel(entry.role, entry.brainstormMode === true) || entry.title;
   };
+  if (!initialLoadComplete) return <main className="session-log-page session-conversation-page"><div className="workspace-state project-opening-state session-opening-state" role="status" aria-live="polite"><p className="intro">Opening session…</p></div></main>;
   return <main className="session-log-page session-conversation-page">
     <section className="session-transcript-conversation" aria-label="Transcript">
       <ol id="session-transcript-history" ref={list} className="session-log-events session-transcript-events"
