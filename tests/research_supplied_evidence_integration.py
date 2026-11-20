@@ -45,6 +45,7 @@ async def check_barrier() -> None:
         assert paused["supplied_evidence_compilation"]["status"] == "blocked"
         assert paused["stopped_at"] is not None
         assert "example.org/unavailable.txt" in paused["message"]
+        assert "source_unavailable" in paused["message"]
         portfolio.assert_not_called()
         reference_compiler.assert_not_awaited()  # Never spend on a blocked source
 
@@ -362,8 +363,8 @@ def check_robust_link_retrieval() -> None:
                 "Content-Length": str(len(self.payload)),
             }.get(name, default)
 
-        def read1(self, _limit):
-            chunk, self.payload = self.payload, b""
+        def read1(self, limit):
+            chunk, self.payload = self.payload[:limit], self.payload[limit:]
             return chunk
 
     def fake_http(content_type: str, payload: bytes):
@@ -426,6 +427,21 @@ def check_robust_link_retrieval() -> None:
             raise AssertionError("Permanent 404 was retried or hidden")
         fetch.assert_called_once()
         sleep.assert_not_called()
+
+    with (
+        patch.object(
+            research_supplied_evidence, "_fetch_url_once", side_effect=TimeoutError("timed_out")
+        ) as fetch,
+        patch.object(research_supplied_evidence.time, "sleep") as sleep,
+    ):
+        try:
+            research_supplied_evidence._fetch_url(url)
+        except TimeoutError as exc:
+            assert str(exc) == "timed_out"
+        else:
+            raise AssertionError("Exhausted transient source failures were ignored")
+        assert fetch.call_count == 3
+        assert sleep.call_count == 2
 
     with patch.object(
         research_supplied_evidence.project_evidence,
