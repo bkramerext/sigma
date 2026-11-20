@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel } from '../src/session-transcript.ts';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, paginateTranscriptTurns } from '../src/session-transcript.ts';
 
 test('Supervisor ratings become one metadata line without changing saved or copied text', () => {
   const saved = [
@@ -13,7 +13,7 @@ test('Supervisor ratings become one metadata line without changing saved or copi
   ].join('\n');
   const result = supervisorDisplay(saved);
   assert.equal(result.body, 'The reasoning remains conditional; independent verification is needed.');
-  assert.deepEqual(result.scores, ['2.0', '2.5', '5.0', '8.0']);
+  assert.deepEqual(result.scores, { alignment: '2.0', advancement: '2.5', evidence: '5.0', health: '8.0' });
   const entries = projectTranscript([
     { seq: 1, timestamp: '2026-11-20T06:25:47Z', type: 'session_event', event_kind: 'supervisor.review',
       role: 'supervisor', strategy_id: 'x', round: 1, message: saved },
@@ -164,4 +164,43 @@ test('Transcript uses paired role labels and Brainstorm displays two Investigato
   assert.equal(transcriptRoleLabel('skeptic', true), 'Investigator');
   assert.equal(transcriptRoleLabel('supervisor', true), 'Supervisor');
   assert.equal(transcriptRoleLabel('human', false), 'Human');
+});
+
+test('Supervisor originality displays when present and legacy four-score reviews remain valid', () => {
+  const saved = [
+    'The agents are exploring fresh possibilities.',
+    '',
+    'Objective alignment: 4.0/10.0',
+    'Originality: 6.5/10.0',
+    'Substantive advancement: 2.5/10.0',
+    'Evidence & validation: 3.0/10.0',
+    'Research health: 7.0/10.0',
+  ].join('\n');
+  assert.deepEqual(supervisorDisplay(saved), {
+    body: 'The agents are exploring fresh possibilities.',
+    scores: { alignment: '4.0', originality: '6.5', advancement: '2.5', evidence: '3.0', health: '7.0' },
+  });
+});
+
+test('Transcript pagination reveals twenty turn numbers at a time without splitting strategies', () => {
+  const groups = [];
+  for (let turn = 45; turn >= 1; turn--) {
+    for (const strategy of ['a', 'b', 'c']) {
+      groups.push({
+        key: `${strategy}:${turn}`, label: `Turn ${turn}`, latestTimestamp: '',
+        entries: [{ id: `${strategy}:${turn}`, role: 'investigator', round: turn, strategyId: strategy, timestamp: '', sequence: 1, text: '' }],
+      });
+    }
+  }
+  const initial = paginateTranscriptTurns(groups, 20);
+  assert.equal(initial.shownGroups.length, 60);
+  assert.equal(initial.remainingTurns, 25);
+  assert.deepEqual([...new Set(initial.shownGroups.map(group => group.entries[0].round))],
+    Array.from({ length: 20 }, (_, index) => 45 - index));
+  const second = paginateTranscriptTurns(groups, 40);
+  assert.equal(second.shownGroups.length, 120);
+  assert.equal(second.remainingTurns, 5);
+  const last = paginateTranscriptTurns(groups, 60);
+  assert.equal(last.shownGroups.length, 135);
+  assert.equal(last.remainingTurns, 0);
 });
