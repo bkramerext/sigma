@@ -44,7 +44,7 @@
 .session-log-page .session-transcript-turn-heading {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   margin: 0 0 8px;
   padding: 0;
   color: #bfb4a5;
