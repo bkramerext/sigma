@@ -266,12 +266,27 @@
   gap: 6px;
 }
 .session-workspace .brainstorm-header-copy h1 .session-page-header-actions { margin-left: 18px; }
+/* Keep a reserved activity slot so Play/Stop/Settings/Close never move
+   when the green heartbeat appears or disappears. */
+.session-workspace .brainstorm-header-copy h1 .session-page-title-and-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.session-workspace .brainstorm-header-copy h1 .session-title-activity-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 24px;
+}
 .session-workspace .brainstorm-header-copy h1 .session-title-activity {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 24px;
-  width: 24px;
+  width: 18px;
   height: 24px;
   margin: 0;
 }
