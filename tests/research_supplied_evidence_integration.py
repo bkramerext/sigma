@@ -139,7 +139,9 @@ async def check_previously_blocked_192k_source_resumes() -> None:
             assert context["uploaded_project_evidence"][0]["excerpt"] == full_text
             # The source may exceed the normal 256 kB compaction target on
             # other documents, but it must pass the reviewed Astra byte guard.
-            assert research_sessions._json_bytes(context) < research_sessions._agent_dispatch_guard_bytes(record)
+            source_context_bytes = research_sessions._json_bytes(context)
+            dispatch_guard_bytes = research_sessions._agent_dispatch_guard_bytes(record)
+            assert source_context_bytes < dispatch_guard_bytes
             reached_portfolio.set()
 
         # Recreate the persisted Source Material failure of an already-started
@@ -148,7 +150,8 @@ async def check_previously_blocked_192k_source_resumes() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation",
+                research_sessions,
+                "_ensure_reference_compilation",
                 new=AsyncMock(return_value=True),
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
@@ -156,7 +159,8 @@ async def check_previously_blocked_192k_source_resumes() -> None:
                 research_supplied_evidence, "compile_entry", side_effect=compile_large_source
             ) as compiled,
             patch.object(
-                research_sessions, "_bounded_supplied_evidence",
+                research_sessions,
+                "_bounded_supplied_evidence",
                 side_effect=ValueError(
                     "Source Material contains 192,711 extracted characters; "
                     "the session supports at most 60,000."
@@ -178,12 +182,14 @@ async def check_previously_blocked_192k_source_resumes() -> None:
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
             patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(
-                research_sessions, "_ensure_reference_compilation",
+                research_sessions,
+                "_ensure_reference_compilation",
                 new=AsyncMock(return_value=True),
             ),
             patch.object(research_sessions, "_portfolio_worker", new=portfolio),
             patch.object(
-                research_supplied_evidence, "compile_entry",
+                research_supplied_evidence,
+                "compile_entry",
                 side_effect=AssertionError("Saved full source must not be fetched again"),
             ),
         ):

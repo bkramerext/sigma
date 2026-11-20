@@ -100,12 +100,15 @@ def test_project_evidence_validation() -> None:
 
 
 def test_compiled_evidence_is_never_silently_clipped() -> None:
-    source = {"id": "uploaded-link:one", "excerpt": "A" * 60000}
+    source = {
+        "id": "uploaded-link:one",
+        "excerpt": "A" * research_sessions.MAX_SUPPLIED_EVIDENCE_CHARACTERS,
+    }
     assert research_sessions._bounded_supplied_evidence([source]) == [source]
     try:
         research_sessions._bounded_supplied_evidence([source, {"id": "two", "excerpt": "B"}])
     except ValueError as exc:
-        assert "60,000" in str(exc)
+        assert "400,000" in str(exc)
     else:
         raise AssertionError("Oversized source material was silently clipped")
 
