@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import DialogDismissButton from './DialogDismissButton';
 import SigmaSelect from './SigmaSelect';
 import './session-settings.css';
@@ -84,7 +85,9 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
     if (value.trim() && Number.isInteger(parsed) && parsed >= minAllowedTurns && parsed <= 1200)
       setDraft(current => ({ ...current, turn_limit: parsed }));
   };
-  return <dialog ref={dialog} className="project-settings-dialog session-settings-dialog"
+  // Session pages hide the underlying Project panes. Mount the modal in the
+  // document top layer, not inside a display:none Session pane.
+  return createPortal(<dialog ref={dialog} className="project-settings-dialog session-settings-dialog"
     aria-labelledby="session-settings-title" onCancel={event => { event.preventDefault(); void close(); }}>
     <form onSubmit={event => event.preventDefault()}>
       <header className="settings-header session-settings-header">
@@ -127,5 +130,5 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
         </label>
       </div>
     </form>
-  </dialog>;
+  </dialog>, document.body);
 }
