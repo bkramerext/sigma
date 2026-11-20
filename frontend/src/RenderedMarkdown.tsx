@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { escapeUnmatchedInlineDollars } from './markdown-dollars';
+import { sizeFractionParentheses } from './math-parentheses';
 import 'katex/dist/katex.min.css';
 
 type MarkdownNode = {
@@ -193,6 +194,21 @@ function semanticMath(): (tree: MarkdownNode) => void {
   };
 }
 
+/** KaTeX defaults to fixed-size parentheses, even around stacked fractions.
+ * Modify only the render tree's math nodes; keep source text unchanged. */
+function sizedMathParentheses(): (tree: MarkdownNode) => void {
+  return tree => {
+    const visit = (node: MarkdownNode): void => {
+      if ((node.type === 'inlineMath' || node.type === 'math') && typeof node.value === 'string') {
+        node.value = sizeFractionParentheses(node.value);
+        return;
+      }
+      for (const child of node.children ?? []) visit(child);
+    };
+    visit(tree);
+  };
+}
+
 /** Normalize legacy TeX delimiters and safely close block math at paragraph boundaries. */
 export function markdownWithMathDelimiters(body: string): string {
   const code = /(^|\n)([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n[ \t]*\3[^\n]*(?=\n|$)|(`+)[^`\n]*\4/g;
@@ -282,7 +298,7 @@ export default function RenderedMarkdown({ body, citationProjectPath, citationUr
       return allowedCitationUrls.has(destination) ? destination : '';
     } catch { return ''; }
   };
-  return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath]}
+  return <ReactMarkdown skipHtml remarkPlugins={[remarkGfm, remarkMath, semanticMath, sizedMathParentheses]}
     rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, errorColor: '#c8d3dc' }]]}
     urlTransform={urlTransform}
     components={{
