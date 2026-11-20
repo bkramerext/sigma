@@ -1143,6 +1143,137 @@ def test_transcript_conversion_uses_server_saved_event_only() -> None:
             raise AssertionError("Unallowlisted source path was accepted")
 
 
+
+def test_running_session_settings_update_preserves_in_flight_slots() -> None:
+    """Live edits keep accepted/in-flight work, and never obtain the idle-worker lock."""
+    from contextlib import nullcontext
+    from copy import deepcopy
+
+    from sigma import projects, research_sessions
+    from sigma.projects import ProjectError
+
+    original = {
+        "id": "active-fixture",
+        "status": "running",
+        "scheduler_version": 2,
+        "cycle_limit": 2,
+        "call_ceiling_cycles": 2,
+        "supervisor_ceiling_calls": 2,
+        "call_limit": 6,
+        "total_token_limit": 1000000,
+        "output_token_limit": 256,
+        "model": "gpt-6-luna",
+        "turns_are_flat": True,
+        "turns_per_round": 2,
+        "research_round_limit": 1,
+        "session_settings": {
+            "name": "",
+            "brainstorm_mode": False,
+            "supervisor_mode": "none",
+            "unlimited_turns": False,
+            "turn_limit": 2,
+        },
+        "strategy_runs": [{"strategy_id": "first", "status": "running", "cycle": 2}],
+        "steps": [
+            {"id": "accepted", "strategy_id": "first",
+             "role": "skeptic", "cycle": 1, "status": "completed"},
+            {"id": "in-flight", "strategy_id": "first",
+             "role": "investigator", "cycle": 2, "status": "running"},
+        ],
+    }
+    stored = {"record": deepcopy(original)}
+    saves = []
+
+    def read(_path, _session_id):
+        return deepcopy(stored["record"])
+
+    def save(_path, record):
+        saves.append(deepcopy(record))
+        stored["record"] = deepcopy(record)
+
+    async def apply(settings):
+        return await research_sessions.update_session_configuration(
+            "/live.sigma", "active-fixture", settings
+        )
+
+    updated = {
+        "name": "Active research",
+        "brainstorm_mode": True,
+        "supervisor_mode": "heavy",
+        "unlimited_turns": False,
+        "turn_limit": 3,
+    }
+    with (
+        patch.object(research_sessions, "_read", side_effect=read),
+        patch.object(research_sessions, "_save_unlocked", side_effect=save),
+        patch.object(research_sessions, "_project_manager_lock", return_value=nullcontext()),
+        patch.object(research_sessions, "_idle_worker_lock", side_effect=AssertionError("Live worker was fenced")),
+        patch.object(research_sessions, "_recover", side_effect=AssertionError("Running call was recovered")),
+        patch.object(projects, "project_write_lock", return_value=nullcontext()),
+        patch.object(research_sessions, "_event"),
+        patch.object(research_sessions, "_public", side_effect=lambda record: deepcopy(record)),
+    ):
+        result = asyncio.run(apply(updated))
+        assert result["session_settings"] == updated
+        assert result["cycle_limit"] == 3
+        assert result["call_limit"] == 9
+        assert result["steps"] == original["steps"]
+        assert result["strategy_runs"] == original["strategy_runs"]
+        assert len(saves) == 1
+        # A second live edit of name and steering must not reserve more calls.
+        again = asyncio.run(apply({**updated, "name": "Renamed", "supervisor_mode": "light"}))
+        assert again["session_settings"]["name"] == "Renamed"
+        assert again["session_settings"]["supervisor_mode"] == "light"
+        assert again["call_limit"] == 9
+        assert again["steps"] == original["steps"]
+        try:
+            asyncio.run(apply({**updated, "turn_limit": 1}))
+        except ProjectError as exc:
+            assert "already executed" in str(exc)
+        else:
+            raise AssertionError("A live edit reduced the limit below an in-flight turn")
+        assert len(saves) == 2
+
+
+def test_live_settings_recheck_latest_checkpoint_before_persisting() -> None:
+    """A different worker may checkpoint between the first read and the write lock."""
+    from contextlib import nullcontext
+    from copy import deepcopy
+
+    from sigma import projects, research_sessions
+    from sigma.projects import ProjectError
+
+    base = {
+        "id": "cross-process-fixture",
+        "status": "running",
+        "scheduler_version": 2,
+        "cycle_limit": 3,
+        "session_settings": {"turn_limit": 3},
+        "strategy_runs": [{"strategy_id": "s", "status": "running", "cycle": 1}],
+        "steps": [],
+    }
+    advanced = deepcopy(base)
+    advanced["strategy_runs"][0]["cycle"] = 3
+    advanced["steps"].append({"role": "investigator", "cycle": 3, "status": "running"})
+    reads = iter([base, advanced])
+    with (
+        patch.object(research_sessions, "_read", side_effect=lambda *_: deepcopy(next(reads))),
+        patch.object(research_sessions, "_project_manager_lock", return_value=nullcontext()),
+        patch.object(projects, "project_write_lock", return_value=nullcontext()),
+        patch.object(research_sessions, "_save_unlocked", side_effect=AssertionError("Stale write")),
+    ):
+        try:
+            asyncio.run(
+                research_sessions.update_session_configuration(
+                    "/live.sigma", "cross-process-fixture", {"turn_limit": 2}
+                )
+            )
+        except ProjectError as exc:
+            assert "already executed" in str(exc)
+        else:
+            raise AssertionError("The stale checkpoint was used for a live configuration edit")
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
@@ -1171,6 +1302,8 @@ def main() -> None:
         test_supervisor_usage_is_authoritative_and_uncertain_cost_is_retained()
         test_abandoned_supervisor_reservation_preserves_full_liability()
         test_pending_supervisor_reviews_only_run_once_after_resume()
+        test_running_session_settings_update_preserves_in_flight_slots()
+        test_live_settings_recheck_latest_checkpoint_before_persisting()
         test_transcript_conversion_uses_server_saved_event_only()
         from test_project_diagnostics import (
             test_client_report_and_copy_download_share_canonical_record,
