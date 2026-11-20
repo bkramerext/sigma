@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -226,11 +226,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     }).format(date);
   };
   const entryName = (entry: TranscriptEntry): string => {
-    if (entry.role === 'investigator') return 'AI #1';
-    if (entry.role === 'skeptic') return 'AI #2';
-    if (entry.role === 'supervisor') return 'Supervisor';
-    if (entry.role === 'human') return 'Human';
-    return entry.title;
+    return transcriptRoleLabel(entry.role, session?.session_settings?.brainstorm_mode === true) || entry.title;
   };
   return <main className="session-log-page session-conversation-page">
     <section className="session-transcript-conversation" aria-label="Transcript">
@@ -257,7 +253,12 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                 className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
                 <div className="session-transcript-entry-heading">
                   {entry.pending
-                    ? <span className="session-transcript-pending-heading"><strong>{name}</strong></span>
+                    ? <span className="chat-disclosure-button session-transcript-pending-heading">
+                        <svg aria-hidden="true" className="disclosure-chevron" viewBox="0 0 12 12">
+                          <path d="m4 2 4 4-4 4"/>
+                        </svg>
+                        <strong>{name}</strong>
+                      </span>
                     : <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
                         aria-controls={'transcript-entry-' + entry.id}
                         onClick={() => setExpandedEntries(current => ({ ...current, [entry.id]: !expanded }))}>
