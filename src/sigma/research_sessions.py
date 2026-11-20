@@ -15287,6 +15287,7 @@ async def _portfolio_supervisor_call(
                     # transcript stream, preserving strategy/turn attribution.
                     dimension_labels = {
                         "objective_alignment": "Objective alignment",
+                        "originality": "Originality",
                         "substantive_advancement": "Substantive advancement",
                         "evidence_validation": "Evidence & validation",
                         "research_health": "Research health",
