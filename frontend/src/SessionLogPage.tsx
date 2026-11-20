@@ -212,6 +212,9 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     projectTranscript(events, interventions).filter(entry => entry.role !== 'other'),
   );
   const { shownGroups, remainingTurns } = paginateTranscriptTurns(allGroups, visibleTurnCount);
+  const activeTurnKey = ['running', 'queued'].includes(session?.status ?? '')
+    ? allGroups.find(group => group.entries.some(entry => typeof entry.round === 'number' && entry.round > 0))?.key
+    : undefined;
   const strategyIds = [...new Set(allGroups.flatMap(group =>
     group.entries.map(entry => entry.strategyId).filter((id): id is string => !!id)))].sort();
   const strategySuffix = (group: (typeof allGroups)[number]) => {
@@ -234,6 +237,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
         {shownGroups.map(group => <li key={group.key} className="session-transcript-turn">
           <h3 className="session-transcript-turn-heading">
             {group.label}{strategySuffix(group)}{group.latestTimestamp && <> · <time dateTime={group.latestTimestamp}>{formatTimestamp(group.latestTimestamp)}</time></>}
+            {group.key === activeTurnKey && <span className="research-running-indicator-frame session-transcript-current-turn" role="img" aria-label="Current turn"><span className="research-running-indicator"/></span>}
           </h3>
           <ol className="session-transcript-turn-entries">
             {group.entries.map(entry => {
