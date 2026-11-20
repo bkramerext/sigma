@@ -89,9 +89,9 @@
 .session-log-page .session-transcript-entry .chat-disclosure-button {
   box-sizing: border-box;
   display: inline-flex;
-  /* Shared label column, sized for the widest role: Co-investigator. */
-  flex: 0 0 154px;
-  width: 154px;
+  /* Default role column fits Investigator; Brainstorm turns widen it below. */
+  flex: 0 0 116px;
+  width: 116px;
   white-space: nowrap;
   align-items: center;
   justify-content: flex-start;
@@ -107,6 +107,11 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+/* One shared column width across all entries of a Brainstorm turn. */
+.session-log-page .session-transcript-turn.is-brainstorm-turn .chat-disclosure-button {
+  flex-basis: 154px;
+  width: 154px;
 }
 .session-log-page .session-transcript-entry .chat-disclosure-button strong {
   color: inherit;
