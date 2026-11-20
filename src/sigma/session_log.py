@@ -836,7 +836,7 @@ def export_filename(saved_short_name: str | None, project_title: str, session_nu
         *{f"LPT{i}" for i in range(1, 10)},
     }:
         stem += "_project"
-    return f"{stem}.session_{session_number}.log"
+    return f"{stem}.session_{session_number}.md"
 
 
 def reference_preparation_summary(session: dict[str, Any]) -> dict[str, Any]:
