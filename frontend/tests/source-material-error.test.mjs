@@ -25,6 +25,15 @@ test('historical blocked event preserves sizes even after top-level message chan
   assert.match(copy.cause, /60,000/);
 });
 
+test('new larger limit is displayed from persisted backend measurements', () => {
+  const copy = sourceMaterialOverflowCopy(
+    'Source Material contains 450,010 extracted characters; the session supports at most 400,000.',
+  );
+  assert.match(copy.cause, /450,010/);
+  assert.match(copy.cause, /400,000/);
+  assert.match(copy.cause, /50,010 over/);
+});
+
 test('missing counts are not invented', () => {
   const copy = sourceMaterialOverflowCopy('Source material exceeds context limit');
   assert.match(copy.cause, /exceed SIGMA’s extracted-text limit/);

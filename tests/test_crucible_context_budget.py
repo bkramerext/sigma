@@ -526,7 +526,10 @@ def test_public_recovery_guidance_prioritizes_internal_context_guard_over_model(
 
 def test_source_material_overflow_reports_exact_pre_dispatch_limit() -> None:
     """A 0-call source overflow needs a specific remedy, not model switching."""
-    source = {"id": "saved-source", "excerpt": "x" * 60_001}
+    source = {
+        "id": "saved-source",
+        "excerpt": "x" * (research_sessions.MAX_SUPPLIED_EVIDENCE_CHARACTERS + 1),
+    }
     source_before = source.copy()
     try:
         research_sessions._bounded_supplied_evidence([source])
@@ -534,8 +537,8 @@ def test_source_material_overflow_reports_exact_pre_dispatch_limit() -> None:
         message = str(exc)
     else:
         raise AssertionError("Oversized Source Material was accepted")
-    assert "Source Material contains 60,001 extracted characters" in message
-    assert "at most 60,000" in message
+    assert "Source Material contains 400,001 extracted characters" in message
+    assert "at most 400,000" in message
     assert source == source_before, "Failed preflight mutated saved source evidence"
     record = {
         "status": "paused",

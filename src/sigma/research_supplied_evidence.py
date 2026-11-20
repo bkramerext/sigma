@@ -23,24 +23,28 @@ from sigma.projects import project_write_lock
 MAX_REMOTE_BYTES = 12 * 1024 * 1024
 MAX_LINK_SECONDS = 10
 MAX_EXTRACT = project_evidence.MAX_EXTRACT_CHARS
+_RETRY_DELAYS_SECONDS = (0.25, 0.75)
+_TRANSIENT_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+_BINARY_PDF_MEDIA_TYPES = {"application/octet-stream", "binary/octet-stream", "application/x-pdf"}
+_SUPPORTED_MEDIA_TYPES = {"application/pdf", "text/plain", "text/html"} | _BINARY_PDF_MEDIA_TYPES
 
 
-def _fetch_url(url: str) -> tuple[bytes, str, str]:
+def _fetch_url_once(url: str) -> tuple[bytes, str, str]:
     current = url
+    deadline = time.monotonic() + MAX_LINK_SECONDS
     for redirect_count in range(3):
         host, host_header, _, path, address_info = research_reference_content._public_endpoint(
             current, allow_http=True
         )
         family, socktype, proto, _, address = address_info
-        deadline = time.monotonic() + MAX_LINK_SECONDS
         request = (
             f"GET {path} HTTP/1.1\r\nHost: {host_header}\r\n"
-            "Accept: application/pdf, text/html, text/plain\r\n"
+            "Accept: application/pdf, application/octet-stream, text/html, text/plain\r\n"
             "Accept-Encoding: identity\r\nUser-Agent: SIGMA-SuppliedEvidence/1.0\r\n"
             "Connection: close\r\n\r\n"
         ).encode("ascii")
         with socket.socket(family, socktype, proto) as raw:
-            raw.settimeout(MAX_LINK_SECONDS)
+            raw.settimeout(max(0.1, deadline - time.monotonic()))
             raw.connect(address)
             raw.settimeout(max(0.1, deadline - time.monotonic()))
             connection = (
@@ -67,8 +71,10 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
                     raise ValueError(f"http_{status}")
                 if response.getheader("Content-Encoding", "identity").lower() != "identity":
                     raise ValueError("unsupported_compression")
-                content_type = (response.getheader("Content-Type") or "").lower().split(";")[0]
-                if content_type not in {"application/pdf", "text/plain", "text/html"}:
+                content_type = (
+                    (response.getheader("Content-Type") or "").lower().split(";")[0].strip()
+                )
+                if content_type not in _SUPPORTED_MEDIA_TYPES:
                     raise ValueError("unsupported_media_type")
                 declared = response.getheader("Content-Length")
                 if declared and int(declared) > MAX_REMOTE_BYTES:
@@ -85,8 +91,38 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
                     payload.extend(chunk)
                 if len(payload) > MAX_REMOTE_BYTES:
                     raise ValueError("document_too_large")
-                return bytes(payload), content_type, current
+                data = bytes(payload)
+                # GitHub raw and other file hosts serve valid PDFs with a generic
+                # binary media type. Accept only PDF-magic bytes, never arbitrary
+                # binary content or an HTML error response posing as a PDF.
+                if content_type in _BINARY_PDF_MEDIA_TYPES:
+                    if not data.startswith(b"%PDF-"):
+                        raise ValueError("binary_response_is_not_pdf")
+                    content_type = "application/pdf"
+                return data, content_type, current
     raise ValueError("redirect_unresolved")
+
+
+def _fetch_url(url: str) -> tuple[bytes, str, str]:
+    """Bounded retry for transient failures, without retrying invalid sources.
+
+    Every attempt repeats public-IP validation and redirect checks. Definitive
+    failures (404, bad media type, invalid URL, TLS errors) fail immediately.
+    """
+    for attempt in range(len(_RETRY_DELAYS_SECONDS) + 1):
+        try:
+            return _fetch_url_once(url)
+        except (ValueError, OSError, TimeoutError, http.client.HTTPException) as exc:
+            if isinstance(exc, ssl.SSLError):
+                raise
+            retryable = isinstance(exc, (OSError, TimeoutError, http.client.HTTPException))
+            if isinstance(exc, ValueError):
+                reason = str(exc)
+                retryable = any(reason == f"http_{status}" for status in _TRANSIENT_HTTP_STATUSES)
+            if not retryable or attempt == len(_RETRY_DELAYS_SECONDS):
+                raise
+            time.sleep(_RETRY_DELAYS_SECONDS[attempt])
+    raise AssertionError("unreachable source fetch retry state")
 
 
 def read_link(url: str, fetched: tuple[bytes, str, str] | None = None) -> dict:

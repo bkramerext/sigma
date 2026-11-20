@@ -108,7 +108,6 @@ def run_ui(
     mock_auth: bool = False,
     sponsored: bool = False,
     prod: bool = False,
-    navigate_path: str = "/",
 ) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
@@ -125,9 +124,6 @@ def run_ui(
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
-        if navigate_path not in {"/", "/?brainstorm=1"}:
-            print("Invalid SIGMA navigation destination.", file=sys.stderr)
-            return 2
         load_local_config()
         if warning := local_google_configuration_warning():
             print(warning, file=sys.stderr, flush=True)
@@ -245,11 +241,6 @@ def run_ui(
                     )
                 child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
                 child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
-                # Scope local Brainstorm to the current launcher, not browser storage.
-                # Override inherited shell variables on every start.
-                child_env["VITE_SIGMA_LOCAL_BRAINSTORM"] = (
-                    "true" if navigate_path == "/?brainstorm=1" else "false"
-                )
                 child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
                 # This launcher owns its API process. Never let a shell-level
                 # Vite proxy override route browser sign-ins to another backend.
@@ -337,14 +328,11 @@ def run_ui(
                             announced = True
                             instance.unlock()
                             if navigate:
-                                destination = URL
-                                if navigate_path != "/":
-                                    destination = URL.rstrip("/") + navigate_path
                                 try:
-                                    if not webbrowser.open(destination, new=2):
-                                        print(f"Open {destination} in your browser.", flush=True)
+                                    if not webbrowser.open(URL, new=2):
+                                        print(f"Open {URL} in your browser.", flush=True)
                                 except (OSError, webbrowser.Error):
-                                    print(f"Open {destination} in your browser.", flush=True)
+                                    print(f"Open {URL} in your browser.", flush=True)
                             else:
                                 print(
                                     f"Use your existing browser tab at {URL} (reload if needed).",
