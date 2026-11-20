@@ -16487,10 +16487,14 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
                     stage["finished_at"] = _now()
                     record["status"] = "paused"
                     record["current_action"] = "Paused · source material unavailable"
-                    names = [
-                        str(item.get("filename") or item.get("url") or item["id"])
-                        for item in unavailable
-                    ]
+                    names = []
+                    for item in unavailable:
+                        name = str(item.get("filename") or item.get("url") or item["id"])
+                        detail = str(
+                            item.get("reason")
+                            or ("incomplete_extract" if item.get("incomplete_extract") else "unavailable")
+                        ).replace("\\n", " ").replace("\\r", " ")[:120]
+                        names.append(f"{name} ({detail})")
                     record["message"] = (
                         f"Cannot research with incomplete Source Material: "
                         f"{', '.join(names[:4])}."
