@@ -26,16 +26,17 @@ MAX_EXTRACT = project_evidence.MAX_EXTRACT_CHARS
 _RETRY_DELAYS_SECONDS = (0.25, 0.75)
 _TRANSIENT_HTTP_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 _BINARY_PDF_MEDIA_TYPES = {"application/octet-stream", "binary/octet-stream", "application/x-pdf"}
+_SUPPORTED_MEDIA_TYPES = {"application/pdf", "text/plain", "text/html"} | _BINARY_PDF_MEDIA_TYPES
 
 
 def _fetch_url_once(url: str) -> tuple[bytes, str, str]:
     current = url
+    deadline = time.monotonic() + MAX_LINK_SECONDS
     for redirect_count in range(3):
         host, host_header, _, path, address_info = research_reference_content._public_endpoint(
             current, allow_http=True
         )
         family, socktype, proto, _, address = address_info
-        deadline = time.monotonic() + MAX_LINK_SECONDS
         request = (
             f"GET {path} HTTP/1.1\r\nHost: {host_header}\r\n"
             "Accept: application/pdf, application/octet-stream, text/html, text/plain\r\n"
@@ -43,7 +44,7 @@ def _fetch_url_once(url: str) -> tuple[bytes, str, str]:
             "Connection: close\r\n\r\n"
         ).encode("ascii")
         with socket.socket(family, socktype, proto) as raw:
-            raw.settimeout(MAX_LINK_SECONDS)
+            raw.settimeout(max(0.1, deadline - time.monotonic()))
             raw.connect(address)
             raw.settimeout(max(0.1, deadline - time.monotonic()))
             connection = (
@@ -71,9 +72,7 @@ def _fetch_url_once(url: str) -> tuple[bytes, str, str]:
                 if response.getheader("Content-Encoding", "identity").lower() != "identity":
                     raise ValueError("unsupported_compression")
                 content_type = (response.getheader("Content-Type") or "").lower().split(";")[0]
-                if content_type not in {
-                    "application/pdf", "text/plain", "text/html", *_BINARY_PDF_MEDIA_TYPES
-                }:
+                if content_type not in _SUPPORTED_MEDIA_TYPES:
                     raise ValueError("unsupported_media_type")
                 declared = response.getheader("Content-Length")
                 if declared and int(declared) > MAX_REMOTE_BYTES:
@@ -111,9 +110,7 @@ def _fetch_url(url: str) -> tuple[bytes, str, str]:
     for attempt in range(len(_RETRY_DELAYS_SECONDS) + 1):
         try:
             return _fetch_url_once(url)
-        except (
-            ValueError, OSError, TimeoutError, http.client.HTTPException
-        ) as exc:
+        except (ValueError, OSError, TimeoutError, http.client.HTTPException) as exc:
             if isinstance(exc, ssl.SSLError):
                 raise
             retryable = isinstance(exc, (OSError, TimeoutError, http.client.HTTPException))
