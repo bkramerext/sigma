@@ -1169,6 +1169,9 @@
 .workspace-page .session-summary .session-heading-actions > :is(.session-log-open-link, .session-settings-action),
 .workspace-page .session-summary .session-heading-actions > .session-remove-link { align-self: center; }
 
+/* Give Settings and the Session log a little more breathing room. */
+.workspace-page .session-summary .session-heading-actions > .session-settings-action + .session-log-open-link { margin-left: 4px; }
+
 
 /* Markdown belongs beside section headings; each section can render independently. */
 .workspace-page .outcome-subsection.has-markdown-control { position: relative; }
