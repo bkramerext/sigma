@@ -26,5 +26,6 @@ export function sizeFractionParentheses(tex: string): string {
       }
     }
   }
-  return Array.from(tex, (character, i) => replacements.get(i) ?? character).join('');
+  // Use UTF-16 offsets consistently with the scanner (including astral symbols).
+  return tex.split('').map((character, i) => replacements.get(i) ?? character).join('');
 }
