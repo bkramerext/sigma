@@ -262,6 +262,11 @@
   align-items: center;
   gap: 6px;
 }
+.session-workspace .brainstorm-header-copy h1 .session-page-header-actions { margin-left: 12px; }
+.session-workspace .session-page-header-actions .research-running-indicator {
+  margin-left: 0;
+  margin-right: 5px;
+}
 .session-workspace .session-page-header-actions button {
   display: inline-flex;
   align-items: center;
