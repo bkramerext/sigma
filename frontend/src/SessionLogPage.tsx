@@ -276,7 +276,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                       <path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"/>
                       <path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z"/>
                     </svg>
-                  </button>
+                  </button>}
                   {!entry.pending && <CopyTranscriptEntryButton title={name} text={entry.text}/>}
                 </div>
                 {supervisor?.scores && <small className="session-transcript-supervisor-scores">
