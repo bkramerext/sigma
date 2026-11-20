@@ -208,17 +208,16 @@ export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurn
     }
   }
   return [...groups.values()].sort((a, b) => {
-    // Keep each strategy together in ascending strategy order. Within a
-    // strategy, the latest turn remains first regardless of completion timing.
+    // Newest turn first; within each turn, display strategies in ascending
+    // order rather than ordering concurrent work by completion timestamp.
+    const aTurn = a.entries.find(entry => entry.round)?.round;
+    const bTurn = b.entries.find(entry => entry.round)?.round;
+    if (aTurn !== undefined && bTurn !== undefined && aTurn !== bTurn)
+      return bTurn - aTurn;
     const aStrategy = a.entries.find(entry => entry.strategyId)?.strategyId;
     const bStrategy = b.entries.find(entry => entry.strategyId)?.strategyId;
-    if (aStrategy && bStrategy && aStrategy !== bStrategy)
+    if (aTurn !== undefined && bTurn !== undefined && aStrategy && bStrategy && aStrategy !== bStrategy)
       return aStrategy.localeCompare(bStrategy, undefined, { numeric: true });
-    if (aStrategy && bStrategy) {
-      const aTurn = a.entries.find(entry => entry.round)?.round ?? 0;
-      const bTurn = b.entries.find(entry => entry.round)?.round ?? 0;
-      if (aTurn !== bTurn) return bTurn - aTurn;
-    }
     return b.latestTimestamp.localeCompare(a.latestTimestamp) || b.key.localeCompare(a.key);
   });
 }
