@@ -9644,7 +9644,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     const byId = new Map(project.strategies.map(strategy => [strategy.id, strategy]));
     return (previewOrder ?? project.active_order).map(id => byId.get(id)!);
   }, [view, previewOrder]);
-  if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state" aria-live="polite">{error ? <>
+  if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state project-opening-state" aria-live="polite">{error ? <>
     <h1 ref={heading} tabIndex={-1}>Project unavailable</h1><p role="alert" className="error">{error}</p>
     <p>Close this project to choose another directory.</p>
   </> : <p className="intro">Opening project…</p>}</div></WorkspaceFrame>;
@@ -9773,7 +9773,11 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView}
     sessionPage={!!sessionPageId} homeHref={sessionPageId ? projectUrl(path) : '/'}
     sessionTitle={sessionPageState ? `Session ${sessionPageState.number}${sessionPageState.session_settings?.name ? ' · ' + sessionPageState.session_settings.name : ''}` : 'Session'}
-    sessionActions={sessionPageId ? <span id="session-page-controls" className="session-page-header-actions"/> : undefined}
+    sessionActions={sessionPageId ? <span id="session-page-controls" className="session-page-header-actions">
+      {sessionPageState && ['running', 'queued'].includes(sessionPageState.status) &&
+        <i className="research-running-indicator" role="img"
+          aria-label={sessionPageState.status === 'queued' ? 'Session queued' : 'Session running'}/>}
+    </span> : undefined}
     onSessionTitleClick={sessionPageId ? () => setTranscriptResetSignal(current => current + 1) : undefined}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
