@@ -5915,11 +5915,12 @@ async def update_session_configuration(
             # A running worker holds the worker lock for its entire lifetime.
             # Only non-running Sessions need the existing idle-worker fence.
             with (
-                nullcontext() if active else _idle_worker_lock(path, session_id)
-            ), (
-                project_write_lock(path)
-                if active and Path(path).suffix in {".sigma", ".json"}
-                else nullcontext()
+                nullcontext() if active else _idle_worker_lock(path, session_id),
+                (
+                    project_write_lock(path)
+                    if active and Path(path).suffix in {".sigma", ".json"}
+                    else nullcontext()
+                ),
             ):
                 record = _read(path, session_id)
                 if not active:
@@ -6028,6 +6029,7 @@ async def update_session_configuration(
                 else:
                     _save(path, record)
                 return _public(record)
+
 
 async def submit_intervention(
     path: str,
