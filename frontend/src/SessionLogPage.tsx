@@ -112,7 +112,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     }, { root: null });
     list.current.querySelectorAll('[data-transcript-entry]').forEach(node => observer.observe(node));
     return () => observer.disconnect();
-  }, [markdownEntries, events, expandedEntries, visibleGroupCount]);
+  }, [markdownEntries, events, expandedEntries, visibleTurnCount]);
 
   // The existing Markdown action formats saved provider text with the same
   // metered converter as other SIGMA research blocks. The original transcript
