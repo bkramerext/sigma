@@ -267,7 +267,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                 ? formattedSupervisor?.scores ? formattedSupervisor.body : supervisor.body
                 : formatted;
               return <li key={entry.id} data-transcript-entry={entry.id}
-                className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
+                className={'session-transcript-entry chat-history-entry chat-history-' + entry.role + (name === 'Co-investigator' ? ' is-brainstorm-co-investigator' : '')}>
                 <div className="session-transcript-entry-heading">
                   {entry.pending
                     ? <span className="chat-disclosure-button session-transcript-pending-heading">
