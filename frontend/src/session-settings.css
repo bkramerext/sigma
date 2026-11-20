@@ -132,7 +132,7 @@
 }
 .session-settings-dialog .session-settings-unlimited { min-height: 39px; }
 .project-settings-dialog.session-settings-dialog .session-settings-supervisor > .sigma-select {
-  width: 180px;
+  width: 112px;
   max-width: 100%;
 }
 .project-settings-dialog.session-settings-dialog .session-settings-supervisor .sigma-select-trigger {
