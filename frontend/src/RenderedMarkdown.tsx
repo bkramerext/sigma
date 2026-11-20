@@ -303,13 +303,13 @@ export default function RenderedMarkdown({ body, citationProjectPath, citationUr
     urlTransform={urlTransform}
     components={{
       img: () => null,
-      pre: ({ children, ...props }) => {
+      pre: ({ node: _node, children, ...props }) => {
         if (!collapsibleCodeBlocks) return <pre {...props}>{children}</pre>;
         const codeClass = isValidElement<{ className?: string }>(children) ? children.props.className ?? '' : '';
-        const language = codeClass.match(/(?:^|\\s)language-([a-z0-9_+-]+)/i)?.[1];
+        const language = codeClass.match(/(?:^|\s)language-([a-z0-9_+-]+)/i)?.[1];
         const label = language ? language.toUpperCase() : 'Code';
         return <details className="markdown-collapsible-code">
-          <summary aria-label={`Expand ${label} code block`}><span className="markdown-code-chevron" aria-hidden="true"/><span>{label} code</span></summary>
+          <summary><span className="markdown-code-chevron" aria-hidden="true"/><span>{label} code</span></summary>
           <pre {...props}>{children}</pre>
         </details>;
       },
