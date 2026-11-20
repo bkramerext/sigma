@@ -40,17 +40,16 @@ with sync_playwright() as playwright:
     page.goto(base_url + "/project?path=" + quote(str(path), safe=""))
     expect(page.get_by_role("heading", name="T201 overflow fixture")).to_be_visible()
 
-    def configure_one_turn():
-        """T201's deterministic fixture handles one pair, not the global 20-turn run."""
-        heading = page.locator(".sessions-pane-heading")
-        heading.get_by_role("button", name="Settings", exact=True).click()
-        dialog = page.get_by_role("dialog", name="Session Settings")
-        expect(dialog).to_be_visible()
-        turn_input = dialog.locator("#session-settings-turns")
-        expect(turn_input).to_have_value("20")
-        turn_input.fill("1")
-        dialog.get_by_role("button", name="Close Session Settings").click()
-        expect(dialog).not_to_be_visible()
+    # The Sessions heading no longer has a Settings action. Preserve the
+    # fixture's single-pair execution limit at the API boundary.
+    def one_pair_start(route):
+        payload = route.request.post_data_json
+        payload["session_settings"]["turn_limit"] = 1
+        headers = {**route.request.headers, "origin": base_url}
+        response = route.fetch(headers=headers, post_data=json.dumps(payload))
+        route.fulfill(response=response)
+
+    page.route("**/api/projects/research-sessions/start", one_pair_start)
 
     page.get_by_role("button", name="New session").click()
     expect(
@@ -67,7 +66,6 @@ with sync_playwright() as playwright:
             f"Research start action overflows narrow viewport: {box}"
         )
     page.set_viewport_size({"width": 1440, "height": 900})
-    configure_one_turn()
     page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session").click()
     row = page.locator(".session-row").filter(has_text="Session 2")
     expect(row).to_be_visible(timeout=15000)
@@ -104,7 +102,6 @@ with sync_playwright() as playwright:
 
     # The same eligible strategy remains usable, with its durable history intact.
     page.get_by_role("button", name="New session").click()
-    configure_one_turn()
     page.locator(".sessions-pane-heading").get_by_role("button", name="Start Session").click()
     second_row = page.locator(".session-row").filter(has_text="Session 3")
     expect(second_row).to_be_visible(timeout=15000)
