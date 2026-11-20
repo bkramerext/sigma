@@ -14,7 +14,7 @@ test('section headings own their content, including fenced JSON, with no separat
     node('h4', 'Claim is conditional'),
     node('p', 'true'),
     node('h4', 'Assumptions'),
-    node('ul', 'The premises'),
+    { type: 'element', tagName: 'ul', children: [node('li', 'The premises')] },
   ] };
   collapsibleMarkdownSections()(tree);
   assert.equal(tree.children.length, 3);
