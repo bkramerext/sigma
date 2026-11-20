@@ -106,6 +106,13 @@
   text-align: left;
   cursor: pointer;
 }
+/* Brainstorm uses a longer role label. Size just those labels to their text,
+   retaining the same 6px heading gap before the Markdown action. */
+.session-log-page .session-transcript-entry.is-brainstorm-co-investigator .chat-disclosure-button {
+  flex: 0 0 max-content;
+  width: max-content;
+  white-space: nowrap;
+}
 .session-log-page .session-transcript-entry .chat-disclosure-button strong {
   color: inherit;
   font-size: .86rem;
