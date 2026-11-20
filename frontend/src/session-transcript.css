@@ -448,3 +448,18 @@
     transform: translateX(16px);
   }
 }
+
+/* Align the Session title block with the Project title, using the same
+   starting position beside the artwork (slightly overlapping its field).
+   A negative grid-item margin enlarges only the title's available space:
+   the independent header pill column remains anchored in place. */
+@media (min-width: 1201px) {
+  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+    margin-left: calc(min(29vw, 270px) - min(29vw, 470px) - 40px);
+  }
+}
+@media (min-width: 701px) and (max-width: 1200px) {
+  .workspace-page.session-workspace .project-art-header.chat-site-header .brainstorm-header-copy {
+    margin-left: calc(min(29vw, 270px) - min(29vw, 330px) - 28px);
+  }
+}
