@@ -316,15 +316,15 @@
   padding: 4px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 6px;
   color: var(--sigma-copper-foreground);
   cursor: pointer;
 }
-.session-workspace .session-page-close svg { width: 18px; height: 18px; }
+.session-workspace .session-page-close svg { width: 20px; height: 20px; }
 .session-workspace .session-page-close:is(:hover, :focus-visible) {
-  border-color: #82694b;
-  color: #ffe0ae;
-  background: #302418;
+  border-color: #ac7054;
+  color: var(--sigma-copper-foreground);
+  background: #3b3029;
 }
 
 /* The Session title replaces the redundant Transcript heading as the reset. */
