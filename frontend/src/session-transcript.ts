@@ -207,6 +207,18 @@ export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurn
       groups.set(key, { key, label, latestTimestamp: entry.timestamp, entries: [entry] });
     }
   }
-  return [...groups.values()].sort((a, b) => b.latestTimestamp.localeCompare(a.latestTimestamp)
-    || b.key.localeCompare(a.key));
+  return [...groups.values()].sort((a, b) => {
+    // Keep each strategy together in ascending strategy order. Within a
+    // strategy, the latest turn remains first regardless of completion timing.
+    const aStrategy = a.entries.find(entry => entry.strategyId)?.strategyId;
+    const bStrategy = b.entries.find(entry => entry.strategyId)?.strategyId;
+    if (aStrategy && bStrategy && aStrategy !== bStrategy)
+      return aStrategy.localeCompare(bStrategy, undefined, { numeric: true });
+    if (aStrategy && bStrategy) {
+      const aTurn = a.entries.find(entry => entry.round)?.round ?? 0;
+      const bTurn = b.entries.find(entry => entry.round)?.round ?? 0;
+      if (aTurn !== bTurn) return bTurn - aTurn;
+    }
+    return b.latestTimestamp.localeCompare(a.latestTimestamp) || b.key.localeCompare(a.key);
+  });
 }
