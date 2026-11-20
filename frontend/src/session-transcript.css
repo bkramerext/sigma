@@ -274,7 +274,8 @@
   gap: 6px;
 }
 /* 9px flex gap + 12.6px inset = 21.6px, 20% less than the prior 27px. */
-.session-workspace .brainstorm-header-copy h1 .session-page-header-actions { margin-left: 12.6px; }
+/* 9px heading gap + 7.2px inset = 16.2px, 25% tighter than 21.6px. */
+.session-workspace .brainstorm-header-copy h1 .session-page-header-actions { margin-left: 7.2px; }
 /* Keep a reserved activity slot so Play/Stop/Settings/Close never move
    when the green heartbeat appears or disappears. */
 .session-workspace .brainstorm-header-copy h1 .session-page-title-and-activity {
