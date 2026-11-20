@@ -534,7 +534,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
 }
 
 /* A dedicated icon track provides a true hanging indent on wrapped project titles. */
-.workspace-page .project-header-title-row { display: grid; grid-template-columns: 26px minmax(0,1fr); align-items: start; gap: 6px; width: 100%; }
+.workspace-page .project-header-title-row { display: grid; grid-template-columns: 26px minmax(0,1fr); align-items: start; gap: 2px; width: 100%; }
 .workspace-page .project-header-title-row .research-type-icon {
   grid-column: 1;
   align-self: start;
@@ -592,7 +592,7 @@ button.project-control-pill:disabled { color: #e0d0c8; cursor: default; opacity:
   height: 1em;
   margin: 0;
 }
-@media (max-width:700px) { .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0,1fr); gap: 5px; } }
+@media (max-width:700px) { .workspace-page .project-header-title-row { grid-template-columns: 22px minmax(0,1fr); gap: 2px; } }
 
 
 /* Hover numbered session titles without recoloring the entire disclosure. */
