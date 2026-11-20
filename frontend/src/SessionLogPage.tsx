@@ -256,15 +256,18 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
               return <li key={entry.id} data-transcript-entry={entry.id}
                 className={'session-transcript-entry chat-history-entry chat-history-' + entry.role}>
                 <div className="session-transcript-entry-heading">
-                  <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
-                    aria-controls={'transcript-entry-' + entry.id}
-                    onClick={() => setExpandedEntries(current => ({ ...current, [entry.id]: !expanded }))}>
-                    <svg aria-hidden="true" className={'disclosure-chevron' + (expanded ? ' is-expanded' : '')} viewBox="0 0 12 12">
-                      <path d="m4 2 4 4-4 4"/>
-                    </svg>
-                    <strong>{name}</strong>
-                  </button>
-                  <button type="button" className={'session-transcript-entry-markdown' + (asMarkdown ? ' is-active' : '')}
+                  {entry.pending
+                    ? <span className="session-transcript-pending-heading"><strong>{name}</strong></span>
+                    : <button type="button" className="chat-disclosure-button" aria-expanded={expanded}
+                        aria-controls={'transcript-entry-' + entry.id}
+                        onClick={() => setExpandedEntries(current => ({ ...current, [entry.id]: !expanded }))}>
+                        <svg aria-hidden="true" className={'disclosure-chevron' + (expanded ? ' is-expanded' : '')} viewBox="0 0 12 12">
+                          <path d="m4 2 4 4-4 4"/>
+                        </svg>
+                        <strong>{name}</strong>
+                      </button>}
+                  {entry.pending && <small className="session-transcript-pending">Awaiting response…</small>}
+                  {!entry.pending && <button type="button" className={'session-transcript-entry-markdown' + (asMarkdown ? ' is-active' : '')}
                     aria-label={asMarkdown ? `Show ${name} as plain text` : `Render ${name} as Markdown`}
                     aria-pressed={asMarkdown}
                     data-tooltip={asMarkdown ? 'Show plain text' : 'Render as Markdown'}
@@ -274,16 +277,16 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                       <path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z"/>
                     </svg>
                   </button>
-                  <CopyTranscriptEntryButton title={name} text={entry.text}/>
+                  {!entry.pending && <CopyTranscriptEntryButton title={name} text={entry.text}/>}
                 </div>
                 {supervisor?.scores && <small className="session-transcript-supervisor-scores">
-                  Alignment {supervisor.scores[0]} · Advancement {supervisor.scores[1]} · Evidence {supervisor.scores[2]} · Health {supervisor.scores[3]} <span>(/10)</span>
+                  Objective alignment {supervisor.scores[0]} · Substantive advancement {supervisor.scores[1]} · Evidence &amp; validation {supervisor.scores[2]} · Research health {supervisor.scores[3]} <span>(/10)</span>
                 </small>}
-                <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
+                {!entry.pending && <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                   {expanded && (asMarkdown
                     ? <div className="session-transcript-markdown"><RenderedMarkdown body={visibleText}/></div>
                     : <pre className="session-transcript-plain">{supervisor?.body ?? entry.text}</pre>)}
-                </div>
+                </div>}
               </li>;
             })}
           </ol>
