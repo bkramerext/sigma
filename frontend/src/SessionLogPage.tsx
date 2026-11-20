@@ -290,7 +290,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                     aria-pressed={asMarkdown}
                     data-tooltip={asMarkdown ? 'Show plain text' : 'Render as Markdown'}
                     onClick={() => toggleEntryMarkdown(entry)}>
-                    <svg className="markdown-logo" aria-hidden="true" viewBox="20 25 160 78">
+                    <svg className="markdown-logo" aria-hidden="true" viewBox="20 25 140 78">
                       <path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z"/>
                       <path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z"/>
                     </svg>
