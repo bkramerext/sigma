@@ -2424,7 +2424,7 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
                   {!sessionPageId && runControls}
                   {settingsControl}
-                  {!guest && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
+                  {!guest && !['queued', 'running'].includes(item.status) && <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path}/>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && <button type="button" className="text-view-link text-view-icon workspace-icon-button session-remove-link" aria-label={`Remove Session ${item.session_number}`} data-tooltip={`Remove Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>}
                   {!guest && canRemove && !pendingAction && !['queued', 'running'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>{['queued', 'running', 'paused'].includes(item.status) ? `Stop and remove session ${item.session_number}?` : `Remove session ${item.session_number} and its saved work?`}</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link" data-tooltip={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div>
@@ -2433,7 +2433,7 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                   sessionHeaderTarget,
                 )}
                 </div>
-                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? statusLabel : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{(pendingAction === 'stop' || pendingAction === 'pause') ? statusLabel : statusLabel === 'running' || statusLabel === 'resuming' || statusLabel === 'stopped' ? <>{statusLabel}<i aria-hidden="true"/></> : <><i aria-hidden="true"/>{statusLabel}</>}</span>
+                <span className={`session-status session-${pendingAction === 'resume' ? 'running' : pendingAction ? 'stopped' : statusLabel}`} aria-label={`Lifecycle status: ${statusLabel}`} data-tooltip={pendingAction ? statusLabel : formatRunAttribution({ kind: 'session', number: item.session_number, creator, model: item.model, thinking: item.reasoning_effort, mode: 'hover' })}>{(pendingAction === 'stop' || pendingAction === 'pause') ? statusLabel : statusLabel === 'running' || statusLabel === 'resuming' || statusLabel === 'stopped' ? <>{statusLabel}{!guest && ['running', 'resuming'].includes(statusLabel) ? <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path} indicator/> : <i aria-hidden="true"/>}</> : <>{!guest && statusLabel === 'queued' ? <SessionLogButton sessionId={item.id} sessionNumber={item.session_number} path={path} indicator/> : <i aria-hidden="true"/>}{statusLabel}</>}</span>
                 {sessionControlFailures[item.id]
                   ? (!sessionControlFailures[item.id].dismissed && <SessionNotice key={`${item.id}:control:${sessionControlFailures[item.id].serial}`}
                       number={item.session_number}
@@ -6519,8 +6519,8 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, homeHref = '/', close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, sessionActivityStatus, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; sessionActivityStatus?: string; onSessionTitleClick?: () => void; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
+function Header({ goHome, homeHref = '/', close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, sessionActivityStatus, sessionActivityHref, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; sessionActivityStatus?: string; sessionActivityHref?: string; onSessionTitleClick?: () => void; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -6604,10 +6604,16 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
           aria-label="Restore default Session transcript expansion" data-tooltip="Restore transcript expansion"
           onClick={onSessionTitleClick}>{sessionTitle || 'Session'}</button> : 'Brainstorm'}
           {sessionPage && ['running', 'queued'].includes(sessionActivityStatus ?? '') &&
-            <span className="research-running-indicator-frame session-title-activity"
-              role="img" aria-label={sessionActivityStatus === 'queued' ? 'Session queued' : 'Session running'}>
+            <a className="research-running-indicator-frame session-title-activity session-activity-navigation"
+              href={sessionActivityHref} aria-label="Show session in project" data-tooltip="Show session in project"
+              onClick={event => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !sessionActivityHref) return;
+                event.preventDefault();
+                window.history.pushState(null, '', sessionActivityHref);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}>
               <span className="research-running-indicator"/>
-            </span>}
+            </a>}
           {sessionPage && sessionActions}
           {sessionPage && <button type="button" className="session-page-close" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => close?.action()}>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
@@ -6667,9 +6673,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, homeHref, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, sessionPage = false, sessionTitle, sessionActions, sessionActivityStatus, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: {
+function WorkspaceFrame({ children, goHome, homeHref, close, projectTitle, projectType, projectView, onProjectUpdated, projectActions, sessionPage = false, sessionTitle, sessionActions, sessionActivityStatus, sessionActivityHref, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
-  sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; sessionActivityStatus?: string; onSessionTitleClick?: () => void;
+  sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; sessionActivityStatus?: string; sessionActivityHref?: string; onSessionTitleClick?: () => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
@@ -6683,7 +6689,7 @@ function WorkspaceFrame({ children, goHome, homeHref, close, projectTitle, proje
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} homeHref={homeHref} close={close} sessionPage={sessionPage} chatPage={sessionPage} sessionTitle={sessionTitle} sessionActions={sessionActions} sessionActivityStatus={sessionActivityStatus} onSessionTitleClick={onSessionTitleClick} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick} onActivityClick={onActivityClick}/>
+    <Header goHome={goHome} homeHref={homeHref} close={close} sessionPage={sessionPage} chatPage={sessionPage} sessionTitle={sessionTitle} sessionActions={sessionActions} sessionActivityStatus={sessionActivityStatus} sessionActivityHref={sessionActivityHref} onSessionTitleClick={onSessionTitleClick} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectActions={projectActions} projectArtwork connectionDisabled={connectionDisabled} researchRunning={researchRunning} paperRunning={paperRunning} paperQueued={paperQueued} askRunning={askRunning} activeRunLabels={activeRunLabels} activityStatus={activityStatus} onIdleProjectTitleClick={onIdleProjectTitleClick} onActivityClick={onActivityClick}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -9781,6 +9787,7 @@ function ProjectScreen({ path, initialView, revalidateCached = false, onViewChan
     sessionTitle={sessionPageState ? `Session ${sessionPageState.number}${sessionPageState.session_settings?.name ? ' · ' + sessionPageState.session_settings.name : ''}` : 'Session'}
     sessionActions={sessionPageId ? <span id="session-page-controls" className="session-page-header-actions"/> : undefined}
     sessionActivityStatus={sessionPageState?.status}
+    sessionActivityHref={sessionPageId ? `${projectUrl(path)}${projectUrl(path).includes("?") ? "&" : "?"}reveal_session=${encodeURIComponent(sessionPageId)}` : undefined}
     onSessionTitleClick={sessionPageId ? () => setTranscriptResetSignal(current => current + 1) : undefined}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading">
