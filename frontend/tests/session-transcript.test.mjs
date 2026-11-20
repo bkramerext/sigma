@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry, supervisorDisplay } from '../src/session-transcript.ts';
+import { projectTranscript, groupTranscriptTurns, transcriptDefaultExpanded, readableTranscriptResponse, transcriptCategories, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel } from '../src/session-transcript.ts';
 
 test('Supervisor ratings become one metadata line without changing saved or copied text', () => {
   const saved = [
@@ -155,4 +155,13 @@ test('strategy groups display in ascending order despite concurrent completion t
   assert.deepEqual(groupTranscriptTurns(entries).map(group => group.key), [
     'strategy-1:2', 'strategy-1:1', 'strategy-2:1', 'strategy-3:1',
   ]);
+});
+
+test('Transcript uses paired role labels and Brainstorm displays two Investigators', () => {
+  assert.equal(transcriptRoleLabel('investigator', false), 'Investigator');
+  assert.equal(transcriptRoleLabel('skeptic', false), 'Skeptic');
+  assert.equal(transcriptRoleLabel('investigator', true), 'Investigator');
+  assert.equal(transcriptRoleLabel('skeptic', true), 'Investigator');
+  assert.equal(transcriptRoleLabel('supervisor', true), 'Supervisor');
+  assert.equal(transcriptRoleLabel('human', false), 'Human');
 });
