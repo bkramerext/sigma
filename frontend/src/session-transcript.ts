@@ -15,6 +15,16 @@ export type TranscriptEntry = {
   text: string; round?: number; strategyId?: string; sequence: number;
   request?: unknown; response?: unknown; pending?: boolean;
 };
+/** Separate the four saved Supervisor ratings for compact display without
+ * rewriting the authoritative transcript, Copy text, or Download contents. */
+export function supervisorDisplay(text: string): { body: string; scores?: [string, string, string, string] } {
+  const pattern = /\r?\n\r?\nObjective alignment:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nSubstantive advancement:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nEvidence & validation:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?\r?\nResearch health:\s*(\d+(?:\.\d+)?)\/10(?:\.0)?(?=\s|$)/;
+  const match = pattern.exec(text);
+  if (!match) return { body: text };
+  return { body: text.slice(0, match.index) + text.slice(match.index + match[0].length),
+    scores: [match[1], match[2], match[3], match[4]] };
+}
+
 function responseText(value: unknown): string {
   if (typeof value === 'string') {
     try {
