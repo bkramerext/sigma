@@ -705,6 +705,7 @@ with sync_playwright() as playwright:
     bounds = start_button.bounding_box()
     assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390, bounds
     page.set_viewport_size({"width": 1440, "height": 1000})
+
     # Start no longer has a separate top-level Settings action. Keep this
     # deterministic fixture's historical nine-turn limit at the API boundary,
     # while exercising the unchanged real Start button and admission flow.
