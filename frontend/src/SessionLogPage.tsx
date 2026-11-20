@@ -281,7 +281,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
                   {!entry.pending && <CopyTranscriptEntryButton title={name} text={entry.text}/>}
                 </div>
                 {supervisor?.scores && <small className="session-transcript-supervisor-scores">
-                  Objective alignment {supervisor.scores[0]} · Substantive advancement {supervisor.scores[1]} · Evidence &amp; validation {supervisor.scores[2]} · Research health {supervisor.scores[3]} <span>(/10)</span>
+                  Objective alignment {supervisor.scores[0]} · Substantive advancement {supervisor.scores[1]} · Evidence &amp; validation {supervisor.scores[2]} · Research health {supervisor.scores[3]}
                 </small>}
                 {!entry.pending && <div id={'transcript-entry-' + entry.id} hidden={!expanded}>
                   {expanded && (asMarkdown
