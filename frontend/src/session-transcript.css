@@ -400,11 +400,8 @@
 }
 .session-log-page .session-transcript-current-turn .research-running-indicator { margin: 0; }
 
-/* Loading Session transcript uses the same unobtrusive label as Project loading. */
-.session-workspace .session-log-page .session-opening-state {
+/* The Session loading state shares Project's label style and top inset.
+   Offset the transcript's normal padding only while its loading text is shown. */
+.session-workspace .session-log-page:has(.session-opening-state) {
   padding-top: 0;
-}
-.session-workspace .session-log-page .session-opening-state .intro {
-  margin: 0;
-  color: var(--workspace-muted);
 }
