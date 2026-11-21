@@ -496,16 +496,17 @@ export default function LeanExplorerPage() {
   }
   function stopAnalysis() {abortRef.current?.abort();}
   async function saveMarkdown() {
-    if (!selected || !dossier?.scope?.some(item =>
-      item.path === selected.path && item.name === selected.name)
-      || !markdownDraft.trim() || savingMarkdown || running
+    // The Markdown belongs to the selected *section*, not necessarily the
+    // declaration currently visible in the source editor.
+    const anchor = dossier?.scope?.[0];
+    if (!anchor || !markdownDraft.trim() || savingMarkdown || running
       || markdownDraft.trim() === savedMarkdown) return;
     setSavingMarkdown(true); setError('');
     try {
       const id = await ensureDossier();
       await postJSON('/api/explorelean/dossiers/' + encodeURIComponent(id) + '/notes', {
-        formal_path: selected.path,
-        declaration: selected.name,
+        formal_path: anchor.path,
+        declaration: anchor.name,
         source_mode: sourceMode,
         text: markdownDraft.trim(),
       });
@@ -837,13 +838,13 @@ export default function LeanExplorerPage() {
           <div className="leanx-markdown-editor">
             <div className="leanx-markdown-toolbar">
               <label htmlFor="leanx-markdown">Expository Markdown</label>
-              <button type="button" disabled={!selectedInScope || !markdownDraft.trim() ||
+              <button type="button" disabled={!scope.length || !markdownDraft.trim() ||
                 markdownDraft.trim() === savedMarkdown || savingMarkdown || running}
                 onClick={() => void saveMarkdown()}>
                 {savingMarkdown ? 'Saving…' : 'Save Markdown'}
               </button>
             </div>
-            <textarea id="leanx-markdown" value={markdownDraft} disabled={!selectedInScope || running || savingMarkdown}
+            <textarea id="leanx-markdown" value={markdownDraft} disabled={!scope.length || running || savingMarkdown}
               onChange={event => setMarkdownDraft(event.target.value)}
               placeholder="The mathematical explanation goes here. Edit its Markdown, refine the ideas, then save it to this section's dossier."/>
             {!!markdownDraft && markdownDraft.trim() !== savedMarkdown && <small>Unsaved edits</small>}
