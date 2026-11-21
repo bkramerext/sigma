@@ -3652,8 +3652,7 @@ async def chat_supervisor_view(body: ChatSupervisorRequest):
     )
 
 
-# Lean Explorer's endpoints are source-driven, not a chat interface. All
-# source text/locations are fetched server-side from pinned revisions.
+# Lean Explorer reads actual pinned source; it does not infer formal dependencies.
 class LeanAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     formal_path: str = Field(default=lean_explorer.DEFAULT_PATH, max_length=240)
@@ -3678,6 +3677,10 @@ class LeanDossierEntryRequest(BaseModel):
     text: str = Field(min_length=1, max_length=24000)
 
 
+def _lean_sse(event: dict[str, Any]) -> str:
+    return "data: " + json.dumps(event) + "\n\n"
+
+
 @app.get("/api/explorelean/inputs")
 def lean_explorer_inputs():
     return JSONResponse(lean_explorer.catalog(), headers={"Cache-Control": "no-store"})
@@ -3692,9 +3695,7 @@ def lean_explorer_source(kind: str = "formal", path: str = lean_explorer.DEFAULT
 
 @app.get("/api/explorelean/declarations")
 def lean_explorer_declarations(path: str = lean_explorer.DEFAULT_PATH):
-    return JSONResponse(
-        lean_explorer.declarations(path), headers={"Cache-Control": "no-store"}
-    )
+    return JSONResponse(lean_explorer.declarations(path), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/explorelean/declaration")
@@ -3714,7 +3715,8 @@ def lean_explorer_list_dossiers():
 @app.post("/api/explorelean/dossiers", status_code=201)
 def lean_explorer_create_dossier():
     return JSONResponse(
-        lean_explorer_dossiers.create(), status_code=201,
+        lean_explorer_dossiers.create(),
+        status_code=201,
         headers={"Cache-Control": "no-store"},
     )
 
@@ -3730,8 +3732,11 @@ def lean_explorer_get_dossier(identifier: str):
 @app.post("/api/explorelean/dossiers/{identifier}/notes", status_code=201)
 def lean_explorer_add_note(identifier: str, body: LeanDossierEntryRequest):
     entry = lean_explorer_dossiers.append(
-        identifier, formal_path=body.formal_path,
-        declaration_name=body.declaration, mode="note", text=body.text,
+        identifier,
+        formal_path=body.formal_path,
+        declaration_name=body.declaration,
+        mode="note",
+        text=body.text,
     )
     return JSONResponse(entry, status_code=201, headers={"Cache-Control": "no-store"})
 
@@ -3740,7 +3745,8 @@ def lean_explorer_add_note(identifier: str, body: LeanDossierEntryRequest):
 def lean_explorer_dossier_markdown(identifier: str):
     content = lean_explorer_dossiers.markdown(identifier)
     return Response(
-        content=content, media_type="text/markdown; charset=utf-8",
+        content=content,
+        media_type="text/markdown; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="lean-explorer-dossier.md"',
             "Cache-Control": "no-store",
@@ -3752,9 +3758,7 @@ def lean_explorer_dossier_markdown(identifier: str):
 async def lean_explorer_analyze(body: LeanAnalysisRequest):
     config = await chat.configuration()
     if not config["available"]:
-        raise HTTPException(
-            503, config["message"] or "Connect an AI account before exploring."
-        )
+        raise HTTPException(503, config["message"] or "Connect an AI account before exploring.")
     selected_model = next(
         (item for item in config.get("models", []) if item.get("id") == body.model),
         None,
@@ -3763,24 +3767,40 @@ async def lean_explorer_analyze(body: LeanAnalysisRequest):
         raise HTTPException(422, "Choose an available Model/Thinking setting.")
 
     async def events():
-        yield "data: " + json.dumps({
-            "type": "stage", "stage": "source",
-            "label": "Retrieving actual Lean source and selected literature",
-        }) + "\n\n"
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "stage": "source",
+                "label": "Retrieving actual Lean source and selected literature",
+            }
+        )
         try:
             packet, sources, selected = await run_in_threadpool(
                 lean_explorer.analysis_packet,
-                body.formal_path, body.declaration,
+                body.formal_path,
+                body.declaration,
                 include_guide=body.include_guide,
                 include_announcement=body.include_announcement,
             )
-            yield "data: " + json.dumps({
-                "type": "stage", "stage": "interpreting",
-                "label": f"Explaining {selected['name']} against source evidence",
-                "source": {key: selected[key] for key in (
-                    "path", "name", "start_line", "end_line", "sha256", "commit", "complete"
-                )},
-            }) + "\n\n"
+            yield _lean_sse(
+                {
+                    "type": "stage",
+                    "stage": "interpreting",
+                    "label": f"Explaining {selected['name']} against source evidence",
+                    "source": {
+                        key: selected[key]
+                        for key in (
+                            "path",
+                            "name",
+                            "start_line",
+                            "end_line",
+                            "sha256",
+                            "commit",
+                            "complete",
+                        )
+                    },
+                }
+            )
             task = asyncio.create_task(
                 chat.respond(
                     speaker="ai_1",
@@ -3794,9 +3814,7 @@ async def lean_explorer_analyze(body: LeanAnalysisRequest):
             )
             try:
                 while not task.done():
-                    done, _ = await asyncio.wait(
-                        {task}, timeout=CHAT_HEARTBEAT_SECONDS
-                    )
+                    done, _ = await asyncio.wait({task}, timeout=CHAT_HEARTBEAT_SECONDS)
                     if not done:
                         yield ": keepalive\n\n"
                 explanation = await task
@@ -3810,36 +3828,51 @@ async def lean_explorer_analyze(body: LeanAnalysisRequest):
 
             entry = None
             if body.dossier_id:
-                yield "data: " + json.dumps({
-                    "type": "stage", "stage": "saving",
-                    "label": "Saving sourced explanation to the dossier",
-                }) + "\n\n"
+                yield _lean_sse(
+                    {
+                        "type": "stage",
+                        "stage": "saving",
+                        "label": "Saving sourced explanation to the dossier",
+                    }
+                )
                 try:
                     entry = await run_in_threadpool(
                         lean_explorer_dossiers.append,
-                        body.dossier_id, formal_path=body.formal_path,
-                        declaration_name=body.declaration, mode="explain",
-                        text=explanation, supplementary_sources=sources[1:],
+                        body.dossier_id,
+                        formal_path=body.formal_path,
+                        declaration_name=body.declaration,
+                        mode="explain",
+                        text=explanation,
+                        supplementary_sources=sources[1:],
                     )
                 except ProjectError as exc:
-                    yield "data: " + json.dumps({
-                        "type": "complete", "text": explanation, "saved": False,
-                        "save_error": str(exc), "sources": sources,
-                    }) + "\n\n"
+                    yield _lean_sse(
+                        {
+                            "type": "complete",
+                            "text": explanation,
+                            "saved": False,
+                            "save_error": str(exc),
+                            "sources": sources,
+                        }
+                    )
                     return
-            yield "data: " + json.dumps({
-                "type": "complete", "text": explanation, "saved": entry is not None,
-                "entry": entry, "sources": sources,
-            }) + "\n\n"
+            yield _lean_sse(
+                {
+                    "type": "complete",
+                    "text": explanation,
+                    "saved": entry is not None,
+                    "entry": entry,
+                    "sources": sources,
+                }
+            )
         except asyncio.CancelledError:
             raise
         except ProjectError as exc:
-            yield "data: " + json.dumps({
-                "type": "error", "error": str(exc)
-            }) + "\n\n"
+            yield _lean_sse({"type": "error", "error": str(exc)})
 
     return StreamingResponse(
-        events(), media_type="text/event-stream",
+        events(),
+        media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
