@@ -47,8 +47,20 @@ type Declaration = {
 };
 type Citation = {kind: string; path: string; commit: string; url: string; sha256: string; complete: boolean};
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
+type DiscoveryMeta = {
+  section_id: string; files_scanned: number; bytes_scanned: number;
+  matching_declarations: number; skipped_large_files: number;
+  auto_selected: number; index_type: string; complete: boolean;
+};
+type DiscoveryEvent = {
+  type: string; label?: string; error?: string;
+  files_scanned?: number; total_files?: number; bytes_scanned?: number;
+  dossier?: Dossier; discovery?: DiscoveryMeta;
+  candidates?: {path: string; name: string; relevance_score: number; why_candidate: string[]}[];
+};
 type Dossier = {
   id: string; title: string; updated_at: string; entries: Entry[];
+  discovery?: DiscoveryMeta | null;
   scope?: Declaration[]; paper_project?: {path: string; project_id: string} | null;
   source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
 };
@@ -129,6 +141,10 @@ export default function LeanExplorerPage() {
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [scopeBusy, setScopeBusy] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryProgress, setDiscoveryProgress] = useState({scanned: 0, total: 0, bytes: 0});
+  const [discoveryCandidates, setDiscoveryCandidates] = useState<DiscoveryEvent['candidates']>([]);
+  const discoveryAbortRef = useRef<AbortController | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
@@ -181,15 +197,15 @@ export default function LeanExplorerPage() {
 
   function chooseSection(id: string) {
     const section = proofMap?.sections.find(item => item.id === id);
-    if (!section || running) return;
+    if (!section || running || discovering) return;
     setSectionId(id); setSectionPrompt(section.question);
-    setDossier(null); setNote('');
+    setDossier(null); setNote(''); setDiscoveryCandidates([]);
     setMarkdownDraft(''); setSavedMarkdown(''); setAnalysis(''); setAnalysisSources([]);
     log('Selected mathematical proof section: ' + section.title, 'ok');
   }
 
   function updateSourceMode(mode: SourceMode) {
-    if (mode === sourceMode || running || localIndexing) return;
+    if (mode === sourceMode || running || localIndexing || discovering) return;
     setSourceMode(mode); setFile(null); setSelected(null); setSelectedName('');
     setAnalysis(''); setAnalysisSources([]); setDossier(null);
     if (mode === 'mirror') void loadFile(DEFAULT_PATH, 'mirror');
@@ -201,7 +217,7 @@ export default function LeanExplorerPage() {
   }
 
   async function indexLocalDirectory() {
-    if (localIndexing || running || !localDirectory.trim()) return;
+    if (localIndexing || running || discovering || !localDirectory.trim()) return;
     setLocalIndexing(true); setScanCount({dirs: 0, files: 0, path: ''});
     setStage('Scanning local directory'); setError('');
     const controller = new AbortController(); indexAbortRef.current = controller;
@@ -300,7 +316,11 @@ export default function LeanExplorerPage() {
       } catch (cause) {if (!cancelled) setError(explainError(cause));}
     }
     void readModel();
-    return () => {cancelled = true; abortRef.current?.abort(); indexAbortRef.current?.abort(); document.title = oldTitle;};
+    return () => {
+      cancelled = true;
+      abortRef.current?.abort(); indexAbortRef.current?.abort(); discoveryAbortRef.current?.abort();
+      document.title = oldTitle;
+    };
   }, [loadFile, loadModules, refreshDossiers]);
 
   useEffect(() => {
@@ -385,6 +405,84 @@ export default function LeanExplorerPage() {
       log('Created new expository dossier', 'ok');
     } catch (cause) {setError(explainError(cause));}
   }
+  async function discoverEvidence() {
+    if (discovering || running || localIndexing || sourceMode !== 'local'
+      || !localSource || !sectionId || dossier?.paper_project) return;
+    setDiscovering(true);
+    setDiscoveryProgress({scanned: 0, total: localSource.file_count, bytes: 0});
+    setDiscoveryCandidates([]);
+    setStage('Searching Lean source'); setError('');
+    const controller = new AbortController();
+    discoveryAbortRef.current = controller;
+    try {
+      const identifier = await ensureDossier();
+      log('Discovering mathematical evidence from all indexed Lean modules for ' + sectionName, 'working');
+      const response = await fetch(
+        '/api/explorelean/dossiers/' + encodeURIComponent(identifier) + '/discover',
+        {
+          method: 'POST', cache: 'no-store', signal: controller.signal,
+          headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
+          body: JSON.stringify({section_id: sectionId}),
+        },
+      );
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null) as {detail?: string} | null;
+        throw new Error(failure?.detail || 'Source discovery failed (' + response.status + ')');
+      }
+      if (!response.body) throw new Error('No discovery progress stream was received.');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finished = false;
+      while (true) {
+        const {done, value} = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), {stream: !done});
+        const frames = buffer.split('\n\n'); buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+          const line = frame.split('\n').find(row => row.startsWith('data: '));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(6)) as DiscoveryEvent;
+          if (event.type === 'progress') {
+            setDiscoveryProgress({
+              scanned: event.files_scanned ?? 0, total: event.total_files ?? 0,
+              bytes: event.bytes_scanned ?? 0,
+            });
+          } else if (event.type === 'stage') {
+            setStage(event.label || 'Discovering evidence');
+          } else if (event.type === 'error') {
+            throw new Error(event.error || 'Evidence discovery failed.');
+          } else if (event.type === 'complete' && event.dossier) {
+            finished = true;
+            setDossier(event.dossier);
+            setDiscoveryCandidates(event.candidates || []);
+            await refreshDossiers();
+            setStage('Source evidence discovered');
+            log('Scanned ' + (event.discovery?.files_scanned ?? 0).toLocaleString()
+              + ' Lean files; selected ' + (event.dossier.scope?.length ?? 0)
+              + ' candidate declarations', 'ok');
+            if (event.dossier.scope?.length) {
+              const first = event.dossier.scope[0];
+              void loadFile(first.path, 'local').then(() => setSelectedName(first.name));
+            }
+          }
+        }
+        if (done) break;
+      }
+      if (!finished) throw new Error('The scan ended without a completed discovery result.');
+    } catch (cause) {
+      if (controller.signal.aborted) {
+        setStage('Discovery stopped');
+        log('Discovery stopped. Existing section evidence was preserved.', 'note');
+      } else {
+        setError(explainError(cause)); setStage('Evidence discovery failed');
+        log(explainError(cause), 'error');
+      }
+    } finally {
+      setDiscovering(false);
+      discoveryAbortRef.current = null;
+    }
+  }
+
   async function updateScope(add: boolean, item: {path: string; name: string}) {
     if (scopeBusy || running) return;
     setScopeBusy(true); setError('');
@@ -540,7 +638,7 @@ export default function LeanExplorerPage() {
     item.path === selected.path && item.name === selected.name);
   const hasExplanation = !!dossier?.entries.some(item => item.mode === 'explain');
   const ready = scope.length > 0 && !loadingFile && !loadingDeclaration && !running
-    && !localIndexing && !scopeBusy && !!config?.available && !!model && !!proofMap;
+    && !localIndexing && !discovering && !scopeBusy && !!config?.available && !!model && !!proofMap;
   const selectedEntries = dossier?.entries.filter(item =>
     item.source.name === selectedName && item.source.path === file?.path) ?? [];
   const matchedDossiers = dossierList.filter(item =>
@@ -562,8 +660,8 @@ export default function LeanExplorerPage() {
     <section className="leanx-workflow" aria-label="Lean Explorer workflow">
       <div className="leanx-workflow-title">
         <strong>Exploring {sectionName}</strong>
-        <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'}
-          aria-label={running || localIndexing ? 'Working' : 'Idle'}/>
+        <span className={running || localIndexing || discovering ? 'leanx-live-dot is-active' : 'leanx-live-dot'}
+          aria-label={running || localIndexing || discovering ? 'Working' : 'Idle'}/>
       </div>
       <ol className="leanx-paper-steps">
         {THINKING_STEPS.map((item, index) =>
@@ -578,7 +676,9 @@ export default function LeanExplorerPage() {
       <div className="leanx-workflow-status" role="status">
         {localIndexing
           ? `Discovering modules: ${scanCount.files.toLocaleString()} Lean files in ${scanCount.dirs.toLocaleString()} directories`
-          : running ? `${stage} · ${Math.floor(elapsed / 60)}m ${String(elapsed % 60).padStart(2, '0')}s` : stage}
+          : discovering
+            ? `${stage}: ${discoveryProgress.scanned.toLocaleString()} / ${discoveryProgress.total.toLocaleString()} files scanned`
+            : running ? `${stage} · ${Math.floor(elapsed / 60)}m ${String(elapsed % 60).padStart(2, '0')}s` : stage}
       </div>
     </section>
 
@@ -587,7 +687,7 @@ export default function LeanExplorerPage() {
     <section className="leanx-section-selection" aria-label="Select a mathematical proof section">
       <div className="leanx-section-selection-line">
         <label htmlFor="leanx-selected-section">Research section</label>
-        <select id="leanx-selected-section" value={sectionId} disabled={running || scopeBusy || handoffBusy}
+        <select id="leanx-selected-section" value={sectionId} disabled={running || discovering || scopeBusy || handoffBusy}
           onChange={event => chooseSection(event.target.value)}>
           {proofMap?.sections.map((item, index) =>
             <option key={item.id} value={item.id}>
@@ -609,9 +709,17 @@ export default function LeanExplorerPage() {
     <section className="leanx-evidence-scope" aria-label="Selected Lean evidence for this section">
       <div className="leanx-scope-heading">
         <strong>Lean evidence scope · {scope.length} declaration{scope.length === 1 ? '' : 's'}</strong>
-        <button type="button" onClick={() => setShowBrowser(true)}>
-          Find Lean evidence
-        </button>
+        <div className="leanx-discovery-actions">
+          <button type="button" className="leanx-primary-action"
+            disabled={discovering || running || !localSource || sourceMode !== 'local'
+              || !sectionId || !!dossier?.paper_project}
+            onClick={() => void discoverEvidence()}>
+            {discovering ? 'Discovering…' : scope.length ? 'Refresh discovered evidence' : 'Discover evidence automatically'}
+          </button>
+          <button type="button" disabled={!discovering}
+            onClick={() => discoveryAbortRef.current?.abort()}>Stop</button>
+          <button type="button" onClick={() => setShowBrowser(true)}>Browse source (optional)</button>
+        </div>
       </div>
       {selected && <div className="leanx-scope-candidate">
         <span>Current declaration: <code>{selected.name}</code> · {selected.path}</span>
@@ -621,17 +729,28 @@ export default function LeanExplorerPage() {
             {scopeBusy ? 'Saving…' : 'Include in section'}
           </button>}
       </div>}
+      {discovering && <p className="leanx-discovery-progress" role="status">
+        Scanning {discoveryProgress.scanned.toLocaleString()} of {discoveryProgress.total.toLocaleString()}
+        {' '}Lean files · {(discoveryProgress.bytes / 1048576).toFixed(1)} MiB read
+      </p>}
+      {dossier?.discovery && <p className="leanx-discovery-summary">
+        Discovery examined {dossier.discovery.files_scanned.toLocaleString()} Lean files
+        and found {dossier.discovery.matching_declarations.toLocaleString()} lexical candidates.
+        The selected declarations below are hypotheses, not formal dependency links.
+      </p>}
       {scope.length > 0 ? <ul className="leanx-scope-list">
         {scope.map(item => <li key={item.path + ':' + item.name}>
-          <span><strong>{item.name}</strong> <small>{item.path}</small></span>
+          <span><strong>{item.name}</strong> <small>{item.path}</small>
+            {'relevance_score' in item && <small> · lexical score {String(item.relevance_score)}</small>}
+          </span>
           <button type="button" disabled={scopeBusy || running || !!dossier?.paper_project}
             aria-label={'Remove ' + item.name + ' from section'}
             onClick={() => void updateScope(false, item)}>Remove</button>
         </li>)}
       </ul> :
         <p className="leanx-scope-empty">
-          No Lean declarations selected yet. Use Find Lean evidence, inspect a declaration,
-          then include it here. Sections can draw from unrelated files.
+          No Lean evidence selected yet. Click Discover evidence automatically to search
+          the indexed root and populate this section. Manual source browsing is optional.
         </p>}
     </section>
 
@@ -815,7 +934,7 @@ export default function LeanExplorerPage() {
             <textarea className="leanx-lean-source-editor" aria-label="Lean source text" readOnly spellCheck={false}
               value={selected.excerpt}/>
             <div className="leanx-pane-footer">Actual Lean source · {selected.complete ? 'To next declaration boundary' : 'Partial excerpt'} · Not a Lean kernel check</div>
-          </> : <p className="leanx-empty">Select a declaration using Find Lean evidence to inspect its source.</p>}
+          </> : <p className="leanx-empty">Use Discover evidence automatically to find relevant Lean source across the repository.</p>}
         </section>
 
         <section className="leanx-pane leanx-analysis-pane">
