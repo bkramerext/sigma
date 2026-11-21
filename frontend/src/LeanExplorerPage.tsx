@@ -362,7 +362,8 @@ export default function LeanExplorerPage() {
     } catch (cause) {setError(explainError(cause));}
   }
   async function analyzeSelected() {
-    if (!selected || !config?.available || !model || busyRef.current) return;
+    if (!selected || !config?.available || !model || busyRef.current
+      || (sectionPath && !selected.path.startsWith(sectionPath + '/'))) return;
     busyRef.current = true; setError(''); setAnalysis(''); setAnalysisSources([]);
     setRunning(true); setStage('Preparing analysis');
     const controller = new AbortController(); abortRef.current = controller;
@@ -375,7 +376,10 @@ export default function LeanExplorerPage() {
         body: JSON.stringify({
           formal_path: selected.path, declaration: selected.name, source_mode: sourceMode,
           include_guide: includeGuide, include_announcement: includeAnnouncement,
-          model, reasoning_effort: effort, objective, dossier_id: dossierId,
+          model, reasoning_effort: effort,
+          objective: (objective + '\n\nSection: ' + (sectionPath || 'Complete proof')
+            + '\nExpository question: ' + sectionPrompt).slice(0, 6000),
+          dossier_id: dossierId,
         }),
       });
       if (!response.ok) {
@@ -457,7 +461,9 @@ export default function LeanExplorerPage() {
   }
 
   const filtered = file?.declarations.filter(item => item.name.toLowerCase().includes(filter.trim().toLowerCase())) ?? [];
-  const ready = !!selected && !loadingFile && !loadingDeclaration && !running && !!config?.available && !!model;
+  const ready = !!selected && !loadingFile && !loadingDeclaration && !running
+    && !localIndexing && !!config?.available && !!model
+    && (!sectionPath || selected.path.startsWith(sectionPath + '/'));
   const selectedEntries = dossier?.entries.filter(item => item.source.name === selectedName && item.source.path === file?.path) ?? [];
   const inSection = !sectionPath || !!selected?.path.startsWith(sectionPath + '/');
   const matchedDossiers = dossierList.filter(item =>
@@ -677,22 +683,13 @@ export default function LeanExplorerPage() {
               {!dossier.entries.length && <p className="leanx-empty">Explanations are saved here automatically after completion.</p>}
             </div>
           </>}
-          <label htmlFor="leanx-note">Note on selected declaration</label>
-          <textarea id="leanx-note" value={note} rows={3} disabled={!selected || savingNote || running} onChange={event => setNote(event.target.value)}
-            placeholder="Record an interpretation, question, or open obligation…"/>
-          <button type="button" disabled={!selected || !note.trim() || savingNote || running} onClick={() => void saveNote()}>
-            {savingNote ? 'Saving…' : 'Save note'}
-          </button>
+
         </section>
       </div>}
     </div>
 
-    <div className="leanx-progress-compact" role="status">
-      <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'} aria-label={running || localIndexing ? 'Active' : 'Idle'}/>
-      <span className="leanx-progress-stage">{stage}</span>
-      {localIndexing && <span>{scanCount.dirs.toLocaleString()} directories · {scanCount.files.toLocaleString()} Lean files</span>}
-      {running && <span>{Math.floor(elapsed / 60)}m {String(elapsed % 60).padStart(2, '0')}s</span>}
-      <button type="button" aria-expanded={showActivity} onClick={() => setShowActivity(!showActivity)}>Activity</button>
+    <div className="leanx-activity-toggle">
+      <button type="button" aria-expanded={showActivity} onClick={() => setShowActivity(!showActivity)}>Activity history</button>
     </div>
     {showActivity && <div className="leanx-activity-expanded">
         <section className="leanx-pane leanx-progress-pane" aria-live="polite">
@@ -721,9 +718,10 @@ export default function LeanExplorerPage() {
             {selected && (selected.url ? <SourceLink href={selected.url + '#L' + selected.start_line}>Lines {selected.start_line}–{selected.end_line}</SourceLink> : <span>Lines {selected.start_line}–{selected.end_line}</span>)}
           </div>
           {selected ? <>
-            <pre><code>{selected.excerpt}</code></pre>
-            <div className="leanx-pane-footer">Actual source · {selected.complete ? 'Excerpt through next declaration boundary' : 'Partial excerpt (length limit)'} · Not an elaborated statement or proof check</div>
-          </> : <p className="leanx-empty">Select a declaration to inspect its actual source.</p>}
+            <textarea className="leanx-lean-source-editor" aria-label="Lean source text" readOnly spellCheck={false}
+              value={selected.excerpt}/>
+            <div className="leanx-pane-footer">Actual Lean source · {selected.complete ? 'To next declaration boundary' : 'Partial excerpt'} · Not a Lean kernel check</div>
+          </> : <p className="leanx-empty">Select a declaration from the tree to inspect its Lean source.</p>}
         </section>
 
         <section className="leanx-pane leanx-analysis-pane">
@@ -739,8 +737,31 @@ export default function LeanExplorerPage() {
             <button type="button" disabled={!running} onClick={stopAnalysis}>Stop</button>
             <span>{config ? (config.available ? `${config.models.find(item => item.id === model)?.label ?? model} · ${effort}` : config.message) : 'Reading selected AI connection…'}</span>
           </div>
-          {analysis ? <div className="leanx-explanation"><Suspense fallback={<p>{analysis}</p>}><RenderedMarkdown body={analysis}/></Suspense></div> :
-            <p className="leanx-empty">Explanation will appear here, grounded in the selected declaration and chosen supplementary excerpts.</p>}
+          {sectionPath && selected && !inSection && <p className="leanx-section-warning">
+            The selected declaration is outside the current section. Choose a file within <code>{sectionPath}/</code> or change sections.
+          </p>}
+          <div className="leanx-markdown-editor">
+            <div className="leanx-markdown-toolbar">
+              <label htmlFor="leanx-markdown">Expository Markdown</label>
+              <button type="button" disabled={!selected || !inSection || !markdownDraft.trim() ||
+                markdownDraft.trim() === savedMarkdown || savingMarkdown || running}
+                onClick={() => void saveMarkdown()}>
+                {savingMarkdown ? 'Saving…' : 'Save Markdown'}
+              </button>
+            </div>
+            <textarea id="leanx-markdown" value={markdownDraft} disabled={!selected || !inSection || running || savingMarkdown}
+              onChange={event => setMarkdownDraft(event.target.value)}
+              placeholder="The mathematical explanation goes here. Edit its Markdown, refine the ideas, then save it to this section's dossier."/>
+            {!!markdownDraft && markdownDraft.trim() !== savedMarkdown && <small>Unsaved edits</small>}
+            {!!markdownDraft && <details className="leanx-markdown-preview">
+              <summary>Preview rendered Markdown</summary>
+              <div className="leanx-explanation">
+                <Suspense fallback={<p>Rendering Markdown…</p>}>
+                  <RenderedMarkdown body={markdownDraft}/>
+                </Suspense>
+              </div>
+            </details>}
+          </div>
           {!!analysisSources.length && <details className="leanx-evidence-detail">
             <summary>Evidence used in this explanation ({analysisSources.length})</summary>
             {analysisSources.map(item => <p key={item.kind + item.path}>
@@ -750,9 +771,21 @@ export default function LeanExplorerPage() {
           </details>}
           {!!selectedEntries.length && <div className="leanx-existing">Saved entries for this declaration: {selectedEntries.length}</div>}
         </section>
+        <section className="leanx-pane leanx-notes-pane">
+          <div className="leanx-pane-title">
+            <h2>Expository notes</h2><span>Editable Markdown · Current section</span>
+          </div>
+          <textarea aria-label="Expository notes" value={note} rows={7}
+            disabled={!selected || !inSection || savingNote || running}
+            onChange={event => setNote(event.target.value)}
+            placeholder="What is surprising here? Which assumptions need explanation? What questions should the next research session pursue?"/>
+          <div className="leanx-notes-action">
+            <button type="button" disabled={!selected || !inSection || !note.trim() || savingNote || running}
+              onClick={() => void saveNote()}>{savingNote ? 'Saving…' : 'Save note to section dossier'}</button>
+          </div>
+        </section>
       </div>
     </div>
-
 
     {error && <p className="chat-error leanx-error" role="alert">{error}</p>}
     <p className="leanx-boundary">Current capability: full local directory file inventory and search, lazy Lean module reading, lexical declaration navigation, source-grounded explanations, durable dossiers and Markdown export. This is not yet an elaborated cross-module dependency graph or a Lean proof check. SIGMA paper handoff is not yet implemented.</p>
