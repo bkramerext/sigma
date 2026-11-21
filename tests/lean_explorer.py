@@ -107,10 +107,29 @@ def test_dossier_and_ai_flow() -> None:
         assert source.status_code == 200
         assert source.json()["total"] == 2
 
-        created = client.post("/api/explorelean/dossiers", json={"source_mode": "mirror"})
+        proof_map = client.get("/api/explorelean/proof-map")
+        assert proof_map.status_code == 200
+        assert len(proof_map.json()["sections"]) == 7
+        assert len(proof_map.json()["connections"]) >= 7
+        assert proof_map.json()["status"] == "interpretive_not_lean_verified"
+
+        created = client.post(
+            "/api/explorelean/dossiers",
+            json={"source_mode": "mirror", "section_id": "reflection"},
+        )
         assert created.status_code == 201, created.text
         dossier_id = created.json()["id"]
+        assert created.json()["section_id"] == "reflection"
+        assert created.json()["section_title"] == "Reflection and the final conclusion"
         assert len(dossier_id) == 36
+
+        other_section = client.post(
+            "/api/explorelean/dossiers",
+            json={"source_mode": "mirror", "section_id": "theta-slopes"},
+        )
+        assert other_section.status_code == 201
+        assert other_section.json()["id"] != dossier_id
+        assert other_section.json()["section_id"] == "theta-slopes"
 
         saved_note = client.post(
             f"/api/explorelean/dossiers/{dossier_id}/notes",
