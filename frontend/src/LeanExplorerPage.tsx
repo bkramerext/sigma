@@ -229,7 +229,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
       try {
         const [account, preference] = await Promise.all([
           requestJSON<AIConfig>('/api/chat/config'),
-          requestJSON<{ai_model?: string; reasoning_effort?: string}>('/api/user-preferences/research-settings').catch(() => ({})),
+          requestJSON<{ai_model?: string; reasoning_effort?: string}>('/api/user-preferences/research-settings').catch(() => ({ai_model: undefined, reasoning_effort: undefined})),
         ]);
         if (cancelled) return;
         setConfig(account);
