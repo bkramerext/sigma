@@ -466,6 +466,9 @@ def apply_discovery(identifier: str, discovery: dict) -> dict:
         record["discovery"] = {
             "root_id": source_id,
             "index_type": discovery["index_type"],
+            "single_file_trial": discovery.get("single_file_trial", False),
+            "selected_file": discovery.get("selected_file", ""),
+            "selected_file_bytes": discovery.get("selected_file_bytes", 0),
             "scanned_files": old.get("scanned_files", 0) + discovery["scanned_files"],
             "total_files": discovery["total_files"],
             "complete": discovery["complete"],
