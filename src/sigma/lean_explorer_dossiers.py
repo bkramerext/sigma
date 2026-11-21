@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from sigma import lean_explorer, lean_explorer_local
+from sigma import lean_explorer, lean_explorer_local, lean_explorer_map
 from sigma.projects import ProjectError
 from sigma.recents import state_directory
 from sigma.ui_instance import private_directory
@@ -87,6 +87,7 @@ def create(
     section_path: str = "",
     section_title: str = "",
     section_focus: str = "",
+    section_id: str = "",
 ) -> dict:
     revision = _revision(source_mode)
     # Sections partition *mathematical arguments*, not filesystem subtrees.
@@ -95,6 +96,10 @@ def create(
         raise ProjectError(
             "Lean source-tree directories cannot be used as mathematical sections."
         )
+    mapped = lean_explorer_map.section(section_id) if section_id else None
+    if mapped:
+        section_title = mapped["title"]
+        section_focus = mapped["question"]
     if not isinstance(section_title, str) or len(section_title.strip()) > 180:
         raise ProjectError("Invalid expository section title.")
     if not isinstance(section_focus, str) or len(section_focus) > 6000:
@@ -111,6 +116,7 @@ def create(
         "formal_commit": revision,
         "source_mode": source_mode,
         "section_path": "",
+        "section_id": section_id,
         "section_title": title,
         "section_focus": section_focus.strip(),
         "section_basis": "conceptual; declaration membership is source-linked",
@@ -155,6 +161,7 @@ def list_dossiers() -> list[dict]:
                 "formal_commit": record.get("formal_commit", ""),
                 "section_path": record.get("section_path", ""),
                 "section_title": record.get("section_title", "Complete proof"),
+                "section_id": record.get("section_id", ""),
                 "section_focus": record.get("section_focus", ""),
             }
         )
@@ -253,6 +260,7 @@ def markdown(identifier: str) -> str:
         f"Formal source: {record['formal_repository']}",
         f"Source revision: `{record['formal_commit']}`",
         f"Mathematical section: {record.get('section_title', 'Unassigned')}",
+        f"Proof map section ID: `{record.get('section_id') or 'unassigned'}`",
         f"Section question: {record.get('section_focus', '')}",
         "Formal declaration membership is recorded per entry, across modules.",
         f"Created: {record['created_at']}",
