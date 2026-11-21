@@ -16,6 +16,13 @@ from sigma.projects import ProjectError
 MAX_SCAN_FILES = 20_000
 MAX_CANDIDATES = 12
 MAX_SCAN_SOURCE_BYTES = 3 * 1024 * 1024
+MIN_TRIAL_FILE_BYTES = 48 * 1024
+# A large, representative source file in the pinned Alpöge mirror.
+AUTOMORPHIC_TRIAL_FILE = (
+    "src/Development/AbelianVarietyTheory/Definitions/"
+    "AutomorphicMembership/ExistsSameData.lean"
+)
+
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*")
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _STOP = frozenset(
@@ -134,11 +141,45 @@ def _score(
     return score, reasons
 
 
+def _trial_file(paths: list[str], terms: set[str]) -> tuple[str, int]:
+    """Select one sizeable section-related indexed file; never leave the local root."""
+    indexed = set(paths)
+    if AUTOMORPHIC_TRIAL_FILE in indexed:
+        payload, _, _, _ = lean_explorer_local.read_module(AUTOMORPHIC_TRIAL_FILE)
+        if MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES:
+            return AUTOMORPHIC_TRIAL_FILE, len(payload)
+
+    likely = [
+        path for path in paths
+        if _words(path.rsplit(".lean", 1)[0]) & terms
+    ]
+    likely.sort(
+        key=lambda path: (-len(_words(path.rsplit(".lean", 1)[0]) & terms), path)
+    )
+    best_path = ""
+    best_size = 0
+    for path in likely[:250]:
+        try:
+            payload, _, _, _ = lean_explorer_local.read_module(path)
+        except (ProjectError, OSError):
+            continue
+        if MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES:
+            if len(payload) > best_size:
+                best_path, best_size = path, len(payload)
+    if not best_path:
+        raise ProjectError(
+            "No large section-related Lean file (at least 48 KiB) was found "
+            "in the indexed root. Choose a different section or source root."
+        )
+    return best_path, best_size
+
+
 def discover(
     section_id: str,
     progress: Callable[[int, int, int, str], None] | None = None,
     *,
     start_offset: int = 0,
+    single_file_trial: bool = False,
 ) -> dict[str, Any]:
     """Search safely indexed local modules for candidate section evidence.
 
@@ -160,9 +201,6 @@ def discover(
         )
         paths.extend(page["files"])
     paths.sort(key=lambda name: (not name.startswith("src/"), name))
-    if not 0 <= start_offset <= total:
-        raise ProjectError("Invalid Lean discovery continuation offset.")
-    scan = paths[start_offset : start_offset + MAX_SCAN_FILES]
     terms = _words(
         " ".join(
             [
@@ -173,6 +211,18 @@ def discover(
             ]
         )
     )
+    chosen_file = ""
+    chosen_bytes = 0
+    if single_file_trial:
+        if start_offset:
+            raise ProjectError("A single-file trial starts from the beginning of its file.")
+        chosen_file, chosen_bytes = _trial_file(paths, terms)
+        scan = [chosen_file]
+        total = 1
+    else:
+        if not 0 <= start_offset <= total:
+            raise ProjectError("Invalid Lean discovery continuation offset.")
+        scan = paths[start_offset : start_offset + MAX_SCAN_FILES]
     hints = section.get("declaration_hints", [])
     ranked: list[dict[str, Any]] = []
     declarations = 0
@@ -203,8 +253,13 @@ def discover(
             end = found[index + 1]["line"] - 1 if index + 1 < len(found) else len(lines)
             excerpt = "\n".join(lines[start - 1 : min(start + 15, end)])
             score, reasons = _score(path, item["kind"], item["name"], excerpt, terms, hints)
-            if score < 7:
+            if score < 7 and not single_file_trial:
                 continue
+            if single_file_trial and score < 7:
+                reasons = [
+                    "one-file trial source sample; section relevance unverified",
+                    *reasons,
+                ]
             matching += 1
             file_ranked.append(
                 {
@@ -252,6 +307,9 @@ def discover(
     return {
         "section_id": section_id,
         "source_root_id": cfg["root_id"],
+        "single_file_trial": single_file_trial,
+        "selected_file": chosen_file,
+        "selected_file_bytes": chosen_bytes,
         "index_type": "lexical heuristic discovery, not elaborated Lean dependencies",
         "start_offset": start_offset,
         "next_offset": start_offset + len(scan),
