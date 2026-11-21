@@ -53,6 +53,7 @@ type Entry = {id: string; mode: string; text: string; created_at: string; source
 type DiscoveryInfo = {
   index_type: string; scanned_files: number; total_files: number; complete: boolean;
   unreadable_files: number; matching_declarations: number; selected: number;
+  single_file_trial?: boolean; selected_file?: string; selected_file_bytes?: number;
   warning: string;
 };
 type Dossier = {
@@ -74,7 +75,8 @@ type Stage = {
   saved?: boolean; save_error?: string; sources?: Citation[];
   scanned?: number; total?: number; matches?: number; path?: string;
   dossier?: Dossier;
-  discovery?: {scanned_files: number; total_files: number; matching_declarations: number; complete: boolean; candidates: unknown[]};
+  discovery?: {scanned_files: number; total_files: number; matching_declarations: number;
+    complete: boolean; candidates: unknown[]; selected_file?: string; selected_file_bytes?: number};
 };
 
 function explainError(err: unknown): string {return err instanceof Error ? err.message : String(err);}
@@ -451,25 +453,40 @@ export default function LeanExplorerPage() {
     } finally {setHandoffBusy(false);}
   }
 
-  async function exploreSection() {
+  async function exploreSection(singleFileTrial = false) {
     if (!localDirectory.trim() || !sectionId || sourceMode !== 'local' || discovering
-      || running || localIndexing || scopeBusy || !!dossier?.paper_project) return;
+      || running || localIndexing || scopeBusy || (!singleFileTrial && !!dossier?.paper_project)) return;
     if (markdownDraft.trim() && markdownDraft.trim() !== savedMarkdown) {
       setError('Save or discard your current Markdown edits before a new exploration.');
       return;
     }
-    setDiscovering(true); setError(''); setStage('Discovering Lean evidence');
+    setDiscovering(true); setError('');
+    setStage(singleFileTrial ? 'Preparing a single-file trial' : 'Discovering Lean evidence');
     const controller = new AbortController(); discoveryAbortRef.current = controller;
     try {
       if (!localSource) {
         const indexed = await indexLocalDirectory();
         if (!indexed) return;
       }
-      const dossierId = await ensureDossier();
+      let dossierId: string;
+      if (singleFileTrial) {
+        const created = await postJSON<Dossier>('/api/explorelean/dossiers', {
+          source_mode: 'local', section_id: sectionId,
+          section_title: sectionName, section_focus: sectionPrompt,
+        });
+        setDossier(created);
+        dossierId = created.id;
+        log('Created isolated single-file trial dossier', 'ok');
+      } else {
+        dossierId = await ensureDossier();
+      }
       const response = await fetch('/api/explorelean/discover', {
         method: 'POST', signal: controller.signal, cache: 'no-store',
         headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
-        body: JSON.stringify({source_mode: 'local', section_id: sectionId, dossier_id: dossierId}),
+        body: JSON.stringify({
+          source_mode: 'local', section_id: sectionId, dossier_id: dossierId,
+          single_file_trial: singleFileTrial,
+        }),
       });
       if (!response.ok) {
         const failure = await response.json().catch(() => null) as {detail?: string} | null;
@@ -500,6 +517,11 @@ export default function LeanExplorerPage() {
             setDossier(event.dossier);
             await refreshDossiers();
             const info = event.discovery;
+            if (singleFileTrial && info.selected_file) {
+              log('One-file trial: ' + info.selected_file + ' (' +
+                (info.selected_file_bytes ?? 0).toLocaleString() + ' bytes)', 'ok');
+              await loadFile(info.selected_file, 'local');
+            }
             log('Scanned ' + info.scanned_files.toLocaleString() + ' Lean files; '
               + info.matching_declarations.toLocaleString() + ' lexical matches; '
               + (event.dossier.scope?.length ?? 0) + ' selected evidence declarations', 'ok');
@@ -738,6 +760,11 @@ export default function LeanExplorerPage() {
                 ? 'Continue scanning Lean files' : 'Explore section'}
           </button>
           {(discovering || running) && <button type="button" onClick={stopAnalysis}>Stop</button>}
+          <button type="button" disabled={!localDirectory.trim() || sourceMode !== 'local'
+            || !proofMap || !sectionId || discovering || running || localIndexing || scopeBusy}
+            onClick={() => void exploreSection(true)}>
+            Test one large Lean file
+          </button>
           <button type="button" onClick={() => setShowBrowser(true)}>Find Lean evidence manually</button>
         </div>
       </div>
@@ -750,6 +777,12 @@ export default function LeanExplorerPage() {
           </button>}
       </div>}
       {dossier?.discovery && <p className="leanx-discovery-summary">
+        {dossier.discovery.single_file_trial && dossier.discovery.selected_file &&
+          <span>Single-file trial: <code>{dossier.discovery.selected_file}</code>
+            {' '}({dossier.discovery.selected_file_bytes?.toLocaleString()} bytes).
+            {' '}One file was scanned; selected declarations are samples, not a complete proof analysis.
+            {' '}
+          </span>}
         Automatic lexical discovery scanned {dossier.discovery.scanned_files.toLocaleString()} of
         {' '}{dossier.discovery.total_files.toLocaleString()} indexed Lean files, with
         {' '}{dossier.discovery.matching_declarations.toLocaleString()} possible matches.
