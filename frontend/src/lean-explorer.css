@@ -188,14 +188,16 @@
   }
 }
 
-/* The header is shared with SIGMA; it should not dominate the workspace. */
+/* Keep the title column outside the decorative artwork layer.
+   The shared project/session header paints its background artwork across
+   min(29vw, 470px); shrinking only the grid column placed text underneath it. */
 @media (min-width: 1201px) {
-  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
-    grid-template-columns: min(17vw, 205px) minmax(0, 1fr) max-content;
-    gap: 20px;
+  .workspace-page.brainstorm-workspace.lean-explorer-page .project-art-header.chat-site-header {
+    grid-template-columns: min(29vw, 470px) minmax(0, 1fr) max-content;
+    gap: 24px;
   }
-  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
-    width: min(17vw, 185px);
+  .workspace-page.brainstorm-workspace.lean-explorer-page .chat-site-header .project-header-art {
+    width: min(29vw, 330px);
   }
 }
 .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
