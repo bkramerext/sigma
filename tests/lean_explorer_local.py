@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from sigma import lean_explorer_local
+from sigma import lean_explorer_discovery, lean_explorer_local
 from sigma.api import app
 from sigma.projects import ProjectError
 
@@ -23,7 +23,9 @@ def check_local_directory() -> None:
             encoding="utf-8",
         )
         (project / "src" / "Proofs" / "Bridge.lean").write_text(
-            "theorem arithmeticBridge : True := trivial\n", encoding="utf-8"
+            "theorem arithmeticBridge : True := trivial\n"
+            "theorem thetaLiftBound : True := trivial\n",
+            encoding="utf-8",
         )
         (project / "Mathlib" / "Analysis" / "Prelude.lean").write_text(
             "lemma localFixture : True := trivial\n", encoding="utf-8"
@@ -118,6 +120,32 @@ def check_local_directory() -> None:
                 )
                 assert selected_scope.status_code == 200, selected_scope.text
             assert len(selected_scope.json()["scope"]) == 2
+
+            # No user-selected source paths: discover the section from the indexed
+            # root, recover a real candidate, and persist its exact source hash.
+            proposed = lean_explorer_discovery.discover("theta-slopes")
+            assert proposed["complete"] is True
+            assert proposed["scanned_files"] == 3
+            assert proposed["index_type"].startswith("lexical")
+            assert any(item["name"] == "thetaLiftBound" for item in proposed["candidates"])
+            auto = client.post(
+                "/api/explorelean/discover",
+                json={
+                    "source_mode": "local",
+                    "section_id": "theta-slopes",
+                    "dossier_id": identifier,
+                },
+            )
+            assert auto.status_code == 200, auto.text
+            assert '"type": "complete"' in auto.text
+            recovered = client.get(f"/api/explorelean/dossiers/{identifier}").json()
+            assert recovered["discovery"]["scanned_files"] == 3
+            assert recovered["discovery"]["complete"] is True
+            auto_scope = [item for item in recovered["scope"] if item["name"] == "thetaLiftBound"]
+            assert len(auto_scope) == 1
+            assert auto_scope[0]["selection_origin"] == "automatic_lexical_candidate"
+            assert auto_scope[0]["sha256"]
+            assert "not elaborated" in recovered["discovery"]["index_type"]
             note = client.post(
                 f"/api/explorelean/dossiers/{identifier}/notes",
                 json={
