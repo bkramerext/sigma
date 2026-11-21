@@ -131,6 +131,29 @@ def test_dossier_and_ai_flow() -> None:
         assert other_section.json()["id"] != dossier_id
         assert other_section.json()["section_id"] == "theta-slopes"
 
+        selected_scope = client.post(
+            f"/api/explorelean/dossiers/{dossier_id}/scope",
+            json={
+                "source_mode": "mirror",
+                "formal_path": "src/Statements.lean",
+                "declaration": "RiemannZetaZerosOnLine",
+            },
+        )
+        assert selected_scope.status_code == 200, selected_scope.text
+        assert len(selected_scope.json()["scope"]) == 1
+        assert selected_scope.json()["scope"][0]["sha256"] == hashlib.sha256(LEAN).hexdigest()
+
+        second_scope = client.post(
+            f"/api/explorelean/dossiers/{dossier_id}/scope",
+            json={
+                "source_mode": "mirror",
+                "formal_path": "src/Statements.lean",
+                "declaration": "DirichletLZerosOnLine",
+            },
+        )
+        assert second_scope.status_code == 200
+        assert len(second_scope.json()["scope"]) == 2
+
         saved_note = client.post(
             f"/api/explorelean/dossiers/{dossier_id}/notes",
             json={
@@ -176,6 +199,8 @@ def test_dossier_and_ai_flow() -> None:
 
         kwargs = reply.call_args.kwargs
         assert "RiemannZetaZerosOnLine" in kwargs["repeated_text"]
+        assert "DirichletLZerosOnLine" in kwargs["repeated_text"]
+        assert "SECTION SCOPE" in kwargs["repeated_text"]
         assert kwargs["instructions_override"] == lean_explorer.ANALYSIS_INSTRUCTIONS
 
         record = client.get(f"/api/explorelean/dossiers/{dossier_id}")
@@ -188,6 +213,20 @@ def test_dossier_and_ai_flow() -> None:
         assert "### Actual Lean source excerpt" in markdown.text
         assert "A sourced interpretation" in markdown.text
         assert "SHA256" in markdown.text
+        assert "Selected Lean evidence" in markdown.text
+        assert len(record.json()["scope"]) == 2
+
+        clear_second = client.request(
+            "DELETE",
+            f"/api/explorelean/dossiers/{dossier_id}/scope",
+            json={
+                "source_mode": "mirror",
+                "formal_path": "src/Statements.lean",
+                "declaration": "DirichletLZerosOnLine",
+            },
+        )
+        assert clear_second.status_code == 200, clear_second.text
+        assert len(clear_second.json()["scope"]) == 1
 
         wrong_pin = client.post(
             "/api/explorelean/dossiers/not-a-uuid/notes",
