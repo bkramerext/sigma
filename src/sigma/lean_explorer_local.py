@@ -258,6 +258,78 @@ def list_files(query: str = "", offset: int = 0, limit: int = 100) -> dict:
     }
 
 
+
+def section_path(prefix: str) -> str:
+    """Validate a relative directory prefix; empty means the whole source tree."""
+    if not isinstance(prefix, str) or len(prefix) > 800:
+        raise ProjectError("Invalid Lean section path.")
+    if not prefix:
+        return ""
+    pure = PurePosixPath(prefix)
+    if (
+        pure.is_absolute()
+        or prefix.startswith(".")
+        or prefix.endswith("/")
+        or "//" in prefix
+        or any(part in {".", ".."} or part.startswith(".") for part in pure.parts)
+        or pure.as_posix() != prefix
+    ):
+        raise ProjectError("A Lean section must be a directory under the indexed root.")
+    return prefix
+
+
+def section_stats(prefix: str = "") -> dict[str, Any]:
+    """Count modules beneath a source-tree section, without reading their bodies."""
+    from bisect import bisect_left
+
+    prefix = section_path(prefix)
+    paths, _ = _modules()
+    start = bisect_left(paths, prefix + "/") if prefix else 0
+    end = bisect_left(paths, prefix + "0") if prefix else len(paths)
+    if prefix and (start == end or not paths[start].startswith(prefix + "/")):
+        raise ProjectError("This Lean section does not contain any indexed modules.")
+    return {"path": prefix, "module_count": end - start, "start": start, "end": end}
+
+
+def tree(prefix: str = "", *, limit: int = 180) -> dict[str, Any]:
+    """One level of the actual filesystem module tree; not theorem dependencies."""
+    if not 1 <= limit <= 300:
+        raise ProjectError("Invalid Lean tree page size.")
+    cfg = source()
+    if cfg is None:
+        raise ProjectError("Index a local Lean directory first.")
+    stats = section_stats(prefix)
+    paths, _ = _modules()
+    start = stats["start"]
+    end = stats["end"]
+    prefix_part = prefix + "/" if prefix else ""
+    children: dict[str, dict[str, Any]] = {}
+    for filename in paths[start:end]:
+        suffix = filename[len(prefix_part):]
+        head, separator, tail = suffix.partition("/")
+        key = prefix_part + head
+        item = children.get(key)
+        if item is None:
+            item = {
+                "name": head,
+                "path": key,
+                "kind": "directory" if separator else "module",
+                "module_count": 0,
+            }
+            children[key] = item
+        item["module_count"] += 1
+    ordered = sorted(children.values(), key=lambda v: (v["kind"] != "directory", v["name"].casefold()))
+    return {
+        "root_id": cfg["root_id"],
+        "prefix": prefix,
+        "parent": prefix.rpartition("/")[0] if prefix else None,
+        "module_count": stats["module_count"],
+        "child_count": len(ordered),
+        "truncated": len(ordered) > limit,
+        "children": ordered[:limit],
+        "index_type": "filesystem module hierarchy; NOT Lean dependency graph",
+    }
+
 def read_module(relative: str) -> tuple[bytes, str, str, str]:
     cfg = source()
     if cfg is None:
