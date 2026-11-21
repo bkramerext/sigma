@@ -345,9 +345,7 @@ def select_declaration(
     return _with_dossier_lock(identifier, apply)
 
 
-def save_discovered_scope(
-    identifier: str, *, section_id: str, discovery: dict
-) -> dict:
+def save_discovered_scope(identifier: str, *, section_id: str, discovery: dict) -> dict:
     """Commit a complete cross-repository discovery as a suggested research scope.
 
     Preserve earlier manual selections. Any auto-added excerpts remain explicitly
