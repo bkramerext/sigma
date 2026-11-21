@@ -18,13 +18,83 @@ MAX_SCAN_SOURCE_BYTES = 3 * 1024 * 1024
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*")
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _STOP = frozenset(
-    "a an and are as at be by can does do for from how in into is it its "
-    "of on or our over should that the their them there these this to use "
-    "using was were what when where which who why will with without "
-    "mathematical mathematics proof proofs lean theorem theorems lemma "
-    "lemmas result results theory formal source explain connect "
-    "connection connections arguments argument possible input inputs "
-    "make needed need later many entire".split()
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "can",
+        "does",
+        "do",
+        "for",
+        "from",
+        "how",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "our",
+        "over",
+        "should",
+        "that",
+        "the",
+        "their",
+        "them",
+        "there",
+        "these",
+        "this",
+        "to",
+        "use",
+        "using",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "will",
+        "with",
+        "without",
+        "mathematical",
+        "mathematics",
+        "proof",
+        "proofs",
+        "lean",
+        "theorem",
+        "theorems",
+        "lemma",
+        "lemmas",
+        "result",
+        "results",
+        "theory",
+        "formal",
+        "source",
+        "explain",
+        "connect",
+        "connection",
+        "connections",
+        "arguments",
+        "argument",
+        "possible",
+        "input",
+        "inputs",
+        "make",
+        "needed",
+        "need",
+        "later",
+        "many",
+        "entire",
+    ]
 )
 
 
@@ -119,9 +189,7 @@ def discover(
             start = item["line"]
             end = found[index + 1]["line"] - 1 if index + 1 < len(found) else len(lines)
             excerpt = "\n".join(lines[start - 1 : min(start + 15, end)])
-            score, reasons = _score(
-                path, item["kind"], item["name"], excerpt, terms, hints
-            )
+            score, reasons = _score(path, item["kind"], item["name"], excerpt, terms, hints)
             if score < 7:
                 continue
             ranked.append(
