@@ -635,7 +635,8 @@ export default function LeanExplorerPage() {
     item.path === selected.path && item.name === selected.name);
   const hasExplanation = !!dossier?.entries.some(item => item.mode === 'explain');
   const ready = scope.length > 0 && !loadingFile && !loadingDeclaration && !running
-    && !localIndexing && !scopeBusy && !!config?.available && !!model && !!proofMap;
+    && !discovering && !localIndexing && !scopeBusy
+    && !!config?.available && !!model && !!proofMap;
   const selectedEntries = dossier?.entries.filter(item =>
     item.source.name === selectedName && item.source.path === file?.path) ?? [];
   const matchedDossiers = dossierList.filter(item =>
@@ -657,13 +658,13 @@ export default function LeanExplorerPage() {
     <section className="leanx-workflow" aria-label="Lean Explorer workflow">
       <div className="leanx-workflow-title">
         <strong>Exploring {sectionName}</strong>
-        <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'}
+        <span className={running || discovering || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'}
           aria-label={running || localIndexing ? 'Working' : 'Idle'}/>
       </div>
       <ol className="leanx-paper-steps">
         {THINKING_STEPS.map((item, index) =>
           <li key={item.name} className={stageCompletion[index] ? 'is-past' :
-            index === activeStep ? (running || localIndexing ? 'is-active' : 'is-current') : 'is-upcoming'}>
+            index === activeStep ? (running || discovering || localIndexing ? 'is-active' : 'is-current') : 'is-upcoming'}>
             <span className="leanx-stage-marker" aria-hidden="true">{stageCompletion[index] ? '✓' : '○'}</span>
             <strong>{item.name}</strong>
           </li>
@@ -672,7 +673,7 @@ export default function LeanExplorerPage() {
       <p className="leanx-thinking-prompt"><strong>Consider:</strong> {currentThought.question}</p>
       <div className="leanx-workflow-status" role="status">
         {localIndexing
-          ? `Discovering modules: ${scanCount.files.toLocaleString()} Lean files in ${scanCount.dirs.toLocaleString()} directories`
+          ? `Indexing: ${scanCount.files.toLocaleString()} Lean files in ${scanCount.dirs.toLocaleString()} directories`
           : running ? `${stage} · ${Math.floor(elapsed / 60)}m ${String(elapsed % 60).padStart(2, '0')}s` : stage}
       </div>
     </section>
@@ -704,9 +705,16 @@ export default function LeanExplorerPage() {
     <section className="leanx-evidence-scope" aria-label="Selected Lean evidence for this section">
       <div className="leanx-scope-heading">
         <strong>Lean evidence scope · {scope.length} declaration{scope.length === 1 ? '' : 's'}</strong>
-        <button type="button" onClick={() => setShowBrowser(true)}>
-          Find Lean evidence
-        </button>
+        <div className="leanx-scope-actions">
+          <button type="button" className="leanx-primary-action"
+            disabled={!localSource || sourceMode !== 'local' || !proofMap || !sectionId
+              || discovering || running || localIndexing || scopeBusy || !!dossier?.paper_project}
+            onClick={() => void exploreSection()}>
+            {discovering ? 'Exploring…' : 'Explore section'}
+          </button>
+          {(discovering || running) && <button type="button" onClick={stopAnalysis}>Stop</button>}
+          <button type="button" onClick={() => setShowBrowser(true)}>Find Lean evidence manually</button>
+        </div>
       </div>
       {selected && <div className="leanx-scope-candidate">
         <span>Current declaration: <code>{selected.name}</code> · {selected.path}</span>
@@ -716,6 +724,15 @@ export default function LeanExplorerPage() {
             {scopeBusy ? 'Saving…' : 'Include in section'}
           </button>}
       </div>}
+      {dossier?.discovery && <p className="leanx-discovery-summary">
+        Automatic lexical discovery scanned {dossier.discovery.scanned_files.toLocaleString()} of
+        {' '}{dossier.discovery.total_files.toLocaleString()} indexed Lean files, with
+        {' '}{dossier.discovery.matching_declarations.toLocaleString()} possible matches.
+        {dossier.discovery.unreadable_files > 0 &&
+          ' Unreadable files: ' + dossier.discovery.unreadable_files.toLocaleString() + '.'}
+        {!dossier.discovery.complete && ' This is a partial repository scan.'}
+        {' '}Matches are candidates, not verified mathematical dependencies.
+      </p>}
       {scope.length > 0 ? <ul className="leanx-scope-list">
         {scope.map(item => <li key={item.path + ':' + item.name}>
           <span><strong>{item.name}</strong> <small>{item.path}</small></span>
@@ -725,8 +742,8 @@ export default function LeanExplorerPage() {
         </li>)}
       </ul> :
         <p className="leanx-scope-empty">
-          No Lean declarations selected yet. Use Find Lean evidence, inspect a declaration,
-          then include it here. Sections can draw from unrelated files.
+          Click Explore section to search the indexed Lean root and automatically collect
+          candidate declarations. You can refine the selection afterward if needed.
         </p>}
     </section>
 
@@ -927,8 +944,8 @@ export default function LeanExplorerPage() {
             <span>{config ? (config.available ? `${config.models.find(item => item.id === model)?.label ?? model} · ${effort}` : config.message) : 'Reading selected AI connection…'}</span>
           </div>
           <p className="leanx-map-provenance">
-            The investigation uses the selected section scope ({scope.length} exact declarations), not the entire repository.
-            Section membership and mathematical connections remain research hypotheses.
+            Investigation uses the selected {scope.length} Lean declarations.
+            Automatically discovered candidates and mathematical connections are hypotheses, not verified Lean dependencies.
           </p>
           <div className="leanx-markdown-editor">
             <div className="leanx-markdown-toolbar">
