@@ -3867,37 +3867,59 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
                 },
             )
 
-        task = asyncio.create_task(
-            asyncio.to_thread(
-                lean_explorer_discovery.discover,
-                body.section_id,
-                progress,
-                start_offset=start_offset,
-            )
-        )
+        active: asyncio.Task | None = None
+        offset = start_offset
         try:
-            while not task.done():
-                try:
-                    update = await asyncio.wait_for(queue.get(), timeout=0.5)
-                    yield _lean_sse(update)
-                except TimeoutError:
-                    continue
-            result = await task
-            yield _lean_sse(
-                {
-                    "type": "stage",
-                    "stage": "saving",
-                    "label": "Verifying candidate source excerpts and recording section scope",
-                }
-            )
-            updated = await run_in_threadpool(
-                lean_explorer_dossiers.apply_discovery, body.dossier_id, result
-            )
-            yield _lean_sse({"type": "complete", "discovery": result, "dossier": updated})
+            while True:
+                active = asyncio.create_task(
+                    asyncio.to_thread(
+                        lean_explorer_discovery.discover,
+                        body.section_id,
+                        progress,
+                        start_offset=offset,
+                    )
+                )
+                while not active.done():
+                    try:
+                        update = await asyncio.wait_for(queue.get(), timeout=0.5)
+                        yield _lean_sse(update)
+                    except TimeoutError:
+                        continue
+                result = await active
+                if cancelled.is_set():
+                    return
+                yield _lean_sse(
+                    {
+                        "type": "stage",
+                        "stage": "saving",
+                        "label": "Saving source-verified Lean evidence and a scan checkpoint",
+                    }
+                )
+                updated = await run_in_threadpool(
+                    lean_explorer_dossiers.apply_discovery, body.dossier_id, result
+                )
+                if result["complete"]:
+                    yield _lean_sse(
+                        {"type": "complete", "discovery": result, "dossier": updated}
+                    )
+                    return
+                next_offset = result["next_offset"]
+                if next_offset <= offset:
+                    raise ProjectError("Lean discovery made no forward progress.")
+                offset = next_offset
+                yield _lean_sse(
+                    {
+                        "type": "stage",
+                        "stage": "discovery",
+                        "label": f"Continuing Lean evidence discovery at file {offset:,}",
+                    }
+                )
         except (ProjectError, OSError, UnicodeError, ValueError) as exc:
             yield _lean_sse({"type": "error", "error": str(exc)})
         finally:
             cancelled.set()
+            if active is not None and not active.done():
+                active.cancel()
 
     return StreamingResponse(
         events(),
@@ -4216,7 +4238,7 @@ async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
             raise
         except ProjectError as exc:
             yield _lean_sse({"type": "error", "error": str(exc)})
-        except Exception as exc:  # noqa: BLE001 - SSE must report post-200 failures
+        except Exception as exc:
             logging.getLogger(__name__).exception(
                 "Lean Explorer investigation failed after starting its SSE response"
             )
