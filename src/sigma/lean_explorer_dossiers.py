@@ -437,30 +437,51 @@ def apply_discovery(identifier: str, discovery: dict) -> dict:
             scoped.append(item)
             existing.add(identity)
             inserted += 1
+        previous = record.get("discovery") or {}
+        continued = (
+            previous.get("root_id") == source_id
+            and previous.get("next_offset") == discovery["start_offset"]
+            and not previous.get("complete")
+        )
+        if discovery["start_offset"] and not continued:
+            raise ProjectError("The discovery checkpoint changed. Restart this section scan.")
+        old = previous if continued else {}
+        cumulative_candidates = old.get("candidates", []) + [
+            {
+                "path": item["path"],
+                "name": item["name"],
+                "score": item["relevance_score"],
+                "reasons": item["selection_reasons"],
+            }
+            for item in accepted
+        ]
+        seen_candidates = set()
+        deduplicated = []
+        for item in cumulative_candidates:
+            identity = (item["path"], item["name"])
+            if identity in seen_candidates:
+                continue
+            seen_candidates.add(identity)
+            deduplicated.append(item)
         record["discovery"] = {
-            **{
-                key: discovery[key]
-                for key in (
-                    "index_type",
-                    "scanned_files",
-                    "total_files",
-                    "complete",
-                    "unreadable_files",
-                    "matching_declarations",
-                    "candidate_declarations",
-                    "warning",
-                )
-            },
-            "selected": inserted,
-            "candidates": [
-                {
-                    "path": item["path"],
-                    "name": item["name"],
-                    "score": item["relevance_score"],
-                    "reasons": item["selection_reasons"],
-                }
-                for item in accepted
-            ],
+            "root_id": source_id,
+            "index_type": discovery["index_type"],
+            "scanned_files": old.get("scanned_files", 0) + discovery["scanned_files"],
+            "total_files": discovery["total_files"],
+            "complete": discovery["complete"],
+            "next_offset": discovery["next_offset"],
+            "unreadable_files": (
+                old.get("unreadable_files", 0) + discovery["unreadable_files"]
+            ),
+            "matching_declarations": (
+                old.get("matching_declarations", 0) + discovery["matching_declarations"]
+            ),
+            "candidate_declarations": (
+                old.get("candidate_declarations", 0) + discovery["candidate_declarations"]
+            ),
+            "warning": discovery["warning"],
+            "selected": old.get("selected", 0) + inserted,
+            "candidates": deduplicated[:MAX_SCOPE_DECLARATIONS],
         }
         return True
 
