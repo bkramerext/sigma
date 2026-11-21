@@ -1,0 +1,859 @@
+/* Lean Explorer — preserve SIGMA header language; prioritize proof reading. */
+.brainstorm-workspace { min-height: 100dvh; overflow-y: auto; }
+.brainstorm-workspace .chat-page.leanx-ui {
+  box-sizing: border-box; width: calc(100% - 72px); min-width: 0;
+  max-width: none; margin: 0 auto 40px; padding: 0;
+  color: #f0e6d7;
+}
+.brainstorm-workspace .chat-error { margin: 12px 0; color: #ffb3a6; }
+/* Keep the Project header's content-sized geometry. The decorative
+   SIGMA background in workspace.css scales proportionally with header height.
+   Do not reserve excess vertical space for the shorter Brainstorm pill stack. */
+@media (min-width: 1201px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 470px) minmax(0, 1fr) max-content;
+    gap: 24px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 330px);
+    max-width: 330px;
+    justify-self: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    box-sizing: border-box;
+    height: auto;
+    min-height: 0;
+    padding-top: 13px;
+    padding-bottom: 13px;
+  }
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+  min-width: 0;
+  padding-top: 6px;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-eyebrow {
+  margin: 0 0 4px;
+  color: #c99a66;
+  font-size: .78rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy h1 {
+  margin: 0;
+  color: #f0e6d7;
+  font-size: clamp(1.45rem, 2vw, 2.1rem);
+  line-height: 1.2;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+  margin: 6px 0 0;
+  color: #c4b9aa;
+  font-size: .88rem;
+  line-height: 1.45;
+}
+@media (min-width: 1800px) {
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+    white-space: nowrap;
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  align-items: start;
+  /* Center the pill stack within the content-sized header row, preserving
+     balanced top and bottom insets without making the header taller. */
+  align-self: center;
+  justify-self: end;
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  justify-content: end;
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    transform: translateX(16px);
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack {
+  grid-area: identity;
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: max-content max-content;
+  row-gap: var(--sigma-project-pill-row-gap);
+  justify-items: end;
+  align-items: start;
+  width: max-content;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection {
+  grid-area: auto;
+  position: relative;
+  contain: none;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection > summary {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0 0 0 auto;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column {
+  grid-area: model-column;
+  display: flex;
+  align-items: flex-start;
+  justify-content: end;
+  min-width: 0;
+  pointer-events: auto;
+}
+/* Home reserves a second row beneath its Model column using padding.
+   Brainstorm has no About/Settings row there: remove the reservation. */
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column .global-model-pill-position {
+  display: inline-flex;
+  position: static;
+  margin: 0;
+}
+@media (min-width: 701px) and (max-width: 1200px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 330px) minmax(0, 1fr);
+    gap: 12px 20px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 330px);
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media (max-width: 700px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(34vw, 175px) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    width: 100%;
+    margin-left: -20px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+  }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+/* Keep the title column outside the decorative artwork layer.
+   The shared project/session header paints its background artwork across
+   min(29vw, 470px); shrinking only the grid column placed text underneath it. */
+@media (min-width: 1201px) {
+  .workspace-page.brainstorm-workspace.lean-explorer-page .project-art-header.chat-site-header {
+    grid-template-columns: min(29vw, 470px) minmax(0, 1fr) max-content;
+    gap: 24px;
+  }
+  .workspace-page.brainstorm-workspace.lean-explorer-page .chat-site-header .project-header-art {
+    width: min(29vw, 330px);
+  }
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+  max-width: 630px; white-space: normal;
+}
+.leanx-ui {
+  --leanx-line: #534735; --leanx-muted: #ab9f91; --leanx-link: #eec08b;
+  min-width: 0;
+}
+.leanx-ui a { color: var(--leanx-link); text-decoration: none; }
+.leanx-ui a:hover { text-decoration: underline; }
+.leanx-ui button { cursor: pointer; color: #ede2d2; font: inherit; }
+.leanx-ui button:disabled { opacity: .48; cursor: default; }
+.leanx-ui :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid #ddb180; outline-offset: 2px;
+}
+.leanx-ui :is(input:not([type=checkbox]), select, textarea) {
+  box-sizing: border-box; min-width: 0; padding: 8px 10px;
+  background: #131210; border: 1px solid #71583f; border-radius: 6px;
+  color: #f0e6d7; font: inherit;
+}
+.leanx-ui :is(button:not(.leanx-declaration-list button, .leanx-module-list button, .leanx-dossier-entries button)) {
+  border: 1px solid #71583f; background: #131b21; border-radius: 6px;
+  padding: 7px 12px; font-size: .82rem;
+}
+.leanx-ui button:hover:not(:disabled) { background: #30281f; }
+
+/* A single compact toolbox row. Optional panels do not occupy permanent columns. */
+.leanx-compact-controls { min-width: 0; }
+.leanx-tool-tabs {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 9px 0 0; padding-bottom: 10px; border-bottom: 1px solid #4c453e;
+}
+.leanx-ui .leanx-tool-tabs button {
+  color: #c8b9a8; background: transparent; border-color: transparent;
+  padding: 6px 10px; text-align: left;
+  max-width: 100%; overflow-wrap: anywhere;
+}
+.leanx-ui .leanx-tool-tabs button:hover,
+.leanx-ui .leanx-tool-tabs button[aria-expanded="true"] {
+  color: #f0c68f; background: #28241f; border-color: #735439;
+}
+.leanx-tool-body {
+  padding: 14px 0 16px; border-bottom: 1px solid #4c453e;
+}
+.leanx-section, .leanx-pane {
+  box-sizing: border-box; min-width: 0; border: 1px solid #5d4d3b;
+  border-radius: 8px; background: #141a1c; overflow: hidden;
+}
+.leanx-tool-body .leanx-section,
+.leanx-tool-body .leanx-pane { border-color: #4d483f; }
+.leanx-section { padding: 14px 18px; }
+.leanx-section-heading, .leanx-pane-title {
+  display: flex; justify-content: space-between; align-items: baseline;
+  flex-wrap: wrap; gap: 8px;
+}
+.leanx-section-heading { padding: 0 0 10px; }
+.leanx-section-heading h2, .leanx-pane-title h2 {
+  color: #f2c48d; margin: 0; font-size: .94rem; line-height: 1.4; font-weight: 600;
+}
+.leanx-section-heading span, .leanx-pane-title > span {
+  color: #ad9f90; font-size: .75rem;
+}
+.leanx-pane-title { padding: 13px 17px; border-bottom: 1px solid #48423b; }
+.leanx-formal-input label, .leanx-supplement strong,
+.leanx-dossier-pane label, .leanx-objective-label {
+  color: #e7ba86; font-size: .8rem; font-weight: 600;
+}
+.leanx-mode-select { display: block; min-width: 185px; margin: 7px 0; }
+.leanx-input-row { display: flex; align-items: stretch; flex-wrap: wrap; gap: 9px; margin: 8px 0; }
+.leanx-input-row input { flex: 1 1 360px; }
+.leanx-local-hint, .leanx-pane-footer, .leanx-source-line {
+  color: var(--leanx-muted); font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere;
+}
+.leanx-local-hint { margin: 6px 0; }
+.leanx-local-hint code, .leanx-source-line code {
+  color: #ddc1a0; font-family: ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.leanx-source-line { display: flex; flex-wrap: wrap; gap: 5px 18px; margin: 7px 0; }
+.leanx-supplement {
+  display: grid; gap: 7px; border-top: 1px solid #464039;
+  padding-top: 11px; margin-top: 13px;
+}
+.leanx-supplement label { display: flex; align-items: start; gap: 8px; font-size: .8rem; }
+.leanx-supplement input[type=checkbox] { width: 15px; height: 15px; margin: 3px 0 0; accent-color: #ba8859; }
+.leanx-local-progress { margin: 8px 0; color: #a4ddae; font-size: .79rem; }
+
+/* File and declaration navigation appears only on demand. */
+.leanx-browser-tool .leanx-declarations {
+  display: grid; grid-template-columns: minmax(210px, 35%) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(160px, auto) auto; align-items: start;
+  gap: 0 12px; padding: 0;
+}
+.leanx-browser-tool .leanx-module-navigator {
+  grid-column: 1; grid-row: 1 / 5; border-right: 1px solid #4d483f;
+  padding-bottom: 9px; min-width: 0;
+}
+.leanx-browser-tool .leanx-declarations > .leanx-pane-title { grid-column: 2; grid-row: 1; }
+.leanx-browser-tool .leanx-declarations > input { grid-column: 2; grid-row: 2; width: calc(100% - 24px); margin: 9px 12px; }
+.leanx-browser-tool .leanx-declaration-list { grid-column: 2; grid-row: 3; }
+.leanx-browser-tool .leanx-declarations > .leanx-pane-footer { grid-column: 2; grid-row: 4; }
+.leanx-browser-tool .leanx-declarations:not(:has(.leanx-module-navigator)) { display: block; }
+.leanx-module-search { display: flex; gap: 5px; margin: 10px; }
+.leanx-module-search input { flex: 1; width: 70px; }
+.leanx-module-list { max-height: 340px; overflow: auto; padding: 0 8px; }
+.leanx-declaration-list { max-height: 340px; overflow: auto; padding: 0 8px; }
+.leanx-module-list button, .leanx-declaration-list button, .leanx-dossier-entries button {
+  display: flex; width: 100%; align-items: start; gap: 7px;
+  padding: 7px 9px; border: 1px solid transparent; border-radius: 5px;
+  background: transparent; color: #ded1c0; font-size: .79rem; text-align: left;
+  overflow-wrap: anywhere;
+}
+.leanx-module-list button { font: .75rem/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.leanx-module-list button.is-selected, .leanx-declaration-list button.is-selected {
+  background: #30271f; color: #f0c68f; border-color: #72543c;
+}
+.leanx-declaration-kind { width: 40px; flex: none; color: #b7a188; font: .67rem ui-monospace,monospace; }
+.leanx-declaration-name { min-width: 0; flex: 1; }
+.leanx-declaration-line { font-size: .7rem; color: #9b8a7e; }
+.leanx-module-pager {
+  display: flex; gap: 6px; justify-content: space-between; align-items: center;
+  margin: 8px 10px; font-size: .7rem; color: var(--leanx-muted);
+}
+.leanx-pane-footer { padding: 10px 15px; border-top: 1px solid #48423b; }
+.leanx-empty { margin: 0; padding: 18px; color: var(--leanx-muted); font-size: .81rem; line-height: 1.6; }
+
+/* Live work is a small status row; verbose activity is expandable. */
+.leanx-progress-compact {
+  min-height: 38px; display: flex; flex-wrap: wrap; gap: 9px;
+  align-items: center; color: #b6a99b; font-size: .8rem;
+  padding: 8px 3px 10px;
+}
+.leanx-progress-stage { color: #d3beaa; }
+.leanx-ui .leanx-progress-compact button {
+  margin-left: auto; background: transparent; border-color: transparent;
+  color: #bfa88d; padding: 5px 9px; font-size: .76rem;
+}
+.leanx-live-dot { height: 9px; width: 9px; flex: none; background: #82756a; border-radius: 50%; }
+.leanx-live-dot.is-active {
+  background: #73d589; box-shadow: 0 0 0 2px #73d58944; animation: leanx-pulse 1.35s ease-in-out infinite;
+}
+@keyframes leanx-pulse { 50% { opacity: .3; box-shadow: 0 0 0 5px #73d58922; } }
+@media (prefers-reduced-motion: reduce) { .leanx-live-dot.is-active { animation: none; } }
+.leanx-activity-expanded { margin: 0 0 14px; }
+.leanx-activity-log { list-style: none; margin: 0; padding: 2px 12px 12px; max-height: 190px; overflow: auto; }
+.leanx-activity-log li { display: flex; gap: 10px; padding: 7px; border-bottom: 1px solid #363c3d; font-size: .78rem; }
+.leanx-activity-icon { color: #bea68b; }
+.leanx-state-ok .leanx-activity-icon { color: #72cf8e; }
+.leanx-state-error .leanx-activity-icon { color: #ef8a78; }
+.leanx-activity-log small { display: block; color: #958b80; font-size: .68rem; }
+.leanx-stage { color: #d3b898; padding: 12px 15px 5px; }
+.leanx-running-time { color: #b6a99b; padding: 0 15px 7px; }
+
+/* The mathematical proof and interpretation occupy the entire content width. */
+.leanx-primary-reading { width: 100%; min-width: 0; }
+.leanx-reading-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.leanx-source-code pre {
+  box-sizing: border-box; width: 100%; max-height: min(47vh, 620px);
+  margin: 0; padding: 19px 22px; overflow: auto; background: #0b1117;
+  color: #e2daca; font: 13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;
+  white-space: pre;
+}
+.leanx-source-code .leanx-pane-title a { font-size: .8rem; }
+.leanx-analysis-pane { padding-bottom: 19px; }
+.leanx-operation-controls {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  padding: 14px 18px 12px;
+}
+.leanx-ui .leanx-operation-controls .leanx-primary-action {
+  background: #80512c; border-color: #b7814f; color: #fff5e8; font-weight: 600;
+}
+.leanx-operation-controls > span { color: #a99f93; font-size: .77rem; margin-left: auto; }
+.leanx-objective-details { padding: 13px 18px 0; }
+.leanx-objective-details summary { cursor: pointer; font-size: .78rem; color: #c4ab8e; }
+.leanx-objective-details textarea { display: block; width: 100%; margin: 9px 0 0; min-height: 76px; resize: vertical; }
+.leanx-explanation {
+  padding: 15px 25px; border-top: 1px solid #443d35;
+  line-height: 1.7; color: #f0e9df; overflow-wrap: anywhere;
+}
+.leanx-explanation :is(pre, code) { max-width: 100%; }
+.leanx-explanation pre { overflow-x: auto; background: #0b1117; padding: 12px; }
+.leanx-explanation p { margin: 8px 0 12px; }
+.leanx-evidence-detail { margin: 5px 18px; padding: 10px 12px; border: 1px solid #50483c; border-radius: 6px; font-size: .75rem; }
+.leanx-evidence-detail summary { color: #d6b795; cursor: pointer; }
+.leanx-evidence-detail p { overflow-wrap: anywhere; }
+.leanx-existing { margin: 8px 18px; font-size: .74rem; color: var(--leanx-muted); }
+
+/* Durable dossier is a tool, not a permanent third column. */
+.leanx-dossier-pane { padding-bottom: 14px; }
+.leanx-dossier-pane label { display: block; margin: 12px 15px 6px; }
+.leanx-dossier-select-row { display: flex; align-items: center; gap: 8px; margin: 0 15px; }
+.leanx-dossier-select-row select { flex: 1; }
+.leanx-download-link { display: inline-block; margin: 12px 15px; font-size: .8rem; }
+.leanx-dossier-entries { margin: 0 15px; max-height: 200px; overflow: auto; }
+.leanx-dossier-entries button { display: block; border-bottom: 1px solid #3c3e3b; }
+.leanx-dossier-entries small { display: block; color: #9c9086; font-size: .7rem; }
+.leanx-dossier-pane textarea { display: block; width: calc(100% - 30px); margin: 0 15px 8px; resize: vertical; }
+.leanx-dossier-pane > button { margin: 0 15px; }
+.leanx-boundary {
+  margin: 17px 0 0; padding-top: 9px; border-top: 1px solid #3b3e3b;
+  color: #8e8377; font-size: .73rem; line-height: 1.55;
+}
+@media (max-width: 1000px) {
+  .leanx-browser-tool .leanx-declarations { display: block; }
+  .leanx-browser-tool .leanx-module-navigator { border-right: 0; border-bottom: 1px solid #4d483f; }
+}
+@media (max-width: 700px) {
+  .brainstorm-workspace .chat-page.leanx-ui { width: calc(100% - 28px); }
+  .leanx-tool-tabs { gap: 2px; }
+  .leanx-ui .leanx-tool-tabs button { font-size: .75rem; padding: 6px; }
+  .leanx-progress-compact { font-size: .72rem; }
+  .leanx-source-code pre { padding: 14px; }
+  .leanx-operation-controls > span { margin-left: 0; }
+}
+
+
+/* Paper-generation inspired Lean workflow: status steps above wide editors. */
+.workspace-page.brainstorm-workspace.lean-explorer-page {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-page.brainstorm-workspace.lean-explorer-page > .site-header {
+  flex: 0 0 auto;
+}
+.workspace-page.brainstorm-workspace.lean-explorer-page > .chat-page.leanx-ui {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  width: 100%;
+  max-width: none;
+  padding: 23px clamp(16px, 3.2vw, 54px) 64px;
+  margin: 0;
+}
+.leanx-workflow {
+  display: grid;
+  gap: 7px;
+  padding: 10px 0 15px;
+  border-bottom: 1px solid #3d4852;
+  color: #a9b9c6;
+}
+.leanx-workflow-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.leanx-workflow-title strong {
+  color: #e4ebf3;
+  font-size: 13px;
+}
+.leanx-paper-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px 19px;
+  padding: 0;
+  margin: 3px 0 0;
+  list-style: none;
+  font-size: 12px;
+}
+.leanx-paper-steps li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 1px 0;
+  color: #8294a2;
+}
+.leanx-paper-steps li strong { font-weight: 500; color: inherit; }
+.leanx-paper-steps li.is-past { color: #c4d5e2; }
+.leanx-paper-steps li.is-current, .leanx-paper-steps li.is-active {
+  color: var(--sigma-copper-foreground, #e5b579);
+}
+.leanx-stage-marker { width: 12px; display: inline-block; text-align: center; }
+.leanx-paper-steps li.is-past .leanx-stage-marker { color: #9ccaac; }
+.leanx-paper-steps li.is-active .leanx-stage-marker {
+  color: #55bd70;
+  animation: leanx-pulse 1.25s ease-in-out infinite;
+}
+.leanx-thinking-prompt {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 2px 0;
+  color: #c5d3df;
+}
+.leanx-thinking-prompt strong { color: #e8c399; font-weight: 600; }
+.leanx-workflow-status { color: #90a4b3; font-size: 11px; line-height: 1.4; }
+.leanx-activity-toggle { display: flex; justify-content: flex-end; }
+.leanx-ui .leanx-activity-toggle button {
+  color: #a9b9c6;
+  border: 0;
+  padding: 4px 9px;
+  background: transparent;
+}
+.leanx-ui .leanx-activity-toggle button:hover:not(:disabled) { text-decoration: underline; }
+
+/* Tree and section controls only show when the Sections disclosure is open. */
+.leanx-browser-tool .leanx-declarations {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.leanx-browser-tool .leanx-declarations > :is(.leanx-section-tree, .leanx-module-navigator) {
+  border: 0;
+  border-bottom: 1px solid #46515a;
+  padding-bottom: 12px;
+}
+.leanx-tree-disclaimer {
+  margin: 6px 14px;
+  color: #9daebb;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.leanx-tree-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px;
+  color: #bdcbd8;
+  font-size: 12px;
+}
+.leanx-tree-children { padding: 0 12px 8px; }
+.leanx-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 0;
+}
+.leanx-ui .leanx-tree-row > button:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  overflow-wrap: anywhere;
+  color: #d7e1ea;
+}
+.leanx-ui .leanx-tree-row > button:first-child:hover { background: #1b2b36; }
+.leanx-tree-row small { margin-left: 9px; color: #96aabc; font-size: 11px; }
+.leanx-ui .leanx-tree-row .leanx-tree-section-action {
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.leanx-current-section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  border-top: 1px solid #394550;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #d1dfeb;
+}
+.leanx-current-section strong { color: #eac394; }
+.leanx-section-prompt-label {
+  display: block;
+  padding: 8px 14px 3px;
+  color: #eac394;
+  font-size: 12px;
+}
+.leanx-section-tree textarea {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 28px);
+  margin: 3px 14px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.leanx-browser-tool .leanx-declarations > input {
+  width: calc(100% - 24px);
+  margin: 9px 12px;
+}
+.leanx-browser-tool .leanx-declaration-list {
+  max-height: 320px;
+}
+.leanx-browser-tool .leanx-module-list {
+  max-height: 240px;
+}
+
+/* Lean source, expository Markdown, notes: wide work areas below steps. */
+.leanx-primary-reading {
+  margin-top: 15px;
+}
+.leanx-source-code .leanx-lean-source-editor {
+  width: 100%;
+  min-height: 180px;
+  height: clamp(190px, 32vh, 440px);
+  resize: vertical;
+  margin: 0;
+  padding: 18px 22px;
+  border: 0;
+  border-radius: 0;
+  background: #0b1117;
+  color: #dce4e9;
+  font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+  overflow: auto;
+}
+.leanx-markdown-editor { padding: 3px 18px 13px; }
+.leanx-markdown-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 3px 0 9px;
+}
+.leanx-markdown-toolbar label {
+  color: #dbe6ee;
+  font-size: 12px;
+  font-weight: 600;
+}
+.leanx-ui .leanx-markdown-editor textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 260px;
+  height: clamp(280px, 43vh, 650px);
+  resize: vertical;
+  color: #dce7ef;
+  background: #0c131a;
+  font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: auto;
+  white-space: pre-wrap;
+  padding: 16px;
+}
+.leanx-markdown-editor small { display: block; color: #edc18b; margin-top: 6px; }
+.leanx-markdown-preview { margin: 13px 0 0; }
+.leanx-markdown-preview summary {
+  cursor: pointer;
+  color: #d5b387;
+  font-size: 12px;
+}
+.leanx-markdown-preview .leanx-explanation {
+  margin-top: 10px;
+  border: 1px solid #45525c;
+  border-radius: 5px;
+}
+.leanx-ui .leanx-notes-pane textarea {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  margin: 15px 16px 10px;
+  min-height: 155px;
+  resize: vertical;
+  line-height: 1.7;
+}
+.leanx-notes-action { padding: 0 16px 15px; }
+.leanx-section-warning {
+  margin: 0 18px 10px;
+  padding: 9px 12px;
+  border-left: 2px solid #c3986b;
+  font-size: 12px;
+  color: #ecd5b5;
+  background: #292218;
+}
+@media (max-width: 740px) {
+  .workspace-page.brainstorm-workspace.lean-explorer-page > .chat-page.leanx-ui {
+    padding: 14px 15px 42px;
+  }
+  .leanx-paper-steps { gap: 3px 10px; }
+  .leanx-thinking-prompt { font-size: 11px; }
+  .leanx-markdown-editor { padding: 3px 12px 12px; }
+  .leanx-source-code .leanx-lean-source-editor { padding: 12px; }
+}
+
+
+/* Mathematical proof map: conceptual sections are not filesystem directories. */
+.leanx-conceptual-map {
+  border-bottom: 1px solid #3d4852;
+  padding: 12px 0 14px;
+}
+.leanx-map-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px 16px;
+  margin-bottom: 9px;
+  font-size: 12px;
+}
+.leanx-map-heading strong { color: #e7ecf0; font-weight: 600; }
+.leanx-map-heading span { color: #97a7b5; font-size: 11px; }
+.leanx-map-heading a { font-size: 11px; }
+.leanx-map-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px 8px;
+}
+.leanx-ui .leanx-map-section {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.45;
+  border-radius: 5px;
+  background: #101b24;
+  border: 1px solid #394956;
+  color: #cad5df;
+}
+.leanx-ui .leanx-map-section[aria-pressed="true"] {
+  border-color: #a77b4d;
+  background: #2b261f;
+  color: #eed3b4;
+}
+.leanx-map-number {
+  color: #b89b7d;
+  font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.leanx-map-saved { margin-left: auto; color: #78c995; font-size: 10px; }
+.leanx-map-focus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 10px;
+  color: #b9c9d7;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.leanx-map-focus p { margin: 0; }
+.leanx-map-focus p:first-child { flex-basis: 100%; }
+.leanx-map-focus p strong { color: #e6bf8e; }
+.leanx-map-links {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  flex-basis: 100%;
+  font-size: 11px;
+}
+.leanx-map-links > span { color: #889aab; }
+.leanx-ui .leanx-map-links button {
+  background: transparent;
+  border: 0;
+  padding: 0 3px;
+  color: #beab93;
+  font-size: 11px;
+}
+.leanx-map-provenance {
+  margin: 0 19px 10px;
+  color: #9caebe;
+  font-size: 11px;
+  line-height: 1.5;
+}
+@media (max-width: 1080px) {
+  .leanx-map-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .leanx-map-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+
+/* Workflow-first controls: sections select a research scope, not a diagram. */
+.leanx-section-selection {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid #3d4852;
+}
+.leanx-section-selection-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.leanx-section-selection-line label {
+  color: #e8c497;
+  font-size: 12px;
+  font-weight: 600;
+}
+.leanx-section-selection-line select {
+  flex: 1 1 330px;
+  max-width: 660px;
+  font-size: 12px;
+}
+.leanx-section-selection-line .leanx-section-provenance,
+.leanx-section-selection-line a {color: #a3b4c1; font-size: 11px;}
+.leanx-section-selection p {margin: 3px 0; font-size: 12px; line-height: 1.5; color: #d3dce3;}
+.leanx-section-selection .leanx-section-purpose {color: #9eafbf; font-size: 11px;}
+.leanx-evidence-scope {padding: 12px 0; border-bottom: 1px solid #3d4852;}
+.leanx-scope-heading {display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between;}
+.leanx-scope-heading strong {color: #e7edf2; font-size: 12px;}
+.leanx-ui .leanx-scope-heading button {background: transparent; border-color: transparent; color: #e0b78a; font-size: 11px;}
+.leanx-scope-candidate {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin-top: 7px;
+  color: #bfcbd5;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.leanx-scope-candidate code {color: #ecd0aa;}
+.leanx-scope-candidate > span:nth-child(2) {color: #81cfa3;}
+.leanx-ui .leanx-scope-candidate button,
+.leanx-ui .leanx-scope-list button {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-color: #495867;
+  background: transparent;
+}
+.leanx-scope-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.leanx-scope-list li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  padding: 4px 7px;
+  border: 1px solid #394650;
+  border-radius: 6px;
+  background: #111b24;
+  color: #d8e2e9;
+  font-size: 11px;
+}
+.leanx-scope-list li strong {font-weight: 600;}
+.leanx-scope-list li small {margin-left: 6px; color: #94a9b7; font-size: 10px;}
+.leanx-scope-empty {margin: 7px 0 0; color: #9aabb8; font-size: 11px; line-height: 1.5;}
+.leanx-paper-stage {
+  border: 1px solid #4d555f;
+  border-radius: 8px;
+  background: #141a1c;
+  margin-top: 14px;
+  padding-bottom: 14px;
+}
+.leanx-paper-stage > p {
+  color: #b5c4ce;
+  margin: 10px 16px 13px;
+  max-width: 900px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.leanx-paper-actions {display: flex; align-items: center; flex-wrap: wrap; gap: 9px 15px; margin: 0 16px;}
+.leanx-ui .leanx-paper-actions button {
+  background: #80512c;
+  border: 1px solid #b7814f;
+  color: #fff1db;
+  padding: 7px 14px;
+}
+.leanx-paper-actions span {font-size: 11px; color: #8bc99e;}
+@media (max-width: 650px) {
+  .leanx-scope-list {display: block;}
+  .leanx-scope-list li {margin: 5px 0;}
+}

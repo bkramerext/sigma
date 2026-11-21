@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from dataclasses import asdict, replace
@@ -39,6 +40,10 @@ from sigma import (
     cloud_demo,
     cloud_research,
     cloud_workspaces,
+    lean_explorer,
+    lean_explorer_dossiers,
+    lean_explorer_local,
+    lean_explorer_map,
     memory_guard,
     paper_scores,
     papers,
@@ -3647,6 +3652,477 @@ async def chat_supervisor_view(body: ChatSupervisorRequest):
     )
     return JSONResponse(
         chat_supervisor.parse_assessment(raw), headers={"Cache-Control": "no-store"}
+    )
+
+
+# Lean Explorer reads actual pinned source; it does not infer formal dependencies.
+class LeanAnalysisRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    formal_path: str = Field(default=lean_explorer.DEFAULT_PATH, max_length=240)
+    source_mode: Literal["mirror", "local"] = "mirror"
+    declaration: str = Field(min_length=1, max_length=240)
+    include_guide: bool = True
+    include_announcement: bool = True
+    model: str = Field(min_length=1, max_length=100)
+    reasoning_effort: Literal["low", "medium", "high", "xhigh"]
+    objective: str = Field(
+        default="Explain this declaration and its precise mathematical role "
+        "in an expository reconstruction of Alpöge's announced RH proof.",
+        min_length=1,
+        max_length=6000,
+    )
+    dossier_id: str | None = None
+
+
+class LeanDossierCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["mirror", "local"] = "mirror"
+    section_path: str = Field(default="", max_length=800)
+    section_title: str = Field(default="", max_length=180)
+    section_focus: str = Field(default="", max_length=6000)
+    section_id: str = Field(default="", max_length=80)
+
+
+class LeanLocalDirectoryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    directory: str = Field(min_length=1, max_length=4096)
+
+
+class LeanDossierEntryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["mirror", "local"] = "mirror"
+    formal_path: str = Field(max_length=240)
+    declaration: str = Field(min_length=1, max_length=240)
+    text: str = Field(min_length=1, max_length=24000)
+
+
+class LeanScopeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["mirror", "local"] = "mirror"
+    formal_path: str = Field(min_length=1, max_length=800)
+    declaration: str = Field(min_length=1, max_length=240)
+
+
+class LeanPaperHandoffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["mirror", "local"] = "mirror"
+
+
+def _lean_sse(event: dict[str, Any]) -> str:
+    return "data: " + json.dumps(event) + "\n\n"
+
+
+def _require_local_lean_request(request: Request) -> None:
+    if (
+        not cloud_auth.config().local
+        or cloud_workspaces.enabled()
+        or request.client is None
+        or request.client.host not in {"127.0.0.1", "::1", "localhost"}
+        or request.url.hostname not in {"127.0.0.1", "localhost"}
+    ):
+        raise HTTPException(404, "Local Lean directory access is unavailable.")
+
+
+@app.get("/api/explorelean/local-status")
+def lean_explorer_local_status(request: Request):
+    _require_local_lean_request(request)
+    active = lean_explorer_local.source()
+    return JSONResponse(
+        {"configured": active is not None, "source": active},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/explorelean/local-files")
+def lean_explorer_local_files(
+    request: Request,
+    query: str = "",
+    offset: int = 0,
+    limit: int = 100,
+):
+    _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer_local.list_files(query=query, offset=offset, limit=limit),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/explorelean/local-index")
+async def lean_explorer_local_index(
+    request: Request,
+    body: LeanLocalDirectoryRequest,
+):
+    _require_local_lean_request(request)
+
+    async def events():
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "stage": "scanning",
+                "label": "Scanning local Lean directory",
+            }
+        )
+        loop = asyncio.get_running_loop()
+        events_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        cancelled = threading.Event()
+
+        def progress(dirs: int, files: int, current: str) -> None:
+            if cancelled.is_set():
+                raise ProjectError("Local Lean directory scan interrupted.")
+            loop.call_soon_threadsafe(
+                events_queue.put_nowait,
+                {
+                    "type": "progress",
+                    "stage": "scanning",
+                    "scanned_directories": dirs,
+                    "found_files": files,
+                    "current_directory": current,
+                },
+            )
+
+        task = asyncio.create_task(
+            asyncio.to_thread(lean_explorer_local.configure, body.directory, progress)
+        )
+        try:
+            while not task.done():
+                try:
+                    update = await asyncio.wait_for(events_queue.get(), timeout=0.4)
+                    yield _lean_sse(update)
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+            while not events_queue.empty():
+                yield _lean_sse(events_queue.get_nowait())
+            result = await task
+            yield _lean_sse({"type": "complete", "source": result})
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        except ProjectError as exc:
+            yield _lean_sse({"type": "error", "error": str(exc)})
+        finally:
+            if not task.done():
+                cancelled.set()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/api/explorelean/proof-map")
+def lean_explorer_proof_map():
+    return JSONResponse(lean_explorer_map.catalog(), headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/explorelean/inputs")
+def lean_explorer_inputs():
+    return JSONResponse(lean_explorer.catalog(), headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/explorelean/source")
+def lean_explorer_source(
+    request: Request,
+    kind: str = "formal",
+    path: str = lean_explorer.DEFAULT_PATH,
+    source_mode: Literal["mirror", "local"] = "mirror",
+):
+    if source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer.read_source(kind, path, source_mode=source_mode),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/explorelean/declarations")
+def lean_explorer_declarations(
+    request: Request,
+    path: str = lean_explorer.DEFAULT_PATH,
+    source_mode: Literal["mirror", "local"] = "mirror",
+):
+    if source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer.declarations(path, source_mode=source_mode),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/explorelean/declaration")
+def lean_explorer_declaration(
+    request: Request,
+    path: str,
+    name: str,
+    source_mode: Literal["mirror", "local"] = "mirror",
+):
+    if source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer.declaration(path, name, source_mode=source_mode),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/explorelean/dossiers")
+def lean_explorer_list_dossiers():
+    return JSONResponse(
+        lean_explorer_dossiers.list_dossiers(), headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.post("/api/explorelean/dossiers", status_code=201)
+def lean_explorer_create_dossier(request: Request, body: LeanDossierCreateRequest):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer_dossiers.create(
+            source_mode=body.source_mode,
+            section_path=body.section_path,
+            section_title=body.section_title,
+            section_focus=body.section_focus,
+            section_id=body.section_id,
+        ),
+        status_code=201,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/explorelean/dossiers/{identifier}")
+def lean_explorer_get_dossier(identifier: str):
+    return JSONResponse(
+        lean_explorer_dossiers.get(identifier),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/explorelean/dossiers/{identifier}/notes", status_code=201)
+def lean_explorer_add_note(
+    request: Request,
+    identifier: str,
+    body: LeanDossierEntryRequest,
+):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    entry = lean_explorer_dossiers.append(
+        identifier,
+        formal_path=body.formal_path,
+        declaration_name=body.declaration,
+        source_mode=body.source_mode,
+        mode="note",
+        text=body.text,
+    )
+    return JSONResponse(entry, status_code=201, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/explorelean/dossiers/{identifier}/scope")
+def lean_explorer_select_source(
+    request: Request,
+    identifier: str,
+    body: LeanScopeRequest,
+):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer_dossiers.select_declaration(
+            identifier,
+            formal_path=body.formal_path,
+            declaration_name=body.declaration,
+            source_mode=body.source_mode,
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.delete("/api/explorelean/dossiers/{identifier}/scope")
+def lean_explorer_deselect_source(
+    request: Request,
+    identifier: str,
+    body: LeanScopeRequest,
+):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer_dossiers.deselect_declaration(
+            identifier,
+            formal_path=body.formal_path,
+            declaration_name=body.declaration,
+            source_mode=body.source_mode,
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/explorelean/dossiers/{identifier}/paper-project")
+def lean_explorer_prepare_paper_project(
+    request: Request,
+    identifier: str,
+    body: LeanPaperHandoffRequest,
+):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    _limit_anonymous_demo_projects()
+    return JSONResponse(
+        lean_explorer_dossiers.prepare_paper_project(identifier, source_mode=body.source_mode),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/explorelean/dossiers/{identifier}/markdown")
+def lean_explorer_dossier_markdown(identifier: str):
+    content = lean_explorer_dossiers.markdown(identifier)
+    return Response(
+        content=content,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="lean-explorer-dossier.md"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.post("/api/explorelean/analyze")
+async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    config = await chat.configuration()
+    if not config["available"]:
+        raise HTTPException(503, config["message"] or "Connect an AI account before exploring.")
+    selected_model = next(
+        (item for item in config.get("models", []) if item.get("id") == body.model),
+        None,
+    )
+    if selected_model is None or body.reasoning_effort not in selected_model.get("efforts", []):
+        raise HTTPException(422, "Choose an available Model/Thinking setting.")
+
+    async def events():
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "stage": "source",
+                "label": "Retrieving actual Lean source and selected literature",
+            }
+        )
+        try:
+            if body.dossier_id:
+                current_dossier = await run_in_threadpool(
+                    lean_explorer_dossiers.get, body.dossier_id
+                )
+                if current_dossier.get("source_mode") != body.source_mode:
+                    raise ProjectError("Dossier does not match the chosen Lean source.")
+                if not current_dossier.get("scope"):
+                    raise ProjectError(
+                        "Select Lean declarations for this section before analyzing it."
+                    )
+                packet, sources, selected = await run_in_threadpool(
+                    lean_explorer.section_analysis_packet,
+                    current_dossier["scope"],
+                    source_mode=body.source_mode,
+                    include_guide=body.include_guide,
+                    include_announcement=body.include_announcement,
+                )
+            else:
+                packet, sources, selected = await run_in_threadpool(
+                    lean_explorer.analysis_packet,
+                    body.formal_path,
+                    body.declaration,
+                    source_mode=body.source_mode,
+                    include_guide=body.include_guide,
+                    include_announcement=body.include_announcement,
+                )
+            yield _lean_sse(
+                {
+                    "type": "stage",
+                    "stage": "interpreting",
+                    "label": f"Explaining {selected['name']} against source evidence",
+                    "source": {
+                        key: selected[key]
+                        for key in (
+                            "path",
+                            "name",
+                            "start_line",
+                            "end_line",
+                            "sha256",
+                            "commit",
+                            "complete",
+                        )
+                    },
+                }
+            )
+            task = asyncio.create_task(
+                chat.respond(
+                    speaker="ai_1",
+                    messages=[{"speaker": "human", "text": body.objective}],
+                    conversation_id=str(uuid4()),
+                    model=body.model,
+                    reasoning_effort=body.reasoning_effort,
+                    repeated_text=packet,
+                    instructions_override=lean_explorer.ANALYSIS_INSTRUCTIONS,
+                )
+            )
+            try:
+                while not task.done():
+                    done, _ = await asyncio.wait({task}, timeout=CHAT_HEARTBEAT_SECONDS)
+                    if not done:
+                        yield ": keepalive\n\n"
+                explanation = await task
+            finally:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+            entry = None
+            if body.dossier_id:
+                yield _lean_sse(
+                    {
+                        "type": "stage",
+                        "stage": "saving",
+                        "label": "Saving sourced explanation to the dossier",
+                    }
+                )
+                try:
+                    entry = await run_in_threadpool(
+                        lean_explorer_dossiers.append,
+                        body.dossier_id,
+                        formal_path=body.formal_path,
+                        declaration_name=body.declaration,
+                        source_mode=body.source_mode,
+                        mode="explain",
+                        text=explanation,
+                        supplementary_sources=sources[1:],
+                    )
+                except ProjectError as exc:
+                    yield _lean_sse(
+                        {
+                            "type": "complete",
+                            "text": explanation,
+                            "saved": False,
+                            "save_error": str(exc),
+                            "sources": sources,
+                        }
+                    )
+                    return
+            yield _lean_sse(
+                {
+                    "type": "complete",
+                    "text": explanation,
+                    "saved": entry is not None,
+                    "entry": entry,
+                    "sources": sources,
+                }
+            )
+        except asyncio.CancelledError:
+            raise
+        except ProjectError as exc:
+            yield _lean_sse({"type": "error", "error": str(exc)})
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
 

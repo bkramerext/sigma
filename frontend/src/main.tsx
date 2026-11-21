@@ -1,6 +1,7 @@
 import { Component, createContext, createElement, forwardRef, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
+import LeanExplorerPage from './LeanExplorerPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
 import SessionSettingsDialog, { defaultSessionSettings, type SessionSettings } from './SessionSettingsDialog';
@@ -6524,8 +6525,8 @@ function useEqualHeaderPillInsets() {
   return ref;
 }
 
-function Header({ goHome, homeHref = '/', close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, sessionPage = false, sessionTitle, sessionActions, sessionActivityStatus, sessionActivityHref, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; sessionActivityStatus?: string; sessionActivityHref?: string; onSessionTitleClick?: () => void; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
+function Header({ goHome, homeHref = '/', close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectActions, projectArtwork = false, chatPage = false, chatPageTitle = 'Brainstorm', chatPageDescription = 'Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.', sessionPage = false, sessionTitle, sessionActions, sessionActivityStatus, sessionActivityHref, onSessionTitleClick, connectionDisabled = false, researchRunning = false, paperRunning = false, paperQueued = false, askRunning = false, activeRunLabels = [], activityStatus, onIdleProjectTitleClick, onActivityClick }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void; homeHref?: string;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectActions?: React.ReactNode; projectArtwork?: boolean; chatPage?: boolean; chatPageTitle?: string; chatPageDescription?: string; sessionPage?: boolean; sessionTitle?: string; sessionActions?: React.ReactNode; sessionActivityStatus?: string; sessionActivityHref?: string; onSessionTitleClick?: () => void; connectionDisabled?: boolean; researchRunning?: boolean; paperRunning?: boolean; paperQueued?: boolean; askRunning?: boolean; activeRunLabels?: string[]; activityStatus?: 'active' | 'queued' | null; onIdleProjectTitleClick?: () => void; onActivityClick?: () => void }) {
   const cloud = useCloudIdentity();
   const showConnectionStatus = !cloud?.enabled || (cloud.authenticated && cloud.user?.role !== 'guest');
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
@@ -6622,12 +6623,12 @@ function Header({ goHome, homeHref = '/', close, projectTitle, projectType, proj
                 <span className="research-running-indicator"/>
               </a>}
           </span>
-        </span> : 'Brainstorm'}
+        </span> : chatPageTitle}
           {sessionPage && sessionActions}
           {sessionPage && <button type="button" className="session-page-close workspace-icon-button" aria-label="Close Session page" data-tooltip="Close Session page" onClick={() => close?.action()}>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
           </button>}</h1>
-        {!sessionPage && <p className="chat-description">Send a message to AI #1. AI #1 and AI #2 will alternate until you stop them.</p>}
+        {!sessionPage && <p className="chat-description">{chatPageDescription}</p>}
       </div>}
     </div>
     <div ref={headerPillsRef} className="header-controls">
@@ -10141,6 +10142,7 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
+  if (url.pathname === '/explorelean') return <><main className="workspace-page brainstorm-workspace lean-explorer-page"><Header goHome={goHome} projectArtwork chatPage chatPageTitle="Lean Explorer" chatPageDescription="Source-grounded exploration of the Alpöge Lean proof." close={{action: () => navigate('/'),busy: false}}/><LeanExplorerPage/><FloatingTooltip/></main></>;
   if (url.pathname === '/session') {
     const sessionId = url.searchParams.get('session_log') ?? '';
     const path = url.searchParams.get('path') ?? '';
