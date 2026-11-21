@@ -200,7 +200,7 @@ export default function LeanExplorerPage() {
     const section = proofMap?.sections.find(item => item.id === id);
     if (!section || running || discovering) return;
     setSectionId(id); setSectionPrompt(section.question);
-    setDossier(null); setNote(''); setDiscoveryCandidates([]);
+    setDossier(null); setNote('');
     setMarkdownDraft(''); setSavedMarkdown(''); setAnalysis(''); setAnalysisSources([]);
     log('Selected mathematical proof section: ' + section.title, 'ok');
   }
