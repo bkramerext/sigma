@@ -252,7 +252,9 @@ async def respond(
         raise ProjectError("A chat message must contain nonempty text.")
     if not isinstance(repeated_text, str):
         raise ProjectError("Repeated text must be a string.")
-    if instructions_override is not None and (session_supervision or speaker == "supervisor" or not instructions_override.strip()):
+    if instructions_override is not None and (
+        session_supervision or speaker == "supervisor" or not instructions_override.strip()
+    ):
         raise ProjectError("Custom instructions are only allowed for ordinary agent turns.")
     if session_supervision and speaker != "supervisor":
         raise ProjectError("Independent Session supervision requires the supervisor role.")
@@ -299,7 +301,9 @@ async def respond(
         "max_output_tokens": MAX_OUTPUT_TOKENS,
         "reasoning": {"effort": reasoning_effort},
         "instructions": (
-            session_supervisor.INSTRUCTIONS if session_supervision else (instructions_override or INSTRUCTIONS[speaker])
+            session_supervisor.INSTRUCTIONS
+            if session_supervision
+            else (instructions_override or INSTRUCTIONS[speaker])
         ),
         "input": [
             {
