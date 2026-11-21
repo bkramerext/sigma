@@ -754,3 +754,104 @@
 @media (max-width: 560px) {
   .leanx-map-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* Workflow-first controls: sections select a research scope, not a diagram. */
+.leanx-section-selection {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid #3d4852;
+}
+.leanx-section-selection-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.leanx-section-selection-line label {
+  color: #e8c497;
+  font-size: 12px;
+  font-weight: 600;
+}
+.leanx-section-selection-line select {
+  flex: 1 1 330px;
+  max-width: 660px;
+  font-size: 12px;
+}
+.leanx-section-selection-line .leanx-section-provenance,
+.leanx-section-selection-line a {color: #a3b4c1; font-size: 11px;}
+.leanx-section-selection p {margin: 3px 0; font-size: 12px; line-height: 1.5; color: #d3dce3;}
+.leanx-section-selection .leanx-section-purpose {color: #9eafbf; font-size: 11px;}
+.leanx-evidence-scope {padding: 12px 0; border-bottom: 1px solid #3d4852;}
+.leanx-scope-heading {display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between;}
+.leanx-scope-heading strong {color: #e7edf2; font-size: 12px;}
+.leanx-ui .leanx-scope-heading button {background: transparent; border-color: transparent; color: #e0b78a; font-size: 11px;}
+.leanx-scope-candidate {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin-top: 7px;
+  color: #bfcbd5;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.leanx-scope-candidate code {color: #ecd0aa;}
+.leanx-scope-candidate > span:nth-child(2) {color: #81cfa3;}
+.leanx-ui .leanx-scope-candidate button,
+.leanx-ui .leanx-scope-list button {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-color: #495867;
+  background: transparent;
+}
+.leanx-scope-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.leanx-scope-list li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  padding: 4px 7px;
+  border: 1px solid #394650;
+  border-radius: 6px;
+  background: #111b24;
+  color: #d8e2e9;
+  font-size: 11px;
+}
+.leanx-scope-list li strong {font-weight: 600;}
+.leanx-scope-list li small {margin-left: 6px; color: #94a9b7; font-size: 10px;}
+.leanx-scope-empty {margin: 7px 0 0; color: #9aabb8; font-size: 11px; line-height: 1.5;}
+.leanx-paper-stage {
+  border: 1px solid #4d555f;
+  border-radius: 8px;
+  background: #141a1c;
+  margin-top: 14px;
+  padding-bottom: 14px;
+}
+.leanx-paper-stage > p {
+  color: #b5c4ce;
+  margin: 10px 16px 13px;
+  max-width: 900px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.leanx-paper-actions {display: flex; align-items: center; flex-wrap: wrap; gap: 9px 15px; margin: 0 16px;}
+.leanx-ui .leanx-paper-actions button {
+  background: #80512c;
+  border: 1px solid #b7814f;
+  color: #fff1db;
+  padding: 7px 14px;
+}
+.leanx-paper-actions span {font-size: 11px; color: #8bc99e;}
+@media (max-width: 650px) {
+  .leanx-scope-list {display: block;}
+  .leanx-scope-list li {margin: 5px 0;}
+}
