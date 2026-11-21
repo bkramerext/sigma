@@ -47,9 +47,15 @@ type Declaration = {
 };
 type Citation = {kind: string; path: string; commit: string; url: string; sha256: string; complete: boolean};
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
+type DiscoveryInfo = {
+  index_type: string; scanned_files: number; total_files: number; complete: boolean;
+  unreadable_files: number; matching_declarations: number; selected: number;
+  warning: string;
+};
 type Dossier = {
   id: string; title: string; updated_at: string; entries: Entry[];
-  scope?: Declaration[]; paper_project?: {path: string; project_id: string} | null;
+  scope?: Declaration[]; discovery?: DiscoveryInfo;
+  paper_project?: {path: string; project_id: string} | null;
   source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
 };
 type DossierItem = {
@@ -60,7 +66,13 @@ type DossierItem = {
 };
 type AIConfig = {available: boolean; message: string; model: string; reasoning_effort: string; models: {id: string; label: string; efforts: string[]}[]};
 type Activity = {id: number; time: string; label: string; state: 'ok'|'working'|'error'|'note'};
-type Stage = {type: string; stage?: string; label?: string; error?: string; text?: string; saved?: boolean; save_error?: string; sources?: Citation[]};
+type Stage = {
+  type: string; stage?: string; label?: string; error?: string; text?: string;
+  saved?: boolean; save_error?: string; sources?: Citation[];
+  scanned?: number; total?: number; matches?: number; path?: string;
+  dossier?: Dossier;
+  discovery?: {scanned_files: number; total_files: number; matching_declarations: number; complete: boolean; candidates: unknown[]};
+};
 
 function explainError(err: unknown): string {return err instanceof Error ? err.message : String(err);}
 async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -129,6 +141,8 @@ export default function LeanExplorerPage() {
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [scopeBusy, setScopeBusy] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
+  const discoveryAbortRef = useRef<AbortController | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
@@ -300,7 +314,11 @@ export default function LeanExplorerPage() {
       } catch (cause) {if (!cancelled) setError(explainError(cause));}
     }
     void readModel();
-    return () => {cancelled = true; abortRef.current?.abort(); indexAbortRef.current?.abort(); document.title = oldTitle;};
+    return () => {
+      cancelled = true; abortRef.current?.abort();
+      indexAbortRef.current?.abort(); discoveryAbortRef.current?.abort();
+      document.title = oldTitle;
+    };
   }, [loadFile, loadModules, refreshDossiers]);
 
   useEffect(() => {
@@ -428,19 +446,93 @@ export default function LeanExplorerPage() {
     } finally {setHandoffBusy(false);}
   }
 
-  async function analyzeSelected() {
-    if (!dossier?.scope?.length || !config?.available || !model || busyRef.current || !proofMap) return;
+  async function exploreSection() {
+    if (!localSource || !sectionId || sourceMode !== 'local' || discovering
+      || running || localIndexing || scopeBusy || !!dossier?.paper_project) return;
+    if (markdownDraft.trim() && markdownDraft.trim() !== savedMarkdown) {
+      setError('Save or discard your current Markdown edits before a new exploration.');
+      return;
+    }
+    setDiscovering(true); setError(''); setStage('Discovering Lean evidence');
+    const controller = new AbortController(); discoveryAbortRef.current = controller;
+    try {
+      const dossierId = await ensureDossier();
+      const response = await fetch('/api/explorelean/discover', {
+        method: 'POST', signal: controller.signal, cache: 'no-store',
+        headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
+        body: JSON.stringify({source_mode: 'local', section_id: sectionId, dossier_id: dossierId}),
+      });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null) as {detail?: string} | null;
+        throw new Error(failure?.detail || 'Lean discovery failed (' + response.status + ')');
+      }
+      if (!response.body) throw new Error('The discovery stream is missing.');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = ''; let completed = false;
+      while (true) {
+        const {done, value} = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), {stream: !done});
+        const frames = buffer.split('\n\n'); buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+          const line = frame.split('\n').find(row => row.startsWith('data: '));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(6)) as Stage;
+          if (event.type === 'stage') {
+            setStage(event.label || 'Working');
+          } else if (event.type === 'progress') {
+            setStage('Scanned ' + (event.scanned ?? 0).toLocaleString() + ' / '
+              + (event.total ?? 0).toLocaleString() + ' Lean files; '
+              + (event.matches ?? 0).toLocaleString() + ' candidate matches');
+          } else if (event.type === 'error') {
+            throw new Error(event.error || 'Lean evidence discovery failed.');
+          } else if (event.type === 'complete' && event.dossier && event.discovery) {
+            completed = true;
+            setDossier(event.dossier);
+            await refreshDossiers();
+            const info = event.discovery;
+            log('Scanned ' + info.scanned_files.toLocaleString() + ' Lean files; '
+              + info.matching_declarations.toLocaleString() + ' lexical matches; '
+              + (event.dossier.scope?.length ?? 0) + ' selected evidence declarations', 'ok');
+            if (!info.complete)
+              log('Discovery is partial: the repository exceeds this pass limit.', 'note');
+            if (event.dossier.scope?.length) {
+              setStage('Lean candidates selected; investigating');
+              if (config?.available && model) await analyzeSelected(event.dossier);
+              else setStage('Evidence selected; connect AI to investigate');
+            } else {
+              setStage('No matching declarations found; expand discovery criteria');
+            }
+          }
+        }
+        if (done) break;
+      }
+      if (!completed) throw new Error('Discovery ended without a completed result.');
+    } catch (cause) {
+      if (controller.signal.aborted) {
+        setStage('Stopped'); log('Discovery stopped; prior evidence remains saved.', 'note');
+      } else {
+        setError(explainError(cause)); setStage('Discovery failed');
+      }
+    } finally {
+      discoveryAbortRef.current = null; setDiscovering(false);
+    }
+  }
+
+  async function analyzeSelected(override?: Dossier) {
+    const analysisDossier = override ?? dossier;
+    if (!analysisDossier?.scope?.length || !config?.available || !model || busyRef.current || !proofMap) return;
     busyRef.current = true; setError(''); setAnalysis(''); setAnalysisSources([]);
     setRunning(true); setStage('Preparing analysis');
     const controller = new AbortController(); abortRef.current = controller;
     try {
-      const dossierId = await ensureDossier();
-      log('Requested analysis of ' + dossier.scope.length + ' selected Lean declarations', 'working');
+      const dossierId = analysisDossier.id;
+      log('Requested analysis of ' + analysisDossier.scope.length + ' selected Lean declarations', 'working');
       const response = await fetch('/api/explorelean/analyze', {
         method: 'POST', cache: 'no-store', signal: controller.signal,
         headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
         body: JSON.stringify({
-          formal_path: dossier.scope[0].path, declaration: dossier.scope[0].name, source_mode: sourceMode,
+          formal_path: analysisDossier.scope[0].path, declaration: analysisDossier.scope[0].name, source_mode: sourceMode,
           include_guide: includeGuide, include_announcement: includeAnnouncement,
           model, reasoning_effort: effort,
           objective: (objective + '\n\nProvisional mathematical proof section: ' + sectionName
@@ -494,7 +586,10 @@ export default function LeanExplorerPage() {
       }
     } finally {setRunning(false); abortRef.current = null; busyRef.current = false;}
   }
-  function stopAnalysis() {abortRef.current?.abort();}
+  function stopAnalysis() {
+    abortRef.current?.abort();
+    discoveryAbortRef.current?.abort();
+  }
   async function saveMarkdown() {
     // The Markdown belongs to the selected *section*, not necessarily the
     // declaration currently visible in the source editor.
