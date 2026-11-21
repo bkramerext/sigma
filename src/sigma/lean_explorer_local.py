@@ -208,6 +208,8 @@ def _paths(root: Path, progress: Callable[[int, int, str], None] | None) -> list
             paths.append(relative)
             if len(paths) > MAX_FILES:
                 raise ProjectError("The directory exceeds the supported 400,000 Lean files.")
+            if progress is not None and len(paths) % 1000 == 0:
+                progress(scanned_dirs, len(paths), relative)
         if progress is not None and scanned_dirs % 250 == 0:
             progress(scanned_dirs, len(paths), current_path.relative_to(root).as_posix())
     paths.sort()
