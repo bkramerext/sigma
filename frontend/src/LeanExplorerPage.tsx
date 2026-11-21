@@ -44,6 +44,7 @@ type FileIndex = {
 type Declaration = {
   path: string; name: string; kind: string; commit: string; url: string; sha256: string;
   start_line: number; end_line: number; complete: boolean; excerpt: string;
+  selection_origin?: string; why_candidate?: string[]; relevance_score?: number;
 };
 type Citation = {kind: string; path: string; commit: string; url: string; sha256: string; complete: boolean};
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
@@ -143,7 +144,7 @@ export default function LeanExplorerPage() {
   const [scopeBusy, setScopeBusy] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [discoveryProgress, setDiscoveryProgress] = useState({scanned: 0, total: 0, bytes: 0});
-  const [discoveryCandidates, setDiscoveryCandidates] = useState<DiscoveryEvent['candidates']>([]);
+
   const discoveryAbortRef = useRef<AbortController | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
@@ -410,7 +411,6 @@ export default function LeanExplorerPage() {
       || !localSource || !sectionId || dossier?.paper_project) return;
     setDiscovering(true);
     setDiscoveryProgress({scanned: 0, total: localSource.file_count, bytes: 0});
-    setDiscoveryCandidates([]);
     setStage('Searching Lean source'); setError('');
     const controller = new AbortController();
     discoveryAbortRef.current = controller;
@@ -456,7 +456,6 @@ export default function LeanExplorerPage() {
             finished = true;
             discoveredDossier = event.dossier;
             setDossier(event.dossier);
-            setDiscoveryCandidates(event.candidates || []);
             await refreshDossiers();
             setStage('Source evidence discovered');
             log('Scanned ' + (event.discovery?.files_scanned ?? 0).toLocaleString()
@@ -760,7 +759,10 @@ export default function LeanExplorerPage() {
       {scope.length > 0 ? <ul className="leanx-scope-list">
         {scope.map(item => <li key={item.path + ':' + item.name}>
           <span><strong>{item.name}</strong> <small>{item.path}</small>
-            {'relevance_score' in item && <small> · lexical score {String(item.relevance_score)}</small>}
+            {item.selection_origin === 'automatic_lexical_discovery' && <small
+              title={item.why_candidate?.join(' · ') ?? 'Lexical match; no verified dependency'}>
+              · Proposed evidence: {item.why_candidate?.[0] ?? 'source term match'}
+            </small>}
           </span>
           <button type="button" disabled={scopeBusy || running || !!dossier?.paper_project}
             aria-label={'Remove ' + item.name + ' from section'}
