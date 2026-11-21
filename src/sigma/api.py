@@ -43,6 +43,7 @@ from sigma import (
     lean_explorer,
     lean_explorer_dossiers,
     lean_explorer_local,
+    lean_explorer_map,
     memory_guard,
     paper_scores,
     papers,
@@ -3679,6 +3680,7 @@ class LeanDossierCreateRequest(BaseModel):
     section_path: str = Field(default="", max_length=800)
     section_title: str = Field(default="", max_length=180)
     section_focus: str = Field(default="", max_length=6000)
+    section_id: str = Field(default="", max_length=80)
 
 
 class LeanLocalDirectoryRequest(BaseModel):
@@ -3809,6 +3811,11 @@ async def lean_explorer_local_index(
     )
 
 
+@app.get("/api/explorelean/proof-map")
+def lean_explorer_proof_map():
+    return JSONResponse(lean_explorer_map.catalog(), headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/explorelean/inputs")
 def lean_explorer_inputs():
     return JSONResponse(lean_explorer.catalog(), headers={"Cache-Control": "no-store"})
@@ -3875,6 +3882,7 @@ def lean_explorer_create_dossier(request: Request, body: LeanDossierCreateReques
             section_path=body.section_path,
             section_title=body.section_title,
             section_focus=body.section_focus,
+            section_id=body.section_id,
         ),
         status_code=201,
         headers={"Cache-Control": "no-store"},
