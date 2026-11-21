@@ -535,7 +535,7 @@ export default function LeanExplorerPage() {
               && (sourceMode !== 'local' || record.formal_commit === 'local:' + localSource?.root_id)
             ) && <span className="leanx-map-saved" aria-label="Has saved dossier">●</span>}
           </button>
-        ))}
+        )}
         {!proofMap && <p className="leanx-empty">Loading the provisional mathematical map…</p>}
       </div>
       {currentSection && <div className="leanx-map-focus">
