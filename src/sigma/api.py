@@ -40,7 +40,7 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     lean_explorer,
-    lean_explorer_transcripts,
+    lean_explorer_dossiers,
     memory_guard,
     paper_scores,
     papers,
@@ -3652,187 +3652,196 @@ async def chat_supervisor_view(body: ChatSupervisorRequest):
     )
 
 
-# Lean Explorer is a fork of the former Brainstorm *interaction* model, but with
-# isolated transcripts and server-attested, pinned source material. This is an
-# excerpt reader, not a Lean elaborator, parser or theorem dependency index.
-class LeanExplorerSelection(BaseModel):
+# Lean Explorer's endpoints are source-driven, not a chat interface. All
+# source text/locations are fetched server-side from pinned revisions.
+class LeanAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    conversation_id: str = Field(
-        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
-    )
     formal_path: str = Field(default=lean_explorer.DEFAULT_PATH, max_length=240)
+    declaration: str = Field(min_length=1, max_length=240)
     include_guide: bool = True
     include_announcement: bool = True
-
-
-class LeanExplorerTurnRequest(ChatTurnRequest):
-    formal_path: str = Field(default=lean_explorer.DEFAULT_PATH, max_length=240)
-    include_guide: bool = True
-    include_announcement: bool = True
-    source_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-
-
-def _lean_packet(
-    formal_path: str, include_guide: bool, include_announcement: bool
-) -> tuple[str, list[dict[str, Any]], str]:
-    import hashlib
-
-    packet, metadata = lean_explorer.context_packet(
-        formal_path, include_guide=include_guide,
-        include_announcement=include_announcement,
+    model: str = Field(min_length=1, max_length=100)
+    reasoning_effort: Literal["low", "medium", "high", "xhigh"]
+    objective: str = Field(
+        default="Explain this declaration and its precise mathematical role "
+        "in an expository reconstruction of Alpöge's announced RH proof.",
+        min_length=1,
+        max_length=6000,
     )
-    digest = hashlib.sha256(
-        json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    return packet, metadata, digest
+    dossier_id: str | None = None
+
+
+class LeanDossierEntryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    formal_path: str = Field(max_length=240)
+    declaration: str = Field(min_length=1, max_length=240)
+    text: str = Field(min_length=1, max_length=24000)
 
 
 @app.get("/api/explorelean/inputs")
 def lean_explorer_inputs():
-    """Configuration is truthful even when upstream source retrieval is unavailable."""
     return JSONResponse(lean_explorer.catalog(), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/explorelean/source")
 def lean_explorer_source(kind: str = "formal", path: str = lean_explorer.DEFAULT_PATH):
-    return JSONResponse(lean_explorer.read_source(kind, path), headers={"Cache-Control": "no-store"})
-
-
-@app.get("/api/explorelean/config")
-async def lean_explorer_config():
-    return JSONResponse(await chat.configuration(), headers={"Cache-Control": "no-store"})
-
-
-@app.get("/api/explorelean/transcripts")
-def lean_explorer_list_transcripts():
     return JSONResponse(
-        lean_explorer_transcripts.list_transcripts(),
+        lean_explorer.read_source(kind, path), headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/api/explorelean/declarations")
+def lean_explorer_declarations(path: str = lean_explorer.DEFAULT_PATH):
+    return JSONResponse(
+        lean_explorer.declarations(path), headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/api/explorelean/declaration")
+def lean_explorer_declaration(path: str, name: str):
+    return JSONResponse(
+        lean_explorer.declaration(path, name), headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.get("/api/explorelean/dossiers")
+def lean_explorer_list_dossiers():
+    return JSONResponse(
+        lean_explorer_dossiers.list_dossiers(), headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.post("/api/explorelean/dossiers", status_code=201)
+def lean_explorer_create_dossier():
+    return JSONResponse(
+        lean_explorer_dossiers.create(), status_code=201,
         headers={"Cache-Control": "no-store"},
     )
 
 
-@app.get("/api/explorelean/transcripts/{name}")
-def lean_explorer_load_transcript(name: str):
+@app.get("/api/explorelean/dossiers/{identifier}")
+def lean_explorer_get_dossier(identifier: str):
     return JSONResponse(
-        lean_explorer_transcripts.load_transcript(name),
+        lean_explorer_dossiers.get(identifier),
         headers={"Cache-Control": "no-store"},
     )
 
 
-@app.get("/api/explorelean/transcripts/{name}/download")
-def lean_explorer_download_transcript(name: str):
-    # Reuse the Brainstorm implementation's private, validated, no-symlink read.
-    body = lean_explorer_transcripts._read_private_file(name)
+@app.post("/api/explorelean/dossiers/{identifier}/notes", status_code=201)
+def lean_explorer_add_note(identifier: str, body: LeanDossierEntryRequest):
+    entry = lean_explorer_dossiers.append(
+        identifier, formal_path=body.formal_path,
+        declaration_name=body.declaration, mode="note", text=body.text,
+    )
+    return JSONResponse(entry, status_code=201, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/explorelean/dossiers/{identifier}/markdown")
+def lean_explorer_dossier_markdown(identifier: str):
+    content = lean_explorer_dossiers.markdown(identifier)
     return Response(
-        content=body, media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{name}"',
-                 "Cache-Control": "no-store"},
+        content=content, media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="lean-explorer-dossier.md"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
-@app.post("/api/explorelean/session")
-def lean_explorer_open_transcript():
-    return JSONResponse(
-        lean_explorer_transcripts.open_transcript(),
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-@app.post("/api/explorelean/message", status_code=204)
-def lean_explorer_append_message(body: ChatTranscriptMessageRequest):
-    lean_explorer_transcripts.append_message(
-        body.conversation_id, body.speaker, body.text
-    )
-    return Response(status_code=204, headers={"Cache-Control": "no-store"})
-
-
-@app.post("/api/explorelean/attach")
-async def lean_explorer_attach_sources(body: LeanExplorerSelection):
-    # Snapshot exact retrieved source identities before the AI request starts.
-    _, metadata, digest = await run_in_threadpool(
-        _lean_packet, body.formal_path, body.include_guide, body.include_announcement
-    )
-    text = json.dumps(
-        {"formal_path": body.formal_path,
-         "include_guide": body.include_guide,
-         "include_announcement": body.include_announcement,
-         "source_manifest_sha256": digest, "sources": metadata},
-        indent=2, sort_keys=True,
-    )
-    lean_explorer_transcripts.append_message(
-        str(UUID(body.conversation_id)), "source", text
-    )
-    return JSONResponse(
-        {"source_manifest_sha256": digest, "sources": metadata, "record": text},
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-@app.post("/api/explorelean/turn")
-async def lean_explorer_turn(body: LeanExplorerTurnRequest):
+@app.post("/api/explorelean/analyze")
+async def lean_explorer_analyze(body: LeanAnalysisRequest):
     config = await chat.configuration()
     if not config["available"]:
-        raise HTTPException(503, config["message"] or "Connect AI before exploring.")
-    selected = next(
-        (item for item in config.get("models", []) if item.get("id") == body.model), None
-    )
-    if selected is None or body.reasoning_effort not in selected.get("efforts", []):
-        raise HTTPException(422, "Choose an available model and Thinking setting.")
-
-    # The source is always fetched on the backend from an allowlisted pinned URL.
-    # The browser supplies only path and flags, never authoritative source text.
-    packet, _, digest = await run_in_threadpool(
-        _lean_packet, body.formal_path, body.include_guide, body.include_announcement
-    )
-    if digest != body.source_manifest_sha256:
         raise HTTPException(
-            409, "A source changed since it was attached. Reload the sources before continuing."
+            503, config["message"] or "Connect an AI account before exploring."
         )
+    selected_model = next(
+        (item for item in config.get("models", []) if item.get("id") == body.model),
+        None,
+    )
+    if selected_model is None or body.reasoning_effort not in selected_model.get("efforts", []):
+        raise HTTPException(422, "Choose an available Model/Thinking setting.")
 
     async def events():
-        yield 'data: {"type":"started"}\n\n'
-        task = asyncio.create_task(chat.respond(
-            speaker=body.speaker,
-            messages=[item.model_dump() for item in body.messages],
-            conversation_id=str(UUID(body.conversation_id)),
-            model=body.model,
-            reasoning_effort=body.reasoning_effort,
-            research_objective=body.research_objective,
-            repeated_text=packet,
-            instructions_override=lean_explorer.INSTRUCTIONS[body.speaker],
-        ))
+        yield "data: " + json.dumps({
+            "type": "stage", "stage": "source",
+            "label": "Retrieving actual Lean source and selected literature",
+        }) + "\n\n"
         try:
-            while not task.done():
-                done, _ = await asyncio.wait({task}, timeout=CHAT_HEARTBEAT_SECONDS)
-                if not done:
-                    yield ": keepalive\n\n"
-            result = await task
-            yield "data: " + json.dumps(
-                {"type": "complete", "text": result, "source_manifest_sha256": digest}
-            ) + "\n\n"
+            packet, sources, selected = await run_in_threadpool(
+                lean_explorer.analysis_packet,
+                body.formal_path, body.declaration,
+                include_guide=body.include_guide,
+                include_announcement=body.include_announcement,
+            )
+            yield "data: " + json.dumps({
+                "type": "stage", "stage": "interpreting",
+                "label": f"Explaining {selected['name']} against source evidence",
+                "source": {key: selected[key] for key in (
+                    "path", "name", "start_line", "end_line", "sha256", "commit", "complete"
+                )},
+            }) + "\n\n"
+            task = asyncio.create_task(
+                chat.respond(
+                    speaker="ai_1",
+                    messages=[{"speaker": "human", "text": body.objective}],
+                    conversation_id=str(uuid4()),
+                    model=body.model,
+                    reasoning_effort=body.reasoning_effort,
+                    repeated_text=packet,
+                    instructions_override=lean_explorer.ANALYSIS_INSTRUCTIONS,
+                )
+            )
+            try:
+                while not task.done():
+                    done, _ = await asyncio.wait(
+                        {task}, timeout=CHAT_HEARTBEAT_SECONDS
+                    )
+                    if not done:
+                        yield ": keepalive\n\n"
+                explanation = await task
+            finally:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+            entry = None
+            if body.dossier_id:
+                yield "data: " + json.dumps({
+                    "type": "stage", "stage": "saving",
+                    "label": "Saving sourced explanation to the dossier",
+                }) + "\n\n"
+                try:
+                    entry = await run_in_threadpool(
+                        lean_explorer_dossiers.append,
+                        body.dossier_id, formal_path=body.formal_path,
+                        declaration_name=body.declaration, mode="explain",
+                        text=explanation, supplementary_sources=sources[1:],
+                    )
+                except ProjectError as exc:
+                    yield "data: " + json.dumps({
+                        "type": "complete", "text": explanation, "saved": False,
+                        "save_error": str(exc), "sources": sources,
+                    }) + "\n\n"
+                    return
+            yield "data: " + json.dumps({
+                "type": "complete", "text": explanation, "saved": entry is not None,
+                "entry": entry, "sources": sources,
+            }) + "\n\n"
         except asyncio.CancelledError:
             raise
         except ProjectError as exc:
-            yield "data: " + json.dumps({"type": "error", "error": str(exc)}) + "\n\n"
-        finally:
-            if not task.done():
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            yield "data: " + json.dumps({
+                "type": "error", "error": str(exc)
+            }) + "\n\n"
 
     return StreamingResponse(
         events(), media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
-
-
-@app.post("/api/explorelean/supervisor")
-async def lean_explorer_supervisor(body: ChatSupervisorRequest):
-    # The optional historic supervisor remains process-only; it is not a source
-    # verifier or a declaration lookup engine.
-    return await chat_supervisor_view(body)
 
 
 @app.post("/api/ai/auth/begin")
