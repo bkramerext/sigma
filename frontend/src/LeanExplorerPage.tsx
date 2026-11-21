@@ -3,6 +3,18 @@ import './lean-explorer.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 const DEFAULT_PATH = 'src/Statements.lean';
+type SourceMode = 'mirror' | 'local';
+type LocalSource = {mode: 'local'; directory: string; root_id: string; file_count: number};
+type LocalStatus = {configured: boolean; source: LocalSource | null};
+type LocalFiles = {
+  root_id: string; directory: string; total_files: number; total_matches: number;
+  offset: number; limit: number; files: string[];
+};
+type LocalEvent = {
+  type: string; stage?: string; label?: string; error?: string;
+  scanned_directories?: number; found_files?: number; current_directory?: string;
+  source?: LocalSource & {sample: string[]};
+};
 
 type LeanDecl = { kind: string; name: string; line: number };
 type FileIndex = {
@@ -16,8 +28,8 @@ type Declaration = {
 };
 type Citation = {kind: string; path: string; commit: string; url: string; sha256: string; complete: boolean};
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
-type Dossier = {id: string; title: string; updated_at: string; entries: Entry[]};
-type DossierItem = {id: string; title: string; entry_count: number; updated_at: string};
+type Dossier = {id: string; title: string; updated_at: string; entries: Entry[]; source_mode: SourceMode};
+type DossierItem = {id: string; title: string; entry_count: number; updated_at: string; source_mode: SourceMode};
 type AIConfig = {available: boolean; message: string; model: string; reasoning_effort: string; models: {id: string; label: string; efforts: string[]}[]};
 type Activity = {id: number; time: string; label: string; state: 'ok'|'working'|'error'|'note'};
 type Stage = {type: string; stage?: string; label?: string; error?: string; text?: string; saved?: boolean; save_error?: string; sources?: Citation[]};
@@ -36,7 +48,9 @@ async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
 const postJSON = <T,>(url: string, body?: unknown) => requestJSON<T>(url, {method: 'POST', ...(body !== undefined ? {headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {})});
 
 function SourceLink({href, children}: {href: string; children: ReactNode}) {
-  return <a href={href} target="_blank" rel="noreferrer">{children}<span aria-hidden="true"> ↗</span></a>;
+  return href.startsWith('https://')
+    ? <a href={href} target="_blank" rel="noreferrer">{children}<span aria-hidden="true"> ↗</span></a>
+    : <span>{children}</span>;
 }
 function Timestamp({value}: {value: string}) {
   const date = new Date(value);
@@ -46,6 +60,16 @@ function Timestamp({value}: {value: string}) {
 export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   const [path, setPath] = useState(DEFAULT_PATH);
   const [formalInput, setFormalInput] = useState(DEFAULT_PATH);
+  const [sourceMode, setSourceMode] = useState<SourceMode>('mirror');
+  const [activeFileMode, setActiveFileMode] = useState<SourceMode>('mirror');
+  const [localDirectory, setLocalDirectory] = useState('');
+  const [localSource, setLocalSource] = useState<LocalSource | null>(null);
+  const [localFiles, setLocalFiles] = useState<LocalFiles | null>(null);
+  const [moduleFilter, setModuleFilter] = useState('');
+  const [moduleLoading, setModuleLoading] = useState(false);
+  const [localIndexing, setLocalIndexing] = useState(false);
+  const [scanCount, setScanCount] = useState({dirs: 0, files: 0, path: ''});
+  const indexAbortRef = useRef<AbortController | null>(null);
   const [includeGuide, setIncludeGuide] = useState(true);
   const [includeAnnouncement, setIncludeAnnouncement] = useState(true);
   const [file, setFile] = useState<FileIndex | null>(null);
@@ -87,25 +111,111 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
     const data = await requestJSON<Dossier>('/api/explorelean/dossiers/' + encodeURIComponent(id));
     setDossier(data); setNote('');
   }, []);
-  const loadFile = useCallback(async (filename: string) => {
+  const loadFile = useCallback(async (filename: string, mode: SourceMode) => {
     setLoadingFile(true); setError(''); setStage('Reading formal source');
     log('Retrieving and scanning ' + filename, 'working');
     try {
-      const data = await requestJSON<FileIndex>('/api/explorelean/declarations?' + new URLSearchParams({path: filename}));
-      setFile(data); setPath(filename); setFormalInput(filename);
+      const data = await requestJSON<FileIndex>('/api/explorelean/declarations?' + new URLSearchParams({path: filename, source_mode: mode}));
+      setFile(data); setPath(filename); setFormalInput(filename); setActiveFileMode(mode);
       setSelectedName(current => data.declarations.some(d => d.name === current) ? current : (data.declarations[0]?.name ?? ''));
       setStage('Formal source loaded');
-      log(`Scanned ${data.total} candidate declarations in ${data.path}; commit ${data.commit.slice(0, 10)}`, 'ok');
+      log(`Scanned ${data.total} candidate declarations in ${data.path}; source ${data.commit.slice(0, 22)}`, 'ok');
     } catch (cause) {
       setError(explainError(cause)); setStage('Source unavailable');
       log('Source load failed: ' + explainError(cause), 'error');
     } finally {setLoadingFile(false);}
   }, [log]);
 
+  const loadModules = useCallback(async (query = '', offset = 0): Promise<LocalFiles> => {
+    setModuleLoading(true);
+    try {
+      const data = await requestJSON<LocalFiles>('/api/explorelean/local-files?' + new URLSearchParams({
+        query, offset: String(offset), limit: '100',
+      }));
+      setLocalFiles(data);
+      return data;
+    } finally {setModuleLoading(false);}
+  }, []);
+
+  function updateSourceMode(mode: SourceMode) {
+    if (mode === sourceMode || running || localIndexing) return;
+    setSourceMode(mode); setFile(null); setSelected(null); setSelectedName('');
+    setAnalysis(''); setAnalysisSources([]); setDossier(null);
+    if (mode === 'mirror') void loadFile(DEFAULT_PATH, 'mirror');
+    else if (localSource) void loadModules().then(result => {
+      if (result.files.length) void loadFile(result.files[0], 'local');
+    }).catch(cause => setError(explainError(cause)));
+  }
+
+  async function indexLocalDirectory() {
+    if (localIndexing || running || !localDirectory.trim()) return;
+    setLocalIndexing(true); setScanCount({dirs: 0, files: 0, path: ''});
+    setStage('Scanning local directory'); setError('');
+    const controller = new AbortController(); indexAbortRef.current = controller;
+    log('Scanning local Lean directory: ' + localDirectory.trim(), 'working');
+    try {
+      const response = await fetch('/api/explorelean/local-index', {
+        method: 'POST', cache: 'no-store', signal: controller.signal,
+        headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
+        body: JSON.stringify({directory: localDirectory.trim()}),
+      });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null) as {detail?: string} | null;
+        throw new Error(failure?.detail || `Directory indexing failed (${response.status})`);
+      }
+      if (!response.body) throw new Error('No directory scan events were received.');
+      const reader = response.body.getReader(); const decoder = new TextDecoder();
+      let buffer = ''; let complete: LocalSource | null = null;
+      while (true) {
+        const {done, value} = await reader.read();
+        buffer += decoder.decode(value ?? new Uint8Array(), {stream: !done});
+        const frames = buffer.split('\n\n'); buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+          const line = frame.split('\n').find(row => row.startsWith('data: '));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(6)) as LocalEvent;
+          if (event.type === 'progress') {
+            setScanCount({
+              dirs: event.scanned_directories ?? 0,
+              files: event.found_files ?? 0,
+              path: event.current_directory ?? '',
+            });
+          } else if (event.type === 'error') {
+            throw new Error(event.error || 'The local directory could not be indexed.');
+          } else if (event.type === 'complete' && event.source) {
+            complete = event.source;
+          }
+        }
+        if (done) break;
+      }
+      if (!complete) throw new Error('The directory scan ended without a completed index.');
+      setLocalSource(complete); setLocalDirectory(complete.directory);
+      setSourceMode('local'); setFile(null); setDossier(null);
+      const listed = await loadModules();
+      if (listed.files.length) await loadFile(listed.files[0], 'local');
+      setStage('Local Lean tree indexed');
+      log(`Indexed ${complete.file_count.toLocaleString()} Lean files from local directory`, 'ok');
+    } catch (cause) {
+      if (controller.signal.aborted) {setStage('Directory scan stopped'); log('Directory scan stopped', 'note');}
+      else {setError(explainError(cause)); setStage('Directory scan failed'); log(explainError(cause), 'error');}
+    } finally {setLocalIndexing(false); indexAbortRef.current = null;}
+  }
+
   useEffect(() => {
     const oldTitle = document.title;
     document.title = 'Lean Explorer · SIGMA';
-    void loadFile(DEFAULT_PATH);
+    void (async () => {
+      try {
+        const status = await requestJSON<LocalStatus>('/api/explorelean/local-status');
+        if (status.configured && status.source) {
+          setLocalSource(status.source);
+          setLocalDirectory(status.source.directory);
+          setSourceMode('local');
+          const listed = await loadModules();
+          if (listed.files.length) await loadFile(listed.files[0], 'local');
+        } else await loadFile(DEFAULT_PATH, 'mirror');
+      } catch { await loadFile(DEFAULT_PATH, 'mirror'); }
+    })();
     void refreshDossiers().catch(cause => setError(explainError(cause)));
     let cancelled = false;
     async function readModel() {
@@ -126,19 +236,19 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
       } catch (cause) {if (!cancelled) setError(explainError(cause));}
     }
     void readModel();
-    return () => {cancelled = true; abortRef.current?.abort(); document.title = oldTitle;};
-  }, [loadFile, refreshDossiers]);
+    return () => {cancelled = true; abortRef.current?.abort(); indexAbortRef.current?.abort(); document.title = oldTitle;};
+  }, [loadFile, loadModules, refreshDossiers]);
 
   useEffect(() => {
     if (!file || !selectedName) {setSelected(null); return;}
     let cancelled = false;
     setLoadingDeclaration(true); setSelected(null);
-    void requestJSON<Declaration>('/api/explorelean/declaration?' + new URLSearchParams({path: file.path, name: selectedName}))
+    void requestJSON<Declaration>('/api/explorelean/declaration?' + new URLSearchParams({path: file.path, name: selectedName, source_mode: activeFileMode}))
       .then(result => {if (!cancelled) setSelected(result);})
       .catch(cause => {if (!cancelled) setError(explainError(cause));})
       .finally(() => {if (!cancelled) setLoadingDeclaration(false);});
     return () => {cancelled = true;};
-  }, [file, selectedName]);
+  }, [file, selectedName, activeFileMode]);
 
   useEffect(() => {
     if (!running) return;
@@ -150,18 +260,23 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   async function selectDossier(value: string) {
     if (!value) {setDossier(null); return;}
     setError('');
-    try {await loadDossier(value);} catch (cause) {setError(explainError(cause));}
+    try {
+      const record = await requestJSON<Dossier>('/api/explorelean/dossiers/' + encodeURIComponent(value));
+      if ((record.source_mode || 'mirror') !== sourceMode)
+        throw new Error('This dossier belongs to a different formal source. Select a matching dossier.');
+      setDossier(record); setNote('');
+    } catch (cause) {setError(explainError(cause));}
   }
   async function ensureDossier(): Promise<string> {
-    if (dossier) return dossier.id;
-    const created = await postJSON<Dossier>('/api/explorelean/dossiers');
+    if (dossier && dossier.source_mode === sourceMode) return dossier.id;
+    const created = await postJSON<Dossier>('/api/explorelean/dossiers', {source_mode: sourceMode});
     setDossier(created); await refreshDossiers(); log('Created new expository dossier', 'ok');
     return created.id;
   }
   async function createDossier() {
     try {
       setError('');
-      const created = await postJSON<Dossier>('/api/explorelean/dossiers');
+      const created = await postJSON<Dossier>('/api/explorelean/dossiers', {source_mode: sourceMode});
       setDossier(created); await refreshDossiers();
       log('Created new expository dossier', 'ok');
     } catch (cause) {setError(explainError(cause));}
@@ -178,7 +293,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
         method: 'POST', cache: 'no-store', signal: controller.signal,
         headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
         body: JSON.stringify({
-          formal_path: selected.path, declaration: selected.name,
+          formal_path: selected.path, declaration: selected.name, source_mode: sourceMode,
           include_guide: includeGuide, include_announcement: includeAnnouncement,
           model, reasoning_effort: effort, objective, dossier_id: dossierId,
         }),
@@ -230,7 +345,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
     try {
       const id = await ensureDossier();
       await postJSON('/api/explorelean/dossiers/' + encodeURIComponent(id) + '/notes', {
-        formal_path: selected.path, declaration: selected.name, text: note.trim(),
+        formal_path: selected.path, declaration: selected.name, source_mode: sourceMode, text: note.trim(),
       });
       await loadDossier(id); await refreshDossiers();
       log('Saved note for ' + selected.name, 'ok');
