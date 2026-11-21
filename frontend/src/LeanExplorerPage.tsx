@@ -45,6 +45,9 @@ type Declaration = {
   path: string; name: string; kind: string; commit: string; url: string; sha256: string;
   start_line: number; end_line: number; complete: boolean; excerpt: string;
 };
+type ScopedDeclaration = Declaration & {
+  selection_origin?: string; relevance_score?: number; selection_reasons?: string[];
+};
 type Citation = {kind: string; path: string; commit: string; url: string; sha256: string; complete: boolean};
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
 type DiscoveryInfo = {
@@ -54,7 +57,7 @@ type DiscoveryInfo = {
 };
 type Dossier = {
   id: string; title: string; updated_at: string; entries: Entry[];
-  scope?: Declaration[]; discovery?: DiscoveryInfo;
+  scope?: ScopedDeclaration[]; discovery?: DiscoveryInfo;
   paper_project?: {path: string; project_id: string} | null;
   source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
 };
@@ -735,7 +738,12 @@ export default function LeanExplorerPage() {
       </p>}
       {scope.length > 0 ? <ul className="leanx-scope-list">
         {scope.map(item => <li key={item.path + ':' + item.name}>
-          <span><strong>{item.name}</strong> <small>{item.path}</small></span>
+          <span title={item.selection_reasons?.join(' · ')}>
+            <strong>{item.name}</strong>
+            <small>{item.path}</small>
+            {item.selection_origin === 'automatic_lexical_candidate' &&
+              <small> · Suggested (lexical score {item.relevance_score})</small>}
+          </span>
           <button type="button" disabled={scopeBusy || running || !!dossier?.paper_project}
             aria-label={'Remove ' + item.name + ' from section'}
             onClick={() => void updateScope(false, item)}>Remove</button>
