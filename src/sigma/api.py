@@ -41,8 +41,8 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     lean_explorer,
-    lean_explorer_dossiers,
     lean_explorer_discovery,
+    lean_explorer_dossiers,
     lean_explorer_local,
     lean_explorer_map,
     memory_guard,
@@ -3936,10 +3936,12 @@ async def lean_explorer_discover_section(
         raise HTTPException(409, "The section's paper scope is frozen.")
 
     async def events():
-        yield _lean_sse({
-            "type": "stage",
-            "label": "Traversing indexed Lean files and ranking source declarations",
-        })
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "label": "Traversing indexed Lean files and ranking source declarations",
+            }
+        )
         loop = asyncio.get_running_loop()
         event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         stopped = threading.Event()
@@ -3971,10 +3973,12 @@ async def lean_explorer_discover_section(
             while not event_queue.empty():
                 yield _lean_sse(event_queue.get_nowait())
             discovered = await job
-            yield _lean_sse({
-                "type": "stage",
-                "label": "Checking candidate source hashes and saving the section scope",
-            })
+            yield _lean_sse(
+                {
+                    "type": "stage",
+                    "label": "Checking candidate source hashes and saving the section scope",
+                }
+            )
             if not discovered["candidates"]:
                 raise ProjectError(
                     "No relevant declarations found with the section's current search terms. "
@@ -3986,24 +3990,30 @@ async def lean_explorer_discover_section(
                 section_id=body.section_id,
                 discovery=discovered,
             )
-            yield _lean_sse({
-                "type": "complete",
-                "dossier": saved,
-                "discovery": {
-                    key: value for key, value in discovered.items()
-                    if key != "candidates"
-                },
-                "candidates": [
-                    {
-                        key: item[key]
-                        for key in (
-                            "path", "name", "kind", "start_line", "relevance_score",
-                            "why_candidate", "status",
-                        )
-                    }
-                    for item in discovered["candidates"]
-                ],
-            })
+            yield _lean_sse(
+                {
+                    "type": "complete",
+                    "dossier": saved,
+                    "discovery": {
+                        key: value for key, value in discovered.items() if key != "candidates"
+                    },
+                    "candidates": [
+                        {
+                            key: item[key]
+                            for key in (
+                                "path",
+                                "name",
+                                "kind",
+                                "start_line",
+                                "relevance_score",
+                                "why_candidate",
+                                "status",
+                            )
+                        }
+                        for item in discovered["candidates"]
+                    ],
+                }
+            )
         except asyncio.CancelledError:
             stopped.set()
             raise
