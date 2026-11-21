@@ -4,7 +4,7 @@ import './lean-explorer.css';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 type Speaker = 'human' | 'ai_1' | 'ai_2' | 'objective' | 'supervisor';
-type TranscriptSpeaker = Speaker | 'supervisor_setting';
+type TranscriptSpeaker = Speaker | 'supervisor_setting' | 'source';
 type Target = 'ai_1' | 'ai_2' | 'both';
 type ChatMessage = { speaker: TranscriptSpeaker; text: string; timestamp?: string; recipient?: Target; guidance?: string; score?: number; breakthrough?: boolean };
 type SupervisorAssessment = {
@@ -38,7 +38,7 @@ type ChatConfig = {
   max_messages: number;
 };
 
-const labels: Record<TranscriptSpeaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor', supervisor_setting: 'Supervisor setting' };
+const labels: Record<TranscriptSpeaker, string> = { human: 'Human', ai_1: 'AI #1', ai_2: 'AI #2', objective: 'Research Objective', supervisor: 'Supervisor', supervisor_setting: 'Supervisor setting', source: 'Sources' };
 // Keep the complete transcript in memory; pagination only affects rendering.
 const TRANSCRIPT_GROUPS_PER_PAGE = 20;
 
@@ -126,8 +126,46 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
   const [expandedEntries, setExpandedEntries] = useState<Record<number, boolean>>({});
   const [visibleGroupCount, setVisibleGroupCount] = useState(TRANSCRIPT_GROUPS_PER_PAGE);
   const [draft, setDraft] = useState('');
-  const [researchObjective, setResearchObjective] = useState('');
-  const researchObjectiveRef = useRef('');
+  type SourceChoice = { formal_path: string; include_guide: boolean; include_announcement: boolean };
+  type SourcePreview = { kind: string; path: string; url: string; commit: string; sha256: string; text: string; complete: boolean; characters: number };
+  const [sourcePath, setSourcePath] = useState('src/Statements.lean');
+  const [includeGuide, setIncludeGuide] = useState(true);
+  const [includeAnnouncement, setIncludeAnnouncement] = useState(true);
+  const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState('');
+  const [activeTranscriptName, setActiveTranscriptName] = useState('');
+  const sourceSettingsRef = useRef<SourceChoice>({ formal_path: 'src/Statements.lean', include_guide: true, include_announcement: true });
+  const lastSourceSelectionRef = useRef('');
+  const sourceManifestShaRef = useRef('');
+  const [sourceRecordVersion, setSourceRecordVersion] = useState(0);
+  async function loadSourcePreview(path: string) {
+    setSourceLoading(true); setSourceError('');
+    try {
+      const q = new URLSearchParams({kind: 'formal', path});
+      const response = await fetch('/api/explorelean/source?' + q, {cache: 'no-store', headers: {'X-Sigma-Error-Handled': 'true'}});
+      const data = await response.json() as SourcePreview & {detail?: string; error?: string};
+      if (!response.ok) throw new Error(apiErrorMessage(data, 'The Lean source could not be retrieved.'));
+      setSourcePreview(data);
+    } catch (cause) {
+      setSourcePreview(null); setSourceError(errorText(cause));
+    } finally { setSourceLoading(false); }
+  }
+  useEffect(() => { void loadSourcePreview('src/Statements.lean'); }, []);
+  function updateSourcePath(value: string) {
+    sourceSettingsRef.current = {...sourceSettingsRef.current, formal_path: value};
+    setSourcePath(value);
+  }
+  function updateIncludeGuide(value: boolean) {
+    sourceSettingsRef.current = {...sourceSettingsRef.current, include_guide: value};
+    setIncludeGuide(value);
+  }
+  function updateIncludeAnnouncement(value: boolean) {
+    sourceSettingsRef.current = {...sourceSettingsRef.current, include_announcement: value};
+    setIncludeAnnouncement(value);
+  }
+  const [researchObjective, setResearchObjective] = useState('Develop a rigorous, human-readable exposition of Alpöge’s Riemann Hypothesis proof, checking every mathematical bridge against the pinned Lean source.');
+  const researchObjectiveRef = useRef('Develop a rigorous, human-readable exposition of Alpöge’s Riemann Hypothesis proof, checking every mathematical bridge against the pinned Lean source.');
   const recordedObjectiveRef = useRef('');
   const [supervisorEnabled, setSupervisorEnabled] = useState(false);
   const supervisorEnabledRef = useRef(false);
@@ -167,7 +205,7 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
     // connection that was selected before this conversation (or even one turn)
     // began. Changing accounts is not a conversation-state change.
     const [connectionResponse, preferencesResponse] = await Promise.all([
-      fetch('/api/chat/config', {
+      fetch('/api/explorelean/config', {
         cache: 'no-store', headers: { 'X-Sigma-Error-Handled': 'true' },
       }),
       fetch('/api/user-preferences/research-settings', {
@@ -197,14 +235,14 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
   }
 
   const refreshTranscripts = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch('/api/chat/transcripts', { cache: 'no-store', signal });
+    const response = await fetch('/api/explorelean/transcripts', { cache: 'no-store', signal });
     if (!response.ok) throw new Error('Could not list saved Lean Explorer transcripts.');
     if (!signal?.aborted) setSavedTranscripts(await response.json() as { name: string }[]);
   }, []);
 
   const refreshConfig = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch('/api/chat/config', {
+      const response = await fetch('/api/explorelean/config', {
         cache: 'no-store', signal, headers: { 'X-Sigma-Error-Handled': 'true' },
       });
       const value = await response.json() as ChatConfig;
@@ -226,7 +264,7 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
   }, []);
 
   const openTranscript = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch('/api/chat/session', {
+    const response = await fetch('/api/explorelean/session', {
       method: 'POST', cache: 'no-store', signal,
     });
     const value = await response.json() as {
@@ -237,6 +275,7 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
     }
     if (!signal?.aborted) {
       transcriptWrites.current = Promise.resolve();
+      setActiveTranscriptName((value as { transcript_name?: string }).transcript_name ?? '');
       recordedObjectiveRef.current = '';
       setConversationId(value.conversation_id);
       setTranscriptPath(value.transcript_path);
@@ -246,7 +285,7 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
 
   function appendTranscriptMessage(id: string, message: ChatMessage): Promise<void> {
     const write = transcriptWrites.current.catch(() => undefined).then(async () => {
-      const response = await fetch('/api/chat/message', {
+      const response = await fetch('/api/explorelean/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
@@ -265,6 +304,24 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
     });
     transcriptWrites.current = write;
     return write;
+  }
+
+  async function ensureSourcesAttached(id: string) {
+    const selection = sourceSettingsRef.current;
+    const key = JSON.stringify(selection);
+    if (key === lastSourceSelectionRef.current && sourceManifestShaRef.current) return;
+    const response = await fetch('/api/explorelean/attach', {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+      body: JSON.stringify({conversation_id: id, ...selection}),
+    });
+    const data = await response.json() as { source_manifest_sha256?: string; record?: string; detail?: string; error?: string };
+    if (!response.ok || !data.source_manifest_sha256 || !data.record)
+      throw new Error(apiErrorMessage(data, 'The selected Lean sources could not be attached.'));
+    sourceManifestShaRef.current = data.source_manifest_sha256;
+    lastSourceSelectionRef.current = key;
+    setSourceRecordVersion(previous => previous + 1);
+    addMessage({speaker: 'source', text: data.record});
   }
 
   function recordResearchObjective(id: string) {
@@ -317,15 +374,17 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
   }, []);
 
   async function requestTurn(who: 'ai_1' | 'ai_2', history: ChatMessage[], controller: AbortController, settings: ChatConfig, sessionId = conversationId): Promise<string> {
-    const response = await fetch('/api/chat/turn', {
+    const response = await fetch('/api/explorelean/turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
       cache: 'no-store',
       signal: controller.signal,
       body: JSON.stringify({
         conversation_id: sessionId,
-                speaker: who,
-        messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting'
+        speaker: who,
+        ...sourceSettingsRef.current,
+        source_manifest_sha256: sourceManifestShaRef.current,
+        messages: history.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting' && item.speaker !== 'source'
           && !(item.speaker === 'supervisor' && item.text.startsWith('Supervisor assessment unavailable:'))).slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model,
         reasoning_effort: settings.reasoning_effort,
@@ -371,11 +430,11 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
     const settings = await currentTurnSettings();
     const controller = new AbortController();
     abort.current = controller;
-    const response = await fetch('/api/chat/supervisor', {
+    const response = await fetch('/api/explorelean/supervisor', {
       method: 'POST', cache: 'no-store', signal: controller.signal,
       headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
       body: JSON.stringify({
-        conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting'
+        conversation_id: sessionId,         messages: messagesRef.current.filter(item => item.speaker !== 'objective' && item.speaker !== 'supervisor_setting' && item.speaker !== 'source'
           && !(item.speaker === 'supervisor' && item.text.startsWith('Supervisor assessment unavailable:')))
           .slice(-settings.max_messages).map(({speaker, text, recipient, guidance}) => ({speaker, text, recipient, guidance})),
         model: settings.model, reasoning_effort: settings.reasoning_effort,
@@ -426,6 +485,8 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
         recordResearchObjective(sessionId);
         // A previous transcript write error must not permanently poison Retry.
         await transcriptWrites.current.catch(() => undefined);
+        if (!runningRef.current || id !== runId.current) return;
+        await ensureSourcesAttached(sessionId);
         if (!runningRef.current || id !== runId.current) return;
         if (pendingHumanRef.current) {
           await appendTranscriptMessage(sessionId, pendingHumanRef.current);
@@ -527,7 +588,7 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
     setError('');
     setNotice('');
     try {
-      const response = await fetch(`/api/chat/transcripts/${encodeURIComponent(name)}`, { cache: 'no-store' });
+      const response = await fetch(`/api/explorelean/transcripts/${encodeURIComponent(name)}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('The selected transcript could not be restored.');
       const saved = await response.json() as SavedTranscript;
       if (runningRef.current) return;
@@ -546,6 +607,7 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
       setVisibleGroupCount(TRANSCRIPT_GROUPS_PER_PAGE);
       setConversationId(saved.conversation_id);
       setTranscriptPath(saved.transcript_path);
+      setActiveTranscriptName(saved.transcript_name);
       recordedObjectiveRef.current = saved.research_objective;
       researchObjectiveRef.current = saved.research_objective;
       setResearchObjective(saved.research_objective);
@@ -680,7 +742,10 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
     setVisibleGroupCount(TRANSCRIPT_GROUPS_PER_PAGE);
     setConversationId('');
     setTranscriptPath('');
+    setActiveTranscriptName('');
     setSelectedTranscript('');
+    lastSourceSelectionRef.current = '';
+    sourceManifestShaRef.current = '';
     transcriptWrites.current = Promise.resolve();
     recordedObjectiveRef.current = '';
     researchObjectiveRef.current = '';
