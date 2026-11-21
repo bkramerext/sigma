@@ -2,8 +2,8 @@
 
 import hashlib
 from pathlib import Path
-from types import SimpleNamespace
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
