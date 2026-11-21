@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from sigma import lean_explorer
+from sigma import lean_explorer, lean_explorer_local
 from sigma.projects import ProjectError
 from sigma.recents import state_directory
 from sigma.ui_instance import private_directory
@@ -71,7 +71,19 @@ def _read(identifier: str) -> dict:
     return record
 
 
-def create() -> dict:
+def _revision(source_mode: str) -> str:
+    if source_mode == "mirror":
+        return lean_explorer.MIRROR_SHA
+    if source_mode == "local":
+        active = lean_explorer_local.source()
+        if active is None:
+            raise ProjectError("Select a local Lean directory first.")
+        return "local:" + active["root_id"]
+    raise ProjectError("Unknown Lean Explorer source mode.")
+
+
+def create(source_mode: str = "mirror") -> dict:
+    revision = _revision(source_mode)
     identifier = str(uuid4())
     timestamp = datetime.now(UTC).isoformat()
     document = {
@@ -80,7 +92,8 @@ def create() -> dict:
         "created_at": timestamp,
         "updated_at": timestamp,
         "formal_repository": lean_explorer.MIRROR,
-        "formal_commit": lean_explorer.MIRROR_SHA,
+        "formal_commit": revision,
+        "source_mode": source_mode,
         "entries": [],
     }
     data = json.dumps(document, ensure_ascii=False, indent=2).encode("utf-8")
@@ -131,6 +144,7 @@ def append(
     mode: str,
     text: str,
     supplementary_sources: list[dict] | None = None,
+    source_mode: str = "mirror",
 ) -> dict:
     if mode not in {"note", "explain", "audit"}:
         raise ProjectError("Unknown dossier entry type.")
@@ -139,7 +153,9 @@ def append(
 
     # Re-read the declaration server-side; never trust client-supplied proof
     # locations, commit identifiers, declaration snippets or source hashes.
-    selected = lean_explorer.declaration(formal_path, declaration_name)
+    selected = lean_explorer.declaration(
+        formal_path, declaration_name, source_mode=source_mode
+    )
     source = {
         key: selected[key]
         for key in (
@@ -165,8 +181,11 @@ def append(
             _check(lock.fileno())
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             record = _read(identifier)
-            if record.get("formal_commit") != lean_explorer.MIRROR_SHA:
-                raise ProjectError("Dossier pin differs from the current formal source.")
+            if (
+                record.get("formal_commit") != _revision(source_mode)
+                or record.get("source_mode", "mirror") != source_mode
+            ):
+                raise ProjectError("Dossier source differs from the selected formal source.")
             entries = record.get("entries")
             if not isinstance(entries, list) or len(entries) >= MAX_ENTRIES:
                 raise ProjectError("The dossier has reached its entry limit.")
@@ -207,7 +226,7 @@ def markdown(identifier: str) -> str:
         f"# {record['title']}",
         "",
         f"Formal source: {record['formal_repository']}",
-        f"Commit: `{record['formal_commit']}`",
+        f"Source revision: `{record['formal_commit']}`",
         f"Created: {record['created_at']}",
         "",
         (
@@ -226,6 +245,8 @@ def markdown(identifier: str) -> str:
                 (
                     f"Source: [{src['path']} lines {src['start_line']}-"
                     f"{src['end_line']}]({src['url']}#L{src['start_line']})"
+                    if src.get("url", "").startswith("https://")
+                    else f"Local source: {src['path']} lines {src['start_line']}-{src['end_line']}"
                 ),
                 f"Commit: `{src['commit']}` · SHA256: `{src['sha256']}`",
                 f"Source excerpt complete: {src['complete']}",
