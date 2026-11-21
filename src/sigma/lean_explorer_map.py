@@ -80,7 +80,6 @@ _SECTIONS = [
         "guide_lines": [233, 251],
         "declaration_hints": ["RiemannHypothesis", "RiemannZetaZerosOnLine"],
     },
-
 ]
 
 # Arrows describe a proposed *mathematical flow*, not formal proof-term references.
