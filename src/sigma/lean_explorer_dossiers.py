@@ -108,7 +108,8 @@ def create(
     timestamp = datetime.now(UTC).isoformat()
     document = {
         "id": identifier,
-        "title": f"Alpöge RH — {title}",
+        "title": f"Lean Explorer — {title}",
+        "study_title": lean_explorer_map.catalog()["title"],
         "created_at": timestamp,
         "updated_at": timestamp,
         "formal_repository": lean_explorer.MIRROR,
@@ -394,7 +395,8 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
         question = str(record.get("section_focus") or "Explain the selected mathematics")
         problem = (
             "Prepare a rigorous, readable mathematical exposition of the selected "
-            "proof section. Pilot subject: Alpöge's announced RH formalization.\n\n"
+            "proof section.\n\n"
+            f"Study: {record.get('study_title', 'Formal proof investigation')}\n"
             f"Section: {title}\nResearch question: {question}\n\n"
             "Use the exact Lean excerpts and citation records in the paper "
             "requirements as evidence. Explain the conceptual connections, "
@@ -477,6 +479,7 @@ def markdown(identifier: str) -> str:
         "",
         f"Formal source: {record['formal_repository']}",
         f"Source revision: `{record['formal_commit']}`",
+        f"Study: {record.get('study_title', 'Formal proof investigation')}",
         f"Mathematical section: {record.get('section_title', 'Unassigned')}",
         f"Proof map section ID: `{record.get('section_id') or 'unassigned'}`",
         f"Section question: {record.get('section_focus', '')}",
