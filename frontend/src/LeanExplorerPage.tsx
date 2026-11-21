@@ -134,7 +134,7 @@ export default function LeanExplorerPage() {
   const [showBrowser, setShowBrowser] = useState(false);
   const [showDossier, setShowDossier] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
-  const [objective, setObjective] = useState('Explain this declaration precisely and identify its role in a rigorous human-readable reconstruction of Alpöge’s Riemann Hypothesis proof.');
+  const [objective, setObjective] = useState('Explain the selected Lean declarations, their mathematical meaning, and unresolved connections in a rigorous human-readable exposition.');
   const abortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
   const activitySeq = useRef(0);
@@ -816,22 +816,25 @@ export default function LeanExplorerPage() {
           </details>
           <div className="leanx-operation-controls">
             <button type="button" className="leanx-primary-action" disabled={!ready || !objective.trim()} onClick={() => void analyzeSelected()}>
-              {running ? 'Exploring…' : 'Explain selected declaration'}
+              {running ? 'Investigating…' : 'Investigate selected Lean evidence (' + scope.length + ')'}
             </button>
             <button type="button" disabled={!running} onClick={stopAnalysis}>Stop</button>
             <span>{config ? (config.available ? `${config.models.find(item => item.id === model)?.label ?? model} · ${effort}` : config.message) : 'Reading selected AI connection…'}</span>
           </div>
-          <p className="leanx-map-provenance">This declaration is being investigated for a possible role in the selected mathematical section; that relationship has not been verified.</p>
+          <p className="leanx-map-provenance">
+            The investigation uses the selected section scope ({scope.length} exact declarations), not the entire repository.
+            Section membership and mathematical connections remain research hypotheses.
+          </p>
           <div className="leanx-markdown-editor">
             <div className="leanx-markdown-toolbar">
               <label htmlFor="leanx-markdown">Expository Markdown</label>
-              <button type="button" disabled={!selected || !markdownDraft.trim() ||
+              <button type="button" disabled={!selectedInScope || !markdownDraft.trim() ||
                 markdownDraft.trim() === savedMarkdown || savingMarkdown || running}
                 onClick={() => void saveMarkdown()}>
                 {savingMarkdown ? 'Saving…' : 'Save Markdown'}
               </button>
             </div>
-            <textarea id="leanx-markdown" value={markdownDraft} disabled={!selected || running || savingMarkdown}
+            <textarea id="leanx-markdown" value={markdownDraft} disabled={!selectedInScope || running || savingMarkdown}
               onChange={event => setMarkdownDraft(event.target.value)}
               placeholder="The mathematical explanation goes here. Edit its Markdown, refine the ideas, then save it to this section's dossier."/>
             {!!markdownDraft && markdownDraft.trim() !== savedMarkdown && <small>Unsaved edits</small>}
@@ -858,18 +861,41 @@ export default function LeanExplorerPage() {
             <h2>Expository notes</h2><span>Editable Markdown · Current section</span>
           </div>
           <textarea aria-label="Expository notes" value={note} rows={7}
-            disabled={!selected || savingNote || running}
+            disabled={!selectedInScope || savingNote || running}
             onChange={event => setNote(event.target.value)}
             placeholder="What is surprising here? Which assumptions need explanation? What questions should the next research session pursue?"/>
           <div className="leanx-notes-action">
-            <button type="button" disabled={!selected || !note.trim() || savingNote || running}
+            <button type="button" disabled={!selectedInScope || !note.trim() || savingNote || running}
               onClick={() => void saveNote()}>{savingNote ? 'Saving…' : 'Save note to section dossier'}</button>
           </div>
         </section>
       </div>
     </div>
 
+    <section className="leanx-paper-stage" aria-label="Generate a section paper">
+      <div className="leanx-pane-title">
+        <h2>Generate expository paper</h2>
+        <span>Using SIGMA's existing paper-generation pipeline</span>
+      </div>
+      <p>
+        This section can become its own SIGMA project, carrying the selected Lean statements,
+        source hashes, and saved explanatory notes. Review its publication settings there,
+        then generate, validate, score, and download a PDF.
+      </p>
+      <div className="leanx-paper-actions">
+        <button type="button" disabled={handoffBusy || running || scopeBusy || !dossier?.scope?.length}
+          onClick={() => void preparePaperProject()}>
+          {handoffBusy ? 'Preparing…' : dossier?.paper_project ? 'Open section paper project' : 'Prepare paper in SIGMA'}
+        </button>
+        {dossier?.paper_project && <span>Project prepared · scope frozen for this paper</span>}
+      </div>
+    </section>
+
     {error && <p className="chat-error leanx-error" role="alert">{error}</p>}
-    <p className="leanx-boundary">Current capability: full local directory file inventory and search, lazy Lean module reading, lexical declaration navigation, source-grounded explanations, durable dossiers and Markdown export. This is not yet an elaborated cross-module dependency graph or a Lean proof check. SIGMA paper handoff is not yet implemented.</p>
+    <p className="leanx-boundary">
+      Current scope is manually selected. Automatic mathematical section inference, elaborated theorem
+      dependencies, and Lean kernel checking remain future capabilities. Paper generation uses SIGMA's
+      project pipeline and retains these evidence limitations.
+    </p>
   </main>;
 }
