@@ -353,6 +353,123 @@ def deselect_declaration(
     return _with_dossier_lock(identifier, apply)
 
 
+def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
+    """Hand selected and checked section evidence to SIGMA's existing paper flow.
+
+    Creates a real project. Publication, scoring, PDF and resume remain owned
+    by SIGMA's existing project Papers pipeline.
+    """
+    from sigma import global_research_settings, project_collaboration
+    from sigma.projects import create_project, inspect_project
+
+    def apply(record: dict) -> bool:
+        if (
+            record.get("formal_commit") != _revision(source_mode)
+            or record.get("source_mode") != source_mode
+        ):
+            raise ProjectError("The selected Lean source differs from this dossier.")
+        previous = record.get("paper_project")
+        if previous:
+            existing = inspect_project(previous["path"])
+            if existing.project.id != previous.get("project_id"):
+                raise ProjectError("The previous paper project identity has changed.")
+            return False
+        scope = record.get("scope") or []
+        if not isinstance(scope, list) or not scope:
+            raise ProjectError("Choose Lean evidence for this section before preparing a paper.")
+        # A local source tree is mutable. Never silently switch a paper's
+        # evidence when a selected Lean file changes after selection.
+        for chosen in scope:
+            current = lean_explorer.declaration(
+                chosen["path"], chosen["name"], source_mode=source_mode
+            )
+            if (
+                current["sha256"] != chosen["sha256"]
+                or current["commit"] != chosen["commit"]
+            ):
+                raise ProjectError(
+                    "A selected Lean source changed. Remove and re-add it before paper preparation."
+                )
+        title = str(record.get("section_title") or "Expository section")
+        question = str(record.get("section_focus") or "Explain the selected mathematics")
+        problem = (
+            "Prepare a rigorous, readable mathematical exposition of the selected "
+            "proof section. Pilot subject: Alpöge's announced RH formalization.\n\n"
+            f"Section: {title}\nResearch question: {question}\n\n"
+            "Use the exact Lean excerpts and citation records in the paper "
+            "requirements as evidence. Explain the conceptual connections, "
+            "all hypotheses, and any gaps. This Explorer has NOT kernel-checked "
+            "the selected statements or verified their dependency relationships."
+        )
+        lines = [
+            "# Scope and publication requirements",
+            "",
+            f"Mathematical section: {title}",
+            f"Guiding question: {question}",
+            f"Evidence identity: {record['formal_commit']}",
+            f"Source mode: {source_mode}",
+            "",
+            "The selected declarations below are a manual research scope, NOT "
+            "a formal dependency closure. The interpretation is unverified. "
+            "Do not assert kernel-checking or prove unverified connections.",
+            "",
+            "## Exact Lean declarations",
+        ]
+        selected_keys = set()
+        for chosen in scope:
+            selected_keys.add((chosen["path"], chosen["name"]))
+            lines.extend([
+                "",
+                f"### {chosen['name']}",
+                f"Source: {chosen['path']} lines {chosen['start_line']}-{chosen['end_line']}",
+                f"Revision: {chosen['commit']} · file SHA256: {chosen['sha256']}",
+                f"Excerpt complete: {chosen['complete']}",
+                "~~~lean",
+                chosen["excerpt"],
+                "~~~",
+            ])
+        commentary = [
+            item for item in record.get("entries", [])
+            if (item.get("source", {}).get("path"), item.get("source", {}).get("name"))
+            in selected_keys
+        ]
+        if commentary:
+            lines.extend(["", "## Explorer research notes and drafts", ""])
+        for item in commentary:
+            src = item["source"]
+            lines.extend([
+                f"### {src['name']} — {item['mode']}",
+                f"Status: {item['interpretation_status']}",
+                item["text"],
+                "",
+            ])
+        requirements = "\n".join(lines)
+        if len(requirements) > 20_000:
+            raise ProjectError(
+                "The section evidence exceeds the existing SIGMA paper context limit "
+                "(20,000 characters). Select fewer declarations or divide the section. "
+                "No source text has been silently discarded."
+            )
+        config = global_research_settings.load_config()
+        view = create_project(
+            f"Lean Explorer — {title[:130]} — {identifier[:8]}",
+            problem,
+            "mathematical",
+            config["ai_model"],
+            config["reasoning_effort"],
+            "hard",
+            False,
+            "A human-readable, source-cited expository paper with explicit open obligations.",
+            requirements,
+        )
+        project_collaboration.register_owner(view)
+        record["paper_project"] = {"path": view.path, "project_id": view.project.id}
+        return True
+
+    updated = _with_dossier_lock(identifier, apply)
+    return updated["paper_project"]
+
+
 def markdown(identifier: str) -> str:
     record = _read(identifier)
     parts = [
