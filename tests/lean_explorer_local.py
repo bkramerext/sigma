@@ -99,10 +99,11 @@ def check_local_directory() -> None:
             assert declaration.json()["commit"].startswith("local:")
             dossier = client.post(
                 "/api/explorelean/dossiers",
-                json={"source_mode": "local"},
+                json={"source_mode": "local", "section_id": "theta-slopes"},
             )
             assert dossier.status_code == 201, dossier.text
             identifier = dossier.json()["id"]
+            assert dossier.json()["section_title"] == "Theta-lift chains, divisibility and slopes"
             note = client.post(
                 f"/api/explorelean/dossiers/{identifier}/notes",
                 json={
@@ -114,6 +115,19 @@ def check_local_directory() -> None:
             )
             assert note.status_code == 201, note.text
             assert note.json()["source"]["commit"] == revision
+            # A mathematical section spans different files and directories.
+            bridge = client.post(
+                f"/api/explorelean/dossiers/{identifier}/notes",
+                json={
+                    "source_mode": "local",
+                    "formal_path": "src/Proofs/Bridge.lean",
+                    "declaration": "arithmeticBridge",
+                    "text": "Study the arithmetic argument supporting the theta lift.",
+                },
+            )
+            assert bridge.status_code == 201, bridge.text
+            assert bridge.json()["source"]["path"] == "src/Proofs/Bridge.lean"
+            assert len(client.get(f"/api/explorelean/dossiers/{identifier}").json()["entries"]) == 2
             export = client.get(f"/api/explorelean/dossiers/{identifier}/markdown")
             assert export.status_code == 200
             assert "Local source: src/Statements.lean" in export.text
