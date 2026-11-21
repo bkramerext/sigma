@@ -50,9 +50,7 @@ def check_auto_discovery() -> None:
             updates: list[tuple[int, int, int, str]] = []
             found = lean_explorer_discovery.discover(
                 "automorphic-foundation",
-                lambda files, total, size, current: updates.append(
-                    (files, total, size, current)
-                ),
+                lambda files, total, size, current: updates.append((files, total, size, current)),
             )
             assert found["complete"] is True
             assert found["files_scanned"] == 3
@@ -89,8 +87,7 @@ def check_auto_discovery() -> None:
             assert record["discovery"]["complete"] is True
             assert len(record["scope"]) >= 2
             assert all(
-                src["selection_origin"] == "automatic_lexical_discovery"
-                for src in record["scope"]
+                src["selection_origin"] == "automatic_lexical_discovery" for src in record["scope"]
             )
             assert all(
                 src["path"] in {candidate["path"] for candidate in found["candidates"]}
