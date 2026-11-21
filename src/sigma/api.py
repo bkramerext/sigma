@@ -3825,13 +3825,28 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
     dossier = lean_explorer_dossiers.get(body.dossier_id)
     if dossier.get("source_mode") != "local" or dossier.get("section_id") != body.section_id:
         raise HTTPException(422, "Choose a dossier for this mathematical section.")
+    root = lean_explorer_local.source()
+    if root is None or dossier.get("formal_commit") != "local:" + root["root_id"]:
+        raise HTTPException(422, "Index the source directory used by this section first.")
+    if dossier.get("paper_project"):
+        raise HTTPException(422, "The paper scope is frozen. Use a new section dossier.")
+    checkpoint = dossier.get("discovery") or {}
+    start_offset = (
+        checkpoint.get("next_offset", 0)
+        if checkpoint.get("root_id") == root["root_id"] and not checkpoint.get("complete")
+        else 0
+    )
 
     async def events():
         yield _lean_sse(
             {
                 "type": "stage",
                 "stage": "discovery",
-                "label": "Searching the indexed Lean repository for mathematical evidence",
+                "label": (
+                    "Continuing Lean evidence discovery at file " + str(start_offset)
+                    if start_offset
+                    else "Searching the indexed Lean repository for mathematical evidence"
+                ),
             }
         )
         loop = asyncio.get_running_loop()
@@ -3853,7 +3868,12 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
             )
 
         task = asyncio.create_task(
-            asyncio.to_thread(lean_explorer_discovery.discover, body.section_id, progress)
+            asyncio.to_thread(
+                lean_explorer_discovery.discover,
+                body.section_id,
+                progress,
+                start_offset=start_offset,
+            )
         )
         try:
             while not task.done():
