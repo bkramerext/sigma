@@ -192,7 +192,13 @@ def discover(
         found = lean_explorer._declarations(text)
         declarations += len(found)
         file_ranked: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
         for index, item in enumerate(found):
+            # The current lexical reader resolves the first occurrence of a
+            # name in a file. Do not suggest an ambiguous later occurrence.
+            if item["name"] in seen_names:
+                continue
+            seen_names.add(item["name"])
             start = item["line"]
             end = found[index + 1]["line"] - 1 if index + 1 < len(found) else len(lines)
             excerpt = "\n".join(lines[start - 1 : min(start + 15, end)])
