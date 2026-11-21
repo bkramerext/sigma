@@ -494,7 +494,7 @@ export default function LeanExplorerPage() {
   }
 
   async function updateScope(add: boolean, item: {path: string; name: string}) {
-    if (scopeBusy || running) return;
+    if (scopeBusy || running || discovering) return;
     setScopeBusy(true); setError('');
     try {
       const id = await ensureDossier();
@@ -516,7 +516,7 @@ export default function LeanExplorerPage() {
   }
 
   async function preparePaperProject() {
-    if (!dossier || !(dossier.scope?.length) || handoffBusy || running) return;
+    if (!dossier || !(dossier.scope?.length) || handoffBusy || running || discovering) return;
     if (markdownDraft.trim() !== savedMarkdown && markdownDraft.trim()) {
       setError('Save the revised expository Markdown before preparing the paper.');
       return;
@@ -742,7 +742,7 @@ export default function LeanExplorerPage() {
       {selected && <div className="leanx-scope-candidate">
         <span>Current declaration: <code>{selected.name}</code> · {selected.path}</span>
         {selectedInScope ? <span>Included in this section</span> :
-          <button type="button" disabled={scopeBusy || running || !!dossier?.paper_project}
+          <button type="button" disabled={scopeBusy || running || discovering || !!dossier?.paper_project}
             onClick={() => void updateScope(true, {path: selected.path, name: selected.name})}>
             {scopeBusy ? 'Saving…' : 'Include in section'}
           </button>}
@@ -764,7 +764,7 @@ export default function LeanExplorerPage() {
               · Proposed evidence: {item.why_candidate?.[0] ?? 'source term match'}
             </small>}
           </span>
-          <button type="button" disabled={scopeBusy || running || !!dossier?.paper_project}
+          <button type="button" disabled={scopeBusy || running || discovering || !!dossier?.paper_project}
             aria-label={'Remove ' + item.name + ' from section'}
             onClick={() => void updateScope(false, item)}>Remove</button>
         </li>)}
@@ -792,7 +792,7 @@ export default function LeanExplorerPage() {
       <div className="leanx-section-heading"><h2>Inputs</h2><span>Formal proof tree + supplementary literature</span></div>
       <div className="leanx-formal-input">
         <label htmlFor="leanx-source-mode">A. Official Lean proof · source location</label>
-        <select id="leanx-source-mode" className="leanx-mode-select" value={sourceMode} disabled={running || localIndexing}
+        <select id="leanx-source-mode" className="leanx-mode-select" value={sourceMode} disabled={running || localIndexing || discovering}
           onChange={event => updateSourceMode(event.target.value as SourceMode)}>
           <option value="local">Local directory</option>
           <option value="mirror">Pinned GitHub mirror</option>
@@ -801,9 +801,9 @@ export default function LeanExplorerPage() {
           <p className="leanx-local-hint">Enter the absolute path of the extracted Lean folder on the same Mac running SIGMA. No browser upload is needed.</p>
           <div className="leanx-input-row">
             <input id="leanx-local-directory" spellCheck={false} aria-label="Local Lean directory" placeholder="~/rh-lean/lean"
-              value={localDirectory} disabled={running || localIndexing} onChange={event => setLocalDirectory(event.target.value)}
+              value={localDirectory} disabled={running || localIndexing || discovering} onChange={event => setLocalDirectory(event.target.value)}
               onKeyDown={event => {if (event.key === 'Enter') void indexLocalDirectory();}}/>
-            <button type="button" disabled={running || localIndexing || !localDirectory.trim()} onClick={() => void indexLocalDirectory()}>
+            <button type="button" disabled={running || localIndexing || discovering || !localDirectory.trim()} onClick={() => void indexLocalDirectory()}>
               {localIndexing ? 'Scanning…' : localSource ? 'Rescan directory' : 'Index directory'}
             </button>
             {localIndexing && <button type="button" onClick={() => indexAbortRef.current?.abort()}>Stop</button>}
@@ -1033,7 +1033,7 @@ export default function LeanExplorerPage() {
         then generate, validate, score, and download a PDF.
       </p>
       <div className="leanx-paper-actions">
-        <button type="button" disabled={handoffBusy || running || scopeBusy || !dossier?.scope?.length}
+        <button type="button" disabled={handoffBusy || running || discovering || scopeBusy || !dossier?.scope?.length}
           onClick={() => void preparePaperProject()}>
           {handoffBusy ? 'Preparing…' : dossier?.paper_project ? 'Open section paper project' : 'Prepare paper in SIGMA'}
         </button>
