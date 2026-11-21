@@ -3899,9 +3899,7 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
                     lean_explorer_dossiers.apply_discovery, body.dossier_id, result
                 )
                 if result["complete"]:
-                    yield _lean_sse(
-                        {"type": "complete", "discovery": result, "dossier": updated}
-                    )
+                    yield _lean_sse({"type": "complete", "discovery": result, "dossier": updated})
                     return
                 next_offset = result["next_offset"]
                 if next_offset <= offset:
