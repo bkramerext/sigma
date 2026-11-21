@@ -65,7 +65,7 @@ type Dossier = {
 type DossierItem = {
   id: string; title: string; entry_count: number; updated_at: string;
   source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
-  formal_commit?: string; scope_count?: number;
+  formal_commit?: string; scope_count?: number; single_file_trial?: boolean;
   paper_project?: {path: string; project_id: string} | null;
 };
 type AIConfig = {available: boolean; message: string; model: string; reasoning_effort: string; models: {id: string; label: string; efforts: string[]}[]};
@@ -342,6 +342,7 @@ export default function LeanExplorerPage() {
   useEffect(() => {
     const match = dossierList.find(item =>
       item.section_id === sectionId && item.source_mode === sourceMode
+      && !item.single_file_trial
       && (sourceMode !== 'local' || item.formal_commit === 'local:' + localSource?.root_id)
     );
     if (!match) {
@@ -384,7 +385,8 @@ export default function LeanExplorerPage() {
     } catch (cause) {setError(explainError(cause));}
   }
   async function ensureDossier(): Promise<string> {
-    if (dossier && dossier.source_mode === sourceMode && dossier.section_id === sectionId)
+    if (dossier && dossier.source_mode === sourceMode && dossier.section_id === sectionId
+      && !dossier.discovery?.single_file_trial)
       return dossier.id;
     const existing = dossierList.find(item =>
       item.section_id === sectionId && item.source_mode === sourceMode
