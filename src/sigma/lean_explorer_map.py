@@ -1,6 +1,7 @@
 """Provisional mathematical proof map for the Alpöge RH exposition.
 
-Every edge is an interpretation of the supplementary proof guide, NOT a
+Sections are ordered in conceptual prerequisite-to-conclusion flow. Every edge
+is an interpretation of the supplementary proof guide, NOT a
 machine-extracted dependency. IDs are stable dossier section identifiers.
 """
 
@@ -17,31 +18,22 @@ GUIDE_URL = (
 
 _SECTIONS = [
     {
-        "id": "reflection",
-        "title": "Reflection and the final conclusion",
-        "question": "Why is exclusion of zeros to the right of the critical line sufficient?",
-        "purpose": "Explain the transition from a zero-free right half-plane to RH and Dirichlet GRH.",
-        "guide_section": 1,
-        "guide_lines": [233, 251],
-        "declaration_hints": ["RiemannHypothesis", "RiemannZetaZerosOnLine"],
-    },
-    {
-        "id": "prime-statistics",
-        "title": "Prime sums and Mellin transforms",
-        "question": "Which prime statistic exposes a zeta zero as a pole, and why this normalization?",
-        "purpose": "Define smoothed von Mangoldt sums, their centering, and Mellin transforms.",
-        "guide_section": 2,
-        "guide_lines": [254, 281],
+        "id": "automorphic-foundation",
+        "title": "Automorphic and Galois-theoretic foundations",
+        "question": "Which representation-theoretic inputs make the theta and cohomological arguments possible?",
+        "purpose": "Trace the automorphic/Galois inputs and the assumptions used by the later constructions.",
+        "guide_section": 7,
+        "guide_lines": [597, 635],
         "declaration_hints": [],
     },
     {
-        "id": "localized-landau",
-        "title": "Localized Landau zero exclusion",
-        "question": "Why do one-sided estimates on distant windows rule out off-line zeros?",
-        "purpose": "Reconstruct the positive-family residues, high-derivative localization, and order of quantifiers.",
-        "guide_section": 3,
-        "guide_lines": [284, 346],
-        "declaration_hints": [],
+        "id": "iwasawa-windows",
+        "title": "Iwasawa theory and cohomological windows",
+        "question": "What is the cost of divisibility, and why can that cost be controlled on whole windows?",
+        "purpose": "Explain cohomological losses, Iwasawa-theoretic bounds, exceptional twists, and interval avoidance.",
+        "guide_section": 6,
+        "guide_lines": [546, 594],
+        "declaration_hints": ["VWinAt"],
     },
     {
         "id": "theta-slopes",
@@ -62,23 +54,33 @@ _SECTIONS = [
         "declaration_hints": [],
     },
     {
-        "id": "iwasawa-windows",
-        "title": "Iwasawa theory and cohomological windows",
-        "question": "What is the cost of divisibility, and why can that cost be controlled on whole windows?",
-        "purpose": "Explain cohomological losses, Iwasawa-theoretic bounds, exceptional twists, and interval avoidance.",
-        "guide_section": 6,
-        "guide_lines": [546, 594],
-        "declaration_hints": ["VWinAt"],
-    },
-    {
-        "id": "automorphic-foundation",
-        "title": "Automorphic and Galois-theoretic foundations",
-        "question": "Which representation-theoretic inputs make the theta and cohomological arguments possible?",
-        "purpose": "Trace the automorphic/Galois inputs and the assumptions used by the later constructions.",
-        "guide_section": 7,
-        "guide_lines": [597, 635],
+        "id": "prime-statistics",
+        "title": "Prime sums and Mellin transforms",
+        "question": "Which prime statistic exposes a zeta zero as a pole, and why this normalization?",
+        "purpose": "Define smoothed von Mangoldt sums, their centering, and Mellin transforms.",
+        "guide_section": 2,
+        "guide_lines": [254, 281],
         "declaration_hints": [],
     },
+    {
+        "id": "localized-landau",
+        "title": "Localized Landau zero exclusion",
+        "question": "Why do one-sided estimates on distant windows rule out off-line zeros?",
+        "purpose": "Reconstruct the positive-family residues, high-derivative localization, and order of quantifiers.",
+        "guide_section": 3,
+        "guide_lines": [284, 346],
+        "declaration_hints": [],
+    },
+    {
+        "id": "reflection",
+        "title": "Reflection and the final conclusion",
+        "question": "Why is exclusion of zeros to the right of the critical line sufficient?",
+        "purpose": "Explain the transition from a zero-free right half-plane to RH and Dirichlet GRH.",
+        "guide_section": 1,
+        "guide_lines": [233, 251],
+        "declaration_hints": ["RiemannHypothesis", "RiemannZetaZerosOnLine"],
+    },
+
 ]
 
 # Arrows describe a proposed *mathematical flow*, not formal proof-term references.
