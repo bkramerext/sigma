@@ -8,12 +8,13 @@ are never followed. The working directory remains mutable, not verified Lean.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 import json
 import os
 import stat
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Any
 
 from sigma import cloud_auth, cloud_workspaces
 from sigma.projects import ProjectError
@@ -25,8 +26,17 @@ MAX_INDEX_BYTES = 80 * 1024 * 1024
 MAX_SOURCE_BYTES = 3 * 1024 * 1024
 MAX_QUERY_RESULTS = 250
 _EXCLUDE = {
-    ".git", ".lake", ".venv", ".idea", ".vscode", "__pycache__",
-    "node_modules", "build", "_build", "dist", "target",
+    ".git",
+    ".lake",
+    ".venv",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    "node_modules",
+    "build",
+    "_build",
+    "dist",
+    "target",
 }
 
 
@@ -181,8 +191,10 @@ def _paths(root: Path, progress: Callable[[int, int, str], None] | None) -> list
             dirs.clear()
             continue
         dirs[:] = [
-            name for name in dirs
-            if name not in _EXCLUDE and not name.startswith(".")
+            name
+            for name in dirs
+            if name not in _EXCLUDE
+            and not name.startswith(".")
             and not (current_path / name).is_symlink()
         ]
         scanned_dirs += 1
@@ -240,7 +252,7 @@ def list_files(query: str = "", offset: int = 0, limit: int = 100) -> dict:
         "total_matches": len(matches),
         "offset": offset,
         "limit": limit,
-        "files": matches[offset:offset + limit],
+        "files": matches[offset : offset + limit],
     }
 
 
