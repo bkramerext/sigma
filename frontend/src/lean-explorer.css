@@ -676,3 +676,25 @@
 .leanx-boundary { margin: 16px 2px 0; padding: 9px 0; border-top: 1px solid #514434; color: #a99f94; font-size: .74rem; line-height: 1.6; }
 @media (max-width: 1120px) { .leanx-workspace-grid { grid-template-columns: minmax(205px, 30%) minmax(0, 1fr); } .leanx-progress-column { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 720px) { .leanx-workspace-grid { grid-template-columns: minmax(0,1fr); } .leanx-progress-column { grid-column: 1; display: flex; } .leanx-input-row { flex-wrap: wrap; } .leanx-input-row input { flex-basis: 100%; } .leanx-pane { min-width: 0; } .leanx-page-row { align-items: flex-start; } }
+
+
+/* Local Lean directory input: an indexed source tree, not a single file upload. */
+.leanx-mode-select { display: block; margin: 8px 0; min-width: 185px; }
+.leanx-local-hint { color: #bcae9e; margin: 7px 0; font-size: .8rem; line-height: 1.6; overflow-wrap: anywhere; }
+.leanx-local-hint code { color: #e9c496; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.leanx-local-progress { margin: 10px 0; padding: 9px 11px; border: 1px solid #66513d; border-radius: 6px; color: #9fdfb0; font-size: .79rem; overflow-wrap: anywhere; }
+.leanx-mirror-controls .leanx-input-row { margin-top: 7px; }
+.leanx-module-navigator { border-bottom: 1px solid #66513d; padding-bottom: 10px; }
+.leanx-module-search { display: flex; gap: 6px; margin: 9px 12px; align-items: stretch; }
+.leanx-module-search input { flex: 1; width: 50px; font-size: .77rem; }
+.leanx-module-search button, .leanx-module-pager button {
+  color: #f0e6d7; background: #07111e; border: 1px solid #88603b;
+  border-radius: 6px; font-size: .74rem; padding: 5px 9px;
+}
+.leanx-module-search button:hover:not(:disabled), .leanx-module-pager button:hover:not(:disabled) { background: #604327; }
+.leanx-module-list { max-height: 245px; overflow-y: auto; padding: 0 8px 6px; }
+.leanx-module-list button { width: 100%; display: block; background: transparent; color: #d6c4b2; border: 1px solid transparent; border-radius: 5px; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 7px 6px; text-align: left; overflow-wrap: anywhere; }
+.leanx-module-list button:hover { background: #2c281f; }
+.leanx-module-list button.is-selected { color: #f7d6ad; background: #38291e; border-color: #946d49; }
+.leanx-module-pager { display: flex; gap: 7px; justify-content: space-between; align-items: center; color: #afa092; margin: 5px 10px 0; font-size: .69rem; }
+.leanx-module-pager button:disabled { opacity: .4; cursor: default; }
