@@ -22,6 +22,7 @@ from sigma.ui_instance import private_directory
 MAX_DOSSIER_BYTES = 4 * 1024 * 1024
 MAX_ENTRIES = 160
 MAX_NOTE_CHARS = 24_000
+MAX_SCOPE_DECLARATIONS = 32
 
 
 def _directory() -> Path:
@@ -119,6 +120,8 @@ def create(
         "section_focus": section_focus.strip(),
         "section_basis": "conceptual; declaration membership is source-linked",
         "entries": [],
+        "scope": [],
+        "paper_project": None,
     }
     data = json.dumps(document, ensure_ascii=False, indent=2).encode("utf-8")
     path = _directory() / (identifier + ".json")
@@ -155,6 +158,8 @@ def list_dossiers() -> list[dict]:
                 "created_at": record["created_at"],
                 "updated_at": record["updated_at"],
                 "entry_count": len(record.get("entries", [])),
+                "scope_count": len(record.get("scope", [])),
+                "paper_project": record.get("paper_project"),
                 "source_mode": record.get("source_mode", "mirror"),
                 "formal_commit": record.get("formal_commit", ""),
                 "section_path": record.get("section_path", ""),
@@ -250,6 +255,104 @@ def append(
         raise ProjectError("The Lean Explorer dossier could not be updated.") from exc
 
 
+def _save_locked(root: Path, identifier: str, record: dict) -> None:
+    """Atomically write a dossier while holding its stable per-ID file lock."""
+    data = json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8")
+    if len(data) > MAX_DOSSIER_BYTES:
+        raise ProjectError("The dossier exceeds its 4 MiB size limit.")
+    temp = root / (identifier + "." + str(uuid4()) + ".tmp")
+    try:
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            _check(stream.fileno())
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp, root / (identifier + ".json"))
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def _with_dossier_lock(identifier: str, update) -> dict:
+    root = _directory()
+    identifier = _identifier(identifier)
+    lock_path = root / (identifier + ".lock")
+    try:
+        fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "rb+") as lock:
+            _check(lock.fileno())
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            record = _read(identifier)
+            changed = update(record)
+            if changed:
+                record["updated_at"] = datetime.now(UTC).isoformat()
+                _save_locked(root, identifier, record)
+            return record
+    except OSError as exc:
+        raise ProjectError("The Lean Explorer dossier could not be updated.") from exc
+
+
+def select_declaration(
+    identifier: str, *, formal_path: str, declaration_name: str, source_mode: str
+) -> dict:
+    """Attach an exact source declaration to the section's independent scope."""
+    selected = lean_explorer.declaration(formal_path, declaration_name, source_mode=source_mode)
+    item = {
+        key: selected[key]
+        for key in (
+            "path", "name", "kind", "commit", "url", "sha256",
+            "start_line", "end_line", "complete", "excerpt"
+        )
+    }
+
+    def apply(record: dict) -> bool:
+        if (
+            record.get("formal_commit") != _revision(source_mode)
+            or record.get("source_mode", "mirror") != source_mode
+        ):
+            raise ProjectError("This dossier belongs to another formal source.")
+        scoped = record.setdefault("scope", [])
+        if not isinstance(scoped, list):
+            raise ProjectError("Dossier scope is invalid.")
+        if any(x.get("path") == item["path"] and x.get("name") == item["name"] for x in scoped):
+            return False
+        if len(scoped) >= MAX_SCOPE_DECLARATIONS:
+            raise ProjectError("This section already has 32 selected declarations; divide the work.")
+        if record.get("paper_project"):
+            raise ProjectError("This section already has a paper handoff. Make a new section dossier to change its scope.")
+        scoped.append(item)
+        return True
+
+    return _with_dossier_lock(identifier, apply)
+
+
+def deselect_declaration(
+    identifier: str, *, formal_path: str, declaration_name: str, source_mode: str
+) -> dict:
+    """Only remove the selection, not prior source-backed research entries."""
+    def apply(record: dict) -> bool:
+        if (
+            record.get("formal_commit") != _revision(source_mode)
+            or record.get("source_mode", "mirror") != source_mode
+        ):
+            raise ProjectError("This dossier belongs to another formal source.")
+        if record.get("paper_project"):
+            raise ProjectError("This section already has a paper handoff. Make a new dossier to change its scope.")
+        scoped = record.get("scope", [])
+        if not isinstance(scoped, list):
+            raise ProjectError("Dossier scope is invalid.")
+        remaining = [
+            x for x in scoped
+            if x.get("path") != formal_path or x.get("name") != declaration_name
+        ]
+        if len(remaining) == len(scoped):
+            return False
+        record["scope"] = remaining
+        return True
+
+    return _with_dossier_lock(identifier, apply)
+
+
 def markdown(identifier: str) -> str:
     record = _read(identifier)
     parts = [
@@ -261,6 +364,7 @@ def markdown(identifier: str) -> str:
         f"Proof map section ID: `{record.get('section_id') or 'unassigned'}`",
         f"Section question: {record.get('section_focus', '')}",
         "Formal declaration membership is recorded per entry, across modules.",
+        f"Selected Lean declarations: {len(record.get('scope', []))}",
         f"Created: {record['created_at']}",
         "",
         (
@@ -270,6 +374,14 @@ def markdown(identifier: str) -> str:
         ),
         "",
     ]
+    if record.get("scope"):
+        parts.extend(["## Selected Lean evidence", ""])
+        for src in record["scope"]:
+            parts.extend([
+                f"- **{src['name']}** — \`{src['path']}\` lines {src['start_line']}-{src['end_line']}",
+                f"  revision \`{src['commit']}\` · file SHA256 \`{src['sha256']}\`",
+            ])
+        parts.append("")
     for index, item in enumerate(record.get("entries", []), 1):
         src = item["source"]
         parts.extend(
