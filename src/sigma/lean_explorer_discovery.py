@@ -27,7 +27,7 @@ MAX_CANDIDATES = 12
 MAX_AUTO_SELECTED = 5
 _PROGRESS_EVERY = 120
 _WORDS = re.compile(r"[A-Za-z][a-z]*|[A-Z]+(?=[A-Z][a-z]|\b)|[A-Z]?[a-z]+|[0-9]+")
-_IGNORE = frozenset(
+_IGNORE = frozenset(re.findall(r"[a-z]+", 
     """which with from into that this these those then than what why where
     when which whose there here them they their were would should could does
     have has had some many most only other about across between against
@@ -40,7 +40,7 @@ _IGNORE = frozenset(
     independent relationship connect connects how an and the for are is
     it or of by in on to at as a be do can we its not all each with
     of zero true false nat int prop sorry namespace open import simp
-    """.split()
+    """
 )
 _GENERICS = frozenset({"structure", "field", "value", "base", "step", "main", "aux", "test"})
 
