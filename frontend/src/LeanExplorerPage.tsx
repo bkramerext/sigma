@@ -677,8 +677,11 @@ export default function LeanExplorerPage() {
       </div>
       <ol className="leanx-paper-steps">
         {THINKING_STEPS.map((item, index) =>
-          <li key={item.name} className={stageCompletion[index] ? 'is-past' :
-            index === activeStep ? (running || localIndexing || discovering || handoffBusy ? 'is-active' : 'is-current') : 'is-upcoming'}>
+          <li key={item.name} className={
+            index === activeStep && (running || discovering || handoffBusy || localIndexing)
+              ? 'is-active' : stageCompletion[index] ? 'is-past'
+              : index === activeStep ? 'is-current' : 'is-upcoming'
+          }>
             <span className="leanx-stage-marker" aria-hidden="true">{stageCompletion[index] ? '✓' : '○'}</span>
             <strong>{item.name}</strong>
           </li>
