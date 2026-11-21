@@ -297,6 +297,24 @@ export default function LeanExplorerPage() {
     return () => {cancelled = true; abortRef.current?.abort(); indexAbortRef.current?.abort(); document.title = oldTitle;};
   }, [loadFile, loadModules, refreshDossiers]);
 
+  // Resume the existing dossier for a mathematical section, regardless of
+  // which source file is currently open. Switching sections never mixes notes.
+  useEffect(() => {
+    const match = dossierList.find(item =>
+      item.section_id === sectionId && item.source_mode === sourceMode
+      && (sourceMode !== 'local' || item.formal_commit === 'local:' + localSource?.root_id)
+    );
+    if (!match) {
+      setDossier(null);
+      return;
+    }
+    let active = true;
+    void requestJSON<Dossier>('/api/explorelean/dossiers/' + encodeURIComponent(match.id))
+      .then(result => {if (active) setDossier(result);})
+      .catch(cause => {if (active) setError(explainError(cause));});
+    return () => {active = false;};
+  }, [dossierList, sectionId, sourceMode, localSource?.root_id]);
+
   useEffect(() => {
     if (!file || !selectedName) {setSelected(null); return;}
     let cancelled = false;
@@ -512,7 +530,10 @@ export default function LeanExplorerPage() {
             className={sectionId === item.id ? 'leanx-map-section is-selected' : 'leanx-map-section'}>
             <span className="leanx-map-number">{index + 1}</span>
             <span>{item.title}</span>
-            {matchedDossiers.some(record => record.section_id === item.id) && <span className="leanx-map-saved" aria-label="Has saved dossier">●</span>}
+            {dossierList.some(record =>
+              record.section_id === item.id && record.source_mode === sourceMode
+              && (sourceMode !== 'local' || record.formal_commit === 'local:' + localSource?.root_id)
+            ) && <span className="leanx-map-saved" aria-label="Has saved dossier">●</span>}
           </button>
         ))}
         {!proofMap && <p className="leanx-empty">Loading the provisional mathematical map…</p>}
