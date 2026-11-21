@@ -596,8 +596,10 @@ export default function LeanExplorerPage() {
       if (controller.signal.aborted) {
         setStage('Stopped'); log('Stopped by user. Earlier dossier entries remain saved.', 'note');
       } else {
-        const message = explainError(cause); setError(message); setStage('Failed');
-        log('Exploration failed: ' + message, 'error');
+        const message = explainError(cause);
+        setError(message);
+        setStage('Investigation failed — discovered evidence is saved');
+        log('Investigation failed: ' + message, 'error');
       }
     } finally {setRunning(false); abortRef.current = null; busyRef.current = false;}
   }
@@ -674,8 +676,8 @@ export default function LeanExplorerPage() {
     <section className="leanx-workflow" aria-label="Lean Explorer workflow">
       <div className="leanx-workflow-title">
         <strong>Exploring {sectionName}</strong>
-        <span className={running || discovering || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'}
-          aria-label={running || localIndexing ? 'Working' : 'Idle'}/>
+        {(running || discovering || localIndexing) &&
+          <span className="research-running-indicator" aria-label="Lean exploration in progress"/>}
       </div>
       <ol className="leanx-paper-steps">
         {THINKING_STEPS.map((item, index) =>
@@ -692,6 +694,11 @@ export default function LeanExplorerPage() {
           ? `Indexing: ${scanCount.files.toLocaleString()} Lean files in ${scanCount.dirs.toLocaleString()} directories`
           : running ? `${stage} · ${Math.floor(elapsed / 60)}m ${String(elapsed % 60).padStart(2, '0')}s` : stage}
       </div>
+      {error && <div className="leanx-workflow-error" role="alert">
+        <span>{error}</span>
+        {!!dossier?.scope?.length && !running && !discovering && !!config?.available && !!model &&
+          <button type="button" onClick={() => void analyzeSelected()}>Retry investigation</button>}
+      </div>}
     </section>
 
 
@@ -728,7 +735,7 @@ export default function LeanExplorerPage() {
             onClick={() => void exploreSection()}>
             {discovering ? 'Exploring…'
               : dossier?.discovery && !dossier.discovery.complete
-                ? 'Continue exploration' : 'Explore section'}
+                ? 'Continue scanning Lean files' : 'Explore section'}
           </button>
           {(discovering || running) && <button type="button" onClick={stopAnalysis}>Stop</button>}
           <button type="button" onClick={() => setShowBrowser(true)}>Find Lean evidence manually</button>
@@ -748,7 +755,7 @@ export default function LeanExplorerPage() {
         {' '}{dossier.discovery.matching_declarations.toLocaleString()} possible matches.
         {dossier.discovery.unreadable_files > 0 &&
           ' Unreadable files: ' + dossier.discovery.unreadable_files.toLocaleString() + '.'}
-        {!dossier.discovery.complete && ' Scan incomplete; Continue exploration resumes at the next file.'}
+        {!dossier.discovery.complete && ' Scan incomplete; Continue scanning Lean files resumes from the saved checkpoint.'}
         {' '}Matches are candidates, not verified mathematical dependencies.
       </p>}
       {scope.length > 0 ? <ul className="leanx-scope-list">
@@ -924,7 +931,8 @@ export default function LeanExplorerPage() {
         <section className="leanx-pane leanx-progress-pane" aria-live="polite">
           <div className="leanx-pane-title">
             <h2>Live activity</h2>
-            <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'} aria-label={running || localIndexing ? 'Active' : 'Idle'}/>
+            {(running || discovering || localIndexing) &&
+              <span className="research-running-indicator" aria-label="Lean exploration in progress"/>}
           </div>
           <div className="leanx-stage">{stage}</div>
           {localIndexing && <p className="leanx-running-time">{scanCount.dirs.toLocaleString()} directories · {scanCount.files.toLocaleString()} Lean files discovered</p>}
@@ -1036,9 +1044,8 @@ export default function LeanExplorerPage() {
       </div>
     </section>
 
-    {error && <p className="chat-error leanx-error" role="alert">{error}</p>}
     <p className="leanx-boundary">
-      Current scope is manually selected. Automatic mathematical section inference, elaborated theorem
+      Current scope contains source-backed candidates; automatic mathematical section inference, elaborated theorem
       dependencies, and Lean kernel checking remain future capabilities. Paper generation uses SIGMA's
       project pipeline and retains these evidence limitations.
     </p>
