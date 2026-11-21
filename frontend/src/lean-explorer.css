@@ -577,3 +577,102 @@
   .lean-explorer-page .leanx-real-source-path-row { flex-wrap: wrap; }
   .lean-explorer-page .leanx-real-source-path-row input { flex-basis: 100%; }
 }
+
+
+/* Source-driven Lean Explorer, based on the former Brainstorm look and feel.
+   The existing Brainstorm header/theme rules above are intentionally retained. */
+.brainstorm-workspace.lean-explorer-page { min-height: 100dvh; }
+.brainstorm-workspace .leanx-ui { padding: 0 0 38px; }
+.leanx-ui { --leanx-edge: #66513d; --leanx-copper: #f2c48d; --leanx-subtle: #b7a99a; color: #f0e6d7; }
+.leanx-page-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 3px 0 13px; }
+.leanx-page-row .chat-eyebrow { margin: 0 0 4px; color: #d6a26d; letter-spacing: .09em; text-transform: uppercase; font-size: .72rem; }
+.leanx-page-row .leanx-description { margin: 0; color: #c6bbad; font-size: .87rem; }
+.leanx-ui .leanx-close-button { cursor: pointer; border-radius: 7px; }
+.leanx-section { margin: 0 0 18px; border: 1px solid var(--leanx-edge); background: #141a1c; border-radius: 10px; padding: 16px 19px; }
+.leanx-section-heading, .leanx-pane-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.leanx-section-heading { margin: 0 0 12px; }
+.leanx-section-heading h2, .leanx-pane-title h2 { margin: 0; color: var(--leanx-copper); font-size: 1.02rem; line-height: 1.5; font-weight: 650; }
+.leanx-section-heading span, .leanx-pane-title>span { color: #b1a79d; font-size: .75rem; }
+.leanx-ui a { color: #edb97e; text-decoration: none; }
+.leanx-ui a:hover { text-decoration: underline; color: #ffd3a0; }
+.leanx-formal-input label, .leanx-supplement strong, .leanx-dossier-pane label, .leanx-objective-label { display: block; color: #f1c18c; font-size: .84rem; font-weight: 600; }
+.leanx-input-row { display: flex; gap: 9px; margin: 8px 0 8px; align-items: stretch; }
+.leanx-ui input:not([type=checkbox]), .leanx-ui select, .leanx-ui textarea {
+  box-sizing: border-box; color: #f0e6d7; background: #131210; border: 1px solid #72553a;
+  border-radius: 7px; font: inherit; padding: 9px 12px; min-width: 0;
+}
+.leanx-ui input:focus-visible, .leanx-ui select:focus-visible, .leanx-ui textarea:focus-visible,
+.leanx-ui button:focus-visible { outline: 2px solid #e5a785; outline-offset: 2px; }
+.leanx-ui button { cursor: pointer; font: inherit; }
+.leanx-ui button:disabled { opacity: .5; cursor: default; }
+.leanx-input-row input { flex: 1 1 auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important; font-size: .8rem !important; }
+.leanx-ui .leanx-input-row button, .leanx-operation-controls button, .leanx-dossier-select-row button, .leanx-dossier-pane>button {
+  border: 1px solid #bd8246; border-radius: 7px; min-height: 35px;
+  background: #07111e; padding: 7px 15px; color: #f0e6d7;
+}
+.leanx-ui .leanx-input-row button:hover:not(:disabled), .leanx-operation-controls button:hover:not(:disabled),
+.leanx-dossier-select-row button:hover:not(:disabled), .leanx-dossier-pane>button:hover:not(:disabled) { background: #6b4329; }
+.leanx-source-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; color: var(--leanx-subtle); font-size: .76rem; }
+.leanx-source-line code { color: #f0d4b1; background: #241f1a; border-radius: 4px; padding: 1px 4px; }
+.leanx-supplement { display: grid; align-items: start; gap: 7px; margin-top: 13px; padding-top: 12px; border-top: 1px solid #4d4339; }
+.leanx-supplement label { display: flex; gap: 9px; align-items: baseline; font-size: .82rem; color: #dccdbd; cursor: pointer; }
+.leanx-supplement input[type=checkbox] { accent-color: #bd8246; width: 15px; height: 15px; margin: 0; }
+.leanx-workspace-grid { display: grid; grid-template-columns: minmax(210px, 23%) minmax(345px, 1fr) minmax(240px, 26%); align-items: start; gap: 14px; }
+.leanx-pane { border: 1px solid var(--leanx-edge); border-radius: 10px; background: #141a1c; overflow: hidden; }
+.leanx-pane-title { padding: 13px 16px 12px; border-bottom: 1px solid #514434; }
+.leanx-reading-column, .leanx-progress-column { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.leanx-declarations>input { display: block; width: calc(100% - 24px); margin: 12px; font-size: .8rem; }
+.leanx-declaration-list { max-height: 510px; overflow: auto; padding: 1px 8px 10px; }
+.leanx-declaration-list button { display: flex; align-items: center; width: 100%; gap: 6px; padding: 10px 7px; background: transparent; border: 1px solid transparent; border-radius: 6px; color: #d9d0c5; text-align: left; font-size: .8rem; }
+.leanx-declaration-list button:hover { background: #292722; }
+.leanx-declaration-list button.is-selected { background: #32261c; border-color: #a27a4e; color: #ffe0bd; }
+.leanx-declaration-kind { flex: none; min-width: 37px; font: 600 .68rem/1 ui-monospace, monospace; color: #bd9a72; }
+.leanx-declaration-name { flex: 1; overflow-wrap: anywhere; }
+.leanx-declaration-line { color: #958e83; font: .7rem ui-monospace,monospace; }
+.leanx-empty { padding: 18px; color: #aba295; font-size: .81rem; line-height: 1.6; margin: 0; }
+.leanx-pane-footer { border-top: 1px solid #403e38; padding: 10px 14px; color: #a99f95; font-size: .72rem; line-height: 1.5; }
+.leanx-source-code pre { box-sizing: border-box; margin: 0; padding: 17px 18px; overflow: auto; max-height: 460px; background: #0b1117; color: #e1dacb; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+.leanx-source-code .leanx-pane-title a { font-size: .76rem; }
+.leanx-analysis-pane { padding-bottom: 15px; }
+.leanx-objective-label { padding: 13px 15px 6px; }
+.leanx-analysis-pane textarea { width: calc(100% - 30px); display: block; min-height: 64px; margin: 0 15px 10px; resize: vertical; line-height: 1.5; }
+.leanx-operation-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 15px 12px; }
+.leanx-operation-controls .leanx-primary-action { background: #80512c; color: #fff5e8; font-weight: 650; }
+.leanx-operation-controls>span { margin-left: auto; color: #aa9c90; font-size: .73rem; }
+.leanx-explanation { border-top: 1px solid #403e38; padding: 17px 19px 9px; line-height: 1.6; color: #eee8dd; }
+.leanx-explanation pre { overflow: auto; background: #0b1117; padding: 12px; border-radius: 6px; }
+.leanx-explanation p { margin: 9px 0; }
+.leanx-evidence-detail { margin: 7px 16px; padding: 11px 12px; border: 1px solid #574536; border-radius: 6px; font-size: .75rem; color: #c5b9ad; }
+.leanx-evidence-detail summary { cursor: pointer; color: #d2b18c; }
+.leanx-evidence-detail p { overflow-wrap: anywhere; }
+.leanx-existing { margin: 10px 16px 0; font-size: .76rem; color: #baa28b; }
+.leanx-progress-pane { min-height: 160px; }
+.leanx-live-dot { flex: none; background: #82746a; border-radius: 50%; height: 10px; width: 10px; }
+.leanx-live-dot.is-active { background: #69db83; box-shadow: 0 0 0 2px #69db8333; animation: leanx-pulse 1.3s ease-in-out infinite; }
+@keyframes leanx-pulse { 50% { opacity: .25; box-shadow: 0 0 0 6px #69db8333; } }
+@media (prefers-reduced-motion: reduce) { .leanx-live-dot.is-active { animation: none; } }
+.leanx-stage { padding: 13px 16px 6px; color: #e7c49f; font-size: .84rem; }
+.leanx-running-time { margin: 0; padding: 0 16px 10px; color: #b7aaa0; font: .75rem ui-monospace,monospace; }
+.leanx-activity-log { list-style: none; margin: 7px 0 0; padding: 0 10px 12px; max-height: 360px; overflow: auto; }
+.leanx-activity-log li { display: flex; align-items: baseline; gap: 9px; padding: 8px 5px; border-top: 1px solid #393b37; font-size: .77rem; line-height: 1.5; }
+.leanx-activity-icon { flex: none; min-width: 12px; color: #cab294; font-weight: 750; }
+.leanx-state-ok .leanx-activity-icon { color: #83d59c; }
+.leanx-state-error .leanx-activity-icon { color: #fd9a8b; }
+.leanx-activity-log li>div { min-width: 0; overflow-wrap: anywhere; }
+.leanx-activity-log small { display: block; color: #948b80; font-size: .66rem; margin-top: 2px; }
+.leanx-dossier-pane { padding-bottom: 15px; }
+.leanx-dossier-pane label { margin: 13px 15px 6px; }
+.leanx-dossier-select-row { display: flex; gap: 7px; margin: 0 15px; }
+.leanx-dossier-select-row select { flex: 1; max-width: calc(100% - 65px); font-size: .75rem; }
+.leanx-dossier-select-row button { padding: 7px 10px; }
+.leanx-download-link { display: inline-block; margin: 11px 15px; font-size: .78rem; }
+.leanx-dossier-entries { max-height: 250px; overflow: auto; margin: 0 12px; }
+.leanx-dossier-entries button { display: block; width: 100%; padding: 9px 5px; color: #e8d9c3; border: 0; border-bottom: 1px solid #514434; background: transparent; text-align: left; font-size: .8rem; }
+.leanx-dossier-entries button:hover { background: #2e281f; }
+.leanx-dossier-entries small { display: block; color: #ac9e91; margin-top: 4px; font-size: .7rem; }
+.leanx-dossier-pane textarea { box-sizing: border-box; display: block; margin: 0 15px 9px; width: calc(100% - 30px); resize: vertical; font-size: .8rem; }
+.leanx-dossier-pane>button { margin: 0 15px; }
+.leanx-error { margin-top: 15px; }
+.leanx-boundary { margin: 16px 2px 0; padding: 9px 0; border-top: 1px solid #514434; color: #a99f94; font-size: .74rem; line-height: 1.6; }
+@media (max-width: 1120px) { .leanx-workspace-grid { grid-template-columns: minmax(205px, 30%) minmax(0, 1fr); } .leanx-progress-column { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 720px) { .leanx-workspace-grid { grid-template-columns: minmax(0,1fr); } .leanx-progress-column { grid-column: 1; display: flex; } .leanx-input-row { flex-wrap: wrap; } .leanx-input-row input { flex-basis: 100%; } .leanx-pane { min-width: 0; } .leanx-page-row { align-items: flex-start; } }
