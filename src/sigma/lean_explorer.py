@@ -282,3 +282,68 @@ def analysis_packet(
             + "\n--- END SUPPLEMENTARY EXCERPT ---"
         )
     return "\n\n".join(packet), sources, selected
+
+
+def section_analysis_packet(
+    scope: list[dict[str, Any]],
+    *,
+    source_mode: str,
+    include_guide: bool,
+    include_announcement: bool,
+) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+    """Analyze only the explicitly selected declarations, across all Lean files.
+
+    The scope comes from a private dossier, never from client-submitted excerpts.
+    Each declaration is re-read and compared with the stored file checksum,
+    preventing a mutable local source from silently changing the evidence.
+    """
+    if not scope or len(scope) > 32:
+        raise ProjectError("Select one or more Lean declarations before analyzing this section.")
+    first = scope[0]
+    packet, sources, selected = analysis_packet(
+        first["path"],
+        first["name"],
+        source_mode=source_mode,
+        include_guide=include_guide,
+        include_announcement=include_announcement,
+    )
+    if selected["sha256"] != first["sha256"] or selected["commit"] != first["commit"]:
+        raise ProjectError("Selected Lean source changed. Remove and re-add the affected declaration.")
+    sections = [
+        "SECTION SCOPE: Only the following manually selected Lean declarations "
+        "are in the analysis set. Their inclusion does not prove any mathematical "
+        "dependency or imply a verified relation to the section title.",
+        packet,
+    ]
+    for item in scope[1:]:
+        actual = declaration(item["path"], item["name"], source_mode=source_mode)
+        if (
+            actual["sha256"] != item.get("sha256")
+            or actual["commit"] != item.get("commit")
+        ):
+            raise ProjectError(
+                f"Lean source for {item['name']} changed. Re-select it before analyzing."
+            )
+        sections.append(
+            f"FORMAL DECLARATION: {actual['name']}\n"
+            f"FILE: {actual['path']}\nREVISION: {actual['commit']}\n"
+            f"SHA256: {actual['sha256']}\n"
+            f"LINES: {actual['start_line']}-{actual['end_line']}\n"
+            f"COMPLETE EXCERPT: {actual['complete']}\n"
+            "--- BEGIN UNTRUSTED LEAN SOURCE ---\n"
+            + actual["excerpt"]
+            + "\n--- END LEAN SOURCE ---"
+        )
+        sources.append({
+            "kind": "formal",
+            **{key: actual[key] for key in (
+                "path", "commit", "url", "sha256", "complete"
+            )},
+        })
+    result = "\n\n".join(sections)
+    if len(result) > 64_000:
+        raise ProjectError(
+            "Selected source evidence exceeds the 64,000-character analysis limit. "
+            "Divide the section or choose fewer declarations."
+        )
+    return result, sources, selected
