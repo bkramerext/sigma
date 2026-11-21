@@ -3505,7 +3505,7 @@ class ChatMessageRequest(BaseModel):
 
 class ChatTranscriptMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    speaker: Literal["human", "ai_1", "ai_2", "objective", "supervisor", "supervisor_setting", "source"]
+    speaker: Literal["human", "ai_1", "ai_2", "objective", "supervisor", "supervisor_setting"]
     text: str = Field(min_length=1)
     recipient: Literal["ai_1", "ai_2", "both"] | None = None
     guidance: str = ""
