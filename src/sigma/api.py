@@ -3919,8 +3919,7 @@ def lean_explorer_add_note(
 def lean_explorer_select_source(
     request: Request,
     identifier: str,
-    body: LeanScopeRequest,,
-
+    body: LeanScopeRequest,
 ):
     if body.source_mode == "local":
         _require_local_lean_request(request)
@@ -3939,8 +3938,7 @@ def lean_explorer_select_source(
 def lean_explorer_deselect_source(
     request: Request,
     identifier: str,
-    body: LeanScopeRequest,,
-
+    body: LeanScopeRequest,
 ):
     if body.source_mode == "local":
         _require_local_lean_request(request)
@@ -3959,8 +3957,7 @@ def lean_explorer_deselect_source(
 def lean_explorer_prepare_paper_project(
     request: Request,
     identifier: str,
-    body: LeanPaperHandoffRequest,,
-
+    body: LeanPaperHandoffRequest,
 ):
     if body.source_mode == "local":
         _require_local_lean_request(request)
