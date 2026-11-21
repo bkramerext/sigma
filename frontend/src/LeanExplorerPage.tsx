@@ -10,7 +10,7 @@ const THINKING_STEPS = [
   {name: 'Select Lean evidence', question: 'Which exact declarations belong in this investigation, across files?'},
   {name: 'Investigate', question: 'What do these declarations establish, and what connections remain unverified?'},
   {name: 'Shape the exposition', question: 'How should we explain the ideas and prerequisites to a human reader?'},
-  {name: 'Generate paper', question: 'Is the selected evidence sufficient for a responsible standalone paper?'},
+  {name: 'Prepare paper', question: 'Is the selected evidence sufficient to hand to SIGMA’s full paper generator?'},
 ] as const;
 type ProofSection = {
   id: string; title: string; question: string; purpose: string;
@@ -95,10 +95,10 @@ export default function LeanExplorerPage() {
   const [localFiles, setLocalFiles] = useState<LocalFiles | null>(null);
   const [moduleFilter, setModuleFilter] = useState('');
   const [proofMap, setProofMap] = useState<ProofMap | null>(null);
-  const [sectionId, setSectionId] = useState('reflection');
+  const [sectionId, setSectionId] = useState('');
   const currentSection = proofMap?.sections.find(item => item.id === sectionId);
-  const sectionName = currentSection?.title ?? 'Reflection and the final conclusion';
-  const [sectionPrompt, setSectionPrompt] = useState('Why is exclusion of zeros to the right of the critical line sufficient?');
+  const sectionName = currentSection?.title ?? 'Choose a mathematical section';
+  const [sectionPrompt, setSectionPrompt] = useState('');
   const [moduleLoading, setModuleLoading] = useState(false);
   const [localIndexing, setLocalIndexing] = useState(false);
   const [scanCount, setScanCount] = useState({dirs: 0, files: 0, path: ''});
@@ -117,7 +117,7 @@ export default function LeanExplorerPage() {
   const [running, setRunning] = useState(false);
   const [stage, setStage] = useState('Idle');
   const [elapsed, setElapsed] = useState(0);
-  const [analysis, setAnalysis] = useState('');
+  const [, setAnalysis] = useState('');
   const [markdownDraft, setMarkdownDraft] = useState('');
   const [savedMarkdown, setSavedMarkdown] = useState('');
   const [savingMarkdown, setSavingMarkdown] = useState(false);
@@ -302,6 +302,13 @@ export default function LeanExplorerPage() {
     void readModel();
     return () => {cancelled = true; abortRef.current?.abort(); indexAbortRef.current?.abort(); document.title = oldTitle;};
   }, [loadFile, loadModules, refreshDossiers]);
+
+  useEffect(() => {
+    if (proofMap?.sections.length && !proofMap.sections.some(item => item.id === sectionId)) {
+      setSectionId(proofMap.sections[0].id);
+      setSectionPrompt(proofMap.sections[0].question);
+    }
+  }, [proofMap, sectionId]);
 
   // Resume the existing dossier for a mathematical section, regardless of
   // which source file is currently open. Switching sections never mixes notes.
@@ -588,7 +595,9 @@ export default function LeanExplorerPage() {
           )}
         </select>
         <span className="leanx-section-provenance">
-          Seeded from the proof guide · conceptual, not Lean-verified
+          {proofMap?.status === 'interpretive_not_lean_verified'
+            ? 'Provisional source-informed sections · formal dependencies not established'
+            : 'Section classification derived from supplied sources'}
         </span>
         {proofMap && <SourceLink href={proofMap.derived_from.url}>Source guide</SourceLink>}
       </div>
