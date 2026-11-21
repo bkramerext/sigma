@@ -137,6 +137,8 @@ def _score(
 def discover(
     section_id: str,
     progress: Callable[[int, int, int, str], None] | None = None,
+    *,
+    start_offset: int = 0,
 ) -> dict[str, Any]:
     """Search safely indexed local modules for candidate section evidence.
 
@@ -158,7 +160,9 @@ def discover(
         )
         paths.extend(page["files"])
     paths.sort(key=lambda name: (not name.startswith("src/"), name))
-    scan = paths[:MAX_SCAN_FILES]
+    if not 0 <= start_offset <= total:
+        raise ProjectError("Invalid Lean discovery continuation offset.")
+    scan = paths[start_offset : start_offset + MAX_SCAN_FILES]
     terms = _words(
         " ".join(
             [
@@ -221,7 +225,7 @@ def discover(
             )
             ranked = ranked[:300]
         if progress is not None and (number % 100 == 0 or number == len(scan)):
-            progress(number, total, matching, path)
+            progress(start_offset + number, total, matching, path)
 
     ranked.sort(
         key=lambda item: (
@@ -245,9 +249,11 @@ def discover(
         "section_id": section_id,
         "source_root_id": cfg["root_id"],
         "index_type": "lexical heuristic discovery, not elaborated Lean dependencies",
+        "start_offset": start_offset,
+        "next_offset": start_offset + len(scan),
         "scanned_files": len(scan),
         "total_files": total,
-        "complete": len(scan) == total,
+        "complete": start_offset + len(scan) == total,
         "unreadable_files": unreadable,
         "candidate_declarations": declarations,
         "matching_declarations": matching,
