@@ -530,7 +530,7 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
             "proof section.\n\n"
             f"Study: {record.get('study_title', 'Formal proof investigation')}\n"
             f"Section: {title}\nResearch question: {question}\n\n"
-            "Use the exact Lean excerpts and citation records in the paper "
+            "Use the available sourced Lean excerpts and citation records in the paper "
             "requirements as evidence. Explain the conceptual connections, "
             "all hypotheses, and any gaps. This Explorer has NOT kernel-checked "
             "the selected statements or verified their dependency relationships."
@@ -544,13 +544,17 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
             f"Source mode: {source_mode}",
             "",
             (
-                "The selected declarations below are a manual research scope, NOT "
+                "The selected declarations below are a candidate research scope, NOT "
                 "a formal dependency closure. The interpretation is unverified. "
                 "Do not assert kernel-checking or prove unverified connections."
             ),
             "",
             "## Exact Lean declarations",
         ]
+        # The source remains complete in the private dossier; the paper context
+        # is a bounded, explicit preview with SHA/line references, not a silent
+        # cut of an oversized project requirement.
+        excerpt_budget = min(2200, max(240, 7500 // len(scope)))
         selected_keys = set()
         for chosen in scope:
             selected_keys.add((chosen["path"], chosen["name"]))
@@ -560,10 +564,17 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
                     f"### {chosen['name']}",
                     f"Source: {chosen['path']} lines {chosen['start_line']}-{chosen['end_line']}",
                     f"Revision: {chosen['commit']} · file SHA256: {chosen['sha256']}",
-                    f"Excerpt complete: {chosen['complete']}",
+                    f"Original declaration excerpt complete: {chosen['complete']}",
+                    f"Paper-context excerpt truncated: {len(chosen['excerpt']) > excerpt_budget}",
                     "~~~lean",
-                    chosen["excerpt"],
+                    chosen["excerpt"][:excerpt_budget],
                     "~~~",
+                    (
+                        "For omitted source, consult the full SHA-pinned declaration "
+                        "in the Explorer dossier; no omitted proof step is validated here."
+                        if len(chosen["excerpt"]) > excerpt_budget
+                        else ""
+                    ),
                 ]
             )
         commentary = [
@@ -574,22 +585,34 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
         ]
         if commentary:
             lines.extend(["", "## Explorer research notes and drafts", ""])
-        for item in commentary:
+        remaining = max(0, 19_000 - len("\n".join(lines)))
+        for item in reversed(commentary):
             src = item["source"]
+            heading = (
+                f"### {src['name']} — {item['mode']}\n"
+                f"Status: {item['interpretation_status']}\n"
+            )
+            if remaining <= len(heading) + 160:
+                lines.append("Additional notes are retained in the Explorer dossier.")
+                break
+            excerpt = item["text"][: min(5000, remaining - len(heading) - 160)]
+            clipped = len(excerpt) < len(item["text"])
             lines.extend(
                 [
-                    f"### {src['name']} — {item['mode']}",
-                    f"Status: {item['interpretation_status']}",
-                    item["text"],
+                    heading,
+                    excerpt,
+                    "Paper-context commentary truncated; read the full saved dossier."
+                    if clipped
+                    else "",
                     "",
                 ]
             )
+            remaining -= len(heading) + len(excerpt) + 160
         requirements = "\n".join(lines)
         if len(requirements) > 20_000:
             raise ProjectError(
-                "The section evidence exceeds the existing SIGMA paper context limit "
-                "(20,000 characters). Select fewer declarations or divide the section. "
-                "No source text has been silently discarded."
+                "Even bounded source previews exceeded SIGMA's 20,000-character paper "
+                "context limit. Split the section; full original evidence is preserved."
             )
         config = global_research_settings.load_config()
         view = create_project(
