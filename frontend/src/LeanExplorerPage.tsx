@@ -93,6 +93,10 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [showInputs, setShowInputs] = useState(true);
+  const [showBrowser, setShowBrowser] = useState(false);
+  const [showDossier, setShowDossier] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const [objective, setObjective] = useState('Explain this declaration precisely and identify its role in a rigorous human-readable reconstruction of Alpöge’s Riemann Hypothesis proof.');
   const abortRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
@@ -194,6 +198,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
       setSourceMode('local'); setFile(null); setDossier(null);
       const listed = await loadModules();
       if (listed.files.length) await loadFile(complete.default_module || listed.files[0], 'local');
+      setShowInputs(false);
       setStage('Local Lean tree indexed');
       log(`Indexed ${complete.file_count.toLocaleString()} Lean files from local directory`, 'ok');
     } catch (cause) {
@@ -365,14 +370,24 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   const selectedEntries = dossier?.entries.filter(item => item.source.name === selectedName && item.source.path === file?.path) ?? [];
 
   return <main className="chat-page leanx-ui">
-    <div className="leanx-page-row">
-      <div>
-        <p className="chat-eyebrow">Pinned formal proof · Source-driven exploration</p>
-        <p className="leanx-description">Select an actual Lean declaration, inspect its source, explain it against the literature, and accumulate a cited expository dossier.</p>
-      </div>
+
       <button className="leanx-close-button" type="button" aria-label="Close Lean Explorer" data-tooltip="Close Lean Explorer" onClick={onClose}>×</button>
     </div>
 
+
+    <div className="leanx-compact-controls">
+      <nav className="leanx-tool-tabs" aria-label="Explorer tools">
+        <button type="button" aria-expanded={showInputs} onClick={() => setShowInputs(!showInputs)}>
+          Source · {sourceMode === 'local' ? (localSource ? 'Local Lean tree' : '~/lean_alpoge') : 'GitHub mirror'}
+        </button>
+        <button type="button" aria-expanded={showBrowser} onClick={() => setShowBrowser(!showBrowser)}>
+          Browse · {selectedName || 'declarations'}
+        </button>
+        <button type="button" aria-expanded={showDossier} onClick={() => setShowDossier(!showDossier)}>
+          Dossier · {dossier?.entries.length ?? 0} entries
+        </button>
+      </nav>
+      {showInputs && <div className="leanx-tool-body">
     <section className="leanx-section" aria-label="Proof and supplementary inputs">
       <div className="leanx-section-heading"><h2>Inputs</h2><span>Formal proof tree + supplementary literature</span></div>
       <div className="leanx-formal-input">
@@ -425,8 +440,8 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
         </label>
       </div>
     </section>
-
-    <div className="leanx-workspace-grid">
+      </div>}
+      {showBrowser && <div className="leanx-tool-body leanx-browser-tool">
       <aside className="leanx-pane leanx-declarations" aria-label="Lean source navigation">
         {sourceMode === 'local' && <div className="leanx-module-navigator">
           <div className="leanx-pane-title"><h2>Lean files</h2><span>{localFiles?.total_matches.toLocaleString() ?? '—'} matches</span></div>
@@ -441,7 +456,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
           <div className="leanx-module-list">
             {localFiles?.files.map(filename => <button type="button" key={filename}
               className={filename === path && activeFileMode === 'local' ? 'is-selected' : ''}
-              onClick={() => void loadFile(filename, 'local')}>{filename}</button>)}
+              onClick={() => {void loadFile(filename, 'local'); setShowBrowser(false);}}>{filename}</button>)}
             {!localFiles?.files.length && <p className="leanx-empty">Index a directory to browse its Lean files.</p>}
           </div>
           {localFiles && <div className="leanx-module-pager">
@@ -457,7 +472,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
         <div className="leanx-declaration-list">
           {filtered.map(item => <button key={item.name + ':' + item.line} type="button"
             className={item.name === selectedName ? 'is-selected' : ''}
-            onClick={() => {setSelectedName(item.name); setAnalysis(''); setAnalysisSources([]);}}>
+            onClick={() => {setSelectedName(item.name); setAnalysis(''); setAnalysisSources([]); setShowBrowser(false);}}>
             <span className="leanx-declaration-kind">{item.kind}</span>
             <span className="leanx-declaration-name">{item.name}</span>
             <span className="leanx-declaration-line">:{item.line}</span>
@@ -469,60 +484,8 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
           Imports and declaration names are scanned lexically. Formal dependencies are not indexed yet.
         </div>}
       </aside>
-
-      <div className="leanx-reading-column">
-        <section className="leanx-pane leanx-source-code">
-          <div className="leanx-pane-title">
-            <h2>{selected?.name ?? (loadingDeclaration ? 'Reading declaration…' : 'Lean source')}</h2>
-            {selected && (selected.url ? <SourceLink href={selected.url + '#L' + selected.start_line}>Lines {selected.start_line}–{selected.end_line}</SourceLink> : <span>Lines {selected.start_line}–{selected.end_line}</span>)}
-          </div>
-          {selected ? <>
-            <pre><code>{selected.excerpt}</code></pre>
-            <div className="leanx-pane-footer">Actual source · {selected.complete ? 'Excerpt through next declaration boundary' : 'Partial excerpt (length limit)'} · Not an elaborated statement or proof check</div>
-          </> : <p className="leanx-empty">Select a declaration to inspect its actual source.</p>}
-        </section>
-
-        <section className="leanx-pane leanx-analysis-pane">
-          <div className="leanx-pane-title"><h2>Mathematical interpretation</h2><span>AI commentary · Not formally verified</span></div>
-          <label className="leanx-objective-label" htmlFor="leanx-objective">Expository objective</label>
-          <textarea id="leanx-objective" rows={2} value={objective} disabled={running} onChange={event => setObjective(event.target.value)}/>
-          <div className="leanx-operation-controls">
-            <button type="button" className="leanx-primary-action" disabled={!ready || !objective.trim()} onClick={() => void analyzeSelected()}>
-              {running ? 'Exploring…' : 'Explain selected declaration'}
-            </button>
-            <button type="button" disabled={!running} onClick={stopAnalysis}>Stop</button>
-            <span>{config ? (config.available ? `${config.models.find(item => item.id === model)?.label ?? model} · ${effort}` : config.message) : 'Reading selected AI connection…'}</span>
-          </div>
-          {analysis ? <div className="leanx-explanation"><Suspense fallback={<p>{analysis}</p>}><RenderedMarkdown body={analysis}/></Suspense></div> :
-            <p className="leanx-empty">Explanation will appear here, grounded in the selected declaration and chosen supplementary excerpts.</p>}
-          {!!analysisSources.length && <details className="leanx-evidence-detail">
-            <summary>Evidence used in this explanation ({analysisSources.length})</summary>
-            {analysisSources.map(item => <p key={item.kind + item.path}>
-              {item.kind}: <SourceLink href={item.url}>{item.path}</SourceLink>
-              <span> · {item.commit.slice(0, 12)} · SHA256 {item.sha256.slice(0, 12)}…</span>
-            </p>)}
-          </details>}
-          {!!selectedEntries.length && <div className="leanx-existing">Saved entries for this declaration: {selectedEntries.length}</div>}
-        </section>
-      </div>
-
-      <aside className="leanx-progress-column">
-        <section className="leanx-pane leanx-progress-pane" aria-live="polite">
-          <div className="leanx-pane-title">
-            <h2>Live activity</h2>
-            <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'} aria-label={running || localIndexing ? 'Active' : 'Idle'}/>
-          </div>
-          <div className="leanx-stage">{stage}</div>
-          {localIndexing && <p className="leanx-running-time">{scanCount.dirs.toLocaleString()} directories · {scanCount.files.toLocaleString()} Lean files discovered</p>}
-          {running && <p className="leanx-running-time">Elapsed: {Math.floor(elapsed / 60)}m {String(elapsed % 60).padStart(2, '0')}s</p>}
-          <ol className="leanx-activity-log">
-            {activity.map(item => <li key={item.id} className={'leanx-state-' + item.state}>
-              <span className="leanx-activity-icon" aria-hidden="true">{item.state === 'ok' ? '✓' : item.state === 'error' ? '!' : '•'}</span>
-              <div><span>{item.label}</span><small><Timestamp value={item.time}/></small></div>
-            </li>)}
-            {!activity.length && <li className="leanx-muted-activity">No operations yet.</li>}
-          </ol>
-        </section>
+      </div>}
+      {showDossier && <div className="leanx-tool-body leanx-dossier-tool">
         <section className="leanx-pane leanx-dossier-pane">
           <div className="leanx-pane-title"><h2>Expository dossier</h2><span>{dossier?.entries.length ?? 0} entries</span></div>
           <label htmlFor="leanx-dossier-select">Working dossier</label>
@@ -556,8 +519,76 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
             {savingNote ? 'Saving…' : 'Save note'}
           </button>
         </section>
-      </aside>
+      </div>}
     </div>
+
+    <div className="leanx-progress-compact" role="status">
+      <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'} aria-label={running || localIndexing ? 'Active' : 'Idle'}/>
+      <span className="leanx-progress-stage">{stage}</span>
+      {localIndexing && <span>{scanCount.dirs.toLocaleString()} directories · {scanCount.files.toLocaleString()} Lean files</span>}
+      {running && <span>{Math.floor(elapsed / 60)}m {String(elapsed % 60).padStart(2, '0')}s</span>}
+      <button type="button" aria-expanded={showActivity} onClick={() => setShowActivity(!showActivity)}>Activity</button>
+    </div>
+    {showActivity && <div className="leanx-activity-expanded">
+      <aside className="leanx-progress-column">
+        <section className="leanx-pane leanx-progress-pane" aria-live="polite">
+          <div className="leanx-pane-title">
+            <h2>Live activity</h2>
+            <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'} aria-label={running || localIndexing ? 'Active' : 'Idle'}/>
+          </div>
+          <div className="leanx-stage">{stage}</div>
+          {localIndexing && <p className="leanx-running-time">{scanCount.dirs.toLocaleString()} directories · {scanCount.files.toLocaleString()} Lean files discovered</p>}
+          {running && <p className="leanx-running-time">Elapsed: {Math.floor(elapsed / 60)}m {String(elapsed % 60).padStart(2, '0')}s</p>}
+          <ol className="leanx-activity-log">
+            {activity.map(item => <li key={item.id} className={'leanx-state-' + item.state}>
+              <span className="leanx-activity-icon" aria-hidden="true">{item.state === 'ok' ? '✓' : item.state === 'error' ? '!' : '•'}</span>
+              <div><span>{item.label}</span><small><Timestamp value={item.time}/></small></div>
+            </li>)}
+            {!activity.length && <li className="leanx-muted-activity">No operations yet.</li>}
+          </ol>
+        </section>
+    </div>}
+
+    <div className="leanx-primary-reading">
+      <div className="leanx-reading-column">
+        <section className="leanx-pane leanx-source-code">
+          <div className="leanx-pane-title">
+            <h2>{selected?.name ?? (loadingDeclaration ? 'Reading declaration…' : 'Lean source')}</h2>
+            {selected && (selected.url ? <SourceLink href={selected.url + '#L' + selected.start_line}>Lines {selected.start_line}–{selected.end_line}</SourceLink> : <span>Lines {selected.start_line}–{selected.end_line}</span>)}
+          </div>
+          {selected ? <>
+            <pre><code>{selected.excerpt}</code></pre>
+            <div className="leanx-pane-footer">Actual source · {selected.complete ? 'Excerpt through next declaration boundary' : 'Partial excerpt (length limit)'} · Not an elaborated statement or proof check</div>
+          </> : <p className="leanx-empty">Select a declaration to inspect its actual source.</p>}
+        </section>
+
+        <section className="leanx-pane leanx-analysis-pane">
+          <div className="leanx-pane-title"><h2>Mathematical interpretation</h2><span>AI commentary · Not formally verified</span></div>
+          <details className="leanx-objective-details">
+            <summary>Expository objective</summary>
+            <textarea id="leanx-objective" aria-label="Expository objective" rows={3} value={objective} disabled={running} onChange={event => setObjective(event.target.value)}/>
+          </details>
+          <div className="leanx-operation-controls">
+            <button type="button" className="leanx-primary-action" disabled={!ready || !objective.trim()} onClick={() => void analyzeSelected()}>
+              {running ? 'Exploring…' : 'Explain selected declaration'}
+            </button>
+            <button type="button" disabled={!running} onClick={stopAnalysis}>Stop</button>
+            <span>{config ? (config.available ? `${config.models.find(item => item.id === model)?.label ?? model} · ${effort}` : config.message) : 'Reading selected AI connection…'}</span>
+          </div>
+          {analysis ? <div className="leanx-explanation"><Suspense fallback={<p>{analysis}</p>}><RenderedMarkdown body={analysis}/></Suspense></div> :
+            <p className="leanx-empty">Explanation will appear here, grounded in the selected declaration and chosen supplementary excerpts.</p>}
+          {!!analysisSources.length && <details className="leanx-evidence-detail">
+            <summary>Evidence used in this explanation ({analysisSources.length})</summary>
+            {analysisSources.map(item => <p key={item.kind + item.path}>
+              {item.kind}: <SourceLink href={item.url}>{item.path}</SourceLink>
+              <span> · {item.commit.slice(0, 12)} · SHA256 {item.sha256.slice(0, 12)}…</span>
+            </p>)}
+          </details>}
+          {!!selectedEntries.length && <div className="leanx-existing">Saved entries for this declaration: {selectedEntries.length}</div>}
+        </section>
+      </div>
+    </div>
+
 
     {error && <p className="chat-error leanx-error" role="alert">{error}</p>}
     <p className="leanx-boundary">Current capability: full local directory file inventory and search, lazy Lean module reading, lexical declaration navigation, source-grounded explanations, durable dossiers and Markdown export. This is not yet an elaborated cross-module dependency graph or a Lean proof check. SIGMA paper handoff is not yet implemented.</p>
