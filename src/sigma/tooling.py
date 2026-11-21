@@ -168,6 +168,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/project_evidence.py"],
             [*python, "python", "tests/lean_explorer.py"],
             [*python, "python", "tests/lean_explorer_local.py"],
+            [*python, "python", "tests/lean_explorer_discovery.py"],
             [*python, "python", "tests/project_transfer.py"],
             [*python, "python", "tests/research_qa.py"],
             [*python, "python", "tests/research_qa_security.py"],
