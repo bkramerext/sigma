@@ -3676,6 +3676,8 @@ class LeanAnalysisRequest(BaseModel):
 class LeanDossierCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     source_mode: Literal["mirror", "local"] = "mirror"
+    section_path: str = Field(default="", max_length=800)
+    section_title: str = Field(default="", max_length=180)
 
 
 class LeanLocalDirectoryRequest(BaseModel):
@@ -3867,7 +3869,11 @@ def lean_explorer_create_dossier(request: Request, body: LeanDossierCreateReques
     if body.source_mode == "local":
         _require_local_lean_request(request)
     return JSONResponse(
-        lean_explorer_dossiers.create(source_mode=body.source_mode),
+        lean_explorer_dossiers.create(
+            source_mode=body.source_mode,
+            section_path=body.section_path,
+            section_title=body.section_title,
+        ),
         status_code=201,
         headers={"Cache-Control": "no-store"},
     )
