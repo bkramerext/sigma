@@ -165,9 +165,7 @@ def list_dossiers() -> list[dict]:
                 "updated_at": record["updated_at"],
                 "entry_count": len(record.get("entries", [])),
                 "scope_count": len(record.get("scope", [])),
-                "single_file_trial": bool(
-                    (record.get("discovery") or {}).get("single_file_trial")
-                ),
+                "single_file_trial": bool((record.get("discovery") or {}).get("single_file_trial")),
                 "paper_project": record.get("paper_project"),
                 "source_mode": record.get("source_mode", "mirror"),
                 "formal_commit": record.get("formal_commit", ""),
