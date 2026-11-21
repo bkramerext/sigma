@@ -3696,6 +3696,18 @@ class LeanDossierEntryRequest(BaseModel):
     text: str = Field(min_length=1, max_length=24000)
 
 
+class LeanScopeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["mirror", "local"] = "mirror"
+    formal_path: str = Field(min_length=1, max_length=800)
+    declaration: str = Field(min_length=1, max_length=240)
+
+
+class LeanPaperHandoffRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["mirror", "local"] = "mirror"
+
+
 def _lean_sse(event: dict[str, Any]) -> str:
     return "data: " + json.dumps(event) + "\n\n"
 
@@ -3903,6 +3915,40 @@ def lean_explorer_add_note(
     return JSONResponse(entry, status_code=201, headers={"Cache-Control": "no-store"})
 
 
+@app.post("/api/explorelean/dossiers/{identifier}/scope")
+def lean_explorer_select_source(
+    request: Request, identifier: str, body: LeanScopeRequest,
+):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer_dossiers.select_declaration(
+            identifier,
+            formal_path=body.formal_path,
+            declaration_name=body.declaration,
+            source_mode=body.source_mode,
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.delete("/api/explorelean/dossiers/{identifier}/scope")
+def lean_explorer_deselect_source(
+    request: Request, identifier: str, body: LeanScopeRequest,
+):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
+    return JSONResponse(
+        lean_explorer_dossiers.deselect_declaration(
+            identifier,
+            formal_path=body.formal_path,
+            declaration_name=body.declaration,
+            source_mode=body.source_mode,
+        ),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/api/explorelean/dossiers/{identifier}/markdown")
 def lean_explorer_dossier_markdown(identifier: str):
     content = lean_explorer_dossiers.markdown(identifier)
@@ -3939,14 +3985,32 @@ async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
             }
         )
         try:
-            packet, sources, selected = await run_in_threadpool(
-                lean_explorer.analysis_packet,
-                body.formal_path,
-                body.declaration,
-                source_mode=body.source_mode,
-                include_guide=body.include_guide,
-                include_announcement=body.include_announcement,
-            )
+            if body.dossier_id:
+                current_dossier = await run_in_threadpool(
+                    lean_explorer_dossiers.get, body.dossier_id
+                )
+                if current_dossier.get("source_mode") != body.source_mode:
+                    raise ProjectError("Dossier does not match the chosen Lean source.")
+                if not current_dossier.get("scope"):
+                    raise ProjectError(
+                        "Select Lean declarations for this section before analyzing it."
+                    )
+                packet, sources, selected = await run_in_threadpool(
+                    lean_explorer.section_analysis_packet,
+                    current_dossier["scope"],
+                    source_mode=body.source_mode,
+                    include_guide=body.include_guide,
+                    include_announcement=body.include_announcement,
+                )
+            else:
+                packet, sources, selected = await run_in_threadpool(
+                    lean_explorer.analysis_packet,
+                    body.formal_path,
+                    body.declaration,
+                    source_mode=body.source_mode,
+                    include_guide=body.include_guide,
+                    include_announcement=body.include_announcement,
+                )
             yield _lean_sse(
                 {
                     "type": "stage",
