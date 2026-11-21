@@ -510,3 +510,70 @@
 .lean-explorer-page .leanx-page-tools {display:flex;align-items:center;justify-content:space-between;gap:16px;margin:2px 0 12px;color:#b9a88f;font-size:12px}
 .lean-explorer-page .leanx-close-button {display:grid;place-items:center;width:32px;height:32px;min-height:32px;padding:0;border:1px solid transparent;background:transparent;color:#e6c098;font-size:24px}
 .lean-explorer-page .leanx-close-button:hover {border-color:#9b764e;background:#302319}
+
+/* Real source selection for the initial Explorer implementation. */
+.lean-explorer-page .leanx-real-sources {
+  margin: 0 0 20px; padding: 0 0 15px; border-top: 1px solid #534333;
+  border-bottom: 1px solid #534333; color: #e5d9ca;
+}
+.lean-explorer-page .leanx-real-source-header {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px;
+  margin: 14px 0;
+}
+.lean-explorer-page .leanx-real-source-header h2 {
+  font: 400 24px/1.3 Georgia, serif; color: #f2c48d; margin: 0;
+}
+.lean-explorer-page .leanx-real-source-header span,
+.lean-explorer-page .leanx-source-note,
+.lean-explorer-page .leanx-source-state {
+  color: #b7aa9d; font-size: 11px; line-height: 1.6;
+}
+.lean-explorer-page .leanx-real-source-form { margin-bottom: 14px; }
+.lean-explorer-page .leanx-real-source-form > label,
+.lean-explorer-page .leanx-source-group-title { margin: 0 0 7px; display: block; color: #f2c48d; font-weight: 650; }
+.lean-explorer-page .leanx-real-source-form a,
+.lean-explorer-page .leanx-source-preview a,
+.lean-explorer-page .leanx-export-link { color: #f1bd88; text-decoration: underline; text-underline-offset: 3px; }
+.lean-explorer-page .leanx-real-source-path-row { display: flex; gap: 10px; align-items: center; }
+.lean-explorer-page .leanx-real-source-path-row input {
+  flex: 1 1 auto; min-width: 0; max-width: 640px; margin: 0;
+  padding: 9px 12px; border: 1px solid #72553a; border-radius: 8px;
+  background: #131210; color: #f0e6d7;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.lean-explorer-page .leanx-real-source-path-row button {
+  min-height: 36px; padding: 7px 15px; border: 1px solid #bd8246;
+  border-radius: 8px; background: #07111e; color: #f0e6d7; font-size: 12px;
+}
+.lean-explorer-page .leanx-real-source-path-row button:hover:not(:disabled) { background: #6b4329; }
+.lean-explorer-page .leanx-real-source-path-row button:disabled { opacity: .5; cursor: default; }
+.lean-explorer-page .leanx-source-note { margin: 7px 0 0; }
+.lean-explorer-page .leanx-source-checkbox {
+  display: flex; align-items: start; gap: 8px; margin: 8px 0;
+  color: #e2d7ca; font-size: 12px; font-weight: 450; cursor: pointer;
+}
+.lean-explorer-page .leanx-source-checkbox input {
+  flex: 0 0 auto; width: 15px; height: 15px; accent-color: #c38a50;
+  padding: 0; margin: 2px 0 0;
+}
+.lean-explorer-page .leanx-source-preview {
+  border: 1px solid #66513d; border-radius: 7px; background: #111719;
+  margin: 12px 0; padding: 9px 13px;
+}
+.lean-explorer-page .leanx-source-preview summary {
+  cursor: pointer; color: #e6c295; font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.lean-explorer-page .leanx-source-preview p { color: #b9b0a7; font-size: 11px; }
+.lean-explorer-page .leanx-source-preview pre {
+  overflow: auto; max-height: 320px; padding: 12px; border: 1px solid #3c413e;
+  border-radius: 5px; color: #d9e0dd; background: #070b0f;
+  font: 11px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+}
+.lean-explorer-page .leanx-export-link { font-size: 12px; white-space: nowrap; }
+.lean-explorer-page .leanx-source-error { margin: 5px 0; }
+@media (max-width: 700px) {
+  .lean-explorer-page .leanx-real-source-path-row { flex-wrap: wrap; }
+  .lean-explorer-page .leanx-real-source-path-row input { flex-basis: 100%; }
+}
