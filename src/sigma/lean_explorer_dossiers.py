@@ -93,9 +93,7 @@ def create(
     # Sections partition *mathematical arguments*, not filesystem subtrees.
     # An exposition may require declarations from unrelated Lean modules.
     if section_path:
-        raise ProjectError(
-            "Lean source-tree directories cannot be used as mathematical sections."
-        )
+        raise ProjectError("Lean source-tree directories cannot be used as mathematical sections.")
     mapped = lean_explorer_map.section(section_id) if section_id else None
     if mapped:
         section_title = mapped["title"]
