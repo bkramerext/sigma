@@ -735,7 +735,7 @@ export default function LeanExplorerPage() {
             <textarea className="leanx-lean-source-editor" aria-label="Lean source text" readOnly spellCheck={false}
               value={selected.excerpt}/>
             <div className="leanx-pane-footer">Actual Lean source · {selected.complete ? 'To next declaration boundary' : 'Partial excerpt'} · Not a Lean kernel check</div>
-          </> : <p className="leanx-empty">Select a declaration from the tree to inspect its Lean source.</p>}
+          </> : <p className="leanx-empty">Select a declaration using Find Lean evidence to inspect its source.</p>}
         </section>
 
         <section className="leanx-pane leanx-analysis-pane">
@@ -751,7 +751,7 @@ export default function LeanExplorerPage() {
             <button type="button" disabled={!running} onClick={stopAnalysis}>Stop</button>
             <span>{config ? (config.available ? `${config.models.find(item => item.id === model)?.label ?? model} · ${effort}` : config.message) : 'Reading selected AI connection…'}</span>
           </div>
-          <p className="leanx-map-provenance">This declaration is being investigated for a possible role in the selected mathematical section; that relationship has not been verified.</p>}
+          <p className="leanx-map-provenance">This declaration is being investigated for a possible role in the selected mathematical section; that relationship has not been verified.</p>
           <div className="leanx-markdown-editor">
             <div className="leanx-markdown-toolbar">
               <label htmlFor="leanx-markdown">Expository Markdown</label>
