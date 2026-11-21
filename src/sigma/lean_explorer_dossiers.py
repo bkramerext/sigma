@@ -112,7 +112,11 @@ def create(
         "study_title": lean_explorer_map.catalog()["title"],
         "created_at": timestamp,
         "updated_at": timestamp,
-        "formal_repository": lean_explorer.MIRROR,
+        "formal_repository": (
+            lean_explorer.MIRROR
+            if source_mode == "mirror"
+            else lean_explorer_local.source()["directory"]
+        ),
         "formal_commit": revision,
         "source_mode": source_mode,
         "section_path": "",
