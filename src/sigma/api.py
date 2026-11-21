@@ -3870,7 +3870,9 @@ def lean_explorer_get_dossier(identifier: str):
 
 @app.post("/api/explorelean/dossiers/{identifier}/notes", status_code=201)
 def lean_explorer_add_note(
-    request: Request, identifier: str, body: LeanDossierEntryRequest,
+    request: Request,
+    identifier: str,
+    body: LeanDossierEntryRequest,
 ):
     if body.source_mode == "local":
         _require_local_lean_request(request)
