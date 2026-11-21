@@ -194,9 +194,7 @@ def check_local_directory() -> None:
                         },
                     )
                     assert frame.status_code == 200, frame.text
-                    record = client.get(
-                        f"/api/explorelean/dossiers/{continued_id}"
-                    ).json()
+                    record = client.get(f"/api/explorelean/dossiers/{continued_id}").json()
                     assert record["discovery"]["next_offset"] == offset
                     assert record["discovery"]["scanned_files"] == offset
                     assert record["discovery"]["complete"] == (offset == 3)
