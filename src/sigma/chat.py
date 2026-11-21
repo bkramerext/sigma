@@ -196,6 +196,7 @@ async def respond(
     external_session_billing: bool = False,
     expected_mode: str | None = None,
     expected_identity_hash: str | None = None,
+    instructions_override: str | None = None,
     return_raw_response: Literal[True],
 ) -> dict[str, Any]: ...
 
@@ -215,6 +216,7 @@ async def respond(
     external_session_billing: bool = False,
     expected_mode: str | None = None,
     expected_identity_hash: str | None = None,
+    instructions_override: str | None = None,
     return_raw_response: Literal[False] = False,
 ) -> str: ...
 
@@ -233,6 +235,7 @@ async def respond(
     external_session_billing: bool = False,
     expected_mode: str | None = None,
     expected_identity_hash: str | None = None,
+    instructions_override: str | None = None,
     return_raw_response: bool = False,
 ) -> str | dict[str, Any]:
     """Generate one bounded agent turn and account hosted sponsored usage."""
@@ -249,6 +252,8 @@ async def respond(
         raise ProjectError("A chat message must contain nonempty text.")
     if not isinstance(repeated_text, str):
         raise ProjectError("Repeated text must be a string.")
+    if instructions_override is not None and (session_supervision or speaker == "supervisor" or not instructions_override.strip()):
+        raise ProjectError("Custom instructions are only allowed for ordinary agent turns.")
     if session_supervision and speaker != "supervisor":
         raise ProjectError("Independent Session supervision requires the supervisor role.")
     if external_session_billing and (not session_supervision or not return_raw_response):
@@ -294,7 +299,7 @@ async def respond(
         "max_output_tokens": MAX_OUTPUT_TOKENS,
         "reasoning": {"effort": reasoning_effort},
         "instructions": (
-            session_supervisor.INSTRUCTIONS if session_supervision else INSTRUCTIONS[speaker]
+            session_supervisor.INSTRUCTIONS if session_supervision else (instructions_override or INSTRUCTIONS[speaker])
         ),
         "input": [
             {
