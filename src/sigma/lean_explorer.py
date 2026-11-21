@@ -11,7 +11,7 @@ import re
 from functools import lru_cache
 from typing import Any
 
-from sigma import project_evidence, research_supplied_evidence
+from sigma import lean_explorer_local, project_evidence, research_supplied_evidence
 from sigma.projects import ProjectError
 
 MIRROR = "https://github.com/CocoSgt/riemann-hypothesis-lean"
@@ -101,9 +101,15 @@ def _retrieve(url: str) -> tuple[bytes, str, str]:
         raise ProjectError(f"Source could not be fetched: {str(exc)[:140]}") from exc
 
 
-def _text_source(kind: str, path: str = DEFAULT_PATH) -> dict[str, Any]:
-    url, resolved_path, commit = _spec(kind, path)
-    payload, media_type, resolved_url = _retrieve(url)
+def _text_source(kind: str, path: str = DEFAULT_PATH, *, source_mode: str = "mirror") -> dict[str, Any]:
+    if kind == "formal" and source_mode == "local":
+        payload, resolved_path, commit, resolved_url = lean_explorer_local.read_module(path)
+        media_type = "text/plain"
+    else:
+        if source_mode not in {"mirror", "local"}:
+            raise ProjectError("Unknown formal source mode.")
+        url, resolved_path, commit = _spec(kind, path)
+        payload, media_type, resolved_url = _retrieve(url)
     if kind == "announcement":
         if media_type != "application/pdf":
             raise ProjectError("Alpöge's announcement did not return a PDF.")
@@ -135,11 +141,12 @@ def _text_source(kind: str, path: str = DEFAULT_PATH) -> dict[str, Any]:
 
 
 def read_source(
-    kind: str, path: str = DEFAULT_PATH, *, limit: int = MAX_VIEW_CHARS
+    kind: str, path: str = DEFAULT_PATH, *, limit: int = MAX_VIEW_CHARS,
+    source_mode: str = "mirror",
 ) -> dict[str, Any]:
     if not 1 <= limit <= MAX_VIEW_CHARS:
         raise ProjectError("Source excerpt limit is invalid.")
-    source = _text_source(kind, path)
+    source = _text_source(kind, path, source_mode=source_mode)
     preview = source["text"][:limit]
     return {
         **{key: value for key, value in source.items() if key != "text"},
@@ -162,8 +169,8 @@ def _declarations(text: str) -> list[dict[str, Any]]:
     return result
 
 
-def declarations(path: str = DEFAULT_PATH) -> dict[str, Any]:
-    source = _text_source("formal", path)
+def declarations(path: str = DEFAULT_PATH, *, source_mode: str = "mirror") -> dict[str, Any]:
+    source = _text_source("formal", path, source_mode=source_mode)
     found = _declarations(source["text"])
     imports = [
         {"line": i, "text": line.strip()}
@@ -180,10 +187,10 @@ def declarations(path: str = DEFAULT_PATH) -> dict[str, Any]:
     }
 
 
-def declaration(path: str, name: str) -> dict[str, Any]:
+def declaration(path: str, name: str, *, source_mode: str = "mirror") -> dict[str, Any]:
     if not name or len(name) > 240:
         raise ProjectError("Choose a declaration from the actual source file.")
-    source = _text_source("formal", path)
+    source = _text_source("formal", path, source_mode=source_mode)
     found = _declarations(source["text"])
     matching = [item for item in found if item["name"] == name]
     if not matching:
@@ -213,8 +220,9 @@ def analysis_packet(
     *,
     include_guide: bool,
     include_announcement: bool,
+    source_mode: str = "mirror",
 ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
-    selected = declaration(path, name)
+    selected = declaration(path, name, source_mode=source_mode)
     sources: list[dict[str, Any]] = [
         {
             "kind": "formal",
@@ -231,7 +239,7 @@ def analysis_packet(
             "was located by a lexical scan of a pinned .lean file. Its dependencies "
             "and kernel validity have NOT been inspected in this Explorer."
         ),
-        f"FORMAL FILE: {path}\nCOMMIT: {selected['commit']}\n"
+        f"FORMAL FILE: {path}\nSOURCE MODE: {source_mode}\nREVISION: {selected['commit']}\n"
         f"SHA256: {selected['sha256']}\nLINES: {selected['start_line']}-"
         f"{selected['end_line']}\nCOMPLETE EXCERPT: {selected['complete']}\n"
         "--- BEGIN UNTRUSTED LEAN SOURCE ---\n" + selected["excerpt"] + "\n--- END LEAN SOURCE ---",
