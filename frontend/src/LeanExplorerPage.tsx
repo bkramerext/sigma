@@ -601,6 +601,35 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
       skipNextSupervisorAssessmentRef.current = false;
       transcriptWrites.current = Promise.resolve();
       const restored = saved.messages;
+      const sourceEntry = [...restored].reverse().find(item => item.speaker === 'source');
+      if (sourceEntry) {
+        try {
+          const savedSource = JSON.parse(sourceEntry.text) as {
+            formal_path?: string; include_guide?: boolean; include_announcement?: boolean;
+            source_manifest_sha256?: string;
+          };
+          if (typeof savedSource.formal_path === 'string'
+              && typeof savedSource.include_guide === 'boolean'
+              && typeof savedSource.include_announcement === 'boolean'
+              && /^[0-9a-f]{64}$/.test(savedSource.source_manifest_sha256 ?? '')) {
+            const selection: SourceChoice = {
+              formal_path: savedSource.formal_path,
+              include_guide: savedSource.include_guide,
+              include_announcement: savedSource.include_announcement,
+            };
+            sourceSettingsRef.current = selection;
+            setSourcePath(selection.formal_path);
+            setIncludeGuide(selection.include_guide);
+            setIncludeAnnouncement(selection.include_announcement);
+            lastSourceSelectionRef.current = JSON.stringify(selection);
+            sourceManifestShaRef.current = savedSource.source_manifest_sha256!;
+            void loadSourcePreview(selection.formal_path);
+          }
+        } catch { /* The source manifest is independently validated on dispatch. */ }
+      } else {
+        lastSourceSelectionRef.current = '';
+        sourceManifestShaRef.current = '';
+      }
       messagesRef.current = restored;
       setMessages(restored);
       setExpandedEntries({});
@@ -803,10 +832,48 @@ export default function LeanExplorerPage({ onClose }: { onClose: () => void }) {
         <option value="">Choose saved transcript…</option>
         {savedTranscripts.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
       </select>
+      {activeTranscriptName && <a className="leanx-export-link" href={`/api/explorelean/transcripts/${encodeURIComponent(activeTranscriptName)}/download`}>Download transcript</a>}
     </div>
-    <p className="chat-privacy-note">Transcript file: <code>{transcriptPath || 'opening…'}</code></p>
+    <p className="chat-privacy-note">Lean Explorer transcript file: <code>{transcriptPath || 'opening…'}</code></p>
     {config && !config.available && <p className="chat-error" role="status">{config.message || 'Connect an AI account to start brainstorming.'}</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
+    <section className="leanx-real-sources" aria-label="Lean Explorer source inputs">
+      <div className="leanx-real-source-header">
+        <h2>Inputs</h2>
+        <span>Pinned formal source + supplementary literature</span>
+      </div>
+      <div className="leanx-real-source-form">
+        <label htmlFor="leanx-formal-path">A. Official Lean proof · <a href="https://github.com/CocoSgt/riemann-hypothesis-lean/tree/7cbf7a0c32fca1badf05931879a37c3f8a2b03b4" target="_blank" rel="noreferrer">Mirror 7cbf7a0</a></label>
+        <div className="leanx-real-source-path-row">
+          <input id="leanx-formal-path" value={sourcePath} disabled={running || restoringTranscript}
+            spellCheck={false} onChange={event => updateSourcePath(event.target.value)}
+            aria-label="Lean file path within pinned mirror" />
+          <button type="button" disabled={sourceLoading || running} onClick={() => void loadSourcePreview(sourceSettingsRef.current.formal_path)}>
+            {sourceLoading ? 'Loading…' : 'Read file'}
+          </button>
+        </div>
+        <p className="leanx-source-note">Enter a real <code>src/… .lean</code> path. The server fetches and hashes source bytes; imports are not followed automatically yet.</p>
+      </div>
+      <div className="leanx-real-source-form">
+        <div className="leanx-source-group-title">B. Supplementary sources</div>
+        <label className="leanx-source-checkbox"><input type="checkbox" checked={includeGuide} disabled={running || restoringTranscript}
+          onChange={event => updateIncludeGuide(event.target.checked)}/>
+          <span>Proof guide (<a href="https://github.com/nasqret/riemann-rev/blob/main/guide/proof-guide.pdf" target="_blank" rel="noreferrer">riemann-rev PDF</a>; text from pinned TeX)</span>
+        </label>
+        <label className="leanx-source-checkbox"><input type="checkbox" checked={includeAnnouncement} disabled={running || restoringTranscript}
+          onChange={event => updateIncludeAnnouncement(event.target.checked)}/>
+          <span>Alpöge announcement (<a href="https://alpo.ge/remark.pdf" target="_blank" rel="noreferrer">remark.pdf</a>)</span>
+        </label>
+        <p className="leanx-source-note">Selected sources are fetched and supplied as bounded, marked excerpts to each AI turn. A source manifest and hashes are saved in the transcript.</p>
+      </div>
+      {sourceError && <p role="alert" className="chat-error leanx-source-error">{sourceError}</p>}
+      {sourcePreview && <details className="leanx-source-preview">
+        <summary>Source preview: {sourcePreview.path} · SHA256 {sourcePreview.sha256.slice(0,12)}… {sourcePreview.complete ? '' : '· incomplete excerpt'}</summary>
+        <p><a href={sourcePreview.url} target="_blank" rel="noreferrer">Pinned source URL</a> · {sourcePreview.commit} · {sourcePreview.characters} characters</p>
+        <pre>{sourcePreview.text}</pre>
+      </details>}
+      <div className="leanx-source-state" role="status">Source manifest: {sourceManifestShaRef.current ? sourceManifestShaRef.current.slice(0, 12) + '… (saved)' : 'will be saved when the exchange starts'}{sourceRecordVersion > 0 ? '' : ''}</div>
+    </section>
     <section className="chat-repeated-prompt" aria-label="Research objective">
       <div className="chat-field-heading">
         <label htmlFor="chat-research-objective" data-tooltip="Shared with both AIs and the optional supervisor; changes apply on the next turn.">Research Objective:</label>
