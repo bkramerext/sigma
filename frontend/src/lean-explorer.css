@@ -335,12 +335,7 @@
   margin-left: auto; background: transparent; border-color: transparent;
   color: #bfa88d; padding: 5px 9px; font-size: .76rem;
 }
-.leanx-live-dot { height: 9px; width: 9px; flex: none; background: #82756a; border-radius: 50%; }
-.leanx-live-dot.is-active {
-  background: #73d589; box-shadow: 0 0 0 2px #73d58944; animation: leanx-pulse 1.35s ease-in-out infinite;
-}
-@keyframes leanx-pulse { 50% { opacity: .3; box-shadow: 0 0 0 5px #73d58922; } }
-@media (prefers-reduced-motion: reduce) { .leanx-live-dot.is-active { animation: none; } }
+@keyframes leanx-pulse { 50% { opacity: .3; } }
 .leanx-activity-expanded { margin: 0 0 14px; }
 .leanx-activity-log { list-style: none; margin: 0; padding: 2px 12px 12px; max-height: 190px; overflow: auto; }
 .leanx-activity-log li { display: flex; gap: 10px; padding: 7px; border-bottom: 1px solid #363c3d; font-size: .78rem; }
@@ -451,6 +446,26 @@
   color: #e4ebf3;
   font-size: 13px;
 }
+.leanx-workflow-title .research-running-indicator,
+.leanx-pane-title .research-running-indicator { margin-left: 0; }
+.leanx-workflow-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px 14px;
+  padding: 7px 0 0;
+  font-size: 12px;
+  color: #efaa98;
+}
+.leanx-ui .leanx-workflow-error button {
+  border: 1px solid #a96d51;
+  padding: 5px 9px;
+  background: transparent;
+  color: #edba8f;
+  border-radius: 5px;
+}
+.leanx-ui .leanx-workflow-error button:hover { background: #32251f; }
+
 .leanx-paper-steps {
   display: flex;
   flex-wrap: wrap;

@@ -41,6 +41,7 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     lean_explorer,
+    lean_explorer_discovery,
     lean_explorer_dossiers,
     lean_explorer_local,
     lean_explorer_map,
@@ -3703,6 +3704,14 @@ class LeanScopeRequest(BaseModel):
     declaration: str = Field(min_length=1, max_length=240)
 
 
+class LeanDiscoveryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["local"] = "local"
+    section_id: str = Field(min_length=1, max_length=80)
+    dossier_id: str = Field(min_length=36, max_length=36)
+    single_file_trial: bool = False
+
+
 class LeanPaperHandoffRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     source_mode: Literal["mirror", "local"] = "mirror"
@@ -3802,6 +3811,117 @@ async def lean_explorer_local_index(
         finally:
             if not task.done():
                 cancelled.set()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/explorelean/discover")
+async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
+    """Discover section candidates from the indexed root, with SSE progress."""
+    _require_local_lean_request(request)
+    dossier = lean_explorer_dossiers.get(body.dossier_id)
+    if dossier.get("source_mode") != "local" or dossier.get("section_id") != body.section_id:
+        raise HTTPException(422, "Choose a dossier for this mathematical section.")
+    root = lean_explorer_local.source()
+    if root is None or dossier.get("formal_commit") != "local:" + root["root_id"]:
+        raise HTTPException(422, "Index the source directory used by this section first.")
+    if dossier.get("paper_project"):
+        raise HTTPException(422, "The paper scope is frozen. Use a new section dossier.")
+    if body.single_file_trial and (dossier.get("scope") or dossier.get("discovery")):
+        raise HTTPException(422, "Start a single-file trial with a new section dossier.")
+    checkpoint = dossier.get("discovery") or {}
+    start_offset = (
+        checkpoint.get("next_offset", 0)
+        if checkpoint.get("root_id") == root["root_id"] and not checkpoint.get("complete")
+        else 0
+    )
+
+    async def events():
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "stage": "discovery",
+                "label": (
+                    "Continuing Lean evidence discovery at file " + str(start_offset)
+                    if start_offset
+                    else "Searching the indexed Lean repository for mathematical evidence"
+                ),
+            }
+        )
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        cancelled = threading.Event()
+
+        def progress(scanned: int, total: int, matches: int, current: str) -> None:
+            if cancelled.is_set():
+                raise ProjectError("The Lean evidence discovery was stopped.")
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {
+                    "type": "progress",
+                    "scanned": scanned,
+                    "total": total,
+                    "matches": matches,
+                    "path": current,
+                },
+            )
+
+        active: asyncio.Task | None = None
+        offset = start_offset
+        try:
+            while True:
+                active = asyncio.create_task(
+                    asyncio.to_thread(
+                        lean_explorer_discovery.discover,
+                        body.section_id,
+                        progress,
+                        start_offset=offset,
+                        single_file_trial=body.single_file_trial,
+                    )
+                )
+                while not active.done():
+                    try:
+                        update = await asyncio.wait_for(queue.get(), timeout=0.5)
+                        yield _lean_sse(update)
+                    except TimeoutError:
+                        continue
+                result = await active
+                if cancelled.is_set():
+                    return
+                yield _lean_sse(
+                    {
+                        "type": "stage",
+                        "stage": "saving",
+                        "label": "Saving source-verified Lean evidence and a scan checkpoint",
+                    }
+                )
+                updated = await run_in_threadpool(
+                    lean_explorer_dossiers.apply_discovery, body.dossier_id, result
+                )
+                if result["complete"]:
+                    yield _lean_sse({"type": "complete", "discovery": result, "dossier": updated})
+                    return
+                next_offset = result["next_offset"]
+                if next_offset <= offset:
+                    raise ProjectError("Lean discovery made no forward progress.")
+                offset = next_offset
+                yield _lean_sse(
+                    {
+                        "type": "stage",
+                        "stage": "discovery",
+                        "label": f"Continuing Lean evidence discovery at file {offset:,}",
+                    }
+                )
+        except (ProjectError, OSError, UnicodeError, ValueError) as exc:
+            yield _lean_sse({"type": "error", "error": str(exc)})
+        finally:
+            cancelled.set()
+            if active is not None and not active.done():
+                active.cancel()
 
     return StreamingResponse(
         events(),
@@ -4092,7 +4212,9 @@ async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
                         source_mode=body.source_mode,
                         mode="explain",
                         text=explanation,
-                        supplementary_sources=sources[1:],
+                        supplementary_sources=[
+                            source for source in sources if source["kind"] != "formal"
+                        ],
                     )
                 except ProjectError as exc:
                     yield _lean_sse(
@@ -4118,6 +4240,20 @@ async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
             raise
         except ProjectError as exc:
             yield _lean_sse({"type": "error", "error": str(exc)})
+        except Exception as exc:
+            logging.getLogger(__name__).exception(
+                "Lean Explorer investigation failed after starting its SSE response"
+            )
+            yield _lean_sse(
+                {
+                    "type": "error",
+                    "error": (
+                        "Mathematical investigation stopped unexpectedly "
+                        f"({type(exc).__name__}). The discovered evidence is saved. "
+                        "Retry investigation; check SIGMA server logs if this repeats."
+                    ),
+                }
+            )
 
     return StreamingResponse(
         events(),

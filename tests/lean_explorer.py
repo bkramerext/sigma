@@ -90,6 +90,58 @@ def test_packet_provenance() -> None:
     assert all(source["sha256"] for source in sources)
 
 
+def test_large_discovered_scope_analysis() -> None:
+    """A whole auto-selected section must fit and must not require optional URLs."""
+    sample = "theorem " + ("largeProofBody " * 800)
+    items = [
+        {
+            "path": f"src/Proofs/Part{i}.lean",
+            "name": f"bigTheorem{i}",
+            "sha256": f"sha-{i}",
+            "commit": "local:test",
+        }
+        for i in range(32)
+    ]
+
+    def read(path: str, name: str, *, source_mode: str) -> dict:
+        assert source_mode == "local"
+        index = int(name.removeprefix("bigTheorem"))
+        return {
+            "path": path,
+            "name": name,
+            "kind": "theorem",
+            "sha256": f"sha-{index}",
+            "commit": "local:test",
+            "url": "",
+            "start_line": 5,
+            "end_line": 140,
+            "complete": False,
+            "excerpt": sample,
+        }
+
+    with (
+        patch("sigma.lean_explorer.declaration", side_effect=read),
+        patch(
+            "sigma.lean_explorer._text_source",
+            side_effect=ProjectError("Supplementary URL unavailable"),
+        ),
+    ):
+        packet, sources, selected = lean_explorer.section_analysis_packet(
+            items,
+            source_mode="local",
+            include_guide=True,
+            include_announcement=True,
+        )
+    assert len(packet) < 48_000
+    assert len(sources) == 32
+    assert selected["name"] == "bigTheorem0"
+    assert "bigTheorem31" in packet
+    assert "MODEL EXCERPT CLIPPED: True" in packet
+    assert "OPTIONAL GUIDE SOURCE UNAVAILABLE" in packet
+    assert "OPTIONAL ANNOUNCEMENT SOURCE UNAVAILABLE" in packet
+    assert all(source["sha256"] for source in sources)
+
+
 def test_dossier_and_ai_flow() -> None:
     with (
         TemporaryDirectory() as temp,
@@ -222,6 +274,33 @@ def test_dossier_and_ai_flow() -> None:
         assert len(record.json()["entries"]) == 2
         assert record.json()["entries"][1]["supplementary_sources"][0]["kind"] == "guide"
 
+        # An AI/provider failure after SSE headers must appear as a visible error
+        # event, not silently leave the UI with a generic Failed state.
+        with (
+            patch("sigma.api.chat.configuration", new=AsyncMock(return_value=config)),
+            patch(
+                "sigma.api.chat.respond",
+                new=AsyncMock(side_effect=RuntimeError("synthetic provider failure")),
+            ),
+        ):
+            failed = client.post(
+                "/api/explorelean/analyze",
+                json={
+                    "formal_path": "src/Statements.lean",
+                    "declaration": "RiemannZetaZerosOnLine",
+                    "include_guide": False,
+                    "include_announcement": False,
+                    "model": "gpt-6.1-sol",
+                    "reasoning_effort": "medium",
+                    "objective": "Explain RH carefully",
+                    "dossier_id": dossier_id,
+                },
+            )
+        assert failed.status_code == 200
+        assert '"type": "error"' in failed.text
+        assert "RuntimeError" in failed.text
+        assert len(client.get(f"/api/explorelean/dossiers/{dossier_id}").json()["entries"]) == 2
+
         markdown = client.get(f"/api/explorelean/dossiers/{dossier_id}/markdown")
         assert markdown.status_code == 200
         assert "### Actual Lean source excerpt" in markdown.text
@@ -293,5 +372,6 @@ def test_dossier_and_ai_flow() -> None:
 if __name__ == "__main__":
     test_source_navigation()
     test_packet_provenance()
+    test_large_discovered_scope_analysis()
     test_dossier_and_ai_flow()
     print("Lean Explorer source and dossier tests passed.")

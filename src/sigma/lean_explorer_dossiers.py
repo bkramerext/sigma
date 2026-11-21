@@ -165,6 +165,7 @@ def list_dossiers() -> list[dict]:
                 "updated_at": record["updated_at"],
                 "entry_count": len(record.get("entries", [])),
                 "scope_count": len(record.get("scope", [])),
+                "single_file_trial": bool((record.get("discovery") or {}).get("single_file_trial")),
                 "paper_project": record.get("paper_project"),
                 "source_mode": record.get("source_mode", "mirror"),
                 "formal_commit": record.get("formal_commit", ""),
@@ -373,6 +374,122 @@ def deselect_declaration(
     return _with_dossier_lock(identifier, apply)
 
 
+def apply_discovery(identifier: str, discovery: dict) -> dict:
+    """Commit root-discovered candidates as explicitly heuristic section scope.
+
+    All citations are reconstructed from the indexed source, not trusted from
+    discovery labels or a browser payload. Existing manual selections survive.
+    """
+    section_id = discovery["section_id"]
+    source_id = discovery["source_root_id"]
+    current = lean_explorer_local.source()
+    if current is None or current["root_id"] != source_id:
+        raise ProjectError("The indexed Lean source changed during discovery.")
+    accepted = []
+    for suggestion in discovery["candidates"]:
+        actual = lean_explorer.declaration(
+            suggestion["path"], suggestion["name"], source_mode="local"
+        )
+        if actual["start_line"] != suggestion["start_line"]:
+            raise ProjectError(
+                "A Lean declaration moved during discovery. Rescan the local directory."
+            )
+        accepted.append(
+            {
+                **{
+                    key: actual[key]
+                    for key in (
+                        "path",
+                        "name",
+                        "kind",
+                        "commit",
+                        "url",
+                        "sha256",
+                        "start_line",
+                        "end_line",
+                        "complete",
+                        "excerpt",
+                    )
+                },
+                "selection_origin": "automatic_lexical_candidate",
+                "relevance_score": suggestion["relevance_score"],
+                "selection_reasons": suggestion["reasons"],
+            }
+        )
+
+    def apply(record: dict) -> bool:
+        if (
+            record.get("section_id") != section_id
+            or record.get("source_mode") != "local"
+            or record.get("formal_commit") != "local:" + source_id
+        ):
+            raise ProjectError("The discovery result does not belong to this section dossier.")
+        if record.get("paper_project"):
+            raise ProjectError(
+                "This section already has a paper handoff. Use a new dossier to explore further."
+            )
+        scoped = record.setdefault("scope", [])
+        existing = {(item["path"], item["name"]) for item in scoped}
+        inserted = 0
+        for item in accepted:
+            identity = (item["path"], item["name"])
+            if identity in existing or len(scoped) >= MAX_SCOPE_DECLARATIONS:
+                continue
+            scoped.append(item)
+            existing.add(identity)
+            inserted += 1
+        previous = record.get("discovery") or {}
+        continued = (
+            previous.get("root_id") == source_id
+            and previous.get("next_offset") == discovery["start_offset"]
+            and not previous.get("complete")
+        )
+        if discovery["start_offset"] and not continued:
+            raise ProjectError("The discovery checkpoint changed. Restart this section scan.")
+        old = previous if continued else {}
+        cumulative_candidates = old.get("candidates", []) + [
+            {
+                "path": item["path"],
+                "name": item["name"],
+                "score": item["relevance_score"],
+                "reasons": item["selection_reasons"],
+            }
+            for item in accepted
+        ]
+        seen_candidates = set()
+        deduplicated = []
+        for item in cumulative_candidates:
+            identity = (item["path"], item["name"])
+            if identity in seen_candidates:
+                continue
+            seen_candidates.add(identity)
+            deduplicated.append(item)
+        record["discovery"] = {
+            "root_id": source_id,
+            "index_type": discovery["index_type"],
+            "single_file_trial": discovery.get("single_file_trial", False),
+            "selected_file": discovery.get("selected_file", ""),
+            "selected_file_bytes": discovery.get("selected_file_bytes", 0),
+            "scanned_files": old.get("scanned_files", 0) + discovery["scanned_files"],
+            "total_files": discovery["total_files"],
+            "complete": discovery["complete"],
+            "next_offset": discovery["next_offset"],
+            "unreadable_files": (old.get("unreadable_files", 0) + discovery["unreadable_files"]),
+            "matching_declarations": (
+                old.get("matching_declarations", 0) + discovery["matching_declarations"]
+            ),
+            "candidate_declarations": (
+                old.get("candidate_declarations", 0) + discovery["candidate_declarations"]
+            ),
+            "warning": discovery["warning"],
+            "selected": old.get("selected", 0) + inserted,
+            "candidates": deduplicated[:MAX_SCOPE_DECLARATIONS],
+        }
+        return True
+
+    return _with_dossier_lock(identifier, apply)
+
+
 def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
     """Hand selected and checked section evidence to SIGMA's existing paper flow.
 
@@ -414,7 +531,7 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
             "proof section.\n\n"
             f"Study: {record.get('study_title', 'Formal proof investigation')}\n"
             f"Section: {title}\nResearch question: {question}\n\n"
-            "Use the exact Lean excerpts and citation records in the paper "
+            "Use the available sourced Lean excerpts and citation records in the paper "
             "requirements as evidence. Explain the conceptual connections, "
             "all hypotheses, and any gaps. This Explorer has NOT kernel-checked "
             "the selected statements or verified their dependency relationships."
@@ -428,13 +545,17 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
             f"Source mode: {source_mode}",
             "",
             (
-                "The selected declarations below are a manual research scope, NOT "
+                "The selected declarations below are a candidate research scope, NOT "
                 "a formal dependency closure. The interpretation is unverified. "
                 "Do not assert kernel-checking or prove unverified connections."
             ),
             "",
             "## Exact Lean declarations",
         ]
+        # The source remains complete in the private dossier; the paper context
+        # is a bounded, explicit preview with SHA/line references, not a silent
+        # cut of an oversized project requirement.
+        excerpt_budget = min(2200, max(240, 7500 // len(scope)))
         selected_keys = set()
         for chosen in scope:
             selected_keys.add((chosen["path"], chosen["name"]))
@@ -444,10 +565,17 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
                     f"### {chosen['name']}",
                     f"Source: {chosen['path']} lines {chosen['start_line']}-{chosen['end_line']}",
                     f"Revision: {chosen['commit']} · file SHA256: {chosen['sha256']}",
-                    f"Excerpt complete: {chosen['complete']}",
+                    f"Original declaration excerpt complete: {chosen['complete']}",
+                    f"Paper-context excerpt truncated: {len(chosen['excerpt']) > excerpt_budget}",
                     "~~~lean",
-                    chosen["excerpt"],
+                    chosen["excerpt"][:excerpt_budget],
                     "~~~",
+                    (
+                        "For omitted source, consult the full SHA-pinned declaration "
+                        "in the Explorer dossier; no omitted proof step is validated here."
+                        if len(chosen["excerpt"]) > excerpt_budget
+                        else ""
+                    ),
                 ]
             )
         commentary = [
@@ -458,22 +586,33 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
         ]
         if commentary:
             lines.extend(["", "## Explorer research notes and drafts", ""])
-        for item in commentary:
+        remaining = max(0, 19_000 - len("\n".join(lines)))
+        for item in reversed(commentary):
             src = item["source"]
+            heading = (
+                f"### {src['name']} — {item['mode']}\nStatus: {item['interpretation_status']}\n"
+            )
+            if remaining <= len(heading) + 160:
+                lines.append("Additional notes are retained in the Explorer dossier.")
+                break
+            excerpt = item["text"][: min(5000, remaining - len(heading) - 160)]
+            clipped = len(excerpt) < len(item["text"])
             lines.extend(
                 [
-                    f"### {src['name']} — {item['mode']}",
-                    f"Status: {item['interpretation_status']}",
-                    item["text"],
+                    heading,
+                    excerpt,
+                    "Paper-context commentary truncated; read the full saved dossier."
+                    if clipped
+                    else "",
                     "",
                 ]
             )
+            remaining -= len(heading) + len(excerpt) + 160
         requirements = "\n".join(lines)
         if len(requirements) > 20_000:
             raise ProjectError(
-                "The section evidence exceeds the existing SIGMA paper context limit "
-                "(20,000 characters). Select fewer declarations or divide the section. "
-                "No source text has been silently discarded."
+                "Even bounded source previews exceeded SIGMA's 20,000-character paper "
+                "context limit. Split the section; full original evidence is preserved."
             )
         config = global_research_settings.load_config()
         view = create_project(
