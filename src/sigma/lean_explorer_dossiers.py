@@ -142,17 +142,25 @@ def append(
     selected = lean_explorer.declaration(formal_path, declaration_name)
     source = {
         key: selected[key]
-        for key in ("path", "name", "kind", "commit", "url", "sha256",
-                    "start_line", "end_line", "complete", "excerpt")
+        for key in (
+            "path",
+            "name",
+            "kind",
+            "commit",
+            "url",
+            "sha256",
+            "start_line",
+            "end_line",
+            "complete",
+            "excerpt",
+        )
     }
     root = _directory()
     identifier = _identifier(identifier)
     # A separate stable lockfile protects writers across atomic JSON replacement.
     lock_path = root / (identifier + ".lock")
     try:
-        lock_fd = os.open(
-            lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600
-        )
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         with os.fdopen(lock_fd, "rb+") as lock:
             _check(lock.fileno())
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
@@ -178,9 +186,7 @@ def append(
                 raise ProjectError("The dossier exceeds its 4 MiB size limit.")
             temp = root / (identifier + "." + str(uuid4()) + ".tmp")
             try:
-                fd = os.open(
-                    temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
-                )
+                fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(fd, "wb") as stream:
                     _check(stream.fileno())
                     stream.write(data)
@@ -204,9 +210,11 @@ def markdown(identifier: str) -> str:
         f"Commit: `{record['formal_commit']}`",
         f"Created: {record['created_at']}",
         "",
-        "> This dossier contains source excerpts and unverified human/AI "
-        "interpretation. Lean Explorer has not kernel-checked or "
-        "mapped dependencies for these statements.",
+        (
+            "> This dossier contains source excerpts and unverified human/AI "
+            "interpretation. Lean Explorer has not kernel-checked or "
+            "mapped dependencies for these statements."
+        ),
         "",
     ]
     for index, item in enumerate(record.get("entries", []), 1):
@@ -215,8 +223,10 @@ def markdown(identifier: str) -> str:
             [
                 f"## {index}. {src['name']} — {item['mode']}",
                 "",
-                f"Source: [{src['path']} lines {src['start_line']}-"
-                f"{src['end_line']}]({src['url']}#L{src['start_line']})",
+                (
+                    f"Source: [{src['path']} lines {src['start_line']}-"
+                    f"{src['end_line']}]({src['url']}#L{src['start_line']})"
+                ),
                 f"Commit: `{src['commit']}` · SHA256: `{src['sha256']}`",
                 f"Source excerpt complete: {src['complete']}",
                 f"Interpretation: **{item['interpretation_status']}**",
@@ -236,7 +246,7 @@ def markdown(identifier: str) -> str:
         for supp in item.get("supplementary_sources", []):
             parts.append(
                 f"Supplementary: {supp['kind']} · [{supp['path']}]({supp['url']})"
-                f" · revision \`{supp['commit']}\` · SHA256 \`{supp['sha256']}\`"
+                f" · revision `{supp['commit']}` · SHA256 `{supp['sha256']}`"
             )
         parts.append("")
     return "\n".join(parts)
