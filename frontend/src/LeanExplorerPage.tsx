@@ -320,16 +320,25 @@ export default function LeanExplorerPage() {
     setError('');
     try {
       const record = await requestJSON<Dossier>('/api/explorelean/dossiers/' + encodeURIComponent(value));
-      if ((record.source_mode || 'mirror') !== sourceMode || (record.section_path || '') !== sectionPath)
-        throw new Error('This dossier belongs to another source-tree section. Choose its section first.');
+      if ((record.source_mode || 'mirror') !== sourceMode || record.section_id !== sectionId)
+        throw new Error('This dossier belongs to a different mathematical proof section.');
       setDossier(record); setNote('');
     } catch (cause) {setError(explainError(cause));}
   }
   async function ensureDossier(): Promise<string> {
-    if (dossier && dossier.source_mode === sourceMode && (dossier.section_path || '') === sectionPath)
+    if (dossier && dossier.source_mode === sourceMode && dossier.section_id === sectionId)
       return dossier.id;
+    const existing = dossierList.find(item =>
+      item.section_id === sectionId && item.source_mode === sourceMode
+      && (sourceMode !== 'local' || item.formal_commit === 'local:' + localSource?.root_id)
+    );
+    if (existing) {
+      await loadDossier(existing.id);
+      return existing.id;
+    }
     const created = await postJSON<Dossier>('/api/explorelean/dossiers', {
-      source_mode: sourceMode, section_path: sectionPath, section_title: sectionName,
+      source_mode: sourceMode, section_id: sectionId,
+      section_title: sectionName, section_focus: sectionPrompt,
     });
     setDossier(created); await refreshDossiers(); log('Created new expository dossier', 'ok');
     return created.id;
@@ -338,15 +347,15 @@ export default function LeanExplorerPage() {
     try {
       setError('');
       const created = await postJSON<Dossier>('/api/explorelean/dossiers', {
-        source_mode: sourceMode, section_path: sectionPath, section_title: sectionName,
+        source_mode: sourceMode, section_id: sectionId,
+        section_title: sectionName, section_focus: sectionPrompt,
       });
       setDossier(created); await refreshDossiers();
       log('Created new expository dossier', 'ok');
     } catch (cause) {setError(explainError(cause));}
   }
   async function analyzeSelected() {
-    if (!selected || !config?.available || !model || busyRef.current
-      || (sectionPath && !selected.path.startsWith(sectionPath + '/'))) return;
+    if (!selected || !config?.available || !model || busyRef.current || !proofMap) return;
     busyRef.current = true; setError(''); setAnalysis(''); setAnalysisSources([]);
     setRunning(true); setStage('Preparing analysis');
     const controller = new AbortController(); abortRef.current = controller;
@@ -360,8 +369,10 @@ export default function LeanExplorerPage() {
           formal_path: selected.path, declaration: selected.name, source_mode: sourceMode,
           include_guide: includeGuide, include_announcement: includeAnnouncement,
           model, reasoning_effort: effort,
-          objective: (objective + '\n\nSection: ' + (sectionPath || 'Complete proof')
-            + '\nExpository question: ' + sectionPrompt).slice(0, 6000),
+          objective: (objective + '\n\nProvisional mathematical proof section: ' + sectionName
+            + '\nExpository question: ' + sectionPrompt
+            + '\nFind evidence for the relevance of this declaration to the section; '
+            + 'do not assume a dependency merely because it was selected.').slice(0, 6000),
           dossier_id: dossierId,
         }),
       });
@@ -445,19 +456,17 @@ export default function LeanExplorerPage() {
 
   const filtered = file?.declarations.filter(item => item.name.toLowerCase().includes(filter.trim().toLowerCase())) ?? [];
   const ready = !!selected && !loadingFile && !loadingDeclaration && !running
-    && !localIndexing && !!config?.available && !!model
-    && (!sectionPath || selected.path.startsWith(sectionPath + '/'));
+    && !localIndexing && !!config?.available && !!model && !!proofMap;
   const selectedEntries = dossier?.entries.filter(item => item.source.name === selectedName && item.source.path === file?.path) ?? [];
-  const inSection = !sectionPath || !!selected?.path.startsWith(sectionPath + '/');
   const matchedDossiers = dossierList.filter(item =>
     (item.source_mode || 'mirror') === sourceMode
-    && (item.section_path || '') === sectionPath
+    && item.section_id === sectionId
     && (sourceMode !== 'local' || (item.formal_commit || '') === 'local:' + localSource?.root_id)
   );
   const stageCompletion = [
     sourceMode === 'local' ? !!localSource : !!file,
-    sourceMode === 'local' ? !!localSource && !!tree : !!file,
-    !!selected && inSection && activeFileMode === sourceMode,
+    !!proofMap && !!currentSection,
+    !!selected && activeFileMode === sourceMode,
     !!analysis && !!selected,
     !!selectedEntries.length || !!savedMarkdown,
   ];
@@ -467,7 +476,7 @@ export default function LeanExplorerPage() {
   return <main className="chat-page leanx-ui">
     <section className="leanx-workflow" aria-label="Lean Explorer workflow">
       <div className="leanx-workflow-title">
-        <strong>Exploring {sectionPath || 'the complete proof'}</strong>
+        <strong>Exploring {sectionName}</strong>
         <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'}
           aria-label={running || localIndexing ? 'Working' : 'Idle'}/>
       </div>
@@ -720,19 +729,17 @@ export default function LeanExplorerPage() {
             <button type="button" disabled={!running} onClick={stopAnalysis}>Stop</button>
             <span>{config ? (config.available ? `${config.models.find(item => item.id === model)?.label ?? model} · ${effort}` : config.message) : 'Reading selected AI connection…'}</span>
           </div>
-          {sectionPath && selected && !inSection && <p className="leanx-section-warning">
-            The selected declaration is outside the current section. Choose a file within <code>{sectionPath}/</code> or change sections.
-          </p>}
+          <p className="leanx-map-provenance">This declaration is being investigated for a possible role in the selected mathematical section; that relationship has not been verified.</p>}
           <div className="leanx-markdown-editor">
             <div className="leanx-markdown-toolbar">
               <label htmlFor="leanx-markdown">Expository Markdown</label>
-              <button type="button" disabled={!selected || !inSection || !markdownDraft.trim() ||
+              <button type="button" disabled={!selected || !markdownDraft.trim() ||
                 markdownDraft.trim() === savedMarkdown || savingMarkdown || running}
                 onClick={() => void saveMarkdown()}>
                 {savingMarkdown ? 'Saving…' : 'Save Markdown'}
               </button>
             </div>
-            <textarea id="leanx-markdown" value={markdownDraft} disabled={!selected || !inSection || running || savingMarkdown}
+            <textarea id="leanx-markdown" value={markdownDraft} disabled={!selected || running || savingMarkdown}
               onChange={event => setMarkdownDraft(event.target.value)}
               placeholder="The mathematical explanation goes here. Edit its Markdown, refine the ideas, then save it to this section's dossier."/>
             {!!markdownDraft && markdownDraft.trim() !== savedMarkdown && <small>Unsaved edits</small>}
@@ -759,11 +766,11 @@ export default function LeanExplorerPage() {
             <h2>Expository notes</h2><span>Editable Markdown · Current section</span>
           </div>
           <textarea aria-label="Expository notes" value={note} rows={7}
-            disabled={!selected || !inSection || savingNote || running}
+            disabled={!selected || savingNote || running}
             onChange={event => setNote(event.target.value)}
             placeholder="What is surprising here? Which assumptions need explanation? What questions should the next research session pursue?"/>
           <div className="leanx-notes-action">
-            <button type="button" disabled={!selected || !inSection || !note.trim() || savingNote || running}
+            <button type="button" disabled={!selected || !note.trim() || savingNote || running}
               onClick={() => void saveNote()}>{savingNote ? 'Saving…' : 'Save note to section dossier'}</button>
           </div>
         </section>
