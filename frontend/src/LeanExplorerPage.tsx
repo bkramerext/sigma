@@ -604,6 +604,7 @@ export default function LeanExplorerPage() {
   function stopAnalysis() {
     abortRef.current?.abort();
     discoveryAbortRef.current?.abort();
+    indexAbortRef.current?.abort();
   }
   async function saveMarkdown() {
     // The Markdown belongs to the selected *section*, not necessarily the
