@@ -3963,9 +3963,7 @@ def lean_explorer_prepare_paper_project(
         _require_local_lean_request(request)
     _limit_anonymous_demo_projects()
     return JSONResponse(
-        lean_explorer_dossiers.prepare_paper_project(
-            identifier, source_mode=body.source_mode
-        ),
+        lean_explorer_dossiers.prepare_paper_project(identifier, source_mode=body.source_mode),
         headers={"Cache-Control": "no-store"},
     )
 
