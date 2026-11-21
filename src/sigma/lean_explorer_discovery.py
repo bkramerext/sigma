@@ -19,8 +19,7 @@ MAX_SCAN_SOURCE_BYTES = 3 * 1024 * 1024
 MIN_TRIAL_FILE_BYTES = 48 * 1024
 # A large, representative source file in the pinned Alpöge mirror.
 AUTOMORPHIC_TRIAL_FILE = (
-    "src/Development/AbelianVarietyTheory/Definitions/"
-    "AutomorphicMembership/ExistsSameData.lean"
+    "src/Development/AbelianVarietyTheory/Definitions/AutomorphicMembership/ExistsSameData.lean"
 )
 
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*")
@@ -149,13 +148,8 @@ def _trial_file(paths: list[str], terms: set[str], section_id: str) -> tuple[str
         if MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES:
             return AUTOMORPHIC_TRIAL_FILE, len(payload)
 
-    likely = [
-        path for path in paths
-        if _words(path.rsplit(".lean", 1)[0]) & terms
-    ]
-    likely.sort(
-        key=lambda path: (-len(_words(path.rsplit(".lean", 1)[0]) & terms), path)
-    )
+    likely = [path for path in paths if _words(path.rsplit(".lean", 1)[0]) & terms]
+    likely.sort(key=lambda path: (-len(_words(path.rsplit(".lean", 1)[0]) & terms), path))
     best_path = ""
     best_size = 0
     for path in likely[:250]:
@@ -163,9 +157,8 @@ def _trial_file(paths: list[str], terms: set[str], section_id: str) -> tuple[str
             payload, _, _, _ = lean_explorer_local.read_module(path)
         except (ProjectError, OSError):
             continue
-        if MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES:
-            if len(payload) > best_size:
-                best_path, best_size = path, len(payload)
+        if MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES and len(payload) > best_size:
+            best_path, best_size = path, len(payload)
     if not best_path:
         raise ProjectError(
             "No large section-related Lean file (at least 48 KiB) was found "
