@@ -3,6 +3,7 @@
 This is a first navigation stage, not a formal dependency extractor. Rankings
 are lexical evidence for review; they do not establish theorem dependencies.
 """
+
 from __future__ import annotations
 
 import re
