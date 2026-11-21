@@ -216,9 +216,7 @@ def discover(
                     "reasons": reasons,
                 }
             )
-        file_ranked.sort(
-            key=lambda item: (-item["relevance_score"], item["start_line"])
-        )
+        file_ranked.sort(key=lambda item: (-item["relevance_score"], item["start_line"]))
         ranked.extend(file_ranked[:3])
         # Bound memory even for roots with hundreds of thousands of declarations.
         if len(ranked) > 1200:
