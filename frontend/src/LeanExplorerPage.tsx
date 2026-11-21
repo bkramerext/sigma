@@ -575,43 +575,54 @@ export default function LeanExplorerPage() {
     </section>
 
 
-    <section className="leanx-conceptual-map" aria-label="Provisional mathematical proof map">
-      <div className="leanx-map-heading">
-        <strong>Mathematical proof map</strong>
-        <span>Guide-informed proposal · not a Lean dependency graph</span>
-        {proofMap && <SourceLink href={proofMap.derived_from.url}>Proof guide</SourceLink>}
+
+    <section className="leanx-section-selection" aria-label="Select a mathematical proof section">
+      <div className="leanx-section-selection-line">
+        <label htmlFor="leanx-selected-section">Research section</label>
+        <select id="leanx-selected-section" value={sectionId} disabled={running || scopeBusy || handoffBusy}
+          onChange={event => chooseSection(event.target.value)}>
+          {proofMap?.sections.map((item, index) =>
+            <option key={item.id} value={item.id}>
+              {index + 1}. {item.title}
+            </option>
+          )}
+        </select>
+        <span className="leanx-section-provenance">
+          Seeded from the proof guide · conceptual, not Lean-verified
+        </span>
+        {proofMap && <SourceLink href={proofMap.derived_from.url}>Source guide</SourceLink>}
       </div>
-      <div className="leanx-map-grid">
-        {proofMap?.sections.map((item, index) =>
-          <button key={item.id} type="button" onClick={() => chooseSection(item.id)}
-            disabled={running}
-            aria-pressed={sectionId === item.id}
-            className={sectionId === item.id ? 'leanx-map-section is-selected' : 'leanx-map-section'}>
-            <span className="leanx-map-number">{index + 1}</span>
-            <span>{item.title}</span>
-            {dossierList.some(record =>
-              record.section_id === item.id && record.source_mode === sourceMode
-              && (sourceMode !== 'local' || record.formal_commit === 'local:' + localSource?.root_id)
-            ) && <span className="leanx-map-saved" aria-label="Has saved dossier">●</span>}
-          </button>
-        )}
-        {!proofMap && <p className="leanx-empty">Loading the provisional mathematical map…</p>}
+      <p><strong>Question:</strong> {sectionPrompt}</p>
+      {currentSection && <p className="leanx-section-purpose">{currentSection.purpose}</p>}
+    </section>
+
+    <section className="leanx-evidence-scope" aria-label="Selected Lean evidence for this section">
+      <div className="leanx-scope-heading">
+        <strong>Lean evidence scope · {scope.length} declaration{scope.length === 1 ? '' : 's'}</strong>
+        <button type="button" onClick={() => setShowBrowser(true)}>
+          Find Lean evidence
+        </button>
       </div>
-      {currentSection && <div className="leanx-map-focus">
-        <p><strong>Question:</strong> {sectionPrompt}</p>
-        <p>{currentSection.purpose}</p>
-        <div className="leanx-map-links">
-          <span>Proposed connections:</span>
-          {proofMap?.connections.filter(edge => edge.to === sectionId || edge.from === sectionId).map(edge => {
-            const counterpart = edge.to === sectionId ? edge.from : edge.to;
-            const other = proofMap.sections.find(item => item.id === counterpart);
-            return <button key={edge.from + edge.to} type="button" disabled={running}
-              title={edge.why + ' (not verified against Lean)'} onClick={() => chooseSection(counterpart)}>
-              {edge.to === sectionId ? '←' : '→'} {other?.title ?? counterpart}
-            </button>;
-          })}
-        </div>
+      {selected && <div className="leanx-scope-candidate">
+        <span>Current declaration: <code>{selected.name}</code> · {selected.path}</span>
+        {selectedInScope ? <span>Included in this section</span> :
+          <button type="button" disabled={scopeBusy || running || !!dossier?.paper_project}
+            onClick={() => void updateScope(true, {path: selected.path, name: selected.name})}>
+            {scopeBusy ? 'Saving…' : 'Include in section'}
+          </button>}
       </div>}
+      {scope.length > 0 ? <ul className="leanx-scope-list">
+        {scope.map(item => <li key={item.path + ':' + item.name}>
+          <span><strong>{item.name}</strong> <small>{item.path}</small></span>
+          <button type="button" disabled={scopeBusy || running || !!dossier?.paper_project}
+            aria-label={'Remove ' + item.name + ' from section'}
+            onClick={() => void updateScope(false, item)}>Remove</button>
+        </li>)}
+      </ul> :
+        <p className="leanx-scope-empty">
+          No Lean declarations selected yet. Use Find Lean evidence, inspect a declaration,
+          then include it here. Sections can draw from unrelated files.
+        </p>}
     </section>
 
     <div className="leanx-compact-controls">
