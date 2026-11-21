@@ -3917,7 +3917,10 @@ def lean_explorer_add_note(
 
 @app.post("/api/explorelean/dossiers/{identifier}/scope")
 def lean_explorer_select_source(
-    request: Request, identifier: str, body: LeanScopeRequest,
+    request: Request,
+    identifier: str,
+    body: LeanScopeRequest,,
+
 ):
     if body.source_mode == "local":
         _require_local_lean_request(request)
@@ -3934,7 +3937,10 @@ def lean_explorer_select_source(
 
 @app.delete("/api/explorelean/dossiers/{identifier}/scope")
 def lean_explorer_deselect_source(
-    request: Request, identifier: str, body: LeanScopeRequest,
+    request: Request,
+    identifier: str,
+    body: LeanScopeRequest,,
+
 ):
     if body.source_mode == "local":
         _require_local_lean_request(request)
@@ -3951,7 +3957,10 @@ def lean_explorer_deselect_source(
 
 @app.post("/api/explorelean/dossiers/{identifier}/paper-project")
 def lean_explorer_prepare_paper_project(
-    request: Request, identifier: str, body: LeanPaperHandoffRequest,
+    request: Request,
+    identifier: str,
+    body: LeanPaperHandoffRequest,,
+
 ):
     if body.source_mode == "local":
         _require_local_lean_request(request)
