@@ -8,10 +8,10 @@ are never followed. The working directory remains mutable, not verified Lean.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
 import json
 import os
 import stat
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -290,4 +290,4 @@ def read_module(relative: str) -> tuple[bytes, str, str, str]:
     if len(payload) > MAX_SOURCE_BYTES:
         raise ProjectError("This Lean module exceeds the per-file source limit.")
     # Local roots are not immutable snapshots. Each opened file is hashed.
-    return payload, "local/" + cfg["root_id"] + "/" + relative, "local:" + cfg["root_id"], ""
+    return payload, relative, "local:" + cfg["root_id"], ""
