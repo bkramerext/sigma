@@ -410,3 +410,260 @@
   .leanx-source-code pre { padding: 14px; }
   .leanx-operation-controls > span { margin-left: 0; }
 }
+
+
+/* Paper-generation inspired Lean workflow: status steps above wide editors. */
+.workspace-page.brainstorm-workspace.lean-explorer-page {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-page.brainstorm-workspace.lean-explorer-page > .site-header {
+  flex: 0 0 auto;
+}
+.workspace-page.brainstorm-workspace.lean-explorer-page > .chat-page.leanx-ui {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  width: 100%;
+  max-width: none;
+  padding: 23px clamp(16px, 3.2vw, 54px) 64px;
+  margin: 0;
+}
+.leanx-workflow {
+  display: grid;
+  gap: 7px;
+  padding: 10px 0 15px;
+  border-bottom: 1px solid #3d4852;
+  color: #a9b9c6;
+}
+.leanx-workflow-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.leanx-workflow-title strong {
+  color: #e4ebf3;
+  font-size: 13px;
+}
+.leanx-paper-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px 19px;
+  padding: 0;
+  margin: 3px 0 0;
+  list-style: none;
+  font-size: 12px;
+}
+.leanx-paper-steps li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 1px 0;
+  color: #8294a2;
+}
+.leanx-paper-steps li strong { font-weight: 500; color: inherit; }
+.leanx-paper-steps li.is-past { color: #c4d5e2; }
+.leanx-paper-steps li.is-current, .leanx-paper-steps li.is-active {
+  color: var(--sigma-copper-foreground, #e5b579);
+}
+.leanx-stage-marker { width: 12px; display: inline-block; text-align: center; }
+.leanx-paper-steps li.is-past .leanx-stage-marker { color: #9ccaac; }
+.leanx-paper-steps li.is-active .leanx-stage-marker {
+  color: #55bd70;
+  animation: leanx-pulse 1.25s ease-in-out infinite;
+}
+.leanx-thinking-prompt {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 2px 0;
+  color: #c5d3df;
+}
+.leanx-thinking-prompt strong { color: #e8c399; font-weight: 600; }
+.leanx-workflow-status { color: #90a4b3; font-size: 11px; line-height: 1.4; }
+.leanx-activity-toggle { display: flex; justify-content: flex-end; }
+.leanx-ui .leanx-activity-toggle button {
+  color: #a9b9c6;
+  border: 0;
+  padding: 4px 9px;
+  background: transparent;
+}
+.leanx-ui .leanx-activity-toggle button:hover:not(:disabled) { text-decoration: underline; }
+
+/* Tree and section controls only show when the Sections disclosure is open. */
+.leanx-browser-tool .leanx-declarations {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.leanx-browser-tool .leanx-declarations > :is(.leanx-section-tree, .leanx-module-navigator) {
+  border: 0;
+  border-bottom: 1px solid #46515a;
+  padding-bottom: 12px;
+}
+.leanx-tree-disclaimer {
+  margin: 6px 14px;
+  color: #9daebb;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.leanx-tree-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px;
+  color: #bdcbd8;
+  font-size: 12px;
+}
+.leanx-tree-children { padding: 0 12px 8px; }
+.leanx-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 0;
+}
+.leanx-ui .leanx-tree-row > button:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  overflow-wrap: anywhere;
+  color: #d7e1ea;
+}
+.leanx-ui .leanx-tree-row > button:first-child:hover { background: #1b2b36; }
+.leanx-tree-row small { margin-left: 9px; color: #96aabc; font-size: 11px; }
+.leanx-ui .leanx-tree-row .leanx-tree-section-action {
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.leanx-current-section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  border-top: 1px solid #394550;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #d1dfeb;
+}
+.leanx-current-section strong { color: #eac394; }
+.leanx-section-prompt-label {
+  display: block;
+  padding: 8px 14px 3px;
+  color: #eac394;
+  font-size: 12px;
+}
+.leanx-section-tree textarea {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 28px);
+  margin: 3px 14px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.leanx-browser-tool .leanx-declarations > input {
+  width: calc(100% - 24px);
+  margin: 9px 12px;
+}
+.leanx-browser-tool .leanx-declaration-list {
+  max-height: 320px;
+}
+.leanx-browser-tool .leanx-module-list {
+  max-height: 240px;
+}
+
+/* Lean source, expository Markdown, notes: wide work areas below steps. */
+.leanx-primary-reading {
+  margin-top: 15px;
+}
+.leanx-source-code .leanx-lean-source-editor {
+  width: 100%;
+  min-height: 180px;
+  height: clamp(190px, 32vh, 440px);
+  resize: vertical;
+  margin: 0;
+  padding: 18px 22px;
+  border: 0;
+  border-radius: 0;
+  background: #0b1117;
+  color: #dce4e9;
+  font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+  overflow: auto;
+}
+.leanx-markdown-editor { padding: 3px 18px 13px; }
+.leanx-markdown-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 3px 0 9px;
+}
+.leanx-markdown-toolbar label {
+  color: #dbe6ee;
+  font-size: 12px;
+  font-weight: 600;
+}
+.leanx-ui .leanx-markdown-editor textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 260px;
+  height: clamp(280px, 43vh, 650px);
+  resize: vertical;
+  color: #dce7ef;
+  background: #0c131a;
+  font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: auto;
+  white-space: pre-wrap;
+  padding: 16px;
+}
+.leanx-markdown-editor small { display: block; color: #edc18b; margin-top: 6px; }
+.leanx-markdown-preview { margin: 13px 0 0; }
+.leanx-markdown-preview summary {
+  cursor: pointer;
+  color: #d5b387;
+  font-size: 12px;
+}
+.leanx-markdown-preview .leanx-explanation {
+  margin-top: 10px;
+  border: 1px solid #45525c;
+  border-radius: 5px;
+}
+.leanx-ui .leanx-notes-pane textarea {
+  display: block;
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  margin: 15px 16px 10px;
+  min-height: 155px;
+  resize: vertical;
+  line-height: 1.7;
+}
+.leanx-notes-action { padding: 0 16px 15px; }
+.leanx-section-warning {
+  margin: 0 18px 10px;
+  padding: 9px 12px;
+  border-left: 2px solid #c3986b;
+  font-size: 12px;
+  color: #ecd5b5;
+  background: #292218;
+}
+@media (max-width: 740px) {
+  .workspace-page.brainstorm-workspace.lean-explorer-page > .chat-page.leanx-ui {
+    padding: 14px 15px 42px;
+  }
+  .leanx-paper-steps { gap: 3px 10px; }
+  .leanx-thinking-prompt { font-size: 11px; }
+  .leanx-markdown-editor { padding: 3px 12px 12px; }
+  .leanx-source-code .leanx-lean-source-editor { padding: 12px; }
+}
