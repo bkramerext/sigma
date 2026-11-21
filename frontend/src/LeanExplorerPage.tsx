@@ -574,7 +574,8 @@ export default function LeanExplorerPage() {
         headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
         body: JSON.stringify({
           formal_path: analysisDossier.scope[0].path, declaration: analysisDossier.scope[0].name, source_mode: sourceMode,
-          include_guide: includeGuide, include_announcement: includeAnnouncement,
+          include_guide: analysisDossier.discovery?.single_file_trial ? false : includeGuide,
+          include_announcement: analysisDossier.discovery?.single_file_trial ? false : includeAnnouncement,
           model, reasoning_effort: effort,
           objective: (objective + '\n\nProvisional mathematical proof section: ' + sectionName
             + '\nExpository question: ' + sectionPrompt
