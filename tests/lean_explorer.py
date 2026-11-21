@@ -109,7 +109,7 @@ def test_dossier_and_ai_flow() -> None:
             assert source.status_code == 200
             assert source.json()["total"] == 2
 
-            created = client.post("/api/explorelean/dossiers")
+            created = client.post("/api/explorelean/dossiers", json={"source_mode": "mirror"})
             assert created.status_code == 201, created.text
             dossier_id = created.json()["id"]
             assert len(dossier_id) == 36
