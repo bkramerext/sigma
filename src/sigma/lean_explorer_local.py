@@ -125,8 +125,13 @@ def source() -> dict[str, Any] | None:
     resolved = _validate_root(record.get("directory", ""))
     if record.get("root_id") != _root_id(resolved):
         raise ProjectError("The configured Lean directory identity changed.")
-    return {"mode": "local", "directory": str(resolved), "root_id": record["root_id"],
-            "indexed_at": record.get("indexed_at"), "file_count": record.get("file_count", 0)}
+    return {
+        "mode": "local",
+        "directory": str(resolved),
+        "root_id": record["root_id"],
+        "file_count": record.get("file_count", 0),
+        "default_module": record.get("default_module", ""),
+    }
 
 
 @lru_cache(maxsize=3)
@@ -152,6 +157,18 @@ def _modules() -> tuple[list[str], frozenset[str]]:
     except OSError as exc:
         raise ProjectError("The local directory must be indexed again.") from exc
     return _cached_modules(cfg["root_id"], mtime)
+
+
+def _entrypoint(files: list[str]) -> str:
+    """Select an actual top-level target if one is present in this tree."""
+    for target in ("src/Statements.lean", "Statements.lean", "src/Main.lean", "Main.lean"):
+        if target in files:
+            return target
+    for suffix in ("/src/Statements.lean", "/Statements.lean", "/src/Main.lean"):
+        for filename in files:
+            if filename.endswith(suffix):
+                return filename
+    return files[0] if files else ""
 
 
 def _paths(root: Path, progress: Callable[[int, int, str], None] | None) -> list[str]:
@@ -198,6 +215,7 @@ def configure(directory: str, progress: Callable[[int, int, str], None] | None =
         "directory": str(root),
         "root_id": _root_id(root),
         "file_count": len(found),
+        "default_module": _entrypoint(found),
     }
     index_path = _index_file()
     _atomic_json(index_path, {"root_id": cfg["root_id"], "files": found})
