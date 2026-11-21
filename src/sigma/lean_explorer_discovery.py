@@ -172,6 +172,7 @@ def discover(
     hints = section.get("declaration_hints", [])
     ranked: list[dict[str, Any]] = []
     declarations = 0
+    matching = 0
     unreadable = 0
     for number, path in enumerate(scan, 1):
         try:
@@ -186,6 +187,7 @@ def discover(
         lines = text.splitlines()
         found = lean_explorer._declarations(text)
         declarations += len(found)
+        file_ranked: list[dict[str, Any]] = []
         for index, item in enumerate(found):
             start = item["line"]
             end = found[index + 1]["line"] - 1 if index + 1 < len(found) else len(lines)
@@ -193,7 +195,8 @@ def discover(
             score, reasons = _score(path, item["kind"], item["name"], excerpt, terms, hints)
             if score < 7:
                 continue
-            ranked.append(
+            matching += 1
+            file_ranked.append(
                 {
                     "path": path,
                     "name": item["name"],
@@ -203,8 +206,22 @@ def discover(
                     "reasons": reasons,
                 }
             )
+        file_ranked.sort(
+            key=lambda item: (-item["relevance_score"], item["start_line"])
+        )
+        ranked.extend(file_ranked[:3])
+        # Bound memory even for roots with hundreds of thousands of declarations.
+        if len(ranked) > 1200:
+            ranked.sort(
+                key=lambda item: (
+                    -item["relevance_score"],
+                    item["path"],
+                    item["start_line"],
+                )
+            )
+            ranked = ranked[:300]
         if progress is not None and (number % 100 == 0 or number == len(scan)):
-            progress(number, total, len(ranked), path)
+            progress(number, total, matching, path)
 
     ranked.sort(
         key=lambda item: (
@@ -233,7 +250,7 @@ def discover(
         "complete": len(scan) == total,
         "unreadable_files": unreadable,
         "candidate_declarations": declarations,
-        "matching_declarations": len(ranked),
+        "matching_declarations": matching,
         "candidates": shortlist,
         "warning": (
             "Candidates are scored using declaration names, source paths and "
