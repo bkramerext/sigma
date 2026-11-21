@@ -589,8 +589,7 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
         for item in reversed(commentary):
             src = item["source"]
             heading = (
-                f"### {src['name']} — {item['mode']}\n"
-                f"Status: {item['interpretation_status']}\n"
+                f"### {src['name']} — {item['mode']}\nStatus: {item['interpretation_status']}\n"
             )
             if remaining <= len(heading) + 160:
                 lines.append("Additional notes are retained in the Explorer dossier.")
