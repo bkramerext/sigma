@@ -3,8 +3,9 @@ import './lean-explorer.css';
 
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 const DEFAULT_PATH = 'src/Statements.lean';
+const DEFAULT_LOCAL_DIRECTORY = '~/lean_alpoge';
 type SourceMode = 'mirror' | 'local';
-type LocalSource = {mode: 'local'; directory: string; root_id: string; file_count: number};
+type LocalSource = {mode: 'local'; directory: string; root_id: string; file_count: number; default_module?: string};
 type LocalStatus = {configured: boolean; source: LocalSource | null};
 type LocalFiles = {
   root_id: string; directory: string; total_files: number; total_matches: number;
@@ -60,9 +61,9 @@ function Timestamp({value}: {value: string}) {
 export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   const [path, setPath] = useState(DEFAULT_PATH);
   const [formalInput, setFormalInput] = useState(DEFAULT_PATH);
-  const [sourceMode, setSourceMode] = useState<SourceMode>('mirror');
+  const [sourceMode, setSourceMode] = useState<SourceMode>('local');
   const [activeFileMode, setActiveFileMode] = useState<SourceMode>('mirror');
-  const [localDirectory, setLocalDirectory] = useState('');
+  const [localDirectory, setLocalDirectory] = useState(DEFAULT_LOCAL_DIRECTORY);
   const [localSource, setLocalSource] = useState<LocalSource | null>(null);
   const [localFiles, setLocalFiles] = useState<LocalFiles | null>(null);
   const [moduleFilter, setModuleFilter] = useState('');
@@ -143,7 +144,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
     setAnalysis(''); setAnalysisSources([]); setDossier(null);
     if (mode === 'mirror') void loadFile(DEFAULT_PATH, 'mirror');
     else if (localSource) void loadModules().then(result => {
-      if (result.files.length) void loadFile(result.files[0], 'local');
+      if (result.files.length) void loadFile(localSource.default_module || result.files[0], 'local');
     }).catch(cause => setError(explainError(cause)));
   }
 
@@ -192,7 +193,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
       setLocalSource(complete); setLocalDirectory(complete.directory);
       setSourceMode('local'); setFile(null); setDossier(null);
       const listed = await loadModules();
-      if (listed.files.length) await loadFile(listed.files[0], 'local');
+      if (listed.files.length) await loadFile(complete.default_module || listed.files[0], 'local');
       setStage('Local Lean tree indexed');
       log(`Indexed ${complete.file_count.toLocaleString()} Lean files from local directory`, 'ok');
     } catch (cause) {
@@ -212,9 +213,15 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
           setLocalDirectory(status.source.directory);
           setSourceMode('local');
           const listed = await loadModules();
-          if (listed.files.length) await loadFile(listed.files[0], 'local');
-        } else await loadFile(DEFAULT_PATH, 'mirror');
-      } catch { await loadFile(DEFAULT_PATH, 'mirror'); }
+          if (listed.files.length) await loadFile(status.source.default_module || listed.files[0], 'local');
+        } else {
+          setStage('Local directory ready to index');
+          log('Local source: ~/lean_alpoge · click Index directory to scan the proof tree', 'note');
+        }
+      } catch {
+        setSourceMode('mirror');
+        await loadFile(DEFAULT_PATH, 'mirror');
+      }
     })();
     void refreshDossiers().catch(cause => setError(explainError(cause)));
     let cancelled = false;
