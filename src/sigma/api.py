@@ -4188,7 +4188,9 @@ async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
                         source_mode=body.source_mode,
                         mode="explain",
                         text=explanation,
-                        supplementary_sources=sources[1:],
+                        supplementary_sources=[
+                            source for source in sources if source["kind"] != "formal"
+                        ],
                     )
                 except ProjectError as exc:
                     yield _lean_sse(
