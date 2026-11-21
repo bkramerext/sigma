@@ -27,22 +27,23 @@ MAX_CANDIDATES = 12
 MAX_AUTO_SELECTED = 5
 _PROGRESS_EVERY = 120
 _WORDS = re.compile(r"[A-Za-z][a-z]*|[A-Z]+(?=[A-Z][a-z]|\b)|[A-Z]?[a-z]+|[0-9]+")
-_IGNORE = frozenset(re.findall(r"[a-z]+", 
-    """which with from into that this these those then than what why where
-    when which whose there here them they their were would should could does
-    have has had some many most only other about across between against
-    proof proves proving theorem definition lemma lemmas mathematics mathematical
-    argument establishes establish understand understanding selected section
-    explain explaining uses useful need needs formal formalization human reader
-    result results assumptions input inputs source sources actual current
-    developed support supporting foundations construction constructions
-    theory estimates estimate theorem formalized lines selected identify
-    independent relationship connect connects how an and the for are is
-    it or of by in on to at as a be do can we its not all each with
-    of zero true false nat int prop sorry namespace open import simp
-    """
+_IGNORE = frozenset(
+    re.findall(
+        r"[a-z]+",
+        """which with from into that this these those then than what why where when
+        whose there here them they their were would should could does have has
+        had some many most only other about across between against proof proves
+        proving theorem definition lemma lemmas mathematics mathematical argument
+        establishes establish understand understanding selected section explain
+        explaining uses useful need needs formal formalization human reader result
+        results assumptions input inputs source sources actual current developed
+        support supporting foundations construction constructions theory estimates
+        estimate formalized lines identify independent relationship connect connects
+        how an and the for are is it or of by in on to at as a be do can we its
+        not all each true false nat int prop sorry namespace open import simp""",
+    )
 )
-_GENERICS = frozenset({"structure", "field", "value", "base", "step", "main", "aux", "test"})
+_GENERICS = frozenset({"structure", "value", "base", "step", "main", "aux", "test"})
 
 
 @dataclass(frozen=True)
