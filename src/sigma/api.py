@@ -41,8 +41,8 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     lean_explorer,
-    lean_explorer_dossiers,
     lean_explorer_discovery,
+    lean_explorer_dossiers,
     lean_explorer_local,
     lean_explorer_map,
     memory_guard,
@@ -3860,7 +3860,7 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
                 try:
                     update = await asyncio.wait_for(queue.get(), timeout=0.5)
                     yield _lean_sse(update)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
             result = await task
             yield _lean_sse(
@@ -3873,9 +3873,7 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
             updated = await run_in_threadpool(
                 lean_explorer_dossiers.apply_discovery, body.dossier_id, result
             )
-            yield _lean_sse(
-                {"type": "complete", "discovery": result, "dossier": updated}
-            )
+            yield _lean_sse({"type": "complete", "discovery": result, "dossier": updated})
         except (ProjectError, OSError, UnicodeError, ValueError) as exc:
             yield _lean_sse({"type": "error", "error": str(exc)})
         finally:
