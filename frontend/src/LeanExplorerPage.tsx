@@ -170,14 +170,45 @@ export default function LeanExplorerPage() {
     } finally {setModuleLoading(false);}
   }, []);
 
+  const loadTree = useCallback(async (prefix = '') => {
+    setTreeBusy(true);
+    try {
+      const result = await requestJSON<LeanTree>(
+        '/api/explorelean/local-tree?' + new URLSearchParams({prefix, limit: '180'})
+      );
+      setTree(result);
+    } catch (cause) {
+      setError(explainError(cause));
+    } finally {
+      setTreeBusy(false);
+    }
+  }, []);
+
+  function chooseSection(prefix: string) {
+    setSectionPath(prefix);
+    setSectionName(prefix ? prefix.split('/').pop() || prefix : 'Complete proof');
+    setSectionPrompt(prefix
+      ? 'What distinctive mathematical idea is developed in this section, and how will we explain it?'
+      : 'What is the central mathematical idea of this proof, and how do its major pieces fit?');
+    setDossier(null);
+    setMarkdownDraft('');
+    setSavedMarkdown('');
+    setAnalysis('');
+    log('Selected expository section: ' + (prefix || 'Complete proof'), 'ok');
+  }
+
   function updateSourceMode(mode: SourceMode) {
     if (mode === sourceMode || running || localIndexing) return;
     setSourceMode(mode); setFile(null); setSelected(null); setSelectedName('');
-    setAnalysis(''); setAnalysisSources([]); setDossier(null);
+    setAnalysis(''); setAnalysisSources([]); setDossier(null); setTree(null);
+    setSectionPath(''); setSectionName('Complete proof');
     if (mode === 'mirror') void loadFile(DEFAULT_PATH, 'mirror');
-    else if (localSource) void loadModules().then(result => {
-      if (result.files.length) void loadFile(localSource.default_module || result.files[0], 'local');
-    }).catch(cause => setError(explainError(cause)));
+    else if (localSource) {
+      void loadTree('');
+      void loadModules().then(result => {
+        if (result.files.length) void loadFile(localSource.default_module || result.files[0], 'local');
+      }).catch(cause => setError(explainError(cause)));
+    }
   }
 
   async function indexLocalDirectory() {
@@ -224,7 +255,9 @@ export default function LeanExplorerPage() {
       if (!complete) throw new Error('The directory scan ended without a completed index.');
       setLocalSource(complete); setLocalDirectory(complete.directory);
       setSourceMode('local'); setFile(null); setDossier(null);
+      setTree(null); chooseSection('');
       const listed = await loadModules();
+      await loadTree('');
       if (listed.files.length) await loadFile(complete.default_module || listed.files[0], 'local');
       setShowInputs(false);
       setStage('Local Lean tree indexed');
@@ -246,6 +279,7 @@ export default function LeanExplorerPage() {
           setLocalDirectory(status.source.directory);
           setSourceMode('local');
           const listed = await loadModules();
+          await loadTree('');
           if (listed.files.length) await loadFile(status.source.default_module || listed.files[0], 'local');
         } else {
           setStage('Local directory ready to index');
@@ -277,7 +311,7 @@ export default function LeanExplorerPage() {
     }
     void readModel();
     return () => {cancelled = true; abortRef.current?.abort(); indexAbortRef.current?.abort(); document.title = oldTitle;};
-  }, [loadFile, loadModules, refreshDossiers]);
+  }, [loadFile, loadModules, loadTree, refreshDossiers]);
 
   useEffect(() => {
     if (!file || !selectedName) {setSelected(null); return;}
