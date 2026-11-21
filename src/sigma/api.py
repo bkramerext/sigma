@@ -3718,7 +3718,10 @@ def lean_explorer_local_status(request: Request):
 
 @app.get("/api/explorelean/local-files")
 def lean_explorer_local_files(
-    request: Request, query: str = "", offset: int = 0, limit: int = 100,
+    request: Request,
+    query: str = "",
+    offset: int = 0,
+    limit: int = 100,
 ):
     _require_local_lean_request(request)
     return JSONResponse(
@@ -3729,16 +3732,19 @@ def lean_explorer_local_files(
 
 @app.post("/api/explorelean/local-index")
 async def lean_explorer_local_index(
-    request: Request, body: LeanLocalDirectoryRequest,
+    request: Request,
+    body: LeanLocalDirectoryRequest,
 ):
     _require_local_lean_request(request)
 
     async def events():
-        yield _lean_sse({
-            "type": "stage",
-            "stage": "scanning",
-            "label": "Scanning local Lean directory",
-        })
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "stage": "scanning",
+                "label": "Scanning local Lean directory",
+            }
+        )
         loop = asyncio.get_running_loop()
         events_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         cancelled = threading.Event()
@@ -3749,7 +3755,8 @@ async def lean_explorer_local_index(
             loop.call_soon_threadsafe(
                 events_queue.put_nowait,
                 {
-                    "type": "progress", "stage": "scanning",
+                    "type": "progress",
+                    "stage": "scanning",
                     "scanned_directories": dirs,
                     "found_files": files,
                     "current_directory": current,
@@ -3793,10 +3800,13 @@ def lean_explorer_inputs():
 
 @app.get("/api/explorelean/source")
 def lean_explorer_source(
+    request: Request,
     kind: str = "formal",
     path: str = lean_explorer.DEFAULT_PATH,
     source_mode: Literal["mirror", "local"] = "mirror",
 ):
+    if source_mode == "local":
+        _require_local_lean_request(request)
     return JSONResponse(
         lean_explorer.read_source(kind, path, source_mode=source_mode),
         headers={"Cache-Control": "no-store"},
@@ -3805,9 +3815,12 @@ def lean_explorer_source(
 
 @app.get("/api/explorelean/declarations")
 def lean_explorer_declarations(
+    request: Request,
     path: str = lean_explorer.DEFAULT_PATH,
     source_mode: Literal["mirror", "local"] = "mirror",
 ):
+    if source_mode == "local":
+        _require_local_lean_request(request)
     return JSONResponse(
         lean_explorer.declarations(path, source_mode=source_mode),
         headers={"Cache-Control": "no-store"},
@@ -3816,8 +3829,13 @@ def lean_explorer_declarations(
 
 @app.get("/api/explorelean/declaration")
 def lean_explorer_declaration(
-    path: str, name: str, source_mode: Literal["mirror", "local"] = "mirror",
+    request: Request,
+    path: str,
+    name: str,
+    source_mode: Literal["mirror", "local"] = "mirror",
 ):
+    if source_mode == "local":
+        _require_local_lean_request(request)
     return JSONResponse(
         lean_explorer.declaration(path, name, source_mode=source_mode),
         headers={"Cache-Control": "no-store"},
@@ -3832,7 +3850,9 @@ def lean_explorer_list_dossiers():
 
 
 @app.post("/api/explorelean/dossiers", status_code=201)
-def lean_explorer_create_dossier(body: LeanDossierCreateRequest):
+def lean_explorer_create_dossier(request: Request, body: LeanDossierCreateRequest):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
     return JSONResponse(
         lean_explorer_dossiers.create(source_mode=body.source_mode),
         status_code=201,
@@ -3849,7 +3869,11 @@ def lean_explorer_get_dossier(identifier: str):
 
 
 @app.post("/api/explorelean/dossiers/{identifier}/notes", status_code=201)
-def lean_explorer_add_note(identifier: str, body: LeanDossierEntryRequest):
+def lean_explorer_add_note(
+    request: Request, identifier: str, body: LeanDossierEntryRequest,
+):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
     entry = lean_explorer_dossiers.append(
         identifier,
         formal_path=body.formal_path,
@@ -3875,7 +3899,9 @@ def lean_explorer_dossier_markdown(identifier: str):
 
 
 @app.post("/api/explorelean/analyze")
-async def lean_explorer_analyze(body: LeanAnalysisRequest):
+async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
+    if body.source_mode == "local":
+        _require_local_lean_request(request)
     config = await chat.configuration()
     if not config["available"]:
         raise HTTPException(503, config["message"] or "Connect an AI account before exploring.")
