@@ -101,7 +101,9 @@ def _retrieve(url: str) -> tuple[bytes, str, str]:
         raise ProjectError(f"Source could not be fetched: {str(exc)[:140]}") from exc
 
 
-def _text_source(kind: str, path: str = DEFAULT_PATH, *, source_mode: str = "mirror") -> dict[str, Any]:
+def _text_source(
+    kind: str, path: str = DEFAULT_PATH, *, source_mode: str = "mirror"
+) -> dict[str, Any]:
     if kind == "formal" and source_mode == "local":
         payload, resolved_path, commit, resolved_url = lean_explorer_local.read_module(path)
         media_type = "text/plain"
@@ -141,7 +143,10 @@ def _text_source(kind: str, path: str = DEFAULT_PATH, *, source_mode: str = "mir
 
 
 def read_source(
-    kind: str, path: str = DEFAULT_PATH, *, limit: int = MAX_VIEW_CHARS,
+    kind: str,
+    path: str = DEFAULT_PATH,
+    *,
+    limit: int = MAX_VIEW_CHARS,
     source_mode: str = "mirror",
 ) -> dict[str, Any]:
     if not 1 <= limit <= MAX_VIEW_CHARS:
