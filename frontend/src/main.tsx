@@ -10142,7 +10142,7 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
-  if (url.pathname === '/explorelean') return <><main className="workspace-page brainstorm-workspace lean-explorer-page"><Header goHome={goHome} projectArtwork chatPage chatPageTitle="Lean Explorer" chatPageDescription="Explore the Lean proof with two AI readers. Source-backed navigation and expository exports are being integrated." close={{action: () => navigate('/'),busy: false}}/><LeanExplorerPage onClose={() => navigate('/')}/><FloatingTooltip/></main></>;
+  if (url.pathname === '/explorelean') return <><main className="workspace-page brainstorm-workspace lean-explorer-page"><Header goHome={goHome} projectArtwork chatPage chatPageTitle="Lean Explorer" chatPageDescription="Source-grounded exploration of the Alpöge Lean proof." close={{action: () => navigate('/'),busy: false}}/><LeanExplorerPage onClose={() => navigate('/')}/><FloatingTooltip/></main></>;
   if (url.pathname === '/session') {
     const sessionId = url.searchParams.get('session_log') ?? '';
     const path = url.searchParams.get('path') ?? '';
