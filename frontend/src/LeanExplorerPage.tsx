@@ -11,10 +11,15 @@ const THINKING_STEPS = [
   {name: 'Explain the idea', question: 'Why is this result useful, and what does it depend on?'},
   {name: 'Shape the exposition', question: 'What must a reader understand before moving forward?'},
 ] as const;
-type LeanTreeNode = {name: string; path: string; kind: 'module' | 'directory'; module_count: number};
-type LeanTree = {
-  root_id: string; prefix: string; parent: string | null; module_count: number;
-  child_count: number; truncated: boolean; children: LeanTreeNode[];
+type ProofSection = {
+  id: string; title: string; question: string; purpose: string;
+  guide_section: number; guide_url: string; status: string; declaration_hints: string[];
+};
+type ProofMap = {
+  title: string; status: string; warning: string;
+  derived_from: {url: string; revision: string; title: string};
+  sections: ProofSection[];
+  connections: {from: string; to: string; why: string; status: string}[];
 };
 type SourceMode = 'mirror' | 'local';
 type LocalSource = {mode: 'local'; directory: string; root_id: string; file_count: number; default_module?: string};
@@ -43,11 +48,11 @@ type Citation = {kind: string; path: string; commit: string; url: string; sha256
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
 type Dossier = {
   id: string; title: string; updated_at: string; entries: Entry[];
-  source_mode: SourceMode; section_path?: string; section_title?: string;
+  source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
 };
 type DossierItem = {
   id: string; title: string; entry_count: number; updated_at: string;
-  source_mode: SourceMode; section_path?: string; section_title?: string;
+  source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
   formal_commit?: string;
 };
 type AIConfig = {available: boolean; message: string; model: string; reasoning_effort: string; models: {id: string; label: string; efforts: string[]}[]};
@@ -86,13 +91,11 @@ export default function LeanExplorerPage() {
   const [localSource, setLocalSource] = useState<LocalSource | null>(null);
   const [localFiles, setLocalFiles] = useState<LocalFiles | null>(null);
   const [moduleFilter, setModuleFilter] = useState('');
-  const [tree, setTree] = useState<LeanTree | null>(null);
-  const [treeBusy, setTreeBusy] = useState(false);
-  const [sectionPath, setSectionPath] = useState('');
-  const [sectionName, setSectionName] = useState('Complete proof');
-  const [sectionPrompt, setSectionPrompt] = useState(
-    'What is the central mathematical idea of this section, and how does it contribute to RH?'
-  );
+  const [proofMap, setProofMap] = useState<ProofMap | null>(null);
+  const [sectionId, setSectionId] = useState('reflection');
+  const currentSection = proofMap?.sections.find(item => item.id === sectionId);
+  const sectionName = currentSection?.title ?? 'Reflection and the final conclusion';
+  const [sectionPrompt, setSectionPrompt] = useState('Why is exclusion of zeros to the right of the critical line sufficient?');
   const [moduleLoading, setModuleLoading] = useState(false);
   const [localIndexing, setLocalIndexing] = useState(false);
   const [scanCount, setScanCount] = useState({dirs: 0, files: 0, path: ''});
@@ -171,41 +174,21 @@ export default function LeanExplorerPage() {
     } finally {setModuleLoading(false);}
   }, []);
 
-  const loadTree = useCallback(async (prefix = '') => {
-    setTreeBusy(true);
-    try {
-      const result = await requestJSON<LeanTree>(
-        '/api/explorelean/local-tree?' + new URLSearchParams({prefix, limit: '180'})
-      );
-      setTree(result);
-    } catch (cause) {
-      setError(explainError(cause));
-    } finally {
-      setTreeBusy(false);
-    }
-  }, []);
-
-  function chooseSection(prefix: string) {
-    setSectionPath(prefix);
-    setSectionName(prefix ? prefix.split('/').pop() || prefix : 'Complete proof');
-    setSectionPrompt(prefix
-      ? 'What distinctive mathematical idea is developed in this section, and how will we explain it?'
-      : 'What is the central mathematical idea of this proof, and how do its major pieces fit?');
-    setDossier(null);
-    setMarkdownDraft('');
-    setSavedMarkdown('');
-    setAnalysis('');
-    log('Selected expository section: ' + (prefix || 'Complete proof'), 'ok');
+  function chooseSection(id: string) {
+    const section = proofMap?.sections.find(item => item.id === id);
+    if (!section || running) return;
+    setSectionId(id); setSectionPrompt(section.question);
+    setDossier(null); setNote('');
+    setMarkdownDraft(''); setSavedMarkdown(''); setAnalysis(''); setAnalysisSources([]);
+    log('Selected mathematical proof section: ' + section.title, 'ok');
   }
 
   function updateSourceMode(mode: SourceMode) {
     if (mode === sourceMode || running || localIndexing) return;
     setSourceMode(mode); setFile(null); setSelected(null); setSelectedName('');
-    setAnalysis(''); setAnalysisSources([]); setDossier(null); setTree(null);
-    setSectionPath(''); setSectionName('Complete proof');
+    setAnalysis(''); setAnalysisSources([]); setDossier(null);
     if (mode === 'mirror') void loadFile(DEFAULT_PATH, 'mirror');
     else if (localSource) {
-      void loadTree('');
       void loadModules().then(result => {
         if (result.files.length) void loadFile(localSource.default_module || result.files[0], 'local');
       }).catch(cause => setError(explainError(cause)));
@@ -256,9 +239,7 @@ export default function LeanExplorerPage() {
       if (!complete) throw new Error('The directory scan ended without a completed index.');
       setLocalSource(complete); setLocalDirectory(complete.directory);
       setSourceMode('local'); setFile(null); setDossier(null);
-      setTree(null); chooseSection('');
       const listed = await loadModules();
-      await loadTree('');
       if (listed.files.length) await loadFile(complete.default_module || listed.files[0], 'local');
       setShowInputs(false);
       setStage('Local Lean tree indexed');
@@ -280,7 +261,6 @@ export default function LeanExplorerPage() {
           setLocalDirectory(status.source.directory);
           setSourceMode('local');
           const listed = await loadModules();
-          await loadTree('');
           if (listed.files.length) await loadFile(status.source.default_module || listed.files[0], 'local');
         } else {
           setStage('Local directory ready to index');
@@ -292,6 +272,9 @@ export default function LeanExplorerPage() {
       }
     })();
     void refreshDossiers().catch(cause => setError(explainError(cause)));
+    void requestJSON<ProofMap>('/api/explorelean/proof-map')
+      .then(result => setProofMap(result))
+      .catch(cause => setError(explainError(cause)));
     let cancelled = false;
     async function readModel() {
       try {
@@ -312,7 +295,7 @@ export default function LeanExplorerPage() {
     }
     void readModel();
     return () => {cancelled = true; abortRef.current?.abort(); indexAbortRef.current?.abort(); document.title = oldTitle;};
-  }, [loadFile, loadModules, loadTree, refreshDossiers]);
+  }, [loadFile, loadModules, refreshDossiers]);
 
   useEffect(() => {
     if (!file || !selectedName) {setSelected(null); return;}
