@@ -500,9 +500,15 @@ export default function LeanExplorerPage() {
             if (!info.complete)
               log('Discovery is partial: the repository exceeds this pass limit.', 'note');
             if (event.dossier.scope?.length) {
-              setStage('Lean candidates selected; investigating');
-              if (config?.available && model) await analyzeSelected(event.dossier);
-              else setStage('Evidence selected; connect AI to investigate');
+              const hasNewEvidence =
+                (event.dossier.scope?.length ?? 0) > (dossier?.scope?.length ?? 0);
+              if (config?.available && model &&
+                  (hasNewEvidence || !event.dossier.entries.some(item => item.mode === 'explain'))) {
+                setStage('Lean candidates selected; investigating');
+                await analyzeSelected(event.dossier);
+              } else {
+                setStage('Evidence collected; section dossier ready for review');
+              }
             } else {
               setStage('No matching declarations found; expand discovery criteria');
             }
@@ -713,7 +719,9 @@ export default function LeanExplorerPage() {
             disabled={!localSource || sourceMode !== 'local' || !proofMap || !sectionId
               || discovering || running || localIndexing || scopeBusy || !!dossier?.paper_project}
             onClick={() => void exploreSection()}>
-            {discovering ? 'Exploring…' : 'Explore section'}
+            {discovering ? 'Exploring…'
+              : dossier?.discovery && !dossier.discovery.complete
+                ? 'Continue exploration' : 'Explore section'}
           </button>
           {(discovering || running) && <button type="button" onClick={stopAnalysis}>Stop</button>}
           <button type="button" onClick={() => setShowBrowser(true)}>Find Lean evidence manually</button>
@@ -733,7 +741,7 @@ export default function LeanExplorerPage() {
         {' '}{dossier.discovery.matching_declarations.toLocaleString()} possible matches.
         {dossier.discovery.unreadable_files > 0 &&
           ' Unreadable files: ' + dossier.discovery.unreadable_files.toLocaleString() + '.'}
-        {!dossier.discovery.complete && ' This is a partial repository scan.'}
+        {!dossier.discovery.complete && ' Scan incomplete; Continue exploration resumes at the next file.'}
         {' '}Matches are candidates, not verified mathematical dependencies.
       </p>}
       {scope.length > 0 ? <ul className="leanx-scope-list">
