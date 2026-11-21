@@ -48,6 +48,7 @@ type Dossier = {
 type DossierItem = {
   id: string; title: string; entry_count: number; updated_at: string;
   source_mode: SourceMode; section_path?: string; section_title?: string;
+  formal_commit?: string;
 };
 type AIConfig = {available: boolean; message: string; model: string; reasoning_effort: string; models: {id: string; label: string; efforts: string[]}[]};
 type Activity = {id: number; time: string; label: string; state: 'ok'|'working'|'error'|'note'};
@@ -475,10 +476,28 @@ export default function LeanExplorerPage() {
   const currentThought = THINKING_STEPS[activeStep >= 0 ? activeStep : THINKING_STEPS.length - 1];
 
   return <main className="chat-page leanx-ui">
-
-      <button className="leanx-close-button" type="button" aria-label="Close Lean Explorer" data-tooltip="Close Lean Explorer" onClick={onClose}>×</button>
-    </div>
-
+    <section className="leanx-workflow" aria-label="Lean Explorer workflow">
+      <div className="leanx-workflow-title">
+        <strong>Exploring {sectionPath || 'the complete proof'}</strong>
+        <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'}
+          aria-label={running || localIndexing ? 'Working' : 'Idle'}/>
+      </div>
+      <ol className="leanx-paper-steps">
+        {THINKING_STEPS.map((item, index) =>
+          <li key={item.name} className={stageCompletion[index] ? 'is-past' :
+            index === activeStep ? (running || localIndexing ? 'is-active' : 'is-current') : 'is-upcoming'}>
+            <span className="leanx-stage-marker" aria-hidden="true">{stageCompletion[index] ? '✓' : '○'}</span>
+            <strong>{item.name}</strong>
+          </li>
+        )}
+      </ol>
+      <p className="leanx-thinking-prompt"><strong>Consider:</strong> {currentThought.question}</p>
+      <div className="leanx-workflow-status" role="status">
+        {localIndexing
+          ? `Discovering modules: ${scanCount.files.toLocaleString()} Lean files in ${scanCount.dirs.toLocaleString()} directories`
+          : running ? `${stage} · ${Math.floor(elapsed / 60)}m ${String(elapsed % 60).padStart(2, '0')}s` : stage}
+      </div>
+    </section>
 
     <div className="leanx-compact-controls">
       <nav className="leanx-tool-tabs" aria-label="Explorer tools">
@@ -486,10 +505,10 @@ export default function LeanExplorerPage() {
           Source · {sourceMode === 'local' ? (localSource ? 'Local Lean tree' : '~/lean_alpoge') : 'GitHub mirror'}
         </button>
         <button type="button" aria-expanded={showBrowser} onClick={() => setShowBrowser(!showBrowser)}>
-          Browse · {selectedName || 'declarations'}
+          Sections · {sectionName}
         </button>
         <button type="button" aria-expanded={showDossier} onClick={() => setShowDossier(!showDossier)}>
-          Dossier · {dossier?.entries.length ?? 0} entries
+          Section dossier · {dossier?.entries.length ?? 0} entries
         </button>
       </nav>
       {showInputs && <div className="leanx-tool-body">
@@ -548,6 +567,43 @@ export default function LeanExplorerPage() {
       </div>}
       {showBrowser && <div className="leanx-tool-body leanx-browser-tool">
       <aside className="leanx-pane leanx-declarations" aria-label="Lean source navigation">
+        {sourceMode === 'local' && <div className="leanx-section-tree">
+          <div className="leanx-pane-title">
+            <h2>Proof sections</h2>
+            <span>Source tree · {tree?.module_count.toLocaleString() ?? '—'} modules</span>
+          </div>
+          <p className="leanx-tree-disclaimer">These are real filesystem branches, not yet theorem-dependency groups. Select a branch to give it a separate paper dossier.</p>
+          <div className="leanx-tree-breadcrumb">
+            <button type="button" disabled={!localSource || treeBusy} onClick={() => void loadTree('')}>Root</button>
+            {tree?.prefix && <span> / {tree.prefix}</span>}
+            {tree?.parent !== null && tree?.prefix && <button type="button" disabled={treeBusy} onClick={() => void loadTree(tree.parent ?? '')}>Up</button>}
+          </div>
+          <div className="leanx-tree-children">
+            {tree?.children.map(node =>
+              <div className="leanx-tree-row" key={node.path}>
+                <button type="button" disabled={treeBusy || running}
+                  onClick={() => node.kind === 'directory' ? void loadTree(node.path) : void loadFile(node.path, 'local')}>
+                  <span aria-hidden="true">{node.kind === 'directory' ? '▸' : '·'}</span> {node.name}
+                  {node.kind === 'directory' && <small>{node.module_count.toLocaleString()} files</small>}
+                </button>
+                {node.kind === 'directory' && <button type="button" className="leanx-tree-section-action"
+                  onClick={() => chooseSection(node.path)} disabled={running} aria-label={'Use ' + node.path + ' as a paper section'}>
+                  {sectionPath === node.path ? 'Selected' : 'Make section'}
+                </button>}
+              </div>
+            )}
+          </div>
+          {tree?.truncated && <p className="leanx-tree-disclaimer">This folder has more children than the preview can show. Use file search to reach a specific module.</p>}
+          <div className="leanx-current-section">
+            <strong>Research section:</strong> {sectionPath || 'Complete proof'}
+            <button type="button" disabled={running} onClick={() => chooseSection(tree?.prefix ?? '')}>
+              {tree?.prefix ? 'Use current folder' : 'Use complete proof'}
+            </button>
+          </div>
+          <label className="leanx-section-prompt-label" htmlFor="leanx-section-prompt">Question guiding this section</label>
+          <textarea id="leanx-section-prompt" value={sectionPrompt} rows={2} onChange={event => setSectionPrompt(event.target.value)}
+            disabled={running}/>
+        </div>}
         {sourceMode === 'local' && <div className="leanx-module-navigator">
           <div className="leanx-pane-title"><h2>Lean files</h2><span>{localFiles?.total_matches.toLocaleString() ?? '—'} matches</span></div>
           <div className="leanx-module-search">
@@ -577,7 +633,10 @@ export default function LeanExplorerPage() {
         <div className="leanx-declaration-list">
           {filtered.map(item => <button key={item.name + ':' + item.line} type="button"
             className={item.name === selectedName ? 'is-selected' : ''}
-            onClick={() => {setSelectedName(item.name); setAnalysis(''); setAnalysisSources([]); setShowBrowser(false);}}>
+            onClick={() => {
+              setSelectedName(item.name); setAnalysis(''); setAnalysisSources([]);
+              setMarkdownDraft(''); setSavedMarkdown(''); setShowBrowser(false);
+            }}>
             <span className="leanx-declaration-kind">{item.kind}</span>
             <span className="leanx-declaration-name">{item.name}</span>
             <span className="leanx-declaration-line">:{item.line}</span>
@@ -597,7 +656,7 @@ export default function LeanExplorerPage() {
           <div className="leanx-dossier-select-row">
             <select id="leanx-dossier-select" value={dossier?.id ?? ''} disabled={running} onChange={event => void selectDossier(event.target.value)}>
               <option value="">Choose dossier…</option>
-              {dossierList.filter(item => (item.source_mode || 'mirror') === sourceMode).map(item => <option key={item.id} value={item.id}>{item.title} ({item.entry_count})</option>)}
+              {matchedDossiers.map(item => <option key={item.id} value={item.id}>{item.title} ({item.entry_count})</option>)}
             </select>
             <button type="button" disabled={running} onClick={() => void createDossier()}>New</button>
           </div>
@@ -610,6 +669,7 @@ export default function LeanExplorerPage() {
                     setFormalInput(item.source.path); void loadFile(item.source.path, sourceMode);
                   }
                   setSelectedName(item.source.name); setAnalysis(item.text);
+                  setMarkdownDraft(item.text); setSavedMarkdown(item.text);
                   setAnalysisSources(item.supplementary_sources || []);
                 }}>
                 <span>{item.source.name}</span><small>{item.mode} · <Timestamp value={item.created_at}/></small>
