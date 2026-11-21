@@ -263,8 +263,9 @@ export default function LeanExplorerPage() {
           const listed = await loadModules();
           if (listed.files.length) await loadFile(status.source.default_module || listed.files[0], 'local');
         } else {
+          setShowInputs(true);
           setStage('Local directory ready to index');
-          log('Local source: ~/lean_alpoge · click Index directory to scan the proof tree', 'note');
+          log('Select Index directory for ~/lean_alpoge to read the formalization', 'note');
         }
       } catch {
         setSourceMode('mirror');
