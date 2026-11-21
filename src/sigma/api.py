@@ -4214,6 +4214,20 @@ async def lean_explorer_analyze(request: Request, body: LeanAnalysisRequest):
             raise
         except ProjectError as exc:
             yield _lean_sse({"type": "error", "error": str(exc)})
+        except Exception as exc:  # noqa: BLE001 - SSE must report post-200 failures
+            logging.getLogger(__name__).exception(
+                "Lean Explorer investigation failed after starting its SSE response"
+            )
+            yield _lean_sse(
+                {
+                    "type": "error",
+                    "error": (
+                        "Mathematical investigation stopped unexpectedly "
+                        f"({type(exc).__name__}). The discovered evidence is saved. "
+                        "Retry investigation; check SIGMA server logs if this repeats."
+                    ),
+                }
+            )
 
     return StreamingResponse(
         events(),
