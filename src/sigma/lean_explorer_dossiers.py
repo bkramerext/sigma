@@ -154,9 +154,7 @@ def append(
 
     # Re-read the declaration server-side; never trust client-supplied proof
     # locations, commit identifiers, declaration snippets or source hashes.
-    selected = lean_explorer.declaration(
-        formal_path, declaration_name, source_mode=source_mode
-    )
+    selected = lean_explorer.declaration(formal_path, declaration_name, source_mode=source_mode)
     source = {
         key: selected[key]
         for key in (
