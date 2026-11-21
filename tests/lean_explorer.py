@@ -113,6 +113,20 @@ def test_dossier_and_ai_flow() -> None:
         assert len(proof_map.json()["sections"]) == 7
         assert len(proof_map.json()["connections"]) >= 7
         assert proof_map.json()["status"] == "interpretive_not_lean_verified"
+        section_ids = [item["id"] for item in proof_map.json()["sections"]]
+        assert section_ids == [
+            "automorphic-foundation",
+            "iwasawa-windows",
+            "theta-slopes",
+            "character-averaging",
+            "prime-statistics",
+            "localized-landau",
+            "reflection",
+        ]
+        section_index = {identifier: index for index, identifier in enumerate(section_ids)}
+        for edge in proof_map.json()["connections"]:
+            assert section_index[edge["from"]] < section_index[edge["to"]]
+
 
         created = client.post(
             "/api/explorelean/dossiers",
