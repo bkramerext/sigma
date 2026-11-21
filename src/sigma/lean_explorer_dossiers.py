@@ -82,18 +82,32 @@ def _revision(source_mode: str) -> str:
     raise ProjectError("Unknown Lean Explorer source mode.")
 
 
-def create(source_mode: str = "mirror") -> dict:
+def create(
+    source_mode: str = "mirror",
+    section_path: str = "",
+    section_title: str = "",
+) -> dict:
     revision = _revision(source_mode)
+    if source_mode == "local":
+        stats = lean_explorer_local.section_stats(section_path)
+        section_path = stats["path"]
+    elif section_path:
+        raise ProjectError("Directory sections require the local Lean source tree.")
+    if not isinstance(section_title, str) or len(section_title) > 180:
+        raise ProjectError("Invalid expository section title.")
+    title = section_title.strip() or (section_path or "Complete proof")
     identifier = str(uuid4())
     timestamp = datetime.now(UTC).isoformat()
     document = {
         "id": identifier,
-        "title": "Alpöge RH — Expository Dossier",
+        "title": f"Alpöge RH — {title}",
         "created_at": timestamp,
         "updated_at": timestamp,
         "formal_repository": lean_explorer.MIRROR,
         "formal_commit": revision,
         "source_mode": source_mode,
+        "section_path": section_path,
+        "section_title": title,
         "entries": [],
     }
     data = json.dumps(document, ensure_ascii=False, indent=2).encode("utf-8")
@@ -132,6 +146,9 @@ def list_dossiers() -> list[dict]:
                 "updated_at": record["updated_at"],
                 "entry_count": len(record.get("entries", [])),
                 "source_mode": record.get("source_mode", "mirror"),
+                "formal_commit": record.get("formal_commit", ""),
+                "section_path": record.get("section_path", ""),
+                "section_title": record.get("section_title", "Complete proof"),
             }
         )
     return sorted(items, key=lambda item: item["updated_at"], reverse=True)
@@ -185,6 +202,9 @@ def append(
                 or record.get("source_mode", "mirror") != source_mode
             ):
                 raise ProjectError("Dossier source differs from the selected formal source.")
+            section = record.get("section_path", "")
+            if section and not formal_path.startswith(section + "/"):
+                raise ProjectError("This declaration is outside the dossier's Lean section.")
             entries = record.get("entries")
             if not isinstance(entries, list) or len(entries) >= MAX_ENTRIES:
                 raise ProjectError("The dossier has reached its entry limit.")
@@ -226,6 +246,7 @@ def markdown(identifier: str) -> str:
         "",
         f"Formal source: {record['formal_repository']}",
         f"Source revision: `{record['formal_commit']}`",
+        f"Source-tree section: `{record.get('section_path') or '/'}`",
         f"Created: {record['created_at']}",
         "",
         (
