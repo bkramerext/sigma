@@ -230,8 +230,13 @@ def check_large_single_file_end_to_end() -> None:
         base = Path(temp)
         root = base / "lean-root"
         target = (
-            root / "src" / "Development" / "AbelianVarietyTheory"
-            / "Definitions" / "AutomorphicMembership" / "ExistsSameData.lean"
+            root
+            / "src"
+            / "Development"
+            / "AbelianVarietyTheory"
+            / "Definitions"
+            / "AutomorphicMembership"
+            / "ExistsSameData.lean"
         )
         target.parent.mkdir(parents=True)
         parts = ["import Mathlib", "namespace AutomorphicMembership"]
