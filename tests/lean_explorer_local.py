@@ -45,9 +45,7 @@ def check_local_directory() -> None:
         ):
             updates: list[tuple[int, int, str]] = []
             manifest = lean_explorer_local.configure(
-                str(project), lambda dirs, files, current: updates.append(
-                    (dirs, files, current)
-                )
+                str(project), lambda dirs, files, current: updates.append((dirs, files, current))
             )
             assert manifest["file_count"] == 3
             assert updates[-1][1] == 3
@@ -85,9 +83,7 @@ def check_local_directory() -> None:
             status = client.get("/api/explorelean/local-status")
             assert status.status_code == 200
             assert status.json()["source"]["file_count"] == 3
-            listing = client.get(
-                "/api/explorelean/local-files", params={"query": "Bridge"}
-            )
+            listing = client.get("/api/explorelean/local-files", params={"query": "Bridge"})
             assert listing.status_code == 200
             assert listing.json()["files"] == ["src/Proofs/Bridge.lean"]
 
@@ -118,9 +114,7 @@ def check_local_directory() -> None:
             )
             assert note.status_code == 201, note.text
             assert note.json()["source"]["commit"] == revision
-            export = client.get(
-                f"/api/explorelean/dossiers/{identifier}/markdown"
-            )
+            export = client.get(f"/api/explorelean/dossiers/{identifier}/markdown")
             assert export.status_code == 200
             assert "Local source: src/Statements.lean" in export.text
             assert "Check this statement" in export.text
