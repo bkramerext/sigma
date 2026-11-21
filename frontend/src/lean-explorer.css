@@ -667,3 +667,90 @@
   .leanx-markdown-editor { padding: 3px 12px 12px; }
   .leanx-source-code .leanx-lean-source-editor { padding: 12px; }
 }
+
+
+/* Mathematical proof map: conceptual sections are not filesystem directories. */
+.leanx-conceptual-map {
+  border-bottom: 1px solid #3d4852;
+  padding: 12px 0 14px;
+}
+.leanx-map-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px 16px;
+  margin-bottom: 9px;
+  font-size: 12px;
+}
+.leanx-map-heading strong { color: #e7ecf0; font-weight: 600; }
+.leanx-map-heading span { color: #97a7b5; font-size: 11px; }
+.leanx-map-heading a { font-size: 11px; }
+.leanx-map-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px 8px;
+}
+.leanx-ui .leanx-map-section {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.45;
+  border-radius: 5px;
+  background: #101b24;
+  border: 1px solid #394956;
+  color: #cad5df;
+}
+.leanx-ui .leanx-map-section[aria-pressed="true"] {
+  border-color: #a77b4d;
+  background: #2b261f;
+  color: #eed3b4;
+}
+.leanx-map-number {
+  color: #b89b7d;
+  font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.leanx-map-saved { margin-left: auto; color: #78c995; font-size: 10px; }
+.leanx-map-focus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 10px;
+  color: #b9c9d7;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.leanx-map-focus p { margin: 0; }
+.leanx-map-focus p:first-child { flex-basis: 100%; }
+.leanx-map-focus p strong { color: #e6bf8e; }
+.leanx-map-links {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  flex-basis: 100%;
+  font-size: 11px;
+}
+.leanx-map-links > span { color: #889aab; }
+.leanx-ui .leanx-map-links button {
+  background: transparent;
+  border: 0;
+  padding: 0 3px;
+  color: #beab93;
+  font-size: 11px;
+}
+.leanx-map-provenance {
+  margin: 0 19px 10px;
+  color: #9caebe;
+  font-size: 11px;
+  line-height: 1.5;
+}
+@media (max-width: 1080px) {
+  .leanx-map-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .leanx-map-grid { grid-template-columns: minmax(0, 1fr); }
+}
