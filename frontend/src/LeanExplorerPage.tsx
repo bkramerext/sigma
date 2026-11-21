@@ -48,12 +48,14 @@ type Citation = {kind: string; path: string; commit: string; url: string; sha256
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
 type Dossier = {
   id: string; title: string; updated_at: string; entries: Entry[];
+  scope?: Declaration[]; paper_project?: {path: string; project_id: string} | null;
   source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
 };
 type DossierItem = {
   id: string; title: string; entry_count: number; updated_at: string;
   source_mode: SourceMode; section_id?: string; section_title?: string; section_focus?: string;
-  formal_commit?: string;
+  formal_commit?: string; scope_count?: number;
+  paper_project?: {path: string; project_id: string} | null;
 };
 type AIConfig = {available: boolean; message: string; model: string; reasoning_effort: string; models: {id: string; label: string; efforts: string[]}[]};
 type Activity = {id: number; time: string; label: string; state: 'ok'|'working'|'error'|'note'};
@@ -125,6 +127,8 @@ export default function LeanExplorerPage() {
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [scopeBusy, setScopeBusy] = useState(false);
+  const [handoffBusy, setHandoffBusy] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
   const [showDossier, setShowDossier] = useState(false);
@@ -373,19 +377,62 @@ export default function LeanExplorerPage() {
       log('Created new expository dossier', 'ok');
     } catch (cause) {setError(explainError(cause));}
   }
+  async function updateScope(add: boolean, item: {path: string; name: string}) {
+    if (scopeBusy || running) return;
+    setScopeBusy(true); setError('');
+    try {
+      const id = await ensureDossier();
+      const result = await requestJSON<Dossier>(
+        '/api/explorelean/dossiers/' + encodeURIComponent(id) + '/scope',
+        {
+          method: add ? 'POST' : 'DELETE',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            formal_path: item.path, declaration: item.name, source_mode: sourceMode,
+          }),
+        },
+      );
+      setDossier(result);
+      await refreshDossiers();
+      log((add ? 'Added ' : 'Removed ') + item.name + (add ? ' to ' : ' from ') + sectionName, 'ok');
+    } catch (cause) {setError(explainError(cause));}
+    finally {setScopeBusy(false);}
+  }
+
+  async function preparePaperProject() {
+    if (!dossier || !(dossier.scope?.length) || handoffBusy || running) return;
+    if (markdownDraft.trim() !== savedMarkdown && markdownDraft.trim()) {
+      setError('Save the revised expository Markdown before preparing the paper.');
+      return;
+    }
+    setHandoffBusy(true); setError('');
+    try {
+      const project = await postJSON<{path: string; project_id: string}>(
+        '/api/explorelean/dossiers/' + encodeURIComponent(dossier.id) + '/paper-project',
+        {source_mode: sourceMode},
+      );
+      setDossier(current => current ? {...current, paper_project: project} : current);
+      await refreshDossiers();
+      log('Prepared SIGMA project and preserved selected Lean evidence for paper generation', 'ok');
+      window.location.assign('/project?' + new URLSearchParams({path: project.path}));
+    } catch (cause) {
+      setError(explainError(cause));
+    } finally {setHandoffBusy(false);}
+  }
+
   async function analyzeSelected() {
-    if (!selected || !config?.available || !model || busyRef.current || !proofMap) return;
+    if (!dossier?.scope?.length || !config?.available || !model || busyRef.current || !proofMap) return;
     busyRef.current = true; setError(''); setAnalysis(''); setAnalysisSources([]);
     setRunning(true); setStage('Preparing analysis');
     const controller = new AbortController(); abortRef.current = controller;
     try {
       const dossierId = await ensureDossier();
-      log('Requested explanation of ' + selected.name, 'working');
+      log('Requested analysis of ' + dossier.scope.length + ' selected Lean declarations', 'working');
       const response = await fetch('/api/explorelean/analyze', {
         method: 'POST', cache: 'no-store', signal: controller.signal,
         headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
         body: JSON.stringify({
-          formal_path: selected.path, declaration: selected.name, source_mode: sourceMode,
+          formal_path: dossier.scope[0].path, declaration: dossier.scope[0].name, source_mode: sourceMode,
           include_guide: includeGuide, include_announcement: includeAnnouncement,
           model, reasoning_effort: effort,
           objective: (objective + '\n\nProvisional mathematical proof section: ' + sectionName
