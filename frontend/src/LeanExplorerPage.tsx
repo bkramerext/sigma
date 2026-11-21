@@ -434,6 +434,7 @@ export default function LeanExplorerPage() {
       const decoder = new TextDecoder();
       let buffer = '';
       let finished = false;
+      let discoveredDossier: Dossier | null = null;
       while (true) {
         const {done, value} = await reader.read();
         buffer += decoder.decode(value ?? new Uint8Array(), {stream: !done});
@@ -453,6 +454,7 @@ export default function LeanExplorerPage() {
             throw new Error(event.error || 'Evidence discovery failed.');
           } else if (event.type === 'complete' && event.dossier) {
             finished = true;
+            discoveredDossier = event.dossier;
             setDossier(event.dossier);
             setDiscoveryCandidates(event.candidates || []);
             await refreshDossiers();
@@ -468,7 +470,16 @@ export default function LeanExplorerPage() {
         }
         if (done) break;
       }
-      if (!finished) throw new Error('The scan ended without a completed discovery result.');
+      if (!finished || !discoveredDossier) {
+        throw new Error('The scan ended without a completed discovery result.');
+      }
+      setDiscovering(false);
+      discoveryAbortRef.current = null;
+      if (config?.available && model && discoveredDossier.scope?.length) {
+        await analyzeSelected(discoveredDossier);
+      } else {
+        setStage('Evidence ready · connect AI to investigate');
+      }
     } catch (cause) {
       if (controller.signal.aborted) {
         setStage('Discovery stopped');
@@ -526,19 +537,19 @@ export default function LeanExplorerPage() {
     } finally {setHandoffBusy(false);}
   }
 
-  async function analyzeSelected() {
-    if (!dossier?.scope?.length || !config?.available || !model || busyRef.current || !proofMap) return;
+  async function analyzeSelected(target: Dossier | null = dossier) {
+    if (!target?.scope?.length || !config?.available || !model || busyRef.current || !proofMap) return;
     busyRef.current = true; setError(''); setAnalysis(''); setAnalysisSources([]);
     setRunning(true); setStage('Preparing analysis');
     const controller = new AbortController(); abortRef.current = controller;
     try {
-      const dossierId = await ensureDossier();
-      log('Requested analysis of ' + dossier.scope.length + ' selected Lean declarations', 'working');
+      const dossierId = target.id;
+      log('Investigating ' + target.scope.length + ' discovered Lean declarations', 'working');
       const response = await fetch('/api/explorelean/analyze', {
         method: 'POST', cache: 'no-store', signal: controller.signal,
         headers: {'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true'},
         body: JSON.stringify({
-          formal_path: dossier.scope[0].path, declaration: dossier.scope[0].name, source_mode: sourceMode,
+          formal_path: target.scope[0].path, declaration: target.scope[0].name, source_mode: sourceMode,
           include_guide: includeGuide, include_announcement: includeAnnouncement,
           model, reasoning_effort: effort,
           objective: (objective + '\n\nProvisional mathematical proof section: ' + sectionName
@@ -653,7 +664,8 @@ export default function LeanExplorerPage() {
     !!dossier?.entries.length,
     !!dossier?.paper_project,
   ];
-  const activeStep = stageCompletion.findIndex(complete => !complete);
+  const nextStep = stageCompletion.findIndex(complete => !complete);
+  const activeStep = discovering ? 2 : running ? 3 : handoffBusy ? 5 : nextStep;
   const currentThought = THINKING_STEPS[activeStep >= 0 ? activeStep : THINKING_STEPS.length - 1];
 
   return <main className="chat-page leanx-ui">
@@ -666,7 +678,7 @@ export default function LeanExplorerPage() {
       <ol className="leanx-paper-steps">
         {THINKING_STEPS.map((item, index) =>
           <li key={item.name} className={stageCompletion[index] ? 'is-past' :
-            index === activeStep ? (running || localIndexing ? 'is-active' : 'is-current') : 'is-upcoming'}>
+            index === activeStep ? (running || localIndexing || discovering || handoffBusy ? 'is-active' : 'is-current') : 'is-upcoming'}>
             <span className="leanx-stage-marker" aria-hidden="true">{stageCompletion[index] ? '✓' : '○'}</span>
             <strong>{item.name}</strong>
           </li>
@@ -714,10 +726,14 @@ export default function LeanExplorerPage() {
             disabled={discovering || running || !localSource || sourceMode !== 'local'
               || !sectionId || !!dossier?.paper_project}
             onClick={() => void discoverEvidence()}>
-            {discovering ? 'Discovering…' : scope.length ? 'Refresh discovered evidence' : 'Discover evidence automatically'}
+            {discovering ? 'Discovering…' : running ? 'Investigating…'
+              : scope.length ? 'Reinvestigate section' : 'Start investigation'}
           </button>
-          <button type="button" disabled={!discovering}
-            onClick={() => discoveryAbortRef.current?.abort()}>Stop</button>
+          <button type="button" disabled={!discovering && !running}
+            onClick={() => {
+              discoveryAbortRef.current?.abort();
+              abortRef.current?.abort();
+            }}>Stop</button>
           <button type="button" onClick={() => setShowBrowser(true)}>Browse source (optional)</button>
         </div>
       </div>
@@ -749,8 +765,8 @@ export default function LeanExplorerPage() {
         </li>)}
       </ul> :
         <p className="leanx-scope-empty">
-          No Lean evidence selected yet. Click Discover evidence automatically to search
-          the indexed root and populate this section. Manual source browsing is optional.
+          The Explorer will find relevant Lean declarations from the indexed root.
+          Press Start investigation. File browsing is optional.
         </p>}
     </section>
 
