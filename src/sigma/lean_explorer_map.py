@@ -3,6 +3,7 @@
 Every edge is an interpretation of the supplementary proof guide, NOT a
 machine-extracted dependency. IDs are stable dossier section identifiers.
 """
+
 from __future__ import annotations
 
 from sigma import lean_explorer
@@ -82,13 +83,41 @@ _SECTIONS = [
 
 # Arrows describe a proposed *mathematical flow*, not formal proof-term references.
 _CONNECTIONS = [
-    {"from": "automorphic-foundation", "to": "iwasawa-windows", "why": "Arithmetic representation inputs support cohomological controls."},
-    {"from": "automorphic-foundation", "to": "theta-slopes", "why": "Automorphic and period inputs underpin the theta-lift construction."},
-    {"from": "iwasawa-windows", "to": "theta-slopes", "why": "Cohomological estimates control divisibility losses."},
-    {"from": "theta-slopes", "to": "character-averaging", "why": "The chain yields estimates that require character selection and averaging."},
-    {"from": "character-averaging", "to": "localized-landau", "why": "A positive-family window bound supplies the analytic hypothesis."},
-    {"from": "prime-statistics", "to": "localized-landau", "why": "Mellin poles and their residues detect zeros."},
-    {"from": "localized-landau", "to": "reflection", "why": "Right-half-plane zero exclusion and the functional equation imply the final result."},
+    {
+        "from": "automorphic-foundation",
+        "to": "iwasawa-windows",
+        "why": "Arithmetic representation inputs support cohomological controls.",
+    },
+    {
+        "from": "automorphic-foundation",
+        "to": "theta-slopes",
+        "why": "Automorphic and period inputs underpin the theta-lift construction.",
+    },
+    {
+        "from": "iwasawa-windows",
+        "to": "theta-slopes",
+        "why": "Cohomological estimates control divisibility losses.",
+    },
+    {
+        "from": "theta-slopes",
+        "to": "character-averaging",
+        "why": "The chain yields estimates that require character selection and averaging.",
+    },
+    {
+        "from": "character-averaging",
+        "to": "localized-landau",
+        "why": "A positive-family window bound supplies the analytic hypothesis.",
+    },
+    {
+        "from": "prime-statistics",
+        "to": "localized-landau",
+        "why": "Mellin poles and their residues detect zeros.",
+    },
+    {
+        "from": "localized-landau",
+        "to": "reflection",
+        "why": "Right-half-plane zero exclusion and the functional equation imply the final result.",
+    },
 ]
 
 
@@ -129,7 +158,6 @@ def catalog() -> dict:
             for item in _SECTIONS
         ],
         "connections": [
-            {**edge, "status": "interpretive_not_machine_verified"}
-            for edge in _CONNECTIONS
+            {**edge, "status": "interpretive_not_machine_verified"} for edge in _CONNECTIONS
         ],
     }
