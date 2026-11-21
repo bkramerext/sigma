@@ -129,17 +129,29 @@ def source() -> dict[str, Any] | None:
             "indexed_at": record.get("indexed_at"), "file_count": record.get("file_count", 0)}
 
 
-def _modules() -> list[str]:
-    cfg = source()
-    if cfg is None:
-        raise ProjectError("Select a local Lean directory first.")
+@lru_cache(maxsize=3)
+def _cached_modules(root_id: str, index_mtime_ns: int) -> tuple[list[str], frozenset[str]]:
     blob = _read_json(_index_file(), MAX_INDEX_BYTES)
-    if not isinstance(blob, dict) or blob.get("root_id") != cfg["root_id"]:
+    if not isinstance(blob, dict) or blob.get("root_id") != root_id:
         raise ProjectError("The local directory must be indexed again.")
     names = blob.get("files")
     if not isinstance(names, list) or not all(isinstance(v, str) for v in names):
         raise ProjectError("The local Lean source index is invalid.")
-    return names
+    if len(names) > MAX_FILES:
+        raise ProjectError("The Lean index exceeds its module limit.")
+    return names, frozenset(names)
+
+
+def _modules() -> tuple[list[str], frozenset[str]]:
+    cfg = source()
+    if cfg is None:
+        raise ProjectError("Select a local Lean directory first.")
+    index_path = _index_file()
+    try:
+        mtime = index_path.stat().st_mtime_ns
+    except OSError as exc:
+        raise ProjectError("The local directory must be indexed again.") from exc
+    return _cached_modules(cfg["root_id"], mtime)
 
 
 def _paths(root: Path, progress: Callable[[int, int, str], None] | None) -> list[str]:
@@ -190,6 +202,7 @@ def configure(directory: str, progress: Callable[[int, int, str], None] | None =
     index_path = _index_file()
     _atomic_json(index_path, {"root_id": cfg["root_id"], "files": found})
     _atomic_json(_config_file(), cfg)
+    _cached_modules.cache_clear()
     return {**cfg, "sample": found[:30], "index_type": "local filesystem file inventory"}
 
 
@@ -199,7 +212,7 @@ def list_files(query: str = "", offset: int = 0, limit: int = 100) -> dict:
     cfg = source()
     if cfg is None:
         raise ProjectError("Select a local Lean directory first.")
-    paths = _modules()
+    paths, _ = _modules()
     needle = query.strip().casefold()
     matches = [name for name in paths if needle in name.casefold()] if needle else paths
     return {
@@ -222,13 +235,17 @@ def read_module(relative: str) -> tuple[bytes, str, str, str]:
     pure = PurePosixPath(relative)
     if pure.is_absolute() or ".." in pure.parts or "." in pure.parts:
         raise ProjectError("Lean file path must remain under the selected directory.")
-    if relative not in set(_modules()):
+    _, module_set = _modules()
+    if relative not in module_set:
         raise ProjectError("This Lean file is not in the local module index. Rescan the directory.")
     root = Path(cfg["directory"])
     candidate = root.joinpath(*pure.parts)
     try:
-        if any(path.is_symlink() for path in (candidate, *candidate.parents) if path != root):
-            raise ProjectError("Symlinked Lean modules are not supported.")
+        check_path = root
+        for component in pure.parts:
+            check_path = check_path / component
+            if check_path.is_symlink():
+                raise ProjectError("Symlinked Lean modules are not supported.")
         resolved = candidate.resolve(strict=True)
         resolved.relative_to(root)
         if not resolved.is_file():
