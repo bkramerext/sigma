@@ -141,10 +141,10 @@ def _score(
     return score, reasons
 
 
-def _trial_file(paths: list[str], terms: set[str]) -> tuple[str, int]:
+def _trial_file(paths: list[str], terms: set[str], section_id: str) -> tuple[str, int]:
     """Select one sizeable section-related indexed file; never leave the local root."""
     indexed = set(paths)
-    if AUTOMORPHIC_TRIAL_FILE in indexed:
+    if section_id == "automorphic-foundation" and AUTOMORPHIC_TRIAL_FILE in indexed:
         payload, _, _, _ = lean_explorer_local.read_module(AUTOMORPHIC_TRIAL_FILE)
         if MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES:
             return AUTOMORPHIC_TRIAL_FILE, len(payload)
@@ -216,7 +216,7 @@ def discover(
     if single_file_trial:
         if start_offset:
             raise ProjectError("A single-file trial starts from the beginning of its file.")
-        chosen_file, chosen_bytes = _trial_file(paths, terms)
+        chosen_file, chosen_bytes = _trial_file(paths, terms, section_id)
         scan = [chosen_file]
         total = 1
     else:
