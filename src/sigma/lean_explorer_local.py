@@ -305,8 +305,8 @@ def tree(prefix: str = "", *, limit: int = 180) -> dict[str, Any]:
     prefix_part = prefix + "/" if prefix else ""
     children: dict[str, dict[str, Any]] = {}
     for filename in paths[start:end]:
-        suffix = filename[len(prefix_part):]
-        head, separator, tail = suffix.partition("/")
+        suffix = filename[len(prefix_part) :]
+        head, separator, _tail = suffix.partition("/")
         key = prefix_part + head
         item = children.get(key)
         if item is None:
@@ -318,7 +318,9 @@ def tree(prefix: str = "", *, limit: int = 180) -> dict[str, Any]:
             }
             children[key] = item
         item["module_count"] += 1
-    ordered = sorted(children.values(), key=lambda v: (v["kind"] != "directory", v["name"].casefold()))
+    ordered = sorted(
+        children.values(), key=lambda v: (v["kind"] != "directory", v["name"].casefold())
+    )
     return {
         "root_id": cfg["root_id"],
         "prefix": prefix,
