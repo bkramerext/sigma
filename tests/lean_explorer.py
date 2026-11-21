@@ -274,6 +274,33 @@ def test_dossier_and_ai_flow() -> None:
         assert len(record.json()["entries"]) == 2
         assert record.json()["entries"][1]["supplementary_sources"][0]["kind"] == "guide"
 
+        # An AI/provider failure after SSE headers must appear as a visible error
+        # event, not silently leave the UI with a generic Failed state.
+        with (
+            patch("sigma.api.chat.configuration", new=AsyncMock(return_value=config)),
+            patch(
+                "sigma.api.chat.respond",
+                new=AsyncMock(side_effect=RuntimeError("synthetic provider failure")),
+            ),
+        ):
+            failed = client.post(
+                "/api/explorelean/analyze",
+                json={
+                    "formal_path": "src/Statements.lean",
+                    "declaration": "RiemannZetaZerosOnLine",
+                    "include_guide": False,
+                    "include_announcement": False,
+                    "model": "gpt-6.1-sol",
+                    "reasoning_effort": "medium",
+                    "objective": "Explain RH carefully",
+                    "dossier_id": dossier_id,
+                },
+            )
+        assert failed.status_code == 200
+        assert '"type": "error"' in failed.text
+        assert "RuntimeError" in failed.text
+        assert len(client.get(f"/api/explorelean/dossiers/{dossier_id}").json()["entries"]) == 2
+
         markdown = client.get(f"/api/explorelean/dossiers/{dossier_id}/markdown")
         assert markdown.status_code == 200
         assert "### Actual Lean source excerpt" in markdown.text
