@@ -68,8 +68,13 @@ def test_source_packet_is_real_and_labeled() -> None:
 
 
 def test_api_transcript_and_attested_turn() -> None:
-    with TemporaryDirectory() as temp, (
-        patch("sigma.lean_explorer_transcripts.state_directory", return_value=Path(temp)),
+    with TemporaryDirectory() as temp:
+        test_api_in_directory(Path(temp))
+
+
+def test_api_in_directory(root: Path) -> None:
+    with (
+        patch("sigma.lean_explorer_transcripts.state_directory", return_value=root),
         patch("sigma.lean_explorer._retrieve", side_effect=fake_retrieve),
         patch("sigma.lean_explorer.project_evidence._extract",
               return_value=(1, ANNOUNCEMENT, False)),
