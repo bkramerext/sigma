@@ -175,6 +175,33 @@ def check_local_directory() -> None:
             assert "Local source: src/Statements.lean" in export.text
             assert "Check this statement" in export.text
 
+            # Bounded discovery resumes on the next pass rather than restarting
+            # at the root. Checkpoint state survives independent API requests.
+            continued = client.post(
+                "/api/explorelean/dossiers",
+                json={"source_mode": "local", "section_id": "theta-slopes"},
+            )
+            assert continued.status_code == 201
+            continued_id = continued.json()["id"]
+            with patch("sigma.lean_explorer_discovery.MAX_SCAN_FILES", 1):
+                for offset in (1, 2, 3):
+                    frame = client.post(
+                        "/api/explorelean/discover",
+                        json={
+                            "source_mode": "local",
+                            "section_id": "theta-slopes",
+                            "dossier_id": continued_id,
+                        },
+                    )
+                    assert frame.status_code == 200, frame.text
+                    record = client.get(
+                        f"/api/explorelean/dossiers/{continued_id}"
+                    ).json()
+                    assert record["discovery"]["next_offset"] == offset
+                    assert record["discovery"]["scanned_files"] == offset
+                    assert record["discovery"]["complete"] == (offset == 3)
+                assert any(item["name"] == "thetaLiftBound" for item in record["scope"])
+
             # A working directory is mutable; a changed file gets a new hash.
             before = declaration.json()["sha256"]
             (project / "src" / "Statements.lean").write_text(
