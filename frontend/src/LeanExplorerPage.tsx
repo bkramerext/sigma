@@ -336,21 +336,26 @@ export default function LeanExplorerPage() {
     setError('');
     try {
       const record = await requestJSON<Dossier>('/api/explorelean/dossiers/' + encodeURIComponent(value));
-      if ((record.source_mode || 'mirror') !== sourceMode)
-        throw new Error('This dossier belongs to a different formal source. Select a matching dossier.');
+      if ((record.source_mode || 'mirror') !== sourceMode || (record.section_path || '') !== sectionPath)
+        throw new Error('This dossier belongs to another source-tree section. Choose its section first.');
       setDossier(record); setNote('');
     } catch (cause) {setError(explainError(cause));}
   }
   async function ensureDossier(): Promise<string> {
-    if (dossier && dossier.source_mode === sourceMode) return dossier.id;
-    const created = await postJSON<Dossier>('/api/explorelean/dossiers', {source_mode: sourceMode});
+    if (dossier && dossier.source_mode === sourceMode && (dossier.section_path || '') === sectionPath)
+      return dossier.id;
+    const created = await postJSON<Dossier>('/api/explorelean/dossiers', {
+      source_mode: sourceMode, section_path: sectionPath, section_title: sectionName,
+    });
     setDossier(created); await refreshDossiers(); log('Created new expository dossier', 'ok');
     return created.id;
   }
   async function createDossier() {
     try {
       setError('');
-      const created = await postJSON<Dossier>('/api/explorelean/dossiers', {source_mode: sourceMode});
+      const created = await postJSON<Dossier>('/api/explorelean/dossiers', {
+        source_mode: sourceMode, section_path: sectionPath, section_title: sectionName,
+      });
       setDossier(created); await refreshDossiers();
       log('Created new expository dossier', 'ok');
     } catch (cause) {setError(explainError(cause));}
@@ -393,7 +398,11 @@ export default function LeanExplorerPage() {
           } else if (event.type === 'error') {
             throw new Error(event.error || 'Exploration failed.');
           } else if (event.type === 'complete') {
-            completed = true; setAnalysis(event.text || ''); setAnalysisSources(event.sources || []);
+            completed = true;
+            setAnalysis(event.text || '');
+            setMarkdownDraft(event.text || '');
+            setSavedMarkdown(event.saved ? (event.text || '') : '');
+            setAnalysisSources(event.sources || []);
             setStage(event.saved ? 'Explanation saved' : 'Explanation ready · not saved');
             log(event.saved ? 'Explanation saved to dossier' : 'Explanation returned without durable save', event.saved ? 'ok' : 'error');
             if (event.save_error) setError(event.save_error);
@@ -413,6 +422,25 @@ export default function LeanExplorerPage() {
     } finally {setRunning(false); abortRef.current = null; busyRef.current = false;}
   }
   function stopAnalysis() {abortRef.current?.abort();}
+  async function saveMarkdown() {
+    if (!selected || !markdownDraft.trim() || savingMarkdown || running
+      || markdownDraft.trim() === savedMarkdown) return;
+    setSavingMarkdown(true); setError('');
+    try {
+      const id = await ensureDossier();
+      await postJSON('/api/explorelean/dossiers/' + encodeURIComponent(id) + '/notes', {
+        formal_path: selected.path,
+        declaration: selected.name,
+        source_mode: sourceMode,
+        text: markdownDraft.trim(),
+      });
+      setSavedMarkdown(markdownDraft.trim());
+      await loadDossier(id); await refreshDossiers();
+      log('Saved revised expository Markdown', 'ok');
+    } catch (cause) {
+      setError(explainError(cause));
+    } finally {setSavingMarkdown(false);}
+  }
   async function saveNote() {
     if (!selected || !note.trim() || savingNote) return;
     setSavingNote(true); setError('');
@@ -430,6 +458,21 @@ export default function LeanExplorerPage() {
   const filtered = file?.declarations.filter(item => item.name.toLowerCase().includes(filter.trim().toLowerCase())) ?? [];
   const ready = !!selected && !loadingFile && !loadingDeclaration && !running && !!config?.available && !!model;
   const selectedEntries = dossier?.entries.filter(item => item.source.name === selectedName && item.source.path === file?.path) ?? [];
+  const inSection = !sectionPath || !!selected?.path.startsWith(sectionPath + '/');
+  const matchedDossiers = dossierList.filter(item =>
+    (item.source_mode || 'mirror') === sourceMode
+    && (item.section_path || '') === sectionPath
+    && (sourceMode !== 'local' || (item.formal_commit || '') === 'local:' + localSource?.root_id)
+  );
+  const stageCompletion = [
+    sourceMode === 'local' ? !!localSource : !!file,
+    sourceMode === 'local' ? !!localSource && !!tree : !!file,
+    !!selected && inSection && activeFileMode === sourceMode,
+    !!analysis && !!selected,
+    !!selectedEntries.length || !!savedMarkdown,
+  ];
+  const activeStep = stageCompletion.findIndex(complete => !complete);
+  const currentThought = THINKING_STEPS[activeStep >= 0 ? activeStep : THINKING_STEPS.length - 1];
 
   return <main className="chat-page leanx-ui">
 
