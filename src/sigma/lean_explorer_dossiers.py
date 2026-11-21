@@ -104,6 +104,9 @@ def create(
     if not isinstance(section_focus, str) or len(section_focus) > 6000:
         raise ProjectError("Invalid expository section question.")
     title = section_title.strip() or "New mathematical section"
+    local_source = lean_explorer_local.source() if source_mode == "local" else None
+    if source_mode == "local" and local_source is None:
+        raise ProjectError("Select a local Lean directory first.")
     identifier = str(uuid4())
     timestamp = datetime.now(UTC).isoformat()
     document = {
@@ -113,9 +116,7 @@ def create(
         "created_at": timestamp,
         "updated_at": timestamp,
         "formal_repository": (
-            lean_explorer.MIRROR
-            if source_mode == "mirror"
-            else lean_explorer_local.source()["directory"]
+            str(local_source["directory"]) if local_source is not None else lean_explorer.MIRROR
         ),
         "formal_commit": revision,
         "source_mode": source_mode,
