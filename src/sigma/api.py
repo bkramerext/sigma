@@ -3505,7 +3505,7 @@ class ChatMessageRequest(BaseModel):
 
 class ChatTranscriptMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    speaker: Literal["human", "ai_1", "ai_2", "objective", "supervisor", "supervisor_setting"]
+    speaker: Literal["human", "ai_1", "ai_2", "objective", "supervisor", "supervisor_setting", "source"]
     text: str = Field(min_length=1)
     recipient: Literal["ai_1", "ai_2", "both"] | None = None
     guidance: str = ""
@@ -3763,7 +3763,7 @@ async def lean_explorer_attach_sources(body: LeanExplorerSelection):
         str(UUID(body.conversation_id)), "source", text
     )
     return JSONResponse(
-        {"source_manifest_sha256": digest, "sources": metadata},
+        {"source_manifest_sha256": digest, "sources": metadata, "record": text},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -3790,7 +3790,7 @@ async def lean_explorer_turn(body: LeanExplorerTurnRequest):
         )
 
     async def events():
-        yield 'data: {"type":"started"}\\n\\n'
+        yield 'data: {"type":"started"}\n\n'
         task = asyncio.create_task(chat.respond(
             speaker=body.speaker,
             messages=[item.model_dump() for item in body.messages],
@@ -3805,15 +3805,15 @@ async def lean_explorer_turn(body: LeanExplorerTurnRequest):
             while not task.done():
                 done, _ = await asyncio.wait({task}, timeout=CHAT_HEARTBEAT_SECONDS)
                 if not done:
-                    yield ": keepalive\\n\\n"
+                    yield ": keepalive\n\n"
             result = await task
             yield "data: " + json.dumps(
                 {"type": "complete", "text": result, "source_manifest_sha256": digest}
-            ) + "\\n\\n"
+            ) + "\n\n"
         except asyncio.CancelledError:
             raise
         except ProjectError as exc:
-            yield "data: " + json.dumps({"type": "error", "error": str(exc)}) + "\\n\\n"
+            yield "data: " + json.dumps({"type": "error", "error": str(exc)}) + "\n\n"
         finally:
             if not task.done():
                 task.cancel()
