@@ -157,7 +157,10 @@ def _trial_file(paths: list[str], terms: set[str], section_id: str) -> tuple[str
             payload, _, _, _ = lean_explorer_local.read_module(path)
         except (ProjectError, OSError):
             continue
-        if MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES and len(payload) > best_size:
+        if (
+            MIN_TRIAL_FILE_BYTES <= len(payload) <= MAX_SCAN_SOURCE_BYTES
+            and len(payload) > best_size
+        ):
             best_path, best_size = path, len(payload)
     if not best_path:
         raise ProjectError(
