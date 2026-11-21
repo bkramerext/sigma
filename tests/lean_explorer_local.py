@@ -104,6 +104,20 @@ def check_local_directory() -> None:
             assert dossier.status_code == 201, dossier.text
             identifier = dossier.json()["id"]
             assert dossier.json()["section_title"] == "Theta-lift chains, divisibility and slopes"
+            for declaration_path, declaration_name in (
+                ("src/Statements.lean", "RiemannZetaZerosOnLine"),
+                ("src/Proofs/Bridge.lean", "arithmeticBridge"),
+            ):
+                selected_scope = client.post(
+                    f"/api/explorelean/dossiers/{identifier}/scope",
+                    json={
+                        "source_mode": "local",
+                        "formal_path": declaration_path,
+                        "declaration": declaration_name,
+                    },
+                )
+                assert selected_scope.status_code == 200, selected_scope.text
+            assert len(selected_scope.json()["scope"]) == 2
             note = client.post(
                 f"/api/explorelean/dossiers/{identifier}/notes",
                 json={
