@@ -42,6 +42,7 @@ from sigma import (
     cloud_workspaces,
     lean_explorer,
     lean_explorer_dossiers,
+    lean_explorer_discovery,
     lean_explorer_local,
     lean_explorer_map,
     memory_guard,
@@ -3703,6 +3704,13 @@ class LeanScopeRequest(BaseModel):
     declaration: str = Field(min_length=1, max_length=240)
 
 
+class LeanDiscoveryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source_mode: Literal["local"] = "local"
+    section_id: str = Field(min_length=1, max_length=80)
+    dossier_id: str = Field(min_length=36, max_length=36)
+
+
 class LeanPaperHandoffRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     source_mode: Literal["mirror", "local"] = "mirror"
@@ -3802,6 +3810,76 @@ async def lean_explorer_local_index(
         finally:
             if not task.done():
                 cancelled.set()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/explorelean/discover")
+async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
+    """Discover section candidates from the indexed root, with SSE progress."""
+    _require_local_lean_request(request)
+    dossier = lean_explorer_dossiers.get(body.dossier_id)
+    if dossier.get("source_mode") != "local" or dossier.get("section_id") != body.section_id:
+        raise HTTPException(422, "Choose a dossier for this mathematical section.")
+
+    async def events():
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "stage": "discovery",
+                "label": "Searching the indexed Lean repository for mathematical evidence",
+            }
+        )
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        cancelled = threading.Event()
+
+        def progress(scanned: int, total: int, matches: int, current: str) -> None:
+            if cancelled.is_set():
+                raise ProjectError("The Lean evidence discovery was stopped.")
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {
+                    "type": "progress",
+                    "scanned": scanned,
+                    "total": total,
+                    "matches": matches,
+                    "path": current,
+                },
+            )
+
+        task = asyncio.create_task(
+            asyncio.to_thread(lean_explorer_discovery.discover, body.section_id, progress)
+        )
+        try:
+            while not task.done():
+                try:
+                    update = await asyncio.wait_for(queue.get(), timeout=0.5)
+                    yield _lean_sse(update)
+                except asyncio.TimeoutError:
+                    continue
+            result = await task
+            yield _lean_sse(
+                {
+                    "type": "stage",
+                    "stage": "saving",
+                    "label": "Verifying candidate source excerpts and recording section scope",
+                }
+            )
+            updated = await run_in_threadpool(
+                lean_explorer_dossiers.apply_discovery, body.dossier_id, result
+            )
+            yield _lean_sse(
+                {"type": "complete", "discovery": result, "dossier": updated}
+            )
+        except (ProjectError, OSError, UnicodeError, ValueError) as exc:
+            yield _lean_sse({"type": "error", "error": str(exc)})
+        finally:
+            cancelled.set()
 
     return StreamingResponse(
         events(),
