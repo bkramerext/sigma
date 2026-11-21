@@ -308,7 +308,9 @@ def section_analysis_packet(
         include_announcement=include_announcement,
     )
     if selected["sha256"] != first["sha256"] or selected["commit"] != first["commit"]:
-        raise ProjectError("Selected Lean source changed. Remove and re-add the affected declaration.")
+        raise ProjectError(
+            "Selected Lean source changed. Remove and re-add the affected declaration."
+        )
     sections = [
         (
             "SECTION SCOPE: Only the following manually selected Lean declarations "
@@ -319,10 +321,7 @@ def section_analysis_packet(
     ]
     for item in scope[1:]:
         actual = declaration(item["path"], item["name"], source_mode=source_mode)
-        if (
-            actual["sha256"] != item.get("sha256")
-            or actual["commit"] != item.get("commit")
-        ):
+        if actual["sha256"] != item.get("sha256") or actual["commit"] != item.get("commit"):
             raise ProjectError(
                 f"Lean source for {item['name']} changed. Re-select it before analyzing."
             )
@@ -336,12 +335,12 @@ def section_analysis_packet(
             + actual["excerpt"]
             + "\n--- END LEAN SOURCE ---"
         )
-        sources.append({
-            "kind": "formal",
-            **{key: actual[key] for key in (
-                "path", "commit", "url", "sha256", "complete"
-            )},
-        })
+        sources.append(
+            {
+                "kind": "formal",
+                **{key: actual[key] for key in ("path", "commit", "url", "sha256", "complete")},
+            }
+        )
     result = "\n\n".join(sections)
     if len(result) > 64_000:
         raise ProjectError(
