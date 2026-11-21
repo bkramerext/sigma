@@ -310,9 +310,11 @@ def section_analysis_packet(
     if selected["sha256"] != first["sha256"] or selected["commit"] != first["commit"]:
         raise ProjectError("Selected Lean source changed. Remove and re-add the affected declaration.")
     sections = [
-        "SECTION SCOPE: Only the following manually selected Lean declarations "
-        "are in the analysis set. Their inclusion does not prove any mathematical "
-        "dependency or imply a verified relation to the section title.",
+        (
+            "SECTION SCOPE: Only the following manually selected Lean declarations "
+            "are in the analysis set. Their inclusion does not prove any mathematical "
+            "dependency or imply a verified relation to the section title."
+        ),
         packet,
     ]
     for item in scope[1:]:
