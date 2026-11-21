@@ -411,9 +411,11 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
             f"Evidence identity: {record['formal_commit']}",
             f"Source mode: {source_mode}",
             "",
-            "The selected declarations below are a manual research scope, NOT "
-            "a formal dependency closure. The interpretation is unverified. "
-            "Do not assert kernel-checking or prove unverified connections.",
+            (
+                "The selected declarations below are a manual research scope, NOT "
+                "a formal dependency closure. The interpretation is unverified. "
+                "Do not assert kernel-checking or prove unverified connections."
+            ),
             "",
             "## Exact Lean declarations",
         ]
@@ -498,8 +500,8 @@ def markdown(identifier: str) -> str:
         parts.extend(["## Selected Lean evidence", ""])
         for src in record["scope"]:
             parts.extend([
-                f"- **{src['name']}** — \`{src['path']}\` lines {src['start_line']}-{src['end_line']}",
-                f"  revision \`{src['commit']}\` · file SHA256 \`{src['sha256']}\`",
+                f"- **{src['name']}** — `{src['path']}` lines {src['start_line']}-{src['end_line']}",
+                f"  revision `{src['commit']}` · file SHA256 `{src['sha256']}`",
             ])
         parts.append("")
     for index, item in enumerate(record.get("entries", []), 1):
