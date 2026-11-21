@@ -136,6 +136,8 @@ export default function LeanExplorerPage() {
   const [elapsed, setElapsed] = useState(0);
   const [, setAnalysis] = useState('');
   const [markdownDraft, setMarkdownDraft] = useState('');
+  const [showMarkdownEditor, setShowMarkdownEditor] = useState(false);
+  const expositionRef = useRef<HTMLElement | null>(null);
   const [savedMarkdown, setSavedMarkdown] = useState('');
   const [savingMarkdown, setSavingMarkdown] = useState(false);
   const [analysisSources, setAnalysisSources] = useState<Citation[]>([]);
@@ -603,6 +605,11 @@ export default function LeanExplorerPage() {
             completed = true;
             setAnalysis(event.text || '');
             setMarkdownDraft(event.text || '');
+            setShowMarkdownEditor(false);
+            if (event.text) {
+              requestAnimationFrame(() =>
+                expositionRef.current?.scrollIntoView({behavior: 'smooth', block: 'start'}));
+            }
             setSavedMarkdown(event.saved ? (event.text || '') : '');
             setAnalysisSources(event.sources || []);
             setStage(event.saved ? 'Explanation saved' : 'Explanation ready · not saved');
@@ -994,7 +1001,7 @@ export default function LeanExplorerPage() {
           </> : <p className="leanx-empty">Select a declaration using Find Lean evidence to inspect its source.</p>}
         </section>
 
-        <section className="leanx-pane leanx-analysis-pane">
+        <section className="leanx-pane leanx-analysis-pane" ref={expositionRef}>
           <div className="leanx-pane-title"><h2>Mathematical interpretation</h2><span>AI commentary · Not formally verified</span></div>
           <details className="leanx-objective-details">
             <summary>Expository objective</summary>
@@ -1013,25 +1020,29 @@ export default function LeanExplorerPage() {
           </p>
           <div className="leanx-markdown-editor">
             <div className="leanx-markdown-toolbar">
-              <label htmlFor="leanx-markdown">Expository Markdown</label>
-              <button type="button" disabled={!scope.length || !markdownDraft.trim() ||
+              <strong>Expository material</strong>
+              {!!markdownDraft && <button type="button"
+                onClick={() => setShowMarkdownEditor(value => !value)}>
+                {showMarkdownEditor ? 'Read exposition' : 'Edit Markdown'}
+              </button>}
+              {showMarkdownEditor && <button type="button" disabled={!scope.length || !markdownDraft.trim() ||
                 markdownDraft.trim() === savedMarkdown || savingMarkdown || running}
                 onClick={() => void saveMarkdown()}>
                 {savingMarkdown ? 'Saving…' : 'Save Markdown'}
-              </button>
+              </button>}
             </div>
-            <textarea id="leanx-markdown" value={markdownDraft} disabled={!scope.length || running || savingMarkdown}
-              onChange={event => setMarkdownDraft(event.target.value)}
-              placeholder="The mathematical explanation goes here. Edit its Markdown, refine the ideas, then save it to this section's dossier."/>
-            {!!markdownDraft && markdownDraft.trim() !== savedMarkdown && <small>Unsaved edits</small>}
-            {!!markdownDraft && <details className="leanx-markdown-preview">
-              <summary>Preview rendered Markdown</summary>
-              <div className="leanx-explanation">
-                <Suspense fallback={<p>Rendering Markdown…</p>}>
-                  <RenderedMarkdown body={markdownDraft}/>
-                </Suspense>
-              </div>
-            </details>}
+            {showMarkdownEditor ? <>
+              <textarea id="leanx-markdown" aria-label="Expository Markdown"
+                value={markdownDraft} disabled={!scope.length || running || savingMarkdown}
+                onChange={event => setMarkdownDraft(event.target.value)}/>
+              {!!markdownDraft && markdownDraft.trim() !== savedMarkdown && <small>Unsaved edits</small>}
+            </> : markdownDraft ? <div className="leanx-explanation" aria-label="Rendered mathematical exposition">
+              <Suspense fallback={<p>Rendering Markdown…</p>}>
+                <RenderedMarkdown body={markdownDraft}/>
+              </Suspense>
+            </div> : <p className="leanx-empty">
+              No exposition yet. Run Explore section or Test one large Lean file to generate readable material.
+            </p>}
           </div>
           {!!analysisSources.length && <details className="leanx-evidence-detail">
             <summary>Evidence used in this explanation ({analysisSources.length})</summary>
