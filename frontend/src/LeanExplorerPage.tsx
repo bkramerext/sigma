@@ -126,7 +126,7 @@ export default function LeanExplorerPage() {
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
-  const [showBrowser, setShowBrowser] = useState(true);
+  const [showBrowser, setShowBrowser] = useState(false);
   const [showDossier, setShowDossier] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [objective, setObjective] = useState('Explain this declaration precisely and identify its role in a rigorous human-readable reconstruction of Alpöge’s Riemann Hypothesis proof.');
@@ -497,13 +497,50 @@ export default function LeanExplorerPage() {
       </div>
     </section>
 
+
+    <section className="leanx-conceptual-map" aria-label="Provisional mathematical proof map">
+      <div className="leanx-map-heading">
+        <strong>Mathematical proof map</strong>
+        <span>Guide-informed proposal · not a Lean dependency graph</span>
+        {proofMap && <SourceLink href={proofMap.derived_from.url}>Proof guide</SourceLink>}
+      </div>
+      <div className="leanx-map-grid">
+        {proofMap?.sections.map((item, index) =>
+          <button key={item.id} type="button" onClick={() => chooseSection(item.id)}
+            disabled={running}
+            aria-pressed={sectionId === item.id}
+            className={sectionId === item.id ? 'leanx-map-section is-selected' : 'leanx-map-section'}>
+            <span className="leanx-map-number">{index + 1}</span>
+            <span>{item.title}</span>
+            {matchedDossiers.some(record => record.section_id === item.id) && <span className="leanx-map-saved" aria-label="Has saved dossier">●</span>}
+          </button>
+        ))}
+        {!proofMap && <p className="leanx-empty">Loading the provisional mathematical map…</p>}
+      </div>
+      {currentSection && <div className="leanx-map-focus">
+        <p><strong>Question:</strong> {sectionPrompt}</p>
+        <p>{currentSection.purpose}</p>
+        <div className="leanx-map-links">
+          <span>Proposed connections:</span>
+          {proofMap?.connections.filter(edge => edge.to === sectionId || edge.from === sectionId).map(edge => {
+            const counterpart = edge.to === sectionId ? edge.from : edge.to;
+            const other = proofMap.sections.find(item => item.id === counterpart);
+            return <button key={edge.from + edge.to} type="button" disabled={running}
+              title={edge.why + ' (not verified against Lean)'} onClick={() => chooseSection(counterpart)}>
+              {edge.to === sectionId ? '←' : '→'} {other?.title ?? counterpart}
+            </button>;
+          })}
+        </div>
+      </div>}
+    </section>
+
     <div className="leanx-compact-controls">
       <nav className="leanx-tool-tabs" aria-label="Explorer tools">
         <button type="button" aria-expanded={showInputs} onClick={() => setShowInputs(!showInputs)}>
           Source · {sourceMode === 'local' ? (localSource ? 'Local Lean tree' : '~/lean_alpoge') : 'GitHub mirror'}
         </button>
         <button type="button" aria-expanded={showBrowser} onClick={() => setShowBrowser(!showBrowser)}>
-          Sections · {sectionName}
+          Find Lean evidence
         </button>
         <button type="button" aria-expanded={showDossier} onClick={() => setShowDossier(!showDossier)}>
           Section dossier · {dossier?.entries.length ?? 0} entries
@@ -564,44 +601,8 @@ export default function LeanExplorerPage() {
     </section>
       </div>}
       {showBrowser && <div className="leanx-tool-body leanx-browser-tool">
-      <aside className="leanx-pane leanx-declarations" aria-label="Lean source navigation">
-        {sourceMode === 'local' && <div className="leanx-section-tree">
-          <div className="leanx-pane-title">
-            <h2>Proof sections</h2>
-            <span>Source tree · {tree?.module_count.toLocaleString() ?? '—'} modules</span>
-          </div>
-          <p className="leanx-tree-disclaimer">These are real filesystem branches, not yet theorem-dependency groups. Select a branch to give it a separate paper dossier.</p>
-          <div className="leanx-tree-breadcrumb">
-            <button type="button" disabled={!localSource || treeBusy} onClick={() => void loadTree('')}>Root</button>
-            {tree?.prefix && <span> / {tree.prefix}</span>}
-            {tree?.parent !== null && tree?.prefix && <button type="button" disabled={treeBusy} onClick={() => void loadTree(tree.parent ?? '')}>Up</button>}
-          </div>
-          <div className="leanx-tree-children">
-            {tree?.children.map(node =>
-              <div className="leanx-tree-row" key={node.path}>
-                <button type="button" disabled={treeBusy || running}
-                  onClick={() => node.kind === 'directory' ? void loadTree(node.path) : void loadFile(node.path, 'local')}>
-                  <span aria-hidden="true">{node.kind === 'directory' ? '▸' : '·'}</span> {node.name}
-                  {node.kind === 'directory' && <small>{node.module_count.toLocaleString()} files</small>}
-                </button>
-                {node.kind === 'directory' && <button type="button" className="leanx-tree-section-action"
-                  onClick={() => chooseSection(node.path)} disabled={running} aria-label={'Use ' + node.path + ' as a paper section'}>
-                  {sectionPath === node.path ? 'Selected' : 'Make section'}
-                </button>}
-              </div>
-            )}
-          </div>
-          {tree?.truncated && <p className="leanx-tree-disclaimer">This folder has more children than the preview can show. Use file search to reach a specific module.</p>}
-          <div className="leanx-current-section">
-            <strong>Research section:</strong> {sectionPath || 'Complete proof'}
-            <button type="button" disabled={running} onClick={() => chooseSection(tree?.prefix ?? '')}>
-              {tree?.prefix ? 'Use current folder' : 'Use complete proof'}
-            </button>
-          </div>
-          <label className="leanx-section-prompt-label" htmlFor="leanx-section-prompt">Question guiding this section</label>
-          <textarea id="leanx-section-prompt" value={sectionPrompt} rows={2} onChange={event => setSectionPrompt(event.target.value)}
-            disabled={running}/>
-        </div>}
+        <p className="leanx-tree-disclaimer">Search real Lean files and declarations across the source tree. Directory names are not mathematical proof sections.</p>
+      <aside className="leanx-pane leanx-declarations" aria-label="Lean source evidence browser">
         {sourceMode === 'local' && <div className="leanx-module-navigator">
           <div className="leanx-pane-title"><h2>Lean files</h2><span>{localFiles?.total_matches.toLocaleString() ?? '—'} matches</span></div>
           <div className="leanx-module-search">
