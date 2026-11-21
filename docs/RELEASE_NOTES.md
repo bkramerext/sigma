@@ -426,15 +426,42 @@ SIGMA remains experimental. Research findings, generated citations and papers, a
 **Release boundary:** Version metadata is 0.4.3. The accepted production build is merged `main` SHA `613b14156adf8b0a0856ce2eda3cac2cf89d9b07` (PR #886, including #885). The operator approved production acceptance on November 17, 2026. See [Deployment History](DEPLOYMENT_HISTORY.md) for the guarded cutover and health checks.
 
 
-## Version 0.4.4 — Unified Session Research Experience
-*Release candidate · November 20, 2026 · Production deployment pending*
+## Version 0.4.4 — Unified Sessions and Reliable Research Recovery
+*Release candidate · November 20, 2026 · Not yet deployed to production*
 
-The Brainstorm research workflow is folded into durable project Sessions. Sessions retain per-turn Brainstorm/paired role semantics, display Supervisor assessments and interventions, support configurable turns, and provide a dedicated live transcript page with navigation back to the expanded Project session.
+**SIGMA now brings open-ended two-investigator exploration and structured Investigator/Skeptic research together in one durable Session workflow.** This release also improves paper completion and scoring, interrupted-run recovery, Source Material handling, and day-to-day research navigation. These notes cover changes merged after the accepted v0.4.3 production build.
 
-- **Unified Session workflow.** Project Sessions support alternating investigators and Supervisor coaching, with per-turn role labels and a consistent transcript presentation.
-- **Improved transcript navigation.** Live turn indicators, status links, aligned role actions, and Session/Project return navigation make research easier to follow while it runs.
-- **Readable mathematical research.** Session Markdown displays embedded JSON as fenced code, artifact identifiers as inline code, and better-sized mathematical parentheses where fractions appear.
-- **Portable research logs.** Individual diagnostic exports use Markdown filenames; the all-sessions ZIP contains Markdown files.
-- **Consistent interface.** Session headers reuse Project account, model, About, and Settings controls. Start/Stop/Settings behavior, loading labels, and responsive spacing have been refined.
+### One Session experience
 
-**Status:** Version metadata prepared on PR #909. Release is **not deployed** until the PR is merged, required exact-SHA CI passes, and the guarded production deployment and smoke checks complete.
+- **Brainstorm is now a Session mode.** Use the same saved project Sessions for an Investigator/Skeptic pair or for two investigators exploring ideas together. The separate Brainstorm page, Home entry, `/brainstorm` route, and `--brainstorm` launcher flag have been retired; existing saved Session work is preserved.
+- **Configurable Turns and SIGMA Supervisor.** New UI-created Sessions default to **20 turns per strategy**, with a finite limit or **Unlimited**. Optional Session names and **None / Light / Heavy** Supervisor settings live in the Session Settings dialog. The process-focused Supervisor can assess and gently coach accepted agent exchanges without asserting that a score establishes a breakthrough or verified result; the older 10.0 breakthrough snap is removed.
+- **Edit while research runs.** Session Settings can be changed while queued, running, or stopped. Changes are saved and applied at supported execution boundaries without rewriting accepted role calls. A completed Session can be extended and then **Resumed** when its settings authorize additional turns. Older round-based histories remain readable without rewriting their stored protocol.
+- **A live, durable transcript.** The Session page groups investigator replies and Supervisor commentary by turn, newest first, with timestamps, individual expansion, Markdown and Copy, a canonical Transcript expansion reset, and Download. The standard reading view suppresses scheduler noise while retaining diagnostics in the saved log. Live indicators and links navigate back to the corresponding Session in its Project.
+- **Safer Supervisor and connection recovery.** Supervisor assessments and failures are recorded without throwing away accepted agent work or injecting private assessment text into researcher prompts. Changes of a selected authorized ChatGPT connection do not bind future turns to a historical account, and ambiguous provider calls are not silently replayed.
+
+### Research startup, evidence, and recovery
+
+- **More dependable Resume.** Recover transient first-Investigator interruptions from valid checkpoints with a single Resume action, within bounded attempt allowances; existing token, money, and uncertain-billing safeguards remain intact. Additional approvals, where genuinely needed, appear beside the relevant control.
+- **Actionable response-validation errors.** Research failures better distinguish malformed model responses, schema field errors, missing text, and internal processing faults. A completed but invalid provider response records its known usage instead of being mistaken for an unknown network dispatch.
+- **Larger, more resilient Source Materials.** The total extracted Source Material cap grows from **60,000 to 400,000 characters**. Public PDF retrieval supports verified binary responses and bounded transient retries, with source-specific failure descriptions. Saved extracted evidence can be reused on Resume. Mandatory prompt-size, context, and provider funding checks still apply; oversized content is not silently truncated.
+- **Clearer sponsored-provider failures.** Authorization, access, rate-limit, and transient model-catalog issues are distinguished. Only confirmed pre-inference failures qualify for narrowly bounded retry; SIGMA does not retry an ambiguous or potentially billable generated response automatically.
+
+### Papers: completion, scores, and PDF recovery
+
+- **Stable completion from Score to Finish.** A newly published PDF no longer makes its in-progress paper card disappear, spawn an unnumbered placeholder, or jump early to a saved-paper card. The numbered generating card stays visible through Score and Finish, with an orderly handoff when the run actually completes. Existing cards remain visible while metadata refreshes; fallback cards retain newest-first order.
+- **No misleading second-scoring transition.** The UI distinguishes a published PDF from a finished generation run. Saved automatic scores are reconciled from the canonical paper record; viewing a completed score does not itself rerun evaluation. Server-side scoring also rechecks the stored score under the single-flight guard to avoid duplicate requests from stale concurrent readers.
+- **Resume failed PDF compilation.** Invalid TeX control characters, including DEL (U+007F), are replaced with explicit review markers. Previously proofread drafts can be sanitized and compiled on Resume without unnecessarily repeating AI writing or proofreading. Deterministic PDF compiler errors remain attached to the correct paper card, without an unrelated provider-usage warning.
+- **Safer paper cleanup.** Authorized removal works for eligible unfinished runs and tightly checked corrupted saved-paper records, with protections for active scoring, ownership, other papers, and immutable paper-number reservations. Paper-score dialogs remain focused on viewing the saved evaluation.
+
+### Workspace, rendering, and samples
+
+- **Private Scratchpad notes.** User Settings adds a Scratchpad tab with durable per-user notes, autosave, Markdown view, Copy, and removal. These notes follow the signed-in user across projects and are not inserted into project data.
+- **Better mathematical and technical Markdown.** Session transcript rendering handles code-like identifiers, embedded JSON, and mathematical parentheses more legibly. Per-entry Markdown is opt-in and limited to accepted expanded entries; raw text and copy remain available.
+- **Riemann Hypothesis sample expansion.** The sample adds a fourth spectral-research strategy with explicit numerical-normalization and primary-literature audits. The sample does **not** claim a proof of the Riemann Hypothesis.
+- **Consistent navigation and layout.** Session headers, activity indicators, settings, role actions, copy controls, Samples spacing, and focus outlines receive focused refinements, including restoration of the Session header after removal of the old Brainstorm stylesheet.
+
+### Status, safeguards, and release boundary
+
+SIGMA remains experimental. An AI-generated paper, Supervisor assessment, agreement between investigators, or high Paper Score is not independent scientific validation. Check research claims, source evidence, citations, and generated PDFs before relying on them.
+
+**Previous production baseline:** v0.4.3, merged SHA `613b14156adf8b0a0856ce2eda3cac2cf89d9b07` (accepted November 17, 2026). **0.4.4 notes cutoff:** merged `main` SHA `f079f1921d544a43e02797e26485289cdff7a332` (through PR #916, November 20, 2026). Python and frontend version metadata currently say `0.4.4`. **This document does not attest to release CI, production deployment, live-provider acceptance, or the creation of a Git tag.** An exact-SHA release verification and guarded production acceptance are still required.
