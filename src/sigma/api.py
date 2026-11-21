@@ -3735,19 +3735,6 @@ def lean_explorer_local_files(
     )
 
 
-@app.get("/api/explorelean/local-tree")
-def lean_explorer_local_tree(
-    request: Request,
-    prefix: str = "",
-    limit: int = 180,
-):
-    _require_local_lean_request(request)
-    return JSONResponse(
-        lean_explorer_local.tree(prefix, limit=limit),
-        headers={"Cache-Control": "no-store"},
-    )
-
-
 @app.post("/api/explorelean/local-index")
 async def lean_explorer_local_index(
     request: Request,
