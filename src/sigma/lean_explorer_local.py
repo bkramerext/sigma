@@ -258,7 +258,6 @@ def list_files(query: str = "", offset: int = 0, limit: int = 100) -> dict:
     }
 
 
-
 def read_module(relative: str) -> tuple[bytes, str, str, str]:
     cfg = source()
     if cfg is None:
