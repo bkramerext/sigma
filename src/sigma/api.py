@@ -3709,6 +3709,7 @@ class LeanDiscoveryRequest(BaseModel):
     source_mode: Literal["local"] = "local"
     section_id: str = Field(min_length=1, max_length=80)
     dossier_id: str = Field(min_length=36, max_length=36)
+    single_file_trial: bool = False
 
 
 class LeanPaperHandoffRequest(BaseModel):
@@ -3830,6 +3831,8 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
         raise HTTPException(422, "Index the source directory used by this section first.")
     if dossier.get("paper_project"):
         raise HTTPException(422, "The paper scope is frozen. Use a new section dossier.")
+    if body.single_file_trial and (dossier.get("scope") or dossier.get("discovery")):
+        raise HTTPException(422, "Start a single-file trial with a new section dossier.")
     checkpoint = dossier.get("discovery") or {}
     start_offset = (
         checkpoint.get("next_offset", 0)
@@ -3877,6 +3880,7 @@ async def lean_explorer_discover(request: Request, body: LeanDiscoveryRequest):
                         body.section_id,
                         progress,
                         start_offset=offset,
+                        single_file_trial=body.single_file_trial,
                     )
                 )
                 while not active.done():
