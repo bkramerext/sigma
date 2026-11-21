@@ -1,6 +1,7 @@
 import { Component, createContext, createElement, forwardRef, lazy, Suspense, type Dispatch, type SetStateAction, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode, type SyntheticEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import SessionLogPage from './SessionLogPage';
+import LeanExplorerPage from './LeanExplorerPage';
 import { adoptLatestWindowSignIn, windowAuthUrl } from './window-auth';
 import SessionLogButton from './SessionLogButton';
 import SessionSettingsDialog, { defaultSessionSettings, type SessionSettings } from './SessionSettingsDialog';
@@ -10141,6 +10142,7 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
+  if (url.pathname === '/explorelean') return <><main className="workspace-page lean-explorer-page"><LeanExplorerPage onClose={() => navigate('/')}/></main><FloatingTooltip/></>;
   if (url.pathname === '/session') {
     const sessionId = url.searchParams.get('session_log') ?? '';
     const path = url.searchParams.get('path') ?? '';
