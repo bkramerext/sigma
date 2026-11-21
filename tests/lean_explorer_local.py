@@ -175,8 +175,8 @@ def check_local_directory() -> None:
             assert "Local source: src/Statements.lean" in export.text
             assert "Check this statement" in export.text
 
-            # Bounded discovery resumes on the next pass rather than restarting
-            # at the root. Checkpoint state survives independent API requests.
+            # A single Explore request traverses all bounded batches, saving a
+            # checkpoint after each pass instead of requiring repeated clicks.
             continued = client.post(
                 "/api/explorelean/dossiers",
                 json={"source_mode": "local", "section_id": "theta-slopes"},
@@ -184,20 +184,21 @@ def check_local_directory() -> None:
             assert continued.status_code == 201
             continued_id = continued.json()["id"]
             with patch("sigma.lean_explorer_discovery.MAX_SCAN_FILES", 1):
-                for offset in (1, 2, 3):
-                    frame = client.post(
-                        "/api/explorelean/discover",
-                        json={
-                            "source_mode": "local",
-                            "section_id": "theta-slopes",
-                            "dossier_id": continued_id,
-                        },
-                    )
-                    assert frame.status_code == 200, frame.text
-                    record = client.get(f"/api/explorelean/dossiers/{continued_id}").json()
-                    assert record["discovery"]["next_offset"] == offset
-                    assert record["discovery"]["scanned_files"] == offset
-                    assert record["discovery"]["complete"] == (offset == 3)
+                frame = client.post(
+                    "/api/explorelean/discover",
+                    json={
+                        "source_mode": "local",
+                        "section_id": "theta-slopes",
+                        "dossier_id": continued_id,
+                    },
+                )
+                assert frame.status_code == 200, frame.text
+                assert frame.text.count('"type": "stage"') >= 3
+                assert frame.text.count('"type": "complete"') == 1
+                record = client.get(f"/api/explorelean/dossiers/{continued_id}").json()
+                assert record["discovery"]["next_offset"] == 3
+                assert record["discovery"]["scanned_files"] == 3
+                assert record["discovery"]["complete"] is True
                 assert any(item["name"] == "thetaLiftBound" for item in record["scope"])
 
             # A working directory is mutable; a changed file gets a new hash.
