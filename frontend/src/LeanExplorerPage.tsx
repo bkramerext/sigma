@@ -4,6 +4,18 @@ import './lean-explorer.css';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 const DEFAULT_PATH = 'src/Statements.lean';
 const DEFAULT_LOCAL_DIRECTORY = '~/lean_alpoge';
+const THINKING_STEPS = [
+  {name: 'Discover the proof', question: 'How is the development organized, and where does RH enter?'},
+  {name: 'Choose a section', question: 'Which piece of mathematics could stand on its own?'},
+  {name: 'Inspect the source', question: 'What is actually asserted, with which hypotheses?'},
+  {name: 'Explain the idea', question: 'Why is this result useful, and what does it depend on?'},
+  {name: 'Shape the exposition', question: 'What must a reader understand before moving forward?'},
+] as const;
+type LeanTreeNode = {name: string; path: string; kind: 'module' | 'directory'; module_count: number};
+type LeanTree = {
+  root_id: string; prefix: string; parent: string | null; module_count: number;
+  child_count: number; truncated: boolean; children: LeanTreeNode[];
+};
 type SourceMode = 'mirror' | 'local';
 type LocalSource = {mode: 'local'; directory: string; root_id: string; file_count: number; default_module?: string};
 type LocalStatus = {configured: boolean; source: LocalSource | null};
@@ -29,8 +41,14 @@ type Declaration = {
 };
 type Citation = {kind: string; path: string; commit: string; url: string; sha256: string; complete: boolean};
 type Entry = {id: string; mode: string; text: string; created_at: string; source: Declaration; supplementary_sources?: Citation[]; interpretation_status: string};
-type Dossier = {id: string; title: string; updated_at: string; entries: Entry[]; source_mode: SourceMode};
-type DossierItem = {id: string; title: string; entry_count: number; updated_at: string; source_mode: SourceMode};
+type Dossier = {
+  id: string; title: string; updated_at: string; entries: Entry[];
+  source_mode: SourceMode; section_path?: string; section_title?: string;
+};
+type DossierItem = {
+  id: string; title: string; entry_count: number; updated_at: string;
+  source_mode: SourceMode; section_path?: string; section_title?: string;
+};
 type AIConfig = {available: boolean; message: string; model: string; reasoning_effort: string; models: {id: string; label: string; efforts: string[]}[]};
 type Activity = {id: number; time: string; label: string; state: 'ok'|'working'|'error'|'note'};
 type Stage = {type: string; stage?: string; label?: string; error?: string; text?: string; saved?: boolean; save_error?: string; sources?: Citation[]};
@@ -58,7 +76,7 @@ function Timestamp({value}: {value: string}) {
   return <time dateTime={value}>{Number.isNaN(date.getTime()) ? value : date.toLocaleString()}</time>;
 }
 
-export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
+export default function LeanExplorerPage() {
   const [path, setPath] = useState(DEFAULT_PATH);
   const [formalInput, setFormalInput] = useState(DEFAULT_PATH);
   const [sourceMode, setSourceMode] = useState<SourceMode>('local');
@@ -67,6 +85,13 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   const [localSource, setLocalSource] = useState<LocalSource | null>(null);
   const [localFiles, setLocalFiles] = useState<LocalFiles | null>(null);
   const [moduleFilter, setModuleFilter] = useState('');
+  const [tree, setTree] = useState<LeanTree | null>(null);
+  const [treeBusy, setTreeBusy] = useState(false);
+  const [sectionPath, setSectionPath] = useState('');
+  const [sectionName, setSectionName] = useState('Complete proof');
+  const [sectionPrompt, setSectionPrompt] = useState(
+    'What is the central mathematical idea of this section, and how does it contribute to RH?'
+  );
   const [moduleLoading, setModuleLoading] = useState(false);
   const [localIndexing, setLocalIndexing] = useState(false);
   const [scanCount, setScanCount] = useState({dirs: 0, files: 0, path: ''});
@@ -86,6 +111,9 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   const [stage, setStage] = useState('Idle');
   const [elapsed, setElapsed] = useState(0);
   const [analysis, setAnalysis] = useState('');
+  const [markdownDraft, setMarkdownDraft] = useState('');
+  const [savedMarkdown, setSavedMarkdown] = useState('');
+  const [savingMarkdown, setSavingMarkdown] = useState(false);
   const [analysisSources, setAnalysisSources] = useState<Citation[]>([]);
   const [error, setError] = useState('');
   const [activity, setActivity] = useState<Activity[]>([]);
@@ -93,8 +121,8 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
-  const [showInputs, setShowInputs] = useState(true);
-  const [showBrowser, setShowBrowser] = useState(false);
+  const [showInputs, setShowInputs] = useState(false);
+  const [showBrowser, setShowBrowser] = useState(true);
   const [showDossier, setShowDossier] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [objective, setObjective] = useState('Explain this declaration precisely and identify its role in a rigorous human-readable reconstruction of Alpöge’s Riemann Hypothesis proof.');
