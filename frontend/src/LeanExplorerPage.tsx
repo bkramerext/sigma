@@ -576,8 +576,15 @@ export default function LeanExplorerPage() {
           model, reasoning_effort: effort,
           objective: (objective + '\n\nProvisional mathematical proof section: ' + sectionName
             + '\nExpository question: ' + sectionPrompt
-            + '\nFind evidence for the relevance of this declaration to the section; '
-            + 'do not assume a dependency merely because it was selected.').slice(0, 6000),
+            + (analysisDossier.discovery?.single_file_trial
+              ? '\nSingle-file trial: write a continuous human-readable mathematical exposition '
+                + 'of the selected declarations from this one file. Start with what the file '
+                + 'actually states, define its terms where the excerpts support them, '
+                + 'explain hypotheses and conclusions, and distinguish source-backed '
+                + 'facts from speculative relationships. Cite precise file paths and lines. '
+                + 'Do not imply the sampled declarations cover the whole file or establish RH.'
+              : '\nFind evidence for the relevance of this declaration to the section; '
+                + 'do not assume a dependency merely because it was selected.')).slice(0, 6000),
           dossier_id: dossierId,
         }),
       });
