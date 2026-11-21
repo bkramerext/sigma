@@ -130,6 +130,7 @@ def append(
     declaration_name: str,
     mode: str,
     text: str,
+    supplementary_sources: list[dict] | None = None,
 ) -> dict:
     if mode not in {"note", "explain", "audit"}:
         raise ProjectError("Unknown dossier entry type.")
@@ -168,6 +169,7 @@ def append(
                 "interpretation_status": "unverified commentary",
                 "text": text.strip(),
                 "source": source,
+                "supplementary_sources": supplementary_sources or [],
             }
             entries.append(item)
             record["updated_at"] = item["created_at"]
@@ -231,4 +233,10 @@ def markdown(identifier: str) -> str:
                 "",
             ]
         )
+        for supp in item.get("supplementary_sources", []):
+            parts.append(
+                f"Supplementary: {supp['kind']} · [{supp['path']}]({supp['url']})"
+                f" · revision \`{supp['commit']}\` · SHA256 \`{supp['sha256']}\`"
+            )
+        parts.append("")
     return "\n".join(parts)
