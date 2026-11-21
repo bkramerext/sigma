@@ -1,144 +1,11 @@
-/* Brainstorm retains the Project artwork header and its exact shared model-pill markup. */
-.brainstorm-workspace { height: 100dvh; overflow-y: auto; }
-.brainstorm-workspace .chat-page {
-  box-sizing: border-box; flex: 0 0 auto; width: calc(100% - 48px);
-  min-width: 0; max-width: none; margin: 0 auto 40px; padding: 0; color: #f0e6d7;
+/* Lean Explorer — preserve SIGMA header language; prioritize proof reading. */
+.brainstorm-workspace { min-height: 100dvh; overflow-y: auto; }
+.brainstorm-workspace .chat-page.leanx-ui {
+  box-sizing: border-box; width: calc(100% - 72px); min-width: 0;
+  max-width: none; margin: 0 auto 40px; padding: 0;
+  color: #f0e6d7;
 }
-.brainstorm-workspace .chat-page-header {
-  display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px 32px;
-  margin: 12px 0 8px; padding-bottom: 12px; border-bottom: 1px solid #46515b;
-}
-.brainstorm-workspace .chat-title-group { flex: 0 0 auto; min-width: 0; }
-.brainstorm-workspace .chat-eyebrow {
-  margin: 0 0 3px; color: #c99a66; font-size: .78rem;
-  letter-spacing: .1em; text-transform: uppercase;
-}
-.brainstorm-workspace .chat-page-header h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); }
-.brainstorm-workspace .chat-description {
-  flex: 1 1 350px; margin: 0 0 5px; color: #c4b9aa; font-size: .92rem;
-}
-.brainstorm-workspace .chat-privacy-note {
-  margin: 0 0 18px; color: #c4b9aa; font-size: .85rem; overflow-wrap: anywhere;
-}
-.brainstorm-workspace .chat-privacy-note code { overflow-wrap: anywhere; }
-.brainstorm-workspace .chat-repeated-prompt,
-.brainstorm-workspace .chat-human-form {
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px;
-  min-width: 0; margin: 0 0 14px;
-}
-.brainstorm-workspace .chat-field-heading {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-width: 0;
-  gap: 6px;
-}
-.brainstorm-workspace .chat-field-heading label {
-  color: #f2c48d;
-  font-weight: 700;
-  margin: 0;
-}
-.brainstorm-workspace .chat-field-heading .chat-copy-button {
-  flex: 0 0 26px;
-  margin: 0;
-}
-.brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea {
-  box-sizing: border-box; display: block; width: 100%; min-width: 0;
-  height: 74px; min-height: 74px; padding: 10px 13px;
-  border: 1px solid #72553a; border-radius: 8px;
-  background: #131210; color: #f0e6d7; font: inherit; line-height: 1.5;
-  resize: vertical; scrollbar-gutter: stable;
-}
-.brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea:focus {
-  outline: 2px solid #bd8246; outline-offset: 1px;
-}
-.brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea::placeholder { color: #8c8275; }
-.brainstorm-workspace .chat-controls {
-  display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap;
-  gap: 12px; min-height: 42px; margin: 0 0 20px;
-}
-.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) {
-  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
-  min-height: 38px; padding: 7px 18px; border: 1px solid #bd8246;
-  border-radius: 8px; color: #f0e6d7; background: #07111e;
-  font: 500 .92rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer;
-}
-.brainstorm-workspace .chat-retry {
-  min-width: 108px; border-color: #e4b679; background: #80512c;
-  color: #fff5e8; font-weight: 700;
-}
-.brainstorm-workspace .chat-send {
-  min-width: 92px; border-color: #e4b679; background: #80512c;
-  color: #fff5e8; font-weight: 700;
-}
-.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):hover:not(:disabled) {
-  background: #6b4329; color: #fff2e9;
-}
-.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):focus-visible {
-  outline: 2px solid #e5a785; outline-offset: 3px;
-}
-.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):disabled { opacity: .5; cursor: default; }
-.brainstorm-workspace .chat-controls [role="status"] {
-  color: #d1c5b7; font-size: .9rem; overflow-wrap: anywhere;
-}
-.brainstorm-workspace .chat-boxes {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
-}
-.brainstorm-workspace .chat-box {
-  box-sizing: border-box; display: flex; flex-direction: column;
-  min-width: 0; min-height: 140px; padding: 17px 20px;
-  border: 1px solid #66513d; border-radius: 12px; background: #141a1c;
-}
-.brainstorm-workspace .chat-box.is-speaking {
-  border-color: #d29a55; box-shadow: 0 0 0 1px #d29a5540;
-}
-.brainstorm-workspace .chat-agent h2 { margin: 0 0 10px; color: #f2c48d; font-size: 1rem; }
-.brainstorm-workspace .chat-agent-placeholder { margin: 0; color: #8c8275; }
-.brainstorm-workspace .chat-agent .chat-markdown {
-  min-width: 0; overflow-wrap: anywhere; line-height: 1.55;
-}
-.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown > :first-child { margin-top: 0; }
-.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown > :last-child { margin-bottom: 0; }
-.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown p { margin: 7px 0; }
-.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown :is(ul, ol) { padding-left: 1.4em; }
-.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown pre {
-  overflow-x: auto; padding: 10px; border-radius: 6px; background: #131210;
-}
-.brainstorm-workspace .chat-history {
-  display: grid; gap: 10px; margin: 20px 0 0; padding: 0; list-style: none;
-}
-.brainstorm-workspace .chat-history li {
-  padding: 12px 15px; border-left: 3px solid #8d754f;
-  border-radius: 0 7px 7px 0; background: #211e1a;
-}
-.brainstorm-workspace .chat-history li.chat-history-ai_1 { border-left-color: #7d9caa; }
-.brainstorm-workspace .chat-history li.chat-history-ai_2 { border-left-color: #c28b5c; }
-.brainstorm-workspace .chat-history strong { color: #edc28e; font-size: .86rem; }
-.brainstorm-workspace .chat-history .chat-markdown { margin-top: 5px; line-height: 1.5; }
-.brainstorm-workspace .chat-error { margin: 10px 0; color: #ffb3a6; }
-
-@media (max-width: 900px) {
-  .brainstorm-workspace .chat-boxes { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 700px) {
-  .brainstorm-workspace .chat-page { width: calc(100% - 28px); }
-  .brainstorm-workspace .chat-page-header h1 { font-size: 1.55rem; }
-  .brainstorm-workspace .chat-controls { gap: 8px; }
-  .brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) { padding-inline: 12px; }
-}
-
-/* Shared project copy icon beside each brainstorm participant heading. */
-.brainstorm-workspace .chat-reply-heading {
-  display: flex; align-items: center; justify-content: flex-start; gap: 6px; min-width: 0;
-}
-.brainstorm-workspace .chat-reply-heading h2 { margin: 0 0 10px; }
-.brainstorm-workspace .chat-reply-heading .chat-copy-button {
-  flex: 0 0 auto; width: 26px; height: 26px; padding: 3px; margin: 0 0 10px;
-}
-.brainstorm-workspace .chat-history .chat-reply-heading .chat-copy-button { margin: 0; }
-.brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
-.brainstorm-workspace .chat-history-objective { border-left-color: #a891bf !important; }
-
+.brainstorm-workspace .chat-error { margin: 12px 0; color: #ffb3a6; }
 /* Keep the Project header's content-sized geometry. The decorative
    SIGMA background in workspace.css scales proportionally with header height.
    Do not reserve excess vertical space for the shorter Brainstorm pill stack. */
@@ -321,380 +188,225 @@
   }
 }
 
-/* Opt-in process supervisor and objective history. */
-.brainstorm-workspace .chat-supervisor-option {
-  display: grid;
-  gap: 7px;
-  margin: 0 0 14px;
-  padding: 12px 15px;
-  border: 1px solid #66513d;
-  border-radius: 8px;
-  background: #141a1c;
+/* The header is shared with SIGMA; it should not dominate the workspace. */
+@media (min-width: 1201px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    grid-template-columns: min(17vw, 205px) minmax(0, 1fr) max-content;
+    gap: 20px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    width: min(17vw, 185px);
+  }
 }
-.brainstorm-workspace .chat-supervisor-option label {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  width: max-content;
-  gap: 9px;
-  margin: 0;
-  font-weight: 700;
-  color: #f2c48d;
-  cursor: pointer;
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+  max-width: 630px; white-space: normal;
 }
-.brainstorm-workspace .chat-supervisor-option input[type="checkbox"] {
-  box-sizing: border-box;
-  display: inline-block;
-  flex: 0 0 17px;
-  width: 17px;
-  min-width: 17px;
-  height: 17px;
-  margin: 0;
-  padding: 0;
-  accent-color: #bd8246;
-}
-.brainstorm-workspace .chat-supervisor-option p {
-  margin: 0;
-  color: #c4b9aa;
-  font-size: .88rem;
-  line-height: 1.45;
-}
-.brainstorm-workspace .chat-progress-status {
-  color: #f2c48d; margin: 0 0 12px;
-}
-.brainstorm-workspace .chat-history li.chat-history-objective { border-left-color: #a891bf; }
-.brainstorm-workspace .chat-history li.chat-history-supervisor { border-left-color: #8cad9f; }
-.brainstorm-workspace .chat-supervisor-meta {
-  margin: 4px 0; color: #a5c7b7; font-size: .83rem;
-}
-
-
-/* Transcript disclosure controls mirror the Project page's chevron affordance. */
-.brainstorm-workspace .chat-transcript { margin-top: 20px; }
-.brainstorm-workspace .chat-transcript-heading { margin: 0 0 10px; font-size: 1.05rem; }
-.brainstorm-workspace .chat-transcript .chat-history { margin-top: 0; }
-.brainstorm-workspace .chat-disclosure-button {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 2px 4px; margin: -2px -4px; border: 0;
-  background: transparent; color: #f2c48d; font: inherit;
-  text-align: left; cursor: pointer;
-}
-.brainstorm-workspace .chat-disclosure-button:hover { color: #ffe0ae; }
-.brainstorm-workspace .chat-disclosure-button:focus-visible {
-  outline: 2px solid #e5a785; outline-offset: 3px; border-radius: 3px;
-}
-.brainstorm-workspace .chat-disclosure-button .disclosure-chevron {
-  flex: 0 0 12px; width: 12px; height: 12px;
-  fill: none; stroke: currentColor; stroke-width: 1.8;
-  stroke-linecap: round; stroke-linejoin: round;
-  transition: transform .15s ease;
-}
-.brainstorm-workspace .chat-disclosure-button .disclosure-chevron.is-expanded { transform: rotate(90deg); }
-.brainstorm-workspace .chat-history .chat-reply-heading { margin-bottom: 0; }
-.brainstorm-workspace .chat-history .chat-reply-heading strong { color: inherit; }
-.brainstorm-workspace .chat-history [hidden] { display: none; }
-
-/* Keep all transcript/response content inside the available page width.
-   Grid items default to min-width:auto, which can grow to a long reply's
-   min-content width and push the entire Brainstorm page off-screen. */
-.brainstorm-workspace .chat-boxes,
-.brainstorm-workspace .chat-history { min-width: 0; grid-template-columns: minmax(0, 1fr); }
-.brainstorm-workspace .chat-boxes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.brainstorm-workspace .chat-box,
-.brainstorm-workspace .chat-history li,
-.brainstorm-workspace .chat-transcript,
-.brainstorm-workspace .chat-history li > div,
-.brainstorm-workspace .chat-markdown {
-  box-sizing: border-box;
+.leanx-ui {
+  --leanx-line: #534735; --leanx-muted: #ab9f91; --leanx-link: #eec08b;
   min-width: 0;
-  max-width: 100%;
 }
-.brainstorm-workspace .chat-markdown {
-  overflow-wrap: anywhere;
-  word-break: normal;
+.leanx-ui a { color: var(--leanx-link); text-decoration: none; }
+.leanx-ui a:hover { text-decoration: underline; }
+.leanx-ui button { cursor: pointer; color: #ede2d2; font: inherit; }
+.leanx-ui button:disabled { opacity: .48; cursor: default; }
+.leanx-ui :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid #ddb180; outline-offset: 2px;
 }
-.brainstorm-workspace .chat-markdown :is(p, li, blockquote, a, h1, h2, h3, h4, h5, h6, code) {
-  overflow-wrap: anywhere;
+.leanx-ui :is(input:not([type=checkbox]), select, textarea) {
+  box-sizing: border-box; min-width: 0; padding: 8px 10px;
+  background: #131210; border: 1px solid #71583f; border-radius: 6px;
+  color: #f0e6d7; font: inherit;
 }
-.brainstorm-workspace .chat-markdown :is(pre, table, .katex-display) {
-  max-width: 100%;
-  overflow-x: auto;
+.leanx-ui :is(button:not(.leanx-declaration-list button, .leanx-module-list button, .leanx-dossier-entries button)) {
+  border: 1px solid #71583f; background: #131b21; border-radius: 6px;
+  padding: 7px 12px; font-size: .82rem;
 }
-.brainstorm-workspace .chat-markdown pre { white-space: pre; }
-.brainstorm-workspace .chat-markdown :is(img, svg) { max-width: 100%; height: auto; }
-@media (max-width: 900px) {
-  .brainstorm-workspace .chat-boxes { grid-template-columns: minmax(0, 1fr); }
-}
+.leanx-ui button:hover:not(:disabled) { background: #30281f; }
 
-/* Choose an existing private Brainstorm transcript without changing the
-   geometry of the shared Project header or transcript body. */
-.brainstorm-workspace .chat-transcript-picker {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
-  min-width: 0; margin: 4px 0 10px;
+/* A single compact toolbox row. Optional panels do not occupy permanent columns. */
+.leanx-compact-controls { min-width: 0; }
+.leanx-tool-tabs {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 9px 0 0; padding-bottom: 10px; border-bottom: 1px solid #4c453e;
 }
-.brainstorm-workspace .chat-transcript-picker label {
-  color: #f2c48d; font-weight: 700;
+.leanx-ui .leanx-tool-tabs button {
+  color: #c8b9a8; background: transparent; border-color: transparent;
+  padding: 6px 10px; text-align: left;
+  max-width: 100%; overflow-wrap: anywhere;
 }
-.brainstorm-workspace .chat-transcript-picker select {
-  box-sizing: border-box; min-width: 0; max-width: 100%; width: min(360px, 100%);
-  padding: 8px 10px; color: #f0e6d7; background: #131210;
-  border: 1px solid #72553a; border-radius: 8px; font: inherit;
+.leanx-ui .leanx-tool-tabs button:hover,
+.leanx-ui .leanx-tool-tabs button[aria-expanded="true"] {
+  color: #f0c68f; background: #28241f; border-color: #735439;
 }
-.brainstorm-workspace .chat-transcript-picker select:focus-visible {
-  outline: 2px solid #e5a785; outline-offset: 2px;
+.leanx-tool-body {
+  padding: 14px 0 16px; border-bottom: 1px solid #4c453e;
 }
-.brainstorm-workspace .chat-transcript-picker select:disabled { opacity: .55; }
+.leanx-section, .leanx-pane {
+  box-sizing: border-box; min-width: 0; border: 1px solid #5d4d3b;
+  border-radius: 8px; background: #141a1c; overflow: hidden;
+}
+.leanx-tool-body .leanx-section,
+.leanx-tool-body .leanx-pane { border-color: #4d483f; }
+.leanx-section { padding: 14px 18px; }
+.leanx-section-heading, .leanx-pane-title {
+  display: flex; justify-content: space-between; align-items: baseline;
+  flex-wrap: wrap; gap: 8px;
+}
+.leanx-section-heading { padding: 0 0 10px; }
+.leanx-section-heading h2, .leanx-pane-title h2 {
+  color: #f2c48d; margin: 0; font-size: .94rem; line-height: 1.4; font-weight: 600;
+}
+.leanx-section-heading span, .leanx-pane-title > span {
+  color: #ad9f90; font-size: .75rem;
+}
+.leanx-pane-title { padding: 13px 17px; border-bottom: 1px solid #48423b; }
+.leanx-formal-input label, .leanx-supplement strong,
+.leanx-dossier-pane label, .leanx-objective-label {
+  color: #e7ba86; font-size: .8rem; font-weight: 600;
+}
+.leanx-mode-select { display: block; min-width: 185px; margin: 7px 0; }
+.leanx-input-row { display: flex; align-items: stretch; flex-wrap: wrap; gap: 9px; margin: 8px 0; }
+.leanx-input-row input { flex: 1 1 360px; }
+.leanx-local-hint, .leanx-pane-footer, .leanx-source-line {
+  color: var(--leanx-muted); font-size: .75rem; line-height: 1.5; overflow-wrap: anywhere;
+}
+.leanx-local-hint { margin: 6px 0; }
+.leanx-local-hint code, .leanx-source-line code {
+  color: #ddc1a0; font-family: ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.leanx-source-line { display: flex; flex-wrap: wrap; gap: 5px 18px; margin: 7px 0; }
+.leanx-supplement {
+  display: grid; gap: 7px; border-top: 1px solid #464039;
+  padding-top: 11px; margin-top: 13px;
+}
+.leanx-supplement label { display: flex; align-items: start; gap: 8px; font-size: .8rem; }
+.leanx-supplement input[type=checkbox] { width: 15px; height: 15px; margin: 3px 0 0; accent-color: #ba8859; }
+.leanx-local-progress { margin: 8px 0; color: #a4ddae; font-size: .79rem; }
 
-/* Explicit recovery when repeated provider validation failures block Retry. */
-.brainstorm-workspace .chat-skip {
-  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
-  min-height: 38px; padding: 7px 18px;
-  border: 1px solid #bd8246; border-radius: 8px;
-  color: #f0e6d7; background: #07111e;
-  font: 500 .92rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
-  cursor: pointer;
+/* File and declaration navigation appears only on demand. */
+.leanx-browser-tool .leanx-declarations {
+  display: grid; grid-template-columns: minmax(210px, 35%) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(160px, auto) auto; align-items: start;
+  gap: 0 12px; padding: 0;
 }
-.brainstorm-workspace .chat-skip:hover:not(:disabled) { background: #6b4329; color: #fff2e9; }
-.brainstorm-workspace .chat-skip:focus-visible {
-  outline: 2px solid #e5a785; outline-offset: 3px;
+.leanx-browser-tool .leanx-module-navigator {
+  grid-column: 1; grid-row: 1 / 5; border-right: 1px solid #4d483f;
+  padding-bottom: 9px; min-width: 0;
 }
-.brainstorm-workspace .chat-skip:disabled { opacity: .5; cursor: default; }
-@media (max-width: 700px) {
-  .brainstorm-workspace .chat-skip { padding-inline: 12px; }
-}
-
-/* Chronological exchanges read top-to-bottom within each group, with
-   the most recent group first. Pagination affects presentation only. */
-.brainstorm-workspace .chat-history {
-  gap: 17px;
-}
-.brainstorm-workspace .chat-history > .chat-transcript-group {
-  list-style: none; margin: 0; padding: 0; background: transparent;
-  border: 0; border-radius: 0;
-}
-.brainstorm-workspace .chat-transcript-group-entries {
-  display: grid; gap: 3px; list-style: none; padding: 0; margin: 0;
-}
-.brainstorm-workspace .chat-history .chat-transcript-group-entries > li {
-  margin: 0;
-}
-.brainstorm-workspace .chat-entry-timestamp {
-  margin-left: auto; flex-shrink: 0; font-size: .73rem;
-  font-weight: 400; color: #a69d92; font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.brainstorm-workspace .chat-history-pagination {
-  margin: 13px 0 0; font-size: .83rem; color: #a69d92;
-}
-.brainstorm-workspace .chat-history-pagination p {
-  margin: 0 0 8px;
-}
-.brainstorm-workspace .chat-history-pagination button {
-  border: 1px solid #817363; border-radius: 6px;
-  padding: 6px 11px; color: #e6d2bd; background: #28231e;
-  cursor: pointer; font: inherit;
-}
-.brainstorm-workspace .chat-history-pagination button:hover {
-  background: #383026;
-}
-.brainstorm-workspace .chat-history-pagination button:focus-visible {
-  outline: 2px solid #e5a785; outline-offset: 3px;
-}
-@media (max-width: 550px) {
-  .brainstorm-workspace .chat-history .chat-reply-heading { flex-wrap: wrap; }
-  .brainstorm-workspace .chat-entry-timestamp { width: 100%; margin-left: 0; }
-}
-
-/* Lean Explorer-specific shell. The layout and transcript controls above were
-   restored from the historical Brainstorm UI, not recreated as a dashboard. */
-.lean-explorer-page .leanx-page-tools {display:flex;align-items:center;justify-content:space-between;gap:16px;margin:2px 0 12px;color:#b9a88f;font-size:12px}
-.lean-explorer-page .leanx-close-button {display:grid;place-items:center;width:32px;height:32px;min-height:32px;padding:0;border:1px solid transparent;background:transparent;color:#e6c098;font-size:24px}
-.lean-explorer-page .leanx-close-button:hover {border-color:#9b764e;background:#302319}
-
-/* Real source selection for the initial Explorer implementation. */
-.lean-explorer-page .leanx-real-sources {
-  margin: 0 0 20px; padding: 0 0 15px; border-top: 1px solid #534333;
-  border-bottom: 1px solid #534333; color: #e5d9ca;
-}
-.lean-explorer-page .leanx-real-source-header {
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px;
-  margin: 14px 0;
-}
-.lean-explorer-page .leanx-real-source-header h2 {
-  font: 400 24px/1.3 Georgia, serif; color: #f2c48d; margin: 0;
-}
-.lean-explorer-page .leanx-real-source-header span,
-.lean-explorer-page .leanx-source-note,
-.lean-explorer-page .leanx-source-state {
-  color: #b7aa9d; font-size: 11px; line-height: 1.6;
-}
-.lean-explorer-page .leanx-real-source-form { margin-bottom: 14px; }
-.lean-explorer-page .leanx-real-source-form > label,
-.lean-explorer-page .leanx-source-group-title { margin: 0 0 7px; display: block; color: #f2c48d; font-weight: 650; }
-.lean-explorer-page .leanx-real-source-form a,
-.lean-explorer-page .leanx-source-preview a,
-.lean-explorer-page .leanx-export-link { color: #f1bd88; text-decoration: underline; text-underline-offset: 3px; }
-.lean-explorer-page .leanx-real-source-path-row { display: flex; gap: 10px; align-items: center; }
-.lean-explorer-page .leanx-real-source-path-row input {
-  flex: 1 1 auto; min-width: 0; max-width: 640px; margin: 0;
-  padding: 9px 12px; border: 1px solid #72553a; border-radius: 8px;
-  background: #131210; color: #f0e6d7;
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.lean-explorer-page .leanx-real-source-path-row button {
-  min-height: 36px; padding: 7px 15px; border: 1px solid #bd8246;
-  border-radius: 8px; background: #07111e; color: #f0e6d7; font-size: 12px;
-}
-.lean-explorer-page .leanx-real-source-path-row button:hover:not(:disabled) { background: #6b4329; }
-.lean-explorer-page .leanx-real-source-path-row button:disabled { opacity: .5; cursor: default; }
-.lean-explorer-page .leanx-source-note { margin: 7px 0 0; }
-.lean-explorer-page .leanx-source-checkbox {
-  display: flex; align-items: start; gap: 8px; margin: 8px 0;
-  color: #e2d7ca; font-size: 12px; font-weight: 450; cursor: pointer;
-}
-.lean-explorer-page .leanx-source-checkbox input {
-  flex: 0 0 auto; width: 15px; height: 15px; accent-color: #c38a50;
-  padding: 0; margin: 2px 0 0;
-}
-.lean-explorer-page .leanx-source-preview {
-  border: 1px solid #66513d; border-radius: 7px; background: #111719;
-  margin: 12px 0; padding: 9px 13px;
-}
-.lean-explorer-page .leanx-source-preview summary {
-  cursor: pointer; color: #e6c295; font-size: 12px;
+.leanx-browser-tool .leanx-declarations > .leanx-pane-title { grid-column: 2; grid-row: 1; }
+.leanx-browser-tool .leanx-declarations > input { grid-column: 2; grid-row: 2; width: calc(100% - 24px); margin: 9px 12px; }
+.leanx-browser-tool .leanx-declaration-list { grid-column: 2; grid-row: 3; }
+.leanx-browser-tool .leanx-declarations > .leanx-pane-footer { grid-column: 2; grid-row: 4; }
+.leanx-browser-tool .leanx-declarations:not(:has(.leanx-module-navigator)) { display: block; }
+.leanx-module-search { display: flex; gap: 5px; margin: 10px; }
+.leanx-module-search input { flex: 1; width: 70px; }
+.leanx-module-list { max-height: 340px; overflow: auto; padding: 0 8px; }
+.leanx-declaration-list { max-height: 340px; overflow: auto; padding: 0 8px; }
+.leanx-module-list button, .leanx-declaration-list button, .leanx-dossier-entries button {
+  display: flex; width: 100%; align-items: start; gap: 7px;
+  padding: 7px 9px; border: 1px solid transparent; border-radius: 5px;
+  background: transparent; color: #ded1c0; font-size: .79rem; text-align: left;
   overflow-wrap: anywhere;
 }
-.lean-explorer-page .leanx-source-preview p { color: #b9b0a7; font-size: 11px; }
-.lean-explorer-page .leanx-source-preview pre {
-  overflow: auto; max-height: 320px; padding: 12px; border: 1px solid #3c413e;
-  border-radius: 5px; color: #d9e0dd; background: #070b0f;
-  font: 11px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+.leanx-module-list button { font: .75rem/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.leanx-module-list button.is-selected, .leanx-declaration-list button.is-selected {
+  background: #30271f; color: #f0c68f; border-color: #72543c;
+}
+.leanx-declaration-kind { width: 40px; flex: none; color: #b7a188; font: .67rem ui-monospace,monospace; }
+.leanx-declaration-name { min-width: 0; flex: 1; }
+.leanx-declaration-line { font-size: .7rem; color: #9b8a7e; }
+.leanx-module-pager {
+  display: flex; gap: 6px; justify-content: space-between; align-items: center;
+  margin: 8px 10px; font-size: .7rem; color: var(--leanx-muted);
+}
+.leanx-pane-footer { padding: 10px 15px; border-top: 1px solid #48423b; }
+.leanx-empty { margin: 0; padding: 18px; color: var(--leanx-muted); font-size: .81rem; line-height: 1.6; }
+
+/* Live work is a small status row; verbose activity is expandable. */
+.leanx-progress-compact {
+  min-height: 38px; display: flex; flex-wrap: wrap; gap: 9px;
+  align-items: center; color: #b6a99b; font-size: .8rem;
+  padding: 8px 3px 10px;
+}
+.leanx-progress-stage { color: #d3beaa; }
+.leanx-ui .leanx-progress-compact button {
+  margin-left: auto; background: transparent; border-color: transparent;
+  color: #bfa88d; padding: 5px 9px; font-size: .76rem;
+}
+.leanx-live-dot { height: 9px; width: 9px; flex: none; background: #82756a; border-radius: 50%; }
+.leanx-live-dot.is-active {
+  background: #73d589; box-shadow: 0 0 0 2px #73d58944; animation: leanx-pulse 1.35s ease-in-out infinite;
+}
+@keyframes leanx-pulse { 50% { opacity: .3; box-shadow: 0 0 0 5px #73d58922; } }
+@media (prefers-reduced-motion: reduce) { .leanx-live-dot.is-active { animation: none; } }
+.leanx-activity-expanded { margin: 0 0 14px; }
+.leanx-activity-log { list-style: none; margin: 0; padding: 2px 12px 12px; max-height: 190px; overflow: auto; }
+.leanx-activity-log li { display: flex; gap: 10px; padding: 7px; border-bottom: 1px solid #363c3d; font-size: .78rem; }
+.leanx-activity-icon { color: #bea68b; }
+.leanx-state-ok .leanx-activity-icon { color: #72cf8e; }
+.leanx-state-error .leanx-activity-icon { color: #ef8a78; }
+.leanx-activity-log small { display: block; color: #958b80; font-size: .68rem; }
+.leanx-stage { color: #d3b898; padding: 12px 15px 5px; }
+.leanx-running-time { color: #b6a99b; padding: 0 15px 7px; }
+
+/* The mathematical proof and interpretation occupy the entire content width. */
+.leanx-primary-reading { width: 100%; min-width: 0; }
+.leanx-reading-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.leanx-source-code pre {
+  box-sizing: border-box; width: 100%; max-height: min(47vh, 620px);
+  margin: 0; padding: 19px 22px; overflow: auto; background: #0b1117;
+  color: #e2daca; font: 13px/1.75 ui-monospace,SFMono-Regular,Menlo,monospace;
   white-space: pre;
 }
-.lean-explorer-page .leanx-export-link { font-size: 12px; white-space: nowrap; }
-.lean-explorer-page .leanx-source-error { margin: 5px 0; }
-@media (max-width: 700px) {
-  .lean-explorer-page .leanx-real-source-path-row { flex-wrap: wrap; }
-  .lean-explorer-page .leanx-real-source-path-row input { flex-basis: 100%; }
+.leanx-source-code .leanx-pane-title a { font-size: .8rem; }
+.leanx-analysis-pane { padding-bottom: 19px; }
+.leanx-operation-controls {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  padding: 14px 18px 12px;
 }
-
-
-/* Source-driven Lean Explorer, based on the former Brainstorm look and feel.
-   The existing Brainstorm header/theme rules above are intentionally retained. */
-.brainstorm-workspace.lean-explorer-page { min-height: 100dvh; }
-.brainstorm-workspace .leanx-ui { padding: 0 0 38px; }
-.leanx-ui { --leanx-edge: #66513d; --leanx-copper: #f2c48d; --leanx-subtle: #b7a99a; color: #f0e6d7; }
-.leanx-page-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 3px 0 13px; }
-.leanx-page-row .chat-eyebrow { margin: 0 0 4px; color: #d6a26d; letter-spacing: .09em; text-transform: uppercase; font-size: .72rem; }
-.leanx-page-row .leanx-description { margin: 0; color: #c6bbad; font-size: .87rem; }
-.leanx-ui .leanx-close-button { cursor: pointer; border-radius: 7px; }
-.leanx-section { margin: 0 0 18px; border: 1px solid var(--leanx-edge); background: #141a1c; border-radius: 10px; padding: 16px 19px; }
-.leanx-section-heading, .leanx-pane-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.leanx-section-heading { margin: 0 0 12px; }
-.leanx-section-heading h2, .leanx-pane-title h2 { margin: 0; color: var(--leanx-copper); font-size: 1.02rem; line-height: 1.5; font-weight: 650; }
-.leanx-section-heading span, .leanx-pane-title>span { color: #b1a79d; font-size: .75rem; }
-.leanx-ui a { color: #edb97e; text-decoration: none; }
-.leanx-ui a:hover { text-decoration: underline; color: #ffd3a0; }
-.leanx-formal-input label, .leanx-supplement strong, .leanx-dossier-pane label, .leanx-objective-label { display: block; color: #f1c18c; font-size: .84rem; font-weight: 600; }
-.leanx-input-row { display: flex; gap: 9px; margin: 8px 0 8px; align-items: stretch; }
-.leanx-ui input:not([type=checkbox]), .leanx-ui select, .leanx-ui textarea {
-  box-sizing: border-box; color: #f0e6d7; background: #131210; border: 1px solid #72553a;
-  border-radius: 7px; font: inherit; padding: 9px 12px; min-width: 0;
+.leanx-ui .leanx-operation-controls .leanx-primary-action {
+  background: #80512c; border-color: #b7814f; color: #fff5e8; font-weight: 600;
 }
-.leanx-ui input:focus-visible, .leanx-ui select:focus-visible, .leanx-ui textarea:focus-visible,
-.leanx-ui button:focus-visible { outline: 2px solid #e5a785; outline-offset: 2px; }
-.leanx-ui button { cursor: pointer; font: inherit; }
-.leanx-ui button:disabled { opacity: .5; cursor: default; }
-.leanx-input-row input { flex: 1 1 auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important; font-size: .8rem !important; }
-.leanx-ui .leanx-input-row button, .leanx-operation-controls button, .leanx-dossier-select-row button, .leanx-dossier-pane>button {
-  border: 1px solid #bd8246; border-radius: 7px; min-height: 35px;
-  background: #07111e; padding: 7px 15px; color: #f0e6d7;
+.leanx-operation-controls > span { color: #a99f93; font-size: .77rem; margin-left: auto; }
+.leanx-objective-details { padding: 13px 18px 0; }
+.leanx-objective-details summary { cursor: pointer; font-size: .78rem; color: #c4ab8e; }
+.leanx-objective-details textarea { display: block; width: 100%; margin: 9px 0 0; min-height: 76px; resize: vertical; }
+.leanx-explanation {
+  padding: 15px 25px; border-top: 1px solid #443d35;
+  line-height: 1.7; color: #f0e9df; overflow-wrap: anywhere;
 }
-.leanx-ui .leanx-input-row button:hover:not(:disabled), .leanx-operation-controls button:hover:not(:disabled),
-.leanx-dossier-select-row button:hover:not(:disabled), .leanx-dossier-pane>button:hover:not(:disabled) { background: #6b4329; }
-.leanx-source-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; color: var(--leanx-subtle); font-size: .76rem; }
-.leanx-source-line code { color: #f0d4b1; background: #241f1a; border-radius: 4px; padding: 1px 4px; }
-.leanx-supplement { display: grid; align-items: start; gap: 7px; margin-top: 13px; padding-top: 12px; border-top: 1px solid #4d4339; }
-.leanx-supplement label { display: flex; gap: 9px; align-items: baseline; font-size: .82rem; color: #dccdbd; cursor: pointer; }
-.leanx-supplement input[type=checkbox] { accent-color: #bd8246; width: 15px; height: 15px; margin: 0; }
-.leanx-workspace-grid { display: grid; grid-template-columns: minmax(210px, 23%) minmax(345px, 1fr) minmax(240px, 26%); align-items: start; gap: 14px; }
-.leanx-pane { border: 1px solid var(--leanx-edge); border-radius: 10px; background: #141a1c; overflow: hidden; }
-.leanx-pane-title { padding: 13px 16px 12px; border-bottom: 1px solid #514434; }
-.leanx-reading-column, .leanx-progress-column { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
-.leanx-declarations>input { display: block; width: calc(100% - 24px); margin: 12px; font-size: .8rem; }
-.leanx-declaration-list { max-height: 510px; overflow: auto; padding: 1px 8px 10px; }
-.leanx-declaration-list button { display: flex; align-items: center; width: 100%; gap: 6px; padding: 10px 7px; background: transparent; border: 1px solid transparent; border-radius: 6px; color: #d9d0c5; text-align: left; font-size: .8rem; }
-.leanx-declaration-list button:hover { background: #292722; }
-.leanx-declaration-list button.is-selected { background: #32261c; border-color: #a27a4e; color: #ffe0bd; }
-.leanx-declaration-kind { flex: none; min-width: 37px; font: 600 .68rem/1 ui-monospace, monospace; color: #bd9a72; }
-.leanx-declaration-name { flex: 1; overflow-wrap: anywhere; }
-.leanx-declaration-line { color: #958e83; font: .7rem ui-monospace,monospace; }
-.leanx-empty { padding: 18px; color: #aba295; font-size: .81rem; line-height: 1.6; margin: 0; }
-.leanx-pane-footer { border-top: 1px solid #403e38; padding: 10px 14px; color: #a99f95; font-size: .72rem; line-height: 1.5; }
-.leanx-source-code pre { box-sizing: border-box; margin: 0; padding: 17px 18px; overflow: auto; max-height: 460px; background: #0b1117; color: #e1dacb; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
-.leanx-source-code .leanx-pane-title a { font-size: .76rem; }
-.leanx-analysis-pane { padding-bottom: 15px; }
-.leanx-objective-label { padding: 13px 15px 6px; }
-.leanx-analysis-pane textarea { width: calc(100% - 30px); display: block; min-height: 64px; margin: 0 15px 10px; resize: vertical; line-height: 1.5; }
-.leanx-operation-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 15px 12px; }
-.leanx-operation-controls .leanx-primary-action { background: #80512c; color: #fff5e8; font-weight: 650; }
-.leanx-operation-controls>span { margin-left: auto; color: #aa9c90; font-size: .73rem; }
-.leanx-explanation { border-top: 1px solid #403e38; padding: 17px 19px 9px; line-height: 1.6; color: #eee8dd; }
-.leanx-explanation pre { overflow: auto; background: #0b1117; padding: 12px; border-radius: 6px; }
-.leanx-explanation p { margin: 9px 0; }
-.leanx-evidence-detail { margin: 7px 16px; padding: 11px 12px; border: 1px solid #574536; border-radius: 6px; font-size: .75rem; color: #c5b9ad; }
-.leanx-evidence-detail summary { cursor: pointer; color: #d2b18c; }
+.leanx-explanation :is(pre, code) { max-width: 100%; }
+.leanx-explanation pre { overflow-x: auto; background: #0b1117; padding: 12px; }
+.leanx-explanation p { margin: 8px 0 12px; }
+.leanx-evidence-detail { margin: 5px 18px; padding: 10px 12px; border: 1px solid #50483c; border-radius: 6px; font-size: .75rem; }
+.leanx-evidence-detail summary { color: #d6b795; cursor: pointer; }
 .leanx-evidence-detail p { overflow-wrap: anywhere; }
-.leanx-existing { margin: 10px 16px 0; font-size: .76rem; color: #baa28b; }
-.leanx-progress-pane { min-height: 160px; }
-.leanx-live-dot { flex: none; background: #82746a; border-radius: 50%; height: 10px; width: 10px; }
-.leanx-live-dot.is-active { background: #69db83; box-shadow: 0 0 0 2px #69db8333; animation: leanx-pulse 1.3s ease-in-out infinite; }
-@keyframes leanx-pulse { 50% { opacity: .25; box-shadow: 0 0 0 6px #69db8333; } }
-@media (prefers-reduced-motion: reduce) { .leanx-live-dot.is-active { animation: none; } }
-.leanx-stage { padding: 13px 16px 6px; color: #e7c49f; font-size: .84rem; }
-.leanx-running-time { margin: 0; padding: 0 16px 10px; color: #b7aaa0; font: .75rem ui-monospace,monospace; }
-.leanx-activity-log { list-style: none; margin: 7px 0 0; padding: 0 10px 12px; max-height: 360px; overflow: auto; }
-.leanx-activity-log li { display: flex; align-items: baseline; gap: 9px; padding: 8px 5px; border-top: 1px solid #393b37; font-size: .77rem; line-height: 1.5; }
-.leanx-activity-icon { flex: none; min-width: 12px; color: #cab294; font-weight: 750; }
-.leanx-state-ok .leanx-activity-icon { color: #83d59c; }
-.leanx-state-error .leanx-activity-icon { color: #fd9a8b; }
-.leanx-activity-log li>div { min-width: 0; overflow-wrap: anywhere; }
-.leanx-activity-log small { display: block; color: #948b80; font-size: .66rem; margin-top: 2px; }
-.leanx-dossier-pane { padding-bottom: 15px; }
-.leanx-dossier-pane label { margin: 13px 15px 6px; }
-.leanx-dossier-select-row { display: flex; gap: 7px; margin: 0 15px; }
-.leanx-dossier-select-row select { flex: 1; max-width: calc(100% - 65px); font-size: .75rem; }
-.leanx-dossier-select-row button { padding: 7px 10px; }
-.leanx-download-link { display: inline-block; margin: 11px 15px; font-size: .78rem; }
-.leanx-dossier-entries { max-height: 250px; overflow: auto; margin: 0 12px; }
-.leanx-dossier-entries button { display: block; width: 100%; padding: 9px 5px; color: #e8d9c3; border: 0; border-bottom: 1px solid #514434; background: transparent; text-align: left; font-size: .8rem; }
-.leanx-dossier-entries button:hover { background: #2e281f; }
-.leanx-dossier-entries small { display: block; color: #ac9e91; margin-top: 4px; font-size: .7rem; }
-.leanx-dossier-pane textarea { box-sizing: border-box; display: block; margin: 0 15px 9px; width: calc(100% - 30px); resize: vertical; font-size: .8rem; }
-.leanx-dossier-pane>button { margin: 0 15px; }
-.leanx-error { margin-top: 15px; }
-.leanx-boundary { margin: 16px 2px 0; padding: 9px 0; border-top: 1px solid #514434; color: #a99f94; font-size: .74rem; line-height: 1.6; }
-@media (max-width: 1120px) { .leanx-workspace-grid { grid-template-columns: minmax(205px, 30%) minmax(0, 1fr); } .leanx-progress-column { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (max-width: 720px) { .leanx-workspace-grid { grid-template-columns: minmax(0,1fr); } .leanx-progress-column { grid-column: 1; display: flex; } .leanx-input-row { flex-wrap: wrap; } .leanx-input-row input { flex-basis: 100%; } .leanx-pane { min-width: 0; } .leanx-page-row { align-items: flex-start; } }
+.leanx-existing { margin: 8px 18px; font-size: .74rem; color: var(--leanx-muted); }
 
-
-/* Local Lean directory input: an indexed source tree, not a single file upload. */
-.leanx-mode-select { display: block; margin: 8px 0; min-width: 185px; }
-.leanx-local-hint { color: #bcae9e; margin: 7px 0; font-size: .8rem; line-height: 1.6; overflow-wrap: anywhere; }
-.leanx-local-hint code { color: #e9c496; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.leanx-local-progress { margin: 10px 0; padding: 9px 11px; border: 1px solid #66513d; border-radius: 6px; color: #9fdfb0; font-size: .79rem; overflow-wrap: anywhere; }
-.leanx-mirror-controls .leanx-input-row { margin-top: 7px; }
-.leanx-module-navigator { border-bottom: 1px solid #66513d; padding-bottom: 10px; }
-.leanx-module-search { display: flex; gap: 6px; margin: 9px 12px; align-items: stretch; }
-.leanx-module-search input { flex: 1; width: 50px; font-size: .77rem; }
-.leanx-module-search button, .leanx-module-pager button {
-  color: #f0e6d7; background: #07111e; border: 1px solid #88603b;
-  border-radius: 6px; font-size: .74rem; padding: 5px 9px;
+/* Durable dossier is a tool, not a permanent third column. */
+.leanx-dossier-pane { padding-bottom: 14px; }
+.leanx-dossier-pane label { display: block; margin: 12px 15px 6px; }
+.leanx-dossier-select-row { display: flex; align-items: center; gap: 8px; margin: 0 15px; }
+.leanx-dossier-select-row select { flex: 1; }
+.leanx-download-link { display: inline-block; margin: 12px 15px; font-size: .8rem; }
+.leanx-dossier-entries { margin: 0 15px; max-height: 200px; overflow: auto; }
+.leanx-dossier-entries button { display: block; border-bottom: 1px solid #3c3e3b; }
+.leanx-dossier-entries small { display: block; color: #9c9086; font-size: .7rem; }
+.leanx-dossier-pane textarea { display: block; width: calc(100% - 30px); margin: 0 15px 8px; resize: vertical; }
+.leanx-dossier-pane > button { margin: 0 15px; }
+.leanx-boundary {
+  margin: 17px 0 0; padding-top: 9px; border-top: 1px solid #3b3e3b;
+  color: #8e8377; font-size: .73rem; line-height: 1.55;
 }
-.leanx-module-search button:hover:not(:disabled), .leanx-module-pager button:hover:not(:disabled) { background: #604327; }
-.leanx-module-list { max-height: 245px; overflow-y: auto; padding: 0 8px 6px; }
-.leanx-module-list button { width: 100%; display: block; background: transparent; color: #d6c4b2; border: 1px solid transparent; border-radius: 5px; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 7px 6px; text-align: left; overflow-wrap: anywhere; }
-.leanx-module-list button:hover { background: #2c281f; }
-.leanx-module-list button.is-selected { color: #f7d6ad; background: #38291e; border-color: #946d49; }
-.leanx-module-pager { display: flex; gap: 7px; justify-content: space-between; align-items: center; color: #afa092; margin: 5px 10px 0; font-size: .69rem; }
-.leanx-module-pager button:disabled { opacity: .4; cursor: default; }
+@media (max-width: 1000px) {
+  .leanx-browser-tool .leanx-declarations { display: block; }
+  .leanx-browser-tool .leanx-module-navigator { border-right: 0; border-bottom: 1px solid #4d483f; }
+}
+@media (max-width: 700px) {
+  .brainstorm-workspace .chat-page.leanx-ui { width: calc(100% - 28px); }
+  .leanx-tool-tabs { gap: 2px; }
+  .leanx-ui .leanx-tool-tabs button { font-size: .75rem; padding: 6px; }
+  .leanx-progress-compact { font-size: .72rem; }
+  .leanx-source-code pre { padding: 14px; }
+  .leanx-operation-controls > span { margin-left: 0; }
+}
