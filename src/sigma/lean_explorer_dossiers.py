@@ -131,6 +131,7 @@ def list_dossiers() -> list[dict]:
                 "created_at": record["created_at"],
                 "updated_at": record["updated_at"],
                 "entry_count": len(record.get("entries", [])),
+                "source_mode": record.get("source_mode", "mirror"),
             }
         )
     return sorted(items, key=lambda item: item["updated_at"], reverse=True)
