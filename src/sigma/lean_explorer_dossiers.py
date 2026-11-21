@@ -470,9 +470,7 @@ def apply_discovery(identifier: str, discovery: dict) -> dict:
             "total_files": discovery["total_files"],
             "complete": discovery["complete"],
             "next_offset": discovery["next_offset"],
-            "unreadable_files": (
-                old.get("unreadable_files", 0) + discovery["unreadable_files"]
-            ),
+            "unreadable_files": (old.get("unreadable_files", 0) + discovery["unreadable_files"]),
             "matching_declarations": (
                 old.get("matching_declarations", 0) + discovery["matching_declarations"]
             ),
