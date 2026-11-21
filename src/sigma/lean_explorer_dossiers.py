@@ -373,6 +373,100 @@ def deselect_declaration(
     return _with_dossier_lock(identifier, apply)
 
 
+def apply_discovery(identifier: str, discovery: dict) -> dict:
+    """Commit root-discovered candidates as explicitly heuristic section scope.
+
+    All citations are reconstructed from the indexed source, not trusted from
+    discovery labels or a browser payload. Existing manual selections survive.
+    """
+    section_id = discovery["section_id"]
+    source_id = discovery["source_root_id"]
+    current = lean_explorer_local.source()
+    if current is None or current["root_id"] != source_id:
+        raise ProjectError("The indexed Lean source changed during discovery.")
+    accepted = []
+    for suggestion in discovery["candidates"]:
+        actual = lean_explorer.declaration(
+            suggestion["path"], suggestion["name"], source_mode="local"
+        )
+        if actual["start_line"] != suggestion["start_line"]:
+            raise ProjectError(
+                "A Lean declaration moved during discovery. Rescan the local directory."
+            )
+        accepted.append(
+            {
+                **{
+                    key: actual[key]
+                    for key in (
+                        "path",
+                        "name",
+                        "kind",
+                        "commit",
+                        "url",
+                        "sha256",
+                        "start_line",
+                        "end_line",
+                        "complete",
+                        "excerpt",
+                    )
+                },
+                "selection_origin": "automatic_lexical_candidate",
+                "relevance_score": suggestion["relevance_score"],
+                "selection_reasons": suggestion["reasons"],
+            }
+        )
+
+    def apply(record: dict) -> bool:
+        if (
+            record.get("section_id") != section_id
+            or record.get("source_mode") != "local"
+            or record.get("formal_commit") != "local:" + source_id
+        ):
+            raise ProjectError("The discovery result does not belong to this section dossier.")
+        if record.get("paper_project"):
+            raise ProjectError(
+                "This section already has a paper handoff. Use a new dossier to explore further."
+            )
+        scoped = record.setdefault("scope", [])
+        existing = {(item["path"], item["name"]) for item in scoped}
+        inserted = 0
+        for item in accepted:
+            identity = (item["path"], item["name"])
+            if identity in existing or len(scoped) >= MAX_SCOPE_DECLARATIONS:
+                continue
+            scoped.append(item)
+            existing.add(identity)
+            inserted += 1
+        record["discovery"] = {
+            **{
+                key: discovery[key]
+                for key in (
+                    "index_type",
+                    "scanned_files",
+                    "total_files",
+                    "complete",
+                    "unreadable_files",
+                    "matching_declarations",
+                    "candidate_declarations",
+                    "warning",
+                )
+            },
+            "selected": inserted,
+            "candidates": [
+                {
+                    "path": item["path"],
+                    "name": item["name"],
+                    "score": item["relevance_score"],
+                    "reasons": item["selection_reasons"],
+                }
+                for item in accepted
+            ],
+        }
+        return True
+
+    return _with_dossier_lock(identifier, apply)
+
+
 def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
     """Hand selected and checked section evidence to SIGMA's existing paper flow.
 
