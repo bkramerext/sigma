@@ -1,95 +1,512 @@
-/* Lean Explorer /explorelean: visual sketch only, aligned to SIGMA's workspace palette. */
-.lean-explorer-page { --leanx-line: #28343e; --leanx-text: #dce4ec; --leanx-muted: #9baab9; --leanx-copper: var(--sigma-copper-foreground, #d9a573); color: var(--leanx-text); font: 13px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
-.leanx-root { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; background: #050c12; }
-.leanx-header { flex: none; display: flex; align-items: center; gap: 19px; min-height: 80px; padding: 15px 30px; border-bottom: 1px solid var(--leanx-line); background: #03090f; }
-.leanx-brand { display: flex; align-items: center; width: 165px; flex: none; }
-.leanx-brand img { display: block; width: 100%; height: auto; object-fit: contain; }
-.leanx-header-divider { height: 28px; width: 1px; background: #40505e; }
-.leanx-header-title { color: var(--leanx-copper); font: 400 21px/1.2 Georgia, serif; }
-.leanx-header-spacer { flex: 1; }
-.leanx-draft-pill { padding: 5px 9px; border: 1px solid #644f3e; border-radius: 5px; color: #d1a782; background: #231b18; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
-.leanx-close { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; background: transparent; color: #aebbc9; font: 400 25px/1 Inter, sans-serif; }
-.leanx-close:hover { border-color: #536473; background: #17212b; color: white; }
-.leanx-scroll { overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 0; }
-.leanx-content { width: min(100%, 1640px); margin: 0 auto; padding: 30px 32px 40px; }
-.leanx-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 18px; margin-bottom: 22px; }
-.leanx-heading h1 { margin: 4px 0 9px; color: #e9d4bb; font: 400 clamp(28px, 2.5vw, 37px)/1.2 Georgia, serif; letter-spacing: -.02em; }
-.leanx-heading p { margin: 0; max-width: 800px; color: #aab6c3; font-size: 13px; line-height: 1.65; }
-.leanx-overline { font-size: 10px; letter-spacing: .16em; font-weight: 650; color: var(--leanx-copper); text-transform: uppercase; }
-.leanx-nodata { color: #be9974; background: #201b18; border: 1px solid #5e4a3b; border-radius: 5px; padding: 7px 10px; font-size: 11px; white-space: nowrap; }
-.leanx-source-strip { display: flex; align-items: center; gap: 15px; padding: 17px 19px; border: 1px solid #72563c; border-radius: 7px; background: #0d151d; margin-bottom: 18px; }
-.leanx-source-symbol { display: grid; place-items: center; width: 41px; height: 41px; flex: none; border: 1px solid #785a3a; border-radius: 6px; color: var(--leanx-copper); background: #291d17; font: italic 26px/1 Georgia, serif; }
-.leanx-source-name { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.leanx-source-name strong { font-size: 13px; font-weight: 600; color: #ebd9c6; }
-.leanx-source-name a, .leanx-reference a, .leanx-code-footer a { color: #cfa176; text-decoration: none; font-size: 11px; overflow-wrap: anywhere; }
-.leanx-source-name a:hover, .leanx-reference a:hover, .leanx-code-footer a:hover { color: #f0bf90; text-decoration: underline; }
-.leanx-source-meta { flex: none; min-width: 83px; display: flex; flex-direction: column; gap: 3px; padding-left: 15px; border-left: 1px solid #32404b; }
-.leanx-source-meta span { color: #90a0ae; font-size: 10px; }
-.leanx-source-meta strong { font-size: 11px; color: #cfd9e3; font-weight: 550; }
-.leanx-columns { display: grid; grid-template-columns: minmax(225px, 260px) minmax(375px, 1fr) minmax(260px, 292px); align-items: start; gap: 16px; }
-.leanx-left, .leanx-center, .leanx-right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.leanx-panel { min-width: 0; overflow: hidden; border: 1px solid var(--leanx-line); border-radius: 7px; background: #0a121a; }
-.leanx-panel-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 17px 18px 14px; }
-.leanx-panel-heading h2 { margin: 0; color: #e0e7ef; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
-.leanx-subtle { font-size: 10px; color: #8192a1; }
-.leanx-nav-panel { padding-bottom: 14px; }
-.leanx-search-placeholder { color: #718394; background: #071019; border: 1px solid #2c3944; border-radius: 5px; margin: 0 13px 20px; padding: 10px 12px; font-size: 11px; }
-.leanx-search-placeholder span { font-size: 20px; line-height: 0; margin-right: 6px; vertical-align: -2px; }
-.leanx-rail-heading { color: #7f90a0; padding: 0 17px; margin: 15px 0 8px; letter-spacing: .1em; text-transform: uppercase; font-size: 10px; font-weight: 600; }
-.leanx-selected-node { display: flex; align-items: center; gap: 10px; padding: 10px 13px; margin: 0 7px; background: #27211d; border: 1px solid #684b34; border-radius: 5px; color: #f3d6b3; font-size: 11px; overflow-wrap: anywhere; }
-.leanx-node-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #dfad6f; }
-.leanx-rail-empty { color: #8a9aaa; margin: 4px 0; padding: 2px 18px 8px; font-size: 11px; }
-.leanx-branch-mark { color: #637583; margin-right: 10px; }
-.leanx-rail-note { color: #80909d; font-size: 11px; line-height: 1.6; margin: 7px 16px 0; }
-.leanx-outline-row { display: flex; gap: 10px; padding: 9px 17px; color: #acb8c4; font-size: 11px; border-top: 1px solid #202c35; }
-.leanx-outline-row span { color: #c29a74; }
-.leanx-file-label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #a2b0bd; font-size: 11px; }
-.leanx-code { background: #060c12; border-top: 1px solid #23303b; border-bottom: 1px solid #23303b; padding: 21px 19px; overflow-x: auto; }
-.leanx-code pre, .leanx-code code { margin: 0; font: 12px/1.85 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #e2d6c8; }
-.leanx-code-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 18px; color: #8d9cab; font-size: 11px; }
-.leanx-interpretation { padding-bottom: 18px; }
-.leanx-interpretation > p { margin: 0 18px 14px; font: 15px/1.7 Georgia, serif; color: #d9e0e7; }
-.leanx-math { white-space: nowrap; color: #e9c79e; }
-.leanx-evidence-note { margin: 0 18px; padding: 12px 14px; border-left: 2px solid #9d7957; background: #151b21; font-size: 11px; line-height: 1.6; color: #afbdc9; }
-.leanx-evidence-note strong { color: #d5c1ab; }
-.leanx-graph-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 235px; margin: 0 16px 16px; padding: 23px; border: 1px dashed #3e4c59; border-radius: 6px; background: #080f16; text-align: center; }
-.leanx-graph-empty strong { color: #c0cbd6; font-weight: 550; font-size: 12px; }
-.leanx-graph-empty p { margin: 0; max-width: 410px; color: #8c9aa8; font-size: 11px; line-height: 1.7; }
-.leanx-graph-glyph { position: relative; width: 75px; height: 48px; margin-bottom: 4px; border-bottom: 1px solid #56687a; border-top: 1px solid #56687a; }
-.leanx-graph-glyph::before { content: ''; position: absolute; left: 37px; top: 0; bottom: 0; width: 1px; background: #56687a; }
-.leanx-graph-glyph span { position: absolute; display: block; width: 10px; height: 10px; border: 1px solid #c89b6f; background: #382719; border-radius: 50%; top: -5px; }
-.leanx-graph-glyph span:nth-child(1) { left: 32px; }
-.leanx-graph-glyph span:nth-child(2) { left: 0; top: auto; bottom: -5px; }
-.leanx-graph-glyph span:nth-child(3) { right: 0; top: auto; bottom: -5px; }
-.leanx-reference-panel { padding-bottom: 7px; }
-.leanx-reference { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #222e39; padding: 14px 18px; font-size: 11px; }
-.leanx-reference strong { color: #ced9e3; font-weight: 550; line-height: 1.5; }
-.leanx-source-type { color: #b69474; text-transform: uppercase; font-size: 10px; letter-spacing: .065em; }
-.leanx-muted { color: #81919f; font-size: 11px; }
-.leanx-small-copy { margin: 0 18px 16px; color: #9baab9; font-size: 11px; line-height: 1.7; }
-.leanx-dossier-placeholder { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 0 18px 18px; color: #9baab9; font-size: 11px; }
-.leanx-dossier-placeholder strong { color: #c4ced8; font-weight: 500; }
-.leanx-planned-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #293540; padding: 15px 18px; color: #8a99a8; font-weight: 600; font-size: 11px; }
-.leanx-planned-action span { color: #748695; font-weight: 400; }
-.leanx-handoff { padding-bottom: 0; }
-.leanx-step { display: flex; gap: 11px; align-items: flex-start; padding: 11px 18px; border-top: 1px solid #222e39; }
-.leanx-step-number { flex: none; display: grid; place-items: center; border: 1px solid #66503d; color: #c6a17b; width: 21px; height: 21px; border-radius: 50%; font-size: 10px; }
-.leanx-step strong { display: block; color: #d4dee8; font-weight: 550; font-size: 11px; }
-.leanx-step small { display: block; color: #8b9ca9; font-size: 10px; margin-top: 3px; }
-.leanx-footer { text-align: center; color: #798a9a; font-size: 10px; line-height: 1.7; padding: 18px 0 0; }
-@media (max-width: 1200px) {
-  .leanx-columns { grid-template-columns: minmax(215px, 28%) minmax(0, 1fr); }
-  .leanx-right { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+/* Brainstorm retains the Project artwork header and its exact shared model-pill markup. */
+.brainstorm-workspace { height: 100dvh; overflow-y: auto; }
+.brainstorm-workspace .chat-page {
+  box-sizing: border-box; flex: 0 0 auto; width: calc(100% - 48px);
+  min-width: 0; max-width: none; margin: 0 auto 40px; padding: 0; color: #f0e6d7;
 }
-@media (max-width: 760px) {
-  .leanx-header { padding: 12px 18px; gap: 10px; min-height: 68px; }
-  .leanx-brand { width: 110px; } .leanx-header-title { font-size: 17px; }
-  .leanx-content { padding: 22px 16px 36px; }
-  .leanx-source-strip { flex-wrap: wrap; }
-  .leanx-source-name { flex-basis: calc(100% - 60px); }
-  .leanx-source-meta { min-width: 0; flex: 1; }
-  .leanx-columns { grid-template-columns: minmax(0, 1fr); }
-  .leanx-right { grid-column: auto; display: flex; }
-  .leanx-nodata { white-space: normal; }
-  .leanx-draft-pill { font-size: 9px; padding: 4px 6px; }
+.brainstorm-workspace .chat-page-header {
+  display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px 32px;
+  margin: 12px 0 8px; padding-bottom: 12px; border-bottom: 1px solid #46515b;
 }
+.brainstorm-workspace .chat-title-group { flex: 0 0 auto; min-width: 0; }
+.brainstorm-workspace .chat-eyebrow {
+  margin: 0 0 3px; color: #c99a66; font-size: .78rem;
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.brainstorm-workspace .chat-page-header h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); }
+.brainstorm-workspace .chat-description {
+  flex: 1 1 350px; margin: 0 0 5px; color: #c4b9aa; font-size: .92rem;
+}
+.brainstorm-workspace .chat-privacy-note {
+  margin: 0 0 18px; color: #c4b9aa; font-size: .85rem; overflow-wrap: anywhere;
+}
+.brainstorm-workspace .chat-privacy-note code { overflow-wrap: anywhere; }
+.brainstorm-workspace .chat-repeated-prompt,
+.brainstorm-workspace .chat-human-form {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px;
+  min-width: 0; margin: 0 0 14px;
+}
+.brainstorm-workspace .chat-field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  gap: 6px;
+}
+.brainstorm-workspace .chat-field-heading label {
+  color: #f2c48d;
+  font-weight: 700;
+  margin: 0;
+}
+.brainstorm-workspace .chat-field-heading .chat-copy-button {
+  flex: 0 0 26px;
+  margin: 0;
+}
+.brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea {
+  box-sizing: border-box; display: block; width: 100%; min-width: 0;
+  height: 74px; min-height: 74px; padding: 10px 13px;
+  border: 1px solid #72553a; border-radius: 8px;
+  background: #131210; color: #f0e6d7; font: inherit; line-height: 1.5;
+  resize: vertical; scrollbar-gutter: stable;
+}
+.brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea:focus {
+  outline: 2px solid #bd8246; outline-offset: 1px;
+}
+.brainstorm-workspace :is(.chat-repeated-prompt, .chat-human-form) textarea::placeholder { color: #8c8275; }
+.brainstorm-workspace .chat-controls {
+  display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap;
+  gap: 12px; min-height: 42px; margin: 0 0 20px;
+}
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 38px; padding: 7px 18px; border: 1px solid #bd8246;
+  border-radius: 8px; color: #f0e6d7; background: #07111e;
+  font: 500 .92rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer;
+}
+.brainstorm-workspace .chat-retry {
+  min-width: 108px; border-color: #e4b679; background: #80512c;
+  color: #fff5e8; font-weight: 700;
+}
+.brainstorm-workspace .chat-send {
+  min-width: 92px; border-color: #e4b679; background: #80512c;
+  color: #fff5e8; font-weight: 700;
+}
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):hover:not(:disabled) {
+  background: #6b4329; color: #fff2e9;
+}
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px;
+}
+.brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear):disabled { opacity: .5; cursor: default; }
+.brainstorm-workspace .chat-controls [role="status"] {
+  color: #d1c5b7; font-size: .9rem; overflow-wrap: anywhere;
+}
+.brainstorm-workspace .chat-boxes {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+}
+.brainstorm-workspace .chat-box {
+  box-sizing: border-box; display: flex; flex-direction: column;
+  min-width: 0; min-height: 140px; padding: 17px 20px;
+  border: 1px solid #66513d; border-radius: 12px; background: #141a1c;
+}
+.brainstorm-workspace .chat-box.is-speaking {
+  border-color: #d29a55; box-shadow: 0 0 0 1px #d29a5540;
+}
+.brainstorm-workspace .chat-agent h2 { margin: 0 0 10px; color: #f2c48d; font-size: 1rem; }
+.brainstorm-workspace .chat-agent-placeholder { margin: 0; color: #8c8275; }
+.brainstorm-workspace .chat-agent .chat-markdown {
+  min-width: 0; overflow-wrap: anywhere; line-height: 1.55;
+}
+.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown > :first-child { margin-top: 0; }
+.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown > :last-child { margin-bottom: 0; }
+.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown p { margin: 7px 0; }
+.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown :is(ul, ol) { padding-left: 1.4em; }
+.brainstorm-workspace :is(.chat-agent, .chat-history) .chat-markdown pre {
+  overflow-x: auto; padding: 10px; border-radius: 6px; background: #131210;
+}
+.brainstorm-workspace .chat-history {
+  display: grid; gap: 10px; margin: 20px 0 0; padding: 0; list-style: none;
+}
+.brainstorm-workspace .chat-history li {
+  padding: 12px 15px; border-left: 3px solid #8d754f;
+  border-radius: 0 7px 7px 0; background: #211e1a;
+}
+.brainstorm-workspace .chat-history li.chat-history-ai_1 { border-left-color: #7d9caa; }
+.brainstorm-workspace .chat-history li.chat-history-ai_2 { border-left-color: #c28b5c; }
+.brainstorm-workspace .chat-history strong { color: #edc28e; font-size: .86rem; }
+.brainstorm-workspace .chat-history .chat-markdown { margin-top: 5px; line-height: 1.5; }
+.brainstorm-workspace .chat-error { margin: 10px 0; color: #ffb3a6; }
+
+@media (max-width: 900px) {
+  .brainstorm-workspace .chat-boxes { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .brainstorm-workspace .chat-page { width: calc(100% - 28px); }
+  .brainstorm-workspace .chat-page-header h1 { font-size: 1.55rem; }
+  .brainstorm-workspace .chat-controls { gap: 8px; }
+  .brainstorm-workspace :is(.chat-send, .chat-retry, .chat-stop, .chat-clear) { padding-inline: 12px; }
+}
+
+/* Shared project copy icon beside each brainstorm participant heading. */
+.brainstorm-workspace .chat-reply-heading {
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px; min-width: 0;
+}
+.brainstorm-workspace .chat-reply-heading h2 { margin: 0 0 10px; }
+.brainstorm-workspace .chat-reply-heading .chat-copy-button {
+  flex: 0 0 auto; width: 26px; height: 26px; padding: 3px; margin: 0 0 10px;
+}
+.brainstorm-workspace .chat-history .chat-reply-heading .chat-copy-button { margin: 0; }
+.brainstorm-workspace .chat-copy-button svg { width: 16px; height: 16px; }
+.brainstorm-workspace .chat-history-objective { border-left-color: #a891bf !important; }
+
+/* Keep the Project header's content-sized geometry. The decorative
+   SIGMA background in workspace.css scales proportionally with header height.
+   Do not reserve excess vertical space for the shorter Brainstorm pill stack. */
+@media (min-width: 1201px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 470px) minmax(0, 1fr) max-content;
+    gap: 24px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 330px);
+    max-width: 330px;
+    justify-self: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .header-controls {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    box-sizing: border-box;
+    height: auto;
+    min-height: 0;
+    padding-top: 13px;
+    padding-bottom: 13px;
+  }
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+  min-width: 0;
+  padding-top: 6px;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-eyebrow {
+  margin: 0 0 4px;
+  color: #c99a66;
+  font-size: .78rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy h1 {
+  margin: 0;
+  color: #f0e6d7;
+  font-size: clamp(1.45rem, 2vw, 2.1rem);
+  line-height: 1.2;
+}
+.workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+  margin: 6px 0 0;
+  color: #c4b9aa;
+  font-size: .88rem;
+  line-height: 1.45;
+}
+@media (min-width: 1800px) {
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy .chat-description {
+    white-space: nowrap;
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas: "model-column identity";
+  column-gap: calc(var(--identity-pill-gap) * 1.2);
+  align-items: start;
+  /* Center the pill stack within the content-sized header row, preserving
+     balanced top and bottom insets without making the header taller. */
+  align-self: center;
+  justify-self: end;
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  justify-content: end;
+}
+@media (min-width: 901px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    transform: translateX(16px);
+  }
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack {
+  grid-area: identity;
+  display: grid;
+  grid-template-columns: max-content;
+  grid-template-rows: max-content max-content;
+  row-gap: var(--sigma-project-pill-row-gap);
+  justify-items: end;
+  align-items: start;
+  width: max-content;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection {
+  grid-area: auto;
+  position: relative;
+  contain: none;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-pill-stack > .api-connection > summary {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  margin: 0 0 0 auto;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column {
+  grid-area: model-column;
+  display: flex;
+  align-items: flex-start;
+  justify-content: end;
+  min-width: 0;
+  pointer-events: auto;
+}
+/* Home reserves a second row beneath its Model column using padding.
+   Brainstorm has no About/Settings row there: remove the reservation. */
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column:has(> .global-model-pill-position) {
+  padding-bottom: 0;
+}
+.workspace-page.brainstorm-workspace .project-art-header .brainstorm-header-model-column .global-model-pill-position {
+  display: inline-flex;
+  position: static;
+  margin: 0;
+}
+@media (min-width: 701px) and (max-width: 1200px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(29vw, 330px) minmax(0, 1fr);
+    gap: 12px 20px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: min(29vw, 330px);
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media (max-width: 700px) {
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header {
+    display: grid;
+    grid-template-columns: min(34vw, 175px) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brand-block {
+    display: contents;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .project-header-art {
+    grid-column: 1;
+    width: 100%;
+    margin-left: -20px;
+  }
+  .workspace-page.brainstorm-workspace .chat-site-header .brainstorm-header-copy {
+    grid-column: 2;
+  }
+  .workspace-page.brainstorm-workspace .project-art-header.chat-site-header .header-controls {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+/* Opt-in process supervisor and objective history. */
+.brainstorm-workspace .chat-supervisor-option {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 14px;
+  padding: 12px 15px;
+  border: 1px solid #66513d;
+  border-radius: 8px;
+  background: #141a1c;
+}
+.brainstorm-workspace .chat-supervisor-option label {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  width: max-content;
+  gap: 9px;
+  margin: 0;
+  font-weight: 700;
+  color: #f2c48d;
+  cursor: pointer;
+}
+.brainstorm-workspace .chat-supervisor-option input[type="checkbox"] {
+  box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 17px;
+  width: 17px;
+  min-width: 17px;
+  height: 17px;
+  margin: 0;
+  padding: 0;
+  accent-color: #bd8246;
+}
+.brainstorm-workspace .chat-supervisor-option p {
+  margin: 0;
+  color: #c4b9aa;
+  font-size: .88rem;
+  line-height: 1.45;
+}
+.brainstorm-workspace .chat-progress-status {
+  color: #f2c48d; margin: 0 0 12px;
+}
+.brainstorm-workspace .chat-history li.chat-history-objective { border-left-color: #a891bf; }
+.brainstorm-workspace .chat-history li.chat-history-supervisor { border-left-color: #8cad9f; }
+.brainstorm-workspace .chat-supervisor-meta {
+  margin: 4px 0; color: #a5c7b7; font-size: .83rem;
+}
+
+
+/* Transcript disclosure controls mirror the Project page's chevron affordance. */
+.brainstorm-workspace .chat-transcript { margin-top: 20px; }
+.brainstorm-workspace .chat-transcript-heading { margin: 0 0 10px; font-size: 1.05rem; }
+.brainstorm-workspace .chat-transcript .chat-history { margin-top: 0; }
+.brainstorm-workspace .chat-disclosure-button {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 2px 4px; margin: -2px -4px; border: 0;
+  background: transparent; color: #f2c48d; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.brainstorm-workspace .chat-disclosure-button:hover { color: #ffe0ae; }
+.brainstorm-workspace .chat-disclosure-button:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px; border-radius: 3px;
+}
+.brainstorm-workspace .chat-disclosure-button .disclosure-chevron {
+  flex: 0 0 12px; width: 12px; height: 12px;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round;
+  transition: transform .15s ease;
+}
+.brainstorm-workspace .chat-disclosure-button .disclosure-chevron.is-expanded { transform: rotate(90deg); }
+.brainstorm-workspace .chat-history .chat-reply-heading { margin-bottom: 0; }
+.brainstorm-workspace .chat-history .chat-reply-heading strong { color: inherit; }
+.brainstorm-workspace .chat-history [hidden] { display: none; }
+
+/* Keep all transcript/response content inside the available page width.
+   Grid items default to min-width:auto, which can grow to a long reply's
+   min-content width and push the entire Brainstorm page off-screen. */
+.brainstorm-workspace .chat-boxes,
+.brainstorm-workspace .chat-history { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.brainstorm-workspace .chat-boxes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.brainstorm-workspace .chat-box,
+.brainstorm-workspace .chat-history li,
+.brainstorm-workspace .chat-transcript,
+.brainstorm-workspace .chat-history li > div,
+.brainstorm-workspace .chat-markdown {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.brainstorm-workspace .chat-markdown {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.brainstorm-workspace .chat-markdown :is(p, li, blockquote, a, h1, h2, h3, h4, h5, h6, code) {
+  overflow-wrap: anywhere;
+}
+.brainstorm-workspace .chat-markdown :is(pre, table, .katex-display) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.brainstorm-workspace .chat-markdown pre { white-space: pre; }
+.brainstorm-workspace .chat-markdown :is(img, svg) { max-width: 100%; height: auto; }
+@media (max-width: 900px) {
+  .brainstorm-workspace .chat-boxes { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Choose an existing private Brainstorm transcript without changing the
+   geometry of the shared Project header or transcript body. */
+.brainstorm-workspace .chat-transcript-picker {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  min-width: 0; margin: 4px 0 10px;
+}
+.brainstorm-workspace .chat-transcript-picker label {
+  color: #f2c48d; font-weight: 700;
+}
+.brainstorm-workspace .chat-transcript-picker select {
+  box-sizing: border-box; min-width: 0; max-width: 100%; width: min(360px, 100%);
+  padding: 8px 10px; color: #f0e6d7; background: #131210;
+  border: 1px solid #72553a; border-radius: 8px; font: inherit;
+}
+.brainstorm-workspace .chat-transcript-picker select:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 2px;
+}
+.brainstorm-workspace .chat-transcript-picker select:disabled { opacity: .55; }
+
+/* Explicit recovery when repeated provider validation failures block Retry. */
+.brainstorm-workspace .chat-skip {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 38px; padding: 7px 18px;
+  border: 1px solid #bd8246; border-radius: 8px;
+  color: #f0e6d7; background: #07111e;
+  font: 500 .92rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+.brainstorm-workspace .chat-skip:hover:not(:disabled) { background: #6b4329; color: #fff2e9; }
+.brainstorm-workspace .chat-skip:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px;
+}
+.brainstorm-workspace .chat-skip:disabled { opacity: .5; cursor: default; }
+@media (max-width: 700px) {
+  .brainstorm-workspace .chat-skip { padding-inline: 12px; }
+}
+
+/* Chronological exchanges read top-to-bottom within each group, with
+   the most recent group first. Pagination affects presentation only. */
+.brainstorm-workspace .chat-history {
+  gap: 17px;
+}
+.brainstorm-workspace .chat-history > .chat-transcript-group {
+  list-style: none; margin: 0; padding: 0; background: transparent;
+  border: 0; border-radius: 0;
+}
+.brainstorm-workspace .chat-transcript-group-entries {
+  display: grid; gap: 3px; list-style: none; padding: 0; margin: 0;
+}
+.brainstorm-workspace .chat-history .chat-transcript-group-entries > li {
+  margin: 0;
+}
+.brainstorm-workspace .chat-entry-timestamp {
+  margin-left: auto; flex-shrink: 0; font-size: .73rem;
+  font-weight: 400; color: #a69d92; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.brainstorm-workspace .chat-history-pagination {
+  margin: 13px 0 0; font-size: .83rem; color: #a69d92;
+}
+.brainstorm-workspace .chat-history-pagination p {
+  margin: 0 0 8px;
+}
+.brainstorm-workspace .chat-history-pagination button {
+  border: 1px solid #817363; border-radius: 6px;
+  padding: 6px 11px; color: #e6d2bd; background: #28231e;
+  cursor: pointer; font: inherit;
+}
+.brainstorm-workspace .chat-history-pagination button:hover {
+  background: #383026;
+}
+.brainstorm-workspace .chat-history-pagination button:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px;
+}
+@media (max-width: 550px) {
+  .brainstorm-workspace .chat-history .chat-reply-heading { flex-wrap: wrap; }
+  .brainstorm-workspace .chat-entry-timestamp { width: 100%; margin-left: 0; }
+}
+
+/* Lean Explorer-specific shell. The layout and transcript controls above were
+   restored from the historical Brainstorm UI, not recreated as a dashboard. */
+.lean-explorer-page .leanx-page-tools {display:flex;align-items:center;justify-content:space-between;gap:16px;margin:2px 0 12px;color:#b9a88f;font-size:12px}
+.lean-explorer-page .leanx-close-button {display:grid;place-items:center;width:32px;height:32px;min-height:32px;padding:0;border:1px solid transparent;background:transparent;color:#e6c098;font-size:24px}
+.lean-explorer-page .leanx-close-button:hover {border-color:#9b764e;background:#302319}
