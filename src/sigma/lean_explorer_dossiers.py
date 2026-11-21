@@ -305,8 +305,16 @@ def select_declaration(
     item = {
         key: selected[key]
         for key in (
-            "path", "name", "kind", "commit", "url", "sha256",
-            "start_line", "end_line", "complete", "excerpt"
+            "path",
+            "name",
+            "kind",
+            "commit",
+            "url",
+            "sha256",
+            "start_line",
+            "end_line",
+            "complete",
+            "excerpt",
         )
     }
 
@@ -322,9 +330,13 @@ def select_declaration(
         if any(x.get("path") == item["path"] and x.get("name") == item["name"] for x in scoped):
             return False
         if len(scoped) >= MAX_SCOPE_DECLARATIONS:
-            raise ProjectError("This section already has 32 selected declarations; divide the work.")
+            raise ProjectError(
+                "This section already has 32 selected declarations; divide the work."
+            )
         if record.get("paper_project"):
-            raise ProjectError("This section already has a paper handoff. Make a new section dossier to change its scope.")
+            raise ProjectError(
+                "This section already has a paper handoff. Make a new section dossier to change its scope."
+            )
         scoped.append(item)
         return True
 
@@ -335,6 +347,7 @@ def deselect_declaration(
     identifier: str, *, formal_path: str, declaration_name: str, source_mode: str
 ) -> dict:
     """Only remove the selection, not prior source-backed research entries."""
+
     def apply(record: dict) -> bool:
         if (
             record.get("formal_commit") != _revision(source_mode)
@@ -342,13 +355,14 @@ def deselect_declaration(
         ):
             raise ProjectError("This dossier belongs to another formal source.")
         if record.get("paper_project"):
-            raise ProjectError("This section already has a paper handoff. Make a new dossier to change its scope.")
+            raise ProjectError(
+                "This section already has a paper handoff. Make a new dossier to change its scope."
+            )
         scoped = record.get("scope", [])
         if not isinstance(scoped, list):
             raise ProjectError("Dossier scope is invalid.")
         remaining = [
-            x for x in scoped
-            if x.get("path") != formal_path or x.get("name") != declaration_name
+            x for x in scoped if x.get("path") != formal_path or x.get("name") != declaration_name
         ]
         if len(remaining) == len(scoped):
             return False
@@ -388,10 +402,7 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
             current = lean_explorer.declaration(
                 chosen["path"], chosen["name"], source_mode=source_mode
             )
-            if (
-                current["sha256"] != chosen["sha256"]
-                or current["commit"] != chosen["commit"]
-            ):
+            if current["sha256"] != chosen["sha256"] or current["commit"] != chosen["commit"]:
                 raise ProjectError(
                     "A selected Lean source changed. Remove and re-add it before paper preparation."
                 )
@@ -426,18 +437,21 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
         selected_keys = set()
         for chosen in scope:
             selected_keys.add((chosen["path"], chosen["name"]))
-            lines.extend([
-                "",
-                f"### {chosen['name']}",
-                f"Source: {chosen['path']} lines {chosen['start_line']}-{chosen['end_line']}",
-                f"Revision: {chosen['commit']} · file SHA256: {chosen['sha256']}",
-                f"Excerpt complete: {chosen['complete']}",
-                "~~~lean",
-                chosen["excerpt"],
-                "~~~",
-            ])
+            lines.extend(
+                [
+                    "",
+                    f"### {chosen['name']}",
+                    f"Source: {chosen['path']} lines {chosen['start_line']}-{chosen['end_line']}",
+                    f"Revision: {chosen['commit']} · file SHA256: {chosen['sha256']}",
+                    f"Excerpt complete: {chosen['complete']}",
+                    "~~~lean",
+                    chosen["excerpt"],
+                    "~~~",
+                ]
+            )
         commentary = [
-            item for item in record.get("entries", [])
+            item
+            for item in record.get("entries", [])
             if (item.get("source", {}).get("path"), item.get("source", {}).get("name"))
             in selected_keys
         ]
@@ -445,12 +459,14 @@ def prepare_paper_project(identifier: str, *, source_mode: str) -> dict:
             lines.extend(["", "## Explorer research notes and drafts", ""])
         for item in commentary:
             src = item["source"]
-            lines.extend([
-                f"### {src['name']} — {item['mode']}",
-                f"Status: {item['interpretation_status']}",
-                item["text"],
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {src['name']} — {item['mode']}",
+                    f"Status: {item['interpretation_status']}",
+                    item["text"],
+                    "",
+                ]
+            )
         requirements = "\n".join(lines)
         if len(requirements) > 20_000:
             raise ProjectError(
@@ -503,10 +519,12 @@ def markdown(identifier: str) -> str:
     if record.get("scope"):
         parts.extend(["## Selected Lean evidence", ""])
         for src in record["scope"]:
-            parts.extend([
-                f"- **{src['name']}** — `{src['path']}` lines {src['start_line']}-{src['end_line']}",
-                f"  revision `{src['commit']}` · file SHA256 `{src['sha256']}`",
-            ])
+            parts.extend(
+                [
+                    f"- **{src['name']}** — `{src['path']}` lines {src['start_line']}-{src['end_line']}",
+                    f"  revision `{src['commit']}` · file SHA256 `{src['sha256']}`",
+                ]
+            )
         parts.append("")
     for index, item in enumerate(record.get("entries", []), 1):
         src = item["source"]
