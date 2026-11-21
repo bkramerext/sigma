@@ -127,7 +127,6 @@ def test_dossier_and_ai_flow() -> None:
         for edge in proof_map.json()["connections"]:
             assert section_index[edge["from"]] < section_index[edge["to"]]
 
-
         created = client.post(
             "/api/explorelean/dossiers",
             json={"source_mode": "mirror", "section_id": "reflection"},
