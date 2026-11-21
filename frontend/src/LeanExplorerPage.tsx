@@ -530,7 +530,6 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
       <button type="button" aria-expanded={showActivity} onClick={() => setShowActivity(!showActivity)}>Activity</button>
     </div>
     {showActivity && <div className="leanx-activity-expanded">
-      <aside className="leanx-progress-column">
         <section className="leanx-pane leanx-progress-pane" aria-live="polite">
           <div className="leanx-pane-title">
             <h2>Live activity</h2>
