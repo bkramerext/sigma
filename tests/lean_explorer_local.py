@@ -2,7 +2,8 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -219,6 +220,146 @@ def check_local_directory() -> None:
             lean_explorer_local._cached_modules.cache_clear()
 
 
+def check_large_single_file_end_to_end() -> None:
+    """One click: large local module -> candidates -> model -> dossier -> paper handoff.
+
+    The model and project destination are mocked; actual source scanning, the
+    SSE endpoints, provenance checks and saved dossier are exercised.
+    """
+    with TemporaryDirectory() as temp:
+        base = Path(temp)
+        root = base / "lean-root"
+        target = (
+            root / "src" / "Development" / "AbelianVarietyTheory"
+            / "Definitions" / "AutomorphicMembership" / "ExistsSameData.lean"
+        )
+        target.parent.mkdir(parents=True)
+        parts = ["import Mathlib", "namespace AutomorphicMembership"]
+        for index in range(10):
+            parts.append(f"theorem automorphicBridge{index} : True := by trivial")
+            parts.extend(
+                "-- Substantial explanatory Lean source context. "
+                + "A local automorphic bridge is being studied. " * 4
+                for _ in range(55)
+            )
+        parts.append("end AutomorphicMembership")
+        text = "\n".join(parts) + "\n"
+        assert len(text.encode()) > 70_000
+        target.write_text(text, encoding="utf-8")
+        relative = target.relative_to(root).as_posix()
+        state_root = base / "state"
+        state_root.mkdir()
+        with (
+            patch("sigma.lean_explorer_local.state_directory", return_value=state_root),
+            patch("sigma.lean_explorer_dossiers.state_directory", return_value=state_root),
+            patch("sigma.lean_explorer_local.require_local", return_value=None),
+            patch("sigma.api._require_local_lean_request", return_value=None),
+        ):
+            manifest = lean_explorer_local.configure(str(root))
+            assert manifest["file_count"] == 1
+            client = TestClient(app)
+            created = client.post(
+                "/api/explorelean/dossiers",
+                json={"source_mode": "local", "section_id": "automorphic-foundation"},
+            )
+            assert created.status_code == 201, created.text
+            identifier = created.json()["id"]
+            discovered = client.post(
+                "/api/explorelean/discover",
+                json={
+                    "source_mode": "local",
+                    "section_id": "automorphic-foundation",
+                    "dossier_id": identifier,
+                    "single_file_trial": True,
+                },
+            )
+            assert discovered.status_code == 200, discovered.text
+            assert '"type": "complete"' in discovered.text
+            result = client.get(f"/api/explorelean/dossiers/{identifier}").json()
+            assert result["discovery"]["single_file_trial"] is True
+            assert result["discovery"]["selected_file"] == relative
+            assert result["discovery"]["selected_file_bytes"] == len(text.encode())
+            assert result["discovery"]["scanned_files"] == 1
+            assert result["discovery"]["complete"] is True
+            assert len(result["scope"]) == 3
+            assert all(item["path"] == relative for item in result["scope"])
+            assert all(item["sha256"] for item in result["scope"])
+            assert all(
+                item["selection_origin"] == "automatic_lexical_candidate"
+                for item in result["scope"]
+            )
+            first = result["scope"][0]
+            config = {
+                "available": True,
+                "models": [{"id": "test-model", "efforts": ["medium"]}],
+            }
+            response = AsyncMock(
+                return_value=(
+                    "# A human-readable examination of automorphic bridges\n\n"
+                    "The supplied source contains three selected declarations. "
+                    "No formal dependency or complete RH proof is established."
+                )
+            )
+            with (
+                patch("sigma.api.chat.configuration", new=AsyncMock(return_value=config)),
+                patch("sigma.api.chat.respond", new=response),
+            ):
+                analyzed = client.post(
+                    "/api/explorelean/analyze",
+                    json={
+                        "formal_path": first["path"],
+                        "declaration": first["name"],
+                        "source_mode": "local",
+                        "include_guide": False,
+                        "include_announcement": False,
+                        "model": "test-model",
+                        "reasoning_effort": "medium",
+                        "objective": "Produce sourced mathematical exposition",
+                        "dossier_id": identifier,
+                    },
+                )
+            assert analyzed.status_code == 200, analyzed.text
+            assert '"saved": true' in analyzed.text
+            input_text = response.call_args.kwargs["repeated_text"]
+            assert len(input_text) < 48_000
+            assert all(item["name"] in input_text for item in result["scope"])
+            dossier = client.get(f"/api/explorelean/dossiers/{identifier}").json()
+            assert len(dossier["entries"]) == 1
+            assert "human-readable" in dossier["entries"][0]["text"]
+            assert dossier["entries"][0]["source"]["sha256"] == first["sha256"]
+
+            fake_project = SimpleNamespace(
+                path="/tmp/lean-large-trial.sigma",
+                project=SimpleNamespace(id="large-lean-trial"),
+            )
+            with (
+                patch("sigma.api._limit_anonymous_demo_projects"),
+                patch(
+                    "sigma.global_research_settings.load_config",
+                    return_value={"ai_model": "test-model", "reasoning_effort": "medium"},
+                ),
+                patch("sigma.projects.create_project", return_value=fake_project) as create,
+                patch("sigma.project_collaboration.register_owner"),
+            ):
+                handoff = client.post(
+                    f"/api/explorelean/dossiers/{identifier}/paper-project",
+                    json={"source_mode": "local"},
+                )
+            assert handoff.status_code == 200, handoff.text
+            assert handoff.json()["project_id"] == "large-lean-trial"
+            context = create.call_args.args[-1]
+            assert len(context) <= 20_000
+            assert relative in context
+            assert "Paper-context excerpt truncated: True" in context
+            assert "A human-readable examination" in context
+            exported = client.get(f"/api/explorelean/dossiers/{identifier}/markdown")
+            assert exported.status_code == 200
+            assert "A human-readable examination" in exported.text
+            assert "automorphicBridge" in exported.text
+            lean_explorer_local._cached_modules.cache_clear()
+
+
 if __name__ == "__main__":
+    check_large_single_file_end_to_end()
     check_local_directory()
     print("Local Lean directory acceptance passed.")
