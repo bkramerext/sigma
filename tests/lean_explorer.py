@@ -1,7 +1,6 @@
-"""Lean Explorer source and transcript integration checks without external network or AI calls."""
+"""Deterministic Lean Explorer tests: real-source locators, dossier, AI stages."""
 
 import hashlib
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -12,144 +11,182 @@ from sigma import lean_explorer
 from sigma.api import app
 from sigma.projects import ProjectError
 
-LEAN = b"def RiemannZetaZerosOnLine : Prop := True\n"
-GUIDE = b"\\section{Overview}\nThis is supplementary commentary.\n"
+LEAN = (
+    b"import Mathlib\n\n"
+    b"def RiemannZetaZerosOnLine : Prop :=\n"
+    b"  forall s, True\n\n"
+    b"def DirichletLZerosOnLine : Prop := True\n"
+)
+GUIDE = b"\\begin{document}\nOverview of proof.\n"
 PDF = b"%PDF-1.7 fixture"
 ANNOUNCEMENT = "[PDF page 1]\nAlpoge announcement"
-MIRROR_SHA = lean_explorer.MIRROR_SHA
-GUIDE_SHA = lean_explorer.GUIDE_SHA
 
 
-def fake_retrieve(url: str):
-    if MIRROR_SHA in url and url.endswith("/src/Statements.lean"):
+def fake_retrieve(url: str) -> tuple[bytes, str, str]:
+    if lean_explorer.MIRROR_SHA in url and url.endswith("/src/Statements.lean"):
         return LEAN, "text/plain", url
-    if GUIDE_SHA in url and url.endswith("/guide/proof-guide.tex"):
+    if lean_explorer.GUIDE_SHA in url and url.endswith("/guide/proof-guide.tex"):
         return GUIDE, "text/plain", url
     if url == lean_explorer.ANNOUNCEMENT:
         return PDF, "application/pdf", url
-    raise AssertionError("Unexpected unpinned or non-allowlisted source URL: " + url)
+    raise AssertionError(f"Unexpected or unpinned source URL: {url}")
 
 
-def test_validated_source_reader() -> None:
-    for invalid in ("../passwd", "src/../../secrets.lean", "src/a.txt",
-                    "https://example.com/x.lean", "src//abc.lean", "src/.env.lean"):
+def test_source_navigation() -> None:
+    for invalid in (
+        "../passwd",
+        "src/../../secrets.lean",
+        "src/a.txt",
+        "https://example.com/x.lean",
+        "src//abc.lean",
+        "src/.env.lean",
+    ):
         try:
             lean_explorer.formal_path(invalid)
         except ProjectError:
             pass
         else:
             raise AssertionError(f"Unsafe Lean path accepted: {invalid}")
-    assert lean_explorer.formal_path("src/Statements.lean") == "src/Statements.lean"
+
     with patch("sigma.lean_explorer._retrieve", side_effect=fake_retrieve):
-        source = lean_explorer.read_source("formal", "src/Statements.lean")
-        assert source["complete"] and source["text"] == LEAN.decode()
-        assert source["sha256"] == hashlib.sha256(LEAN).hexdigest()
-        assert source["commit"] == MIRROR_SHA
-        partial = lean_explorer.read_source("formal", "src/Statements.lean", limit=10)
-        assert partial["complete"] is False and partial["text"] == LEAN.decode()[:10]
+        preview = lean_explorer.read_source("formal", "src/Statements.lean")
+        assert preview["text"] == LEAN.decode()
+        assert preview["sha256"] == hashlib.sha256(LEAN).hexdigest()
 
-
-def test_source_packet_is_real_and_labeled() -> None:
-    with (
-        patch("sigma.lean_explorer._retrieve", side_effect=fake_retrieve),
-        patch("sigma.lean_explorer.project_evidence._extract",
-              return_value=(1, ANNOUNCEMENT, False)),
-    ):
-        packet, metadata = lean_explorer.context_packet(
-            "src/Statements.lean", include_guide=True, include_announcement=True
+        found = lean_explorer.declarations("src/Statements.lean")
+        assert [item["name"] for item in found["declarations"]] == [
+            "RiemannZetaZerosOnLine",
+            "DirichletLZerosOnLine",
+        ]
+        assert found["index_type"].startswith("lexical")
+        selected = lean_explorer.declaration(
+            "src/Statements.lean", "RiemannZetaZerosOnLine"
         )
-    assert len(metadata) == 3
-    assert "RiemannZetaZerosOnLine" in packet
-    assert "supplementary commentary" in packet
-    assert "Alpoge announcement" in packet
-    assert MIRROR_SHA in packet and GUIDE_SHA in packet
-    assert "NOT a Lean dependency index" in packet
-    assert all(entry["sha256"] for entry in metadata)
+        assert selected["start_line"] == 3
+        assert selected["complete"] is True
+        assert "3: def RiemannZetaZerosOnLine" in selected["excerpt"]
 
 
-def test_api_transcript_and_attested_turn() -> None:
-    with TemporaryDirectory() as temp:
-        test_api_in_directory(Path(temp))
-
-
-def test_api_in_directory(root: Path) -> None:
+def test_packet_provenance() -> None:
     with (
-        patch("sigma.lean_explorer_transcripts.state_directory", return_value=root),
         patch("sigma.lean_explorer._retrieve", side_effect=fake_retrieve),
-        patch("sigma.lean_explorer.project_evidence._extract",
-              return_value=(1, ANNOUNCEMENT, False)),
+        patch(
+            "sigma.lean_explorer.project_evidence._extract",
+            return_value=(1, ANNOUNCEMENT, False),
+        ),
     ):
-        client = TestClient(app)
-        preview = client.get("/api/explorelean/source", params={
-            "kind": "formal", "path": "src/Statements.lean"
-        })
-        assert preview.status_code == 200
-        assert preview.json()["sha256"] == hashlib.sha256(LEAN).hexdigest()
+        packet, sources, selected = lean_explorer.analysis_packet(
+            "src/Statements.lean",
+            "RiemannZetaZerosOnLine",
+            include_guide=True,
+            include_announcement=True,
+        )
+    assert selected["start_line"] == 3
+    assert len(sources) == 3
+    assert lean_explorer.MIRROR_SHA in packet
+    assert lean_explorer.GUIDE_SHA in packet
+    assert "Overview of proof" in packet
+    assert "Alpoge announcement" in packet
+    assert "have NOT been inspected" in packet
+    assert all(source["sha256"] for source in sources)
 
-        session = client.post("/api/explorelean/session")
-        assert session.status_code == 200
-        sid = session.json()["conversation_id"]
-        name = session.json()["transcript_name"]
-        selection = {
-            "conversation_id": sid,
-            "formal_path": "src/Statements.lean",
-            "include_guide": True,
-            "include_announcement": True,
-        }
-        attached = client.post("/api/explorelean/attach", json=selection)
-        assert attached.status_code == 200, attached.text
-        digest = attached.json()["source_manifest_sha256"]
-        assert len(digest) == 64
-        forged = client.post("/api/explorelean/message", json={
-            "conversation_id": sid, "speaker": "source", "text": "FAKE VERIFIED"
-        })
-        assert forged.status_code == 422
 
-        saved = client.get(f"/api/explorelean/transcripts/{name}")
-        assert saved.status_code == 200
-        assert saved.json()["messages"][0]["speaker"] == "source"
-        assert digest in saved.json()["messages"][0]["text"]
-        download = client.get(f"/api/explorelean/transcripts/{name}/download")
-        assert download.status_code == 200
-        assert digest in download.text
-
-        settings = {
-            "available": True, "models": [
-                {"id": "gpt-6.1-sol", "efforts": ["medium"]}
-            ],
-        }
-        fake_response = AsyncMock(return_value="A tested explanation, not formal verification.")
+def test_dossier_and_ai_flow() -> None:
+    with TemporaryDirectory() as temp:
         with (
-            patch("sigma.api.chat.configuration", new=AsyncMock(return_value=settings)),
-            patch("sigma.api.chat.respond", new=fake_response),
+            patch("sigma.lean_explorer_dossiers.state_directory", return_value=Path(temp)),
+            patch("sigma.lean_explorer._retrieve", side_effect=fake_retrieve),
+            patch(
+                "sigma.lean_explorer.project_evidence._extract",
+                return_value=(1, ANNOUNCEMENT, False),
+            ),
         ):
-            turn = client.post("/api/explorelean/turn", json={
-                **selection, "speaker": "ai_1",
-                "messages": [{"speaker": "human", "text": "Explain this declaration."}],
-                "model": "gpt-6.1-sol", "reasoning_effort": "medium",
-                "research_objective": "Explain the formal proof",
-                "source_manifest_sha256": digest,
-            })
-        assert turn.status_code == 200, turn.text
-        assert '"type": "complete"' in turn.text
-        call = fake_response.call_args.kwargs
-        assert "RiemannZetaZerosOnLine" in call["repeated_text"]
-        assert call["instructions_override"] == lean_explorer.INSTRUCTIONS["ai_1"]
+            client = TestClient(app)
+            source = client.get(
+                "/api/explorelean/declarations",
+                params={"path": "src/Statements.lean"},
+            )
+            assert source.status_code == 200
+            assert source.json()["total"] == 2
 
-        # No user-controlled external URL is accepted, and source drift must not
-        # be silently passed to the model.
-        with patch("sigma.api.chat.configuration", new=AsyncMock(return_value=settings)):
-            changed = client.post("/api/explorelean/turn", json={
-                **selection, "speaker": "ai_1",
-                "messages": [{"speaker": "human", "text": "Continue"}],
-                "model": "gpt-6.1-sol", "reasoning_effort": "medium",
-                "source_manifest_sha256": "0" * 64,
-            })
-        assert changed.status_code == 409
+            created = client.post("/api/explorelean/dossiers")
+            assert created.status_code == 201, created.text
+            dossier_id = created.json()["id"]
+            assert len(dossier_id) == 36
+
+            saved_note = client.post(
+                f"/api/explorelean/dossiers/{dossier_id}/notes",
+                json={
+                    "formal_path": "src/Statements.lean",
+                    "declaration": "RiemannZetaZerosOnLine",
+                    "text": "Explain quantifier scope in a future exposition.",
+                },
+            )
+            assert saved_note.status_code == 201, saved_note.text
+            assert saved_note.json()["source"]["start_line"] == 3
+            assert saved_note.json()["interpretation_status"] == "unverified commentary"
+
+            config = {
+                "available": True,
+                "models": [{"id": "gpt-6.1-sol", "efforts": ["medium"]}],
+            }
+            reply = AsyncMock(return_value="A sourced interpretation of the statement.")
+            with (
+                patch(
+                    "sigma.api.chat.configuration",
+                    new=AsyncMock(return_value=config),
+                ),
+                patch("sigma.api.chat.respond", new=reply),
+            ):
+                response = client.post(
+                    "/api/explorelean/analyze",
+                    json={
+                        "formal_path": "src/Statements.lean",
+                        "declaration": "RiemannZetaZerosOnLine",
+                        "include_guide": True,
+                        "include_announcement": True,
+                        "model": "gpt-6.1-sol",
+                        "reasoning_effort": "medium",
+                        "objective": "Explain RH carefully",
+                        "dossier_id": dossier_id,
+                    },
+                )
+            assert response.status_code == 200, response.text
+            assert '"stage": "source"' in response.text
+            assert '"stage": "interpreting"' in response.text
+            assert '"stage": "saving"' in response.text
+            assert '"saved": true' in response.text
+
+            kwargs = reply.call_args.kwargs
+            assert "RiemannZetaZerosOnLine" in kwargs["repeated_text"]
+            assert kwargs["instructions_override"] == lean_explorer.ANALYSIS_INSTRUCTIONS
+
+            record = client.get(f"/api/explorelean/dossiers/{dossier_id}")
+            assert record.status_code == 200
+            assert len(record.json()["entries"]) == 2
+            assert record.json()["entries"][1]["supplementary_sources"][0]["kind"] == "guide"
+
+            markdown = client.get(
+                f"/api/explorelean/dossiers/{dossier_id}/markdown"
+            )
+            assert markdown.status_code == 200
+            assert "### Actual Lean source excerpt" in markdown.text
+            assert "A sourced interpretation" in markdown.text
+            assert "SHA256" in markdown.text
+
+            wrong_pin = client.post(
+                "/api/explorelean/dossiers/not-a-uuid/notes",
+                json={
+                    "formal_path": "src/Statements.lean",
+                    "declaration": "RiemannZetaZerosOnLine",
+                    "text": "Should fail",
+                },
+            )
+            assert wrong_pin.status_code in {400, 422}
 
 
 if __name__ == "__main__":
-    test_validated_source_reader()
-    test_source_packet_is_real_and_labeled()
-    test_api_transcript_and_attested_turn()
-    print("Lean Explorer source and transcript tests passed.")
+    test_source_navigation()
+    test_packet_provenance()
+    test_dossier_and_ai_flow()
+    print("Lean Explorer source and dossier tests passed.")
