@@ -41,6 +41,7 @@ from sigma import (
     cloud_research,
     cloud_workspaces,
     lean_explorer,
+    lean_explorer_discovery,
     lean_explorer_dossiers,
     lean_explorer_local,
     lean_explorer_map,
@@ -3913,6 +3914,120 @@ def lean_explorer_add_note(
         text=body.text,
     )
     return JSONResponse(entry, status_code=201, headers={"Cache-Control": "no-store"})
+
+
+class LeanDiscoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    section_id: str = Field(min_length=1, max_length=80)
+
+
+@app.post("/api/explorelean/dossiers/{identifier}/discover")
+async def lean_explorer_discover_section(
+    request: Request,
+    identifier: str,
+    body: LeanDiscoverRequest,
+):
+    """Discover section evidence directly from the local Lean source root."""
+    _require_local_lean_request(request)
+    record = await run_in_threadpool(lean_explorer_dossiers.get, identifier)
+    if record.get("section_id") != body.section_id or record.get("source_mode") != "local":
+        raise HTTPException(422, "The mathematical section or source does not match.")
+    if record.get("paper_project"):
+        raise HTTPException(409, "The section's paper scope is frozen.")
+
+    async def events():
+        yield _lean_sse(
+            {
+                "type": "stage",
+                "label": "Traversing indexed Lean files and ranking source declarations",
+            }
+        )
+        loop = asyncio.get_running_loop()
+        event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        stopped = threading.Event()
+
+        def progress(files: int, total: int, bytes_read: int, current: str) -> None:
+            if stopped.is_set():
+                raise ProjectError("Lean evidence discovery stopped.")
+            loop.call_soon_threadsafe(
+                event_queue.put_nowait,
+                {
+                    "type": "progress",
+                    "files_scanned": files,
+                    "total_files": total,
+                    "bytes_scanned": bytes_read,
+                    "current_file": current,
+                },
+            )
+
+        job = asyncio.create_task(
+            asyncio.to_thread(lean_explorer_discovery.discover, body.section_id, progress)
+        )
+        try:
+            while not job.done():
+                try:
+                    update = await asyncio.wait_for(event_queue.get(), timeout=0.4)
+                    yield _lean_sse(update)
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+            while not event_queue.empty():
+                yield _lean_sse(event_queue.get_nowait())
+            discovered = await job
+            yield _lean_sse(
+                {
+                    "type": "stage",
+                    "label": "Checking candidate source hashes and saving the section scope",
+                }
+            )
+            if not discovered["candidates"]:
+                raise ProjectError(
+                    "No relevant declarations found with the section's current search terms. "
+                    "The source tree was scanned; no scope was invented."
+                )
+            saved = await run_in_threadpool(
+                lean_explorer_dossiers.save_discovered_scope,
+                identifier,
+                section_id=body.section_id,
+                discovery=discovered,
+            )
+            yield _lean_sse(
+                {
+                    "type": "complete",
+                    "dossier": saved,
+                    "discovery": {
+                        key: value for key, value in discovered.items() if key != "candidates"
+                    },
+                    "candidates": [
+                        {
+                            key: item[key]
+                            for key in (
+                                "path",
+                                "name",
+                                "kind",
+                                "start_line",
+                                "relevance_score",
+                                "why_candidate",
+                                "status",
+                            )
+                        }
+                        for item in discovered["candidates"]
+                    ],
+                }
+            )
+        except asyncio.CancelledError:
+            stopped.set()
+            raise
+        except ProjectError as exc:
+            yield _lean_sse({"type": "error", "error": str(exc)})
+        finally:
+            if not job.done():
+                stopped.set()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/explorelean/dossiers/{identifier}/scope")

@@ -128,6 +128,7 @@ def create(
         "entries": [],
         "scope": [],
         "paper_project": None,
+        "discovery": None,
     }
     data = json.dumps(document, ensure_ascii=False, indent=2).encode("utf-8")
     path = _directory() / (identifier + ".json")
@@ -339,6 +340,77 @@ def select_declaration(
                 "This section already has a paper handoff. Make a new section dossier to change its scope."
             )
         scoped.append(item)
+        return True
+
+    return _with_dossier_lock(identifier, apply)
+
+
+def save_discovered_scope(identifier: str, *, section_id: str, discovery: dict) -> dict:
+    """Commit a complete cross-repository discovery as a suggested research scope.
+
+    Preserve earlier manual selections. Any auto-added excerpts remain explicitly
+    marked as unverified lexical candidates, never formal dependency edges.
+    """
+    from sigma import lean_explorer_discovery
+
+    def apply(record: dict) -> bool:
+        if (
+            record.get("source_mode") != "local"
+            or record.get("formal_commit") != _revision("local")
+            or record.get("section_id") != section_id
+        ):
+            raise ProjectError("The discovery does not match this local proof and section.")
+        if record.get("paper_project"):
+            raise ProjectError(
+                "This section's paper scope is frozen. Create a new dossier to investigate again."
+            )
+        if discovery.get("source_root_id") != lean_explorer_local.source()["root_id"]:
+            raise ProjectError("The local proof root changed during discovery.")
+        scoped = record.setdefault("scope", [])
+        if not isinstance(scoped, list):
+            raise ProjectError("Invalid section scope.")
+        additions = 0
+        total_excerpt_chars = sum(len(item.get("excerpt", "")) for item in scoped)
+        for proposal in discovery["candidates"]:
+            if additions >= lean_explorer_discovery.MAX_AUTO_SELECTED:
+                break
+            if len(scoped) >= MAX_SCOPE_DECLARATIONS:
+                break
+            key = (proposal["path"], proposal["name"])
+            if any((x.get("path"), x.get("name")) == key for x in scoped):
+                continue
+            current = lean_explorer.declaration(
+                proposal["path"], proposal["name"], source_mode="local"
+            )
+            if current["sha256"] != proposal["sha256"]:
+                raise ProjectError(
+                    "A source file changed during discovery; the results were not saved."
+                )
+            if total_excerpt_chars + len(current["excerpt"]) > 28_000:
+                continue
+            scoped.append(
+                {
+                    **current,
+                    "selection_origin": "automatic_lexical_discovery",
+                    "relevance_score": proposal["relevance_score"],
+                    "why_candidate": proposal["why_candidate"],
+                }
+            )
+            additions += 1
+            total_excerpt_chars += len(current["excerpt"])
+        record["discovery"] = {
+            key: discovery[key]
+            for key in (
+                "section_id",
+                "files_scanned",
+                "bytes_scanned",
+                "matching_declarations",
+                "skipped_large_files",
+                "index_type",
+                "complete",
+            )
+        }
+        record["discovery"]["auto_selected"] = additions
         return True
 
     return _with_dossier_lock(identifier, apply)
