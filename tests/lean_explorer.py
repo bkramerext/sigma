@@ -2,6 +2,7 @@
 
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
@@ -227,6 +228,43 @@ def test_dossier_and_ai_flow() -> None:
         )
         assert clear_second.status_code == 200, clear_second.text
         assert len(clear_second.json()["scope"]) == 1
+
+        fake_project = SimpleNamespace(
+            path="/tmp/lean-section-paper.sigma",
+            project=SimpleNamespace(id="paper-section-project"),
+        )
+        with (
+            patch("sigma.api._limit_anonymous_demo_projects"),
+            patch(
+                "sigma.global_research_settings.load_config",
+                return_value={"ai_model": "gpt-6.1-sol", "reasoning_effort": "medium"},
+            ),
+            patch("sigma.projects.create_project", return_value=fake_project) as creator,
+            patch("sigma.projects.inspect_project", return_value=fake_project),
+            patch("sigma.project_collaboration.register_owner"),
+        ):
+            handoff = client.post(
+                f"/api/explorelean/dossiers/{dossier_id}/paper-project",
+                json={"source_mode": "mirror"},
+            )
+            assert handoff.status_code == 200, handoff.text
+            assert handoff.json()["project_id"] == "paper-section-project"
+            requirements = creator.call_args.args[-1]
+            assert "RiemannZetaZerosOnLine" in requirements
+            assert "DirichletLZerosOnLine" not in requirements
+            assert "NOT a formal dependency closure" in requirements
+            assert "SHA256" in requirements
+            assert "A sourced interpretation" in requirements
+            repeat = client.post(
+                f"/api/explorelean/dossiers/{dossier_id}/paper-project",
+                json={"source_mode": "mirror"},
+            )
+            assert repeat.status_code == 200
+            assert repeat.json() == handoff.json()
+            assert creator.call_count == 1
+
+        prepared = client.get(f"/api/explorelean/dossiers/{dossier_id}")
+        assert prepared.json()["paper_project"]["project_id"] == "paper-section-project"
 
         wrong_pin = client.post(
             "/api/explorelean/dossiers/not-a-uuid/notes",
