@@ -5,11 +5,12 @@ const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 const DEFAULT_PATH = 'src/Statements.lean';
 const DEFAULT_LOCAL_DIRECTORY = '~/lean_alpoge';
 const THINKING_STEPS = [
-  {name: 'Discover the proof', question: 'How is the development organized, and where does RH enter?'},
-  {name: 'Choose a section', question: 'Which piece of mathematics could stand on its own?'},
-  {name: 'Inspect the source', question: 'What is actually asserted, with which hypotheses?'},
-  {name: 'Explain the idea', question: 'Why is this result useful, and what does it depend on?'},
-  {name: 'Shape the exposition', question: 'What must a reader understand before moving forward?'},
+  {name: 'Load sources', question: 'Which formal and supplementary sources can be inspected directly?'},
+  {name: 'Choose a section', question: 'What is a coherent mathematical part of the argument?'},
+  {name: 'Select Lean evidence', question: 'Which exact declarations belong in this investigation, across files?'},
+  {name: 'Investigate', question: 'What do these declarations establish, and what connections remain unverified?'},
+  {name: 'Shape the exposition', question: 'How should we explain the ideas and prerequisites to a human reader?'},
+  {name: 'Generate paper', question: 'Is the selected evidence sufficient for a responsible standalone paper?'},
 ] as const;
 type ProofSection = {
   id: string; title: string; question: string; purpose: string;
@@ -488,7 +489,9 @@ export default function LeanExplorerPage() {
   }
   function stopAnalysis() {abortRef.current?.abort();}
   async function saveMarkdown() {
-    if (!selected || !markdownDraft.trim() || savingMarkdown || running
+    if (!selected || !dossier?.scope?.some(item =>
+      item.path === selected.path && item.name === selected.name)
+      || !markdownDraft.trim() || savingMarkdown || running
       || markdownDraft.trim() === savedMarkdown) return;
     setSavingMarkdown(true); setError('');
     try {
@@ -507,7 +510,9 @@ export default function LeanExplorerPage() {
     } finally {setSavingMarkdown(false);}
   }
   async function saveNote() {
-    if (!selected || !note.trim() || savingNote) return;
+    if (!selected || !dossier?.scope?.some(item =>
+      item.path === selected.path && item.name === selected.name)
+      || !note.trim() || savingNote) return;
     setSavingNote(true); setError('');
     try {
       const id = await ensureDossier();
@@ -520,21 +525,27 @@ export default function LeanExplorerPage() {
     finally {setSavingNote(false);}
   }
 
-  const filtered = file?.declarations.filter(item => item.name.toLowerCase().includes(filter.trim().toLowerCase())) ?? [];
-  const ready = !!selected && !loadingFile && !loadingDeclaration && !running
-    && !localIndexing && !!config?.available && !!model && !!proofMap;
-  const selectedEntries = dossier?.entries.filter(item => item.source.name === selectedName && item.source.path === file?.path) ?? [];
+  const filtered = file?.declarations.filter(item =>
+    item.name.toLowerCase().includes(filter.trim().toLowerCase())) ?? [];
+  const scope = dossier?.scope ?? [];
+  const selectedInScope = !!selected && scope.some(item =>
+    item.path === selected.path && item.name === selected.name);
+  const hasExplanation = !!dossier?.entries.some(item => item.mode === 'explain');
+  const ready = scope.length > 0 && !loadingFile && !loadingDeclaration && !running
+    && !localIndexing && !scopeBusy && !!config?.available && !!model && !!proofMap;
+  const selectedEntries = dossier?.entries.filter(item =>
+    item.source.name === selectedName && item.source.path === file?.path) ?? [];
   const matchedDossiers = dossierList.filter(item =>
-    (item.source_mode || 'mirror') === sourceMode
-    && item.section_id === sectionId
+    (item.source_mode || 'mirror') === sourceMode && item.section_id === sectionId
     && (sourceMode !== 'local' || (item.formal_commit || '') === 'local:' + localSource?.root_id)
   );
   const stageCompletion = [
     sourceMode === 'local' ? !!localSource : !!file,
     !!proofMap && !!currentSection,
-    !!selected && activeFileMode === sourceMode,
-    !!analysis && !!selected,
-    !!selectedEntries.length || !!savedMarkdown,
+    scope.length > 0,
+    hasExplanation,
+    !!dossier?.entries.length,
+    !!dossier?.paper_project,
   ];
   const activeStep = stageCompletion.findIndex(complete => !complete);
   const currentThought = THINKING_STEPS[activeStep >= 0 ? activeStep : THINKING_STEPS.length - 1];
