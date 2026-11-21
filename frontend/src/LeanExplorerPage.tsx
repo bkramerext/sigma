@@ -367,20 +367,45 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
     </div>
 
     <section className="leanx-section" aria-label="Proof and supplementary inputs">
-      <div className="leanx-section-heading"><h2>Inputs</h2><span>Actual sources</span></div>
+      <div className="leanx-section-heading"><h2>Inputs</h2><span>Formal proof tree + supplementary literature</span></div>
       <div className="leanx-formal-input">
-        <label htmlFor="leanx-input-path">A. Official proof · <SourceLink href="https://github.com/CocoSgt/riemann-hypothesis-lean">CocoSgt mirror</SourceLink></label>
-        <div className="leanx-input-row">
-          <input id="leanx-input-path" spellCheck={false} value={formalInput} disabled={running || loadingFile} onChange={event => setFormalInput(event.target.value)}
-            onKeyDown={event => {if (event.key === 'Enter') void loadFile(formalInput.trim());}}/>
-          <button type="button" disabled={running || loadingFile || !formalInput.trim()} onClick={() => void loadFile(formalInput.trim())}>{loadingFile ? 'Reading…' : 'Open file'}</button>
-        </div>
+        <label htmlFor="leanx-source-mode">A. Official Lean proof · source location</label>
+        <select id="leanx-source-mode" className="leanx-mode-select" value={sourceMode} disabled={running || localIndexing}
+          onChange={event => updateSourceMode(event.target.value as SourceMode)}>
+          <option value="local">Local directory</option>
+          <option value="mirror">Pinned GitHub mirror</option>
+        </select>
+        {sourceMode === 'local' ? <>
+          <p className="leanx-local-hint">Enter the absolute path of the extracted Lean folder on the same Mac running SIGMA. No browser upload is needed.</p>
+          <div className="leanx-input-row">
+            <input id="leanx-local-directory" spellCheck={false} aria-label="Local Lean directory" placeholder="~/rh-lean/lean"
+              value={localDirectory} disabled={running || localIndexing} onChange={event => setLocalDirectory(event.target.value)}
+              onKeyDown={event => {if (event.key === 'Enter') void indexLocalDirectory();}}/>
+            <button type="button" disabled={running || localIndexing || !localDirectory.trim()} onClick={() => void indexLocalDirectory()}>
+              {localIndexing ? 'Scanning…' : localSource ? 'Rescan directory' : 'Index directory'}
+            </button>
+            {localIndexing && <button type="button" onClick={() => indexAbortRef.current?.abort()}>Stop</button>}
+          </div>
+          {localIndexing && <div className="leanx-local-progress" role="status">
+            {scanCount.dirs.toLocaleString()} directories scanned · {scanCount.files.toLocaleString()} Lean files found
+            {scanCount.path && <span> · {scanCount.path}</span>}
+          </div>}
+          {localSource && <p className="leanx-local-hint">{localSource.file_count.toLocaleString()} Lean modules indexed from <code>{localSource.directory}</code>. Files are read lazily; local working copies are mutable.</p>}
+        </> : <div className="leanx-mirror-controls">
+          <p className="leanx-local-hint">Pinned mirror: <SourceLink href="https://github.com/CocoSgt/riemann-hypothesis-lean">CocoSgt/riemann-hypothesis-lean</SourceLink></p>
+          <div className="leanx-input-row">
+            <input id="leanx-input-path" spellCheck={false} aria-label="Lean module path on pinned GitHub mirror"
+              value={formalInput} disabled={running || loadingFile} onChange={event => setFormalInput(event.target.value)}
+              onKeyDown={event => {if (event.key === 'Enter') void loadFile(formalInput.trim(), 'mirror');}}/>
+            <button type="button" disabled={running || loadingFile || !formalInput.trim()} onClick={() => void loadFile(formalInput.trim(), 'mirror')}>{loadingFile ? 'Reading…' : 'Open file'}</button>
+          </div>
+        </div>}
         {file && <div className="leanx-source-line">
-          <span>Commit <code>{file.commit.slice(0, 12)}</code></span>
-          <span>SHA256 <code>{file.sha256.slice(0, 12)}…</code></span>
-          <span>{file.total} candidate declarations</span>
+          <span>Source <code>{file.commit.slice(0, 24)}</code></span>
+          <span>File SHA256 <code>{file.sha256.slice(0, 12)}…</code></span>
+          <span>{file.total} candidate declarations in current file</span>
           <span>Lexical scan · Not kernel checked</span>
-          <SourceLink href={file.url}>Source</SourceLink>
+          {file.url && <SourceLink href={file.url}>View source</SourceLink>}
         </div>}
       </div>
       <div className="leanx-supplement">
@@ -395,8 +420,32 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
     </section>
 
     <div className="leanx-workspace-grid">
-      <aside className="leanx-pane leanx-declarations" aria-label="Lean declaration selector">
-        <div className="leanx-pane-title"><h2>Declarations</h2><span>{file?.total ?? '—'} in this file</span></div>
+      <aside className="leanx-pane leanx-declarations" aria-label="Lean source navigation">
+        {sourceMode === 'local' && <div className="leanx-module-navigator">
+          <div className="leanx-pane-title"><h2>Lean files</h2><span>{localFiles?.total_matches.toLocaleString() ?? '—'} matches</span></div>
+          <div className="leanx-module-search">
+            <input type="search" placeholder="Find files across directory…" aria-label="Find Lean files"
+              value={moduleFilter} disabled={!localSource || moduleLoading || localIndexing}
+              onChange={event => setModuleFilter(event.target.value)}
+              onKeyDown={event => {if (event.key === 'Enter') void loadModules(moduleFilter).catch(cause => setError(explainError(cause)));}}/>
+            <button type="button" disabled={!localSource || moduleLoading || localIndexing}
+              onClick={() => void loadModules(moduleFilter).catch(cause => setError(explainError(cause)))}>Find</button>
+          </div>
+          <div className="leanx-module-list">
+            {localFiles?.files.map(filename => <button type="button" key={filename}
+              className={filename === path && activeFileMode === 'local' ? 'is-selected' : ''}
+              onClick={() => void loadFile(filename, 'local')}>{filename}</button>)}
+            {!localFiles?.files.length && <p className="leanx-empty">Index a directory to browse its Lean files.</p>}
+          </div>
+          {localFiles && <div className="leanx-module-pager">
+            <button type="button" disabled={moduleLoading || localFiles.offset === 0}
+              onClick={() => void loadModules(moduleFilter, Math.max(0, localFiles.offset - 100)).catch(cause => setError(explainError(cause)))}>Previous</button>
+            <span>{localFiles.total_matches ? localFiles.offset + 1 : 0}–{Math.min(localFiles.offset + localFiles.files.length, localFiles.total_matches)} of {localFiles.total_matches.toLocaleString()}</span>
+            <button type="button" disabled={moduleLoading || localFiles.offset + localFiles.files.length >= localFiles.total_matches}
+              onClick={() => void loadModules(moduleFilter, localFiles.offset + 100).catch(cause => setError(explainError(cause)))}>Next</button>
+          </div>}
+        </div>}
+        <div className="leanx-pane-title"><h2>Declarations</h2><span>{file?.total ?? '—'} in current file</span></div>
         <input type="search" placeholder="Filter declarations…" aria-label="Filter declarations" value={filter} onChange={event => setFilter(event.target.value)}/>
         <div className="leanx-declaration-list">
           {filtered.map(item => <button key={item.name + ':' + item.line} type="button"
@@ -418,7 +467,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
         <section className="leanx-pane leanx-source-code">
           <div className="leanx-pane-title">
             <h2>{selected?.name ?? (loadingDeclaration ? 'Reading declaration…' : 'Lean source')}</h2>
-            {selected && <SourceLink href={selected.url + '#L' + selected.start_line}>Lines {selected.start_line}–{selected.end_line}</SourceLink>}
+            {selected && (selected.url ? <SourceLink href={selected.url + '#L' + selected.start_line}>Lines {selected.start_line}–{selected.end_line}</SourceLink> : <span>Lines {selected.start_line}–{selected.end_line}</span>)}
           </div>
           {selected ? <>
             <pre><code>{selected.excerpt}</code></pre>
@@ -454,9 +503,10 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
         <section className="leanx-pane leanx-progress-pane" aria-live="polite">
           <div className="leanx-pane-title">
             <h2>Live activity</h2>
-            <span className={running ? 'leanx-live-dot is-active' : 'leanx-live-dot'} aria-label={running ? 'Active' : 'Idle'}/>
+            <span className={running || localIndexing ? 'leanx-live-dot is-active' : 'leanx-live-dot'} aria-label={running || localIndexing ? 'Active' : 'Idle'}/>
           </div>
           <div className="leanx-stage">{stage}</div>
+          {localIndexing && <p className="leanx-running-time">{scanCount.dirs.toLocaleString()} directories · {scanCount.files.toLocaleString()} Lean files discovered</p>}
           {running && <p className="leanx-running-time">Elapsed: {Math.floor(elapsed / 60)}m {String(elapsed % 60).padStart(2, '0')}s</p>}
           <ol className="leanx-activity-log">
             {activity.map(item => <li key={item.id} className={'leanx-state-' + item.state}>
@@ -472,7 +522,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
           <div className="leanx-dossier-select-row">
             <select id="leanx-dossier-select" value={dossier?.id ?? ''} disabled={running} onChange={event => void selectDossier(event.target.value)}>
               <option value="">Choose dossier…</option>
-              {dossierList.map(item => <option key={item.id} value={item.id}>{item.title} ({item.entry_count})</option>)}
+              {dossierList.filter(item => (item.source_mode || 'mirror') === sourceMode).map(item => <option key={item.id} value={item.id}>{item.title} ({item.entry_count})</option>)}
             </select>
             <button type="button" disabled={running} onClick={() => void createDossier()}>New</button>
           </div>
@@ -482,7 +532,7 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
               {dossier.entries.slice().reverse().slice(0, 12).map(item => <button key={item.id} type="button"
                 onClick={() => {
                   if (item.source.path !== path) {
-                    setFormalInput(item.source.path); void loadFile(item.source.path);
+                    setFormalInput(item.source.path); void loadFile(item.source.path, sourceMode);
                   }
                   setSelectedName(item.source.name); setAnalysis(item.text);
                   setAnalysisSources(item.supplementary_sources || []);
@@ -503,6 +553,6 @@ export default function LeanExplorerPage({onClose}: {onClose: () => void}) {
     </div>
 
     {error && <p className="chat-error leanx-error" role="alert">{error}</p>}
-    <p className="leanx-boundary">Current capability: pinned-source retrieval, single-file declaration scanning, source-grounded AI explanations, durable dossiers and Markdown export. Full import/dependency indexing, Lean elaboration, verification and SIGMA paper handoff are not yet implemented.</p>
+    <p className="leanx-boundary">Current capability: full local directory file inventory and search, lazy Lean module reading, lexical declaration navigation, source-grounded explanations, durable dossiers and Markdown export. This is not yet an elaborated cross-module dependency graph or a Lean proof check. SIGMA paper handoff is not yet implemented.</p>
   </main>;
 }
