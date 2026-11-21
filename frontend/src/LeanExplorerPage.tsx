@@ -217,8 +217,8 @@ export default function LeanExplorerPage() {
     }
   }
 
-  async function indexLocalDirectory() {
-    if (localIndexing || running || !localDirectory.trim()) return;
+  async function indexLocalDirectory(): Promise<LocalSource | null> {
+    if (localIndexing || running || !localDirectory.trim()) return null;
     setLocalIndexing(true); setScanCount({dirs: 0, files: 0, path: ''});
     setStage('Scanning local directory'); setError('');
     const controller = new AbortController(); indexAbortRef.current = controller;
@@ -266,9 +266,11 @@ export default function LeanExplorerPage() {
       setShowInputs(false);
       setStage('Local Lean tree indexed');
       log(`Indexed ${complete.file_count.toLocaleString()} Lean files from local directory`, 'ok');
+      return complete;
     } catch (cause) {
       if (controller.signal.aborted) {setStage('Directory scan stopped'); log('Directory scan stopped', 'note');}
       else {setError(explainError(cause)); setStage('Directory scan failed'); log(explainError(cause), 'error');}
+      return null;
     } finally {setLocalIndexing(false); indexAbortRef.current = null;}
   }
 
@@ -450,7 +452,7 @@ export default function LeanExplorerPage() {
   }
 
   async function exploreSection() {
-    if (!localSource || !sectionId || sourceMode !== 'local' || discovering
+    if (!localDirectory.trim() || !sectionId || sourceMode !== 'local' || discovering
       || running || localIndexing || scopeBusy || !!dossier?.paper_project) return;
     if (markdownDraft.trim() && markdownDraft.trim() !== savedMarkdown) {
       setError('Save or discard your current Markdown edits before a new exploration.');
@@ -459,6 +461,10 @@ export default function LeanExplorerPage() {
     setDiscovering(true); setError(''); setStage('Discovering Lean evidence');
     const controller = new AbortController(); discoveryAbortRef.current = controller;
     try {
+      if (!localSource) {
+        const indexed = await indexLocalDirectory();
+        if (!indexed) return;
+      }
       const dossierId = await ensureDossier();
       const response = await fetch('/api/explorelean/discover', {
         method: 'POST', signal: controller.signal, cache: 'no-store',
@@ -716,7 +722,7 @@ export default function LeanExplorerPage() {
         <strong>Lean evidence scope · {scope.length} declaration{scope.length === 1 ? '' : 's'}</strong>
         <div className="leanx-scope-actions">
           <button type="button" className="leanx-primary-action"
-            disabled={!localSource || sourceMode !== 'local' || !proofMap || !sectionId
+            disabled={!localDirectory.trim() || sourceMode !== 'local' || !proofMap || !sectionId
               || discovering || running || localIndexing || scopeBusy || !!dossier?.paper_project}
             onClick={() => void exploreSection()}>
             {discovering ? 'Exploring…'
