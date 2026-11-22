@@ -32,8 +32,8 @@
 .sigma-public-panel h1 { margin: 0; font-size: clamp(1.8rem, 3.5vw, 2.9rem); line-height: 1.18; color: #fff; }
 .sigma-public-author { margin: 18px 0 24px; color: #c5d3e6; }
 .sigma-public-summary { line-height: 1.7; }
-.sigma-public-panel h2 { margin-top: 31px; font-size: 1.1rem; color: #fff; }
-.sigma-public-downloads { display: flex; flex-wrap: wrap; gap: 14px 30px; margin: 20px 0 28px; }
+.sigma-public-panel h2 { margin: 31px 0 7px; font-size: 1.1rem; color: #fff; }
+.sigma-public-downloads { display: flex; flex-wrap: wrap; gap: 14px 30px; margin: 0 0 28px; }
 .sigma-public-download, .sigma-public-home-link {
   color: #f5c890;
   text-decoration: underline;
@@ -45,10 +45,12 @@
 .sigma-public-panel a { color: #f5c890; }
 .sigma-public-note, .sigma-public-feedback, .sigma-public-references { font-size: .9rem; line-height: 1.65; color: #c7d2df; }
 .sigma-public-note { border-top: 1px solid rgba(185, 169, 143, .3); padding-top: 20px; }
+.sigma-not-found-page { padding-top: 112px; }
 .sigma-not-found-page .sigma-public-panel { max-width: 560px; }
 .sigma-not-found-page .sigma-public-panel h1 { margin-bottom: 20px; }
 @media (max-width: 550px) {
  .sigma-public-header { height: 86px; }
+ .sigma-not-found-page { padding-top: 86px; }
  .sigma-public-panel { margin-top: 12px; }
  .sigma-public-downloads { flex-direction: column; }
 }
