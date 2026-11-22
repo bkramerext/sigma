@@ -21,6 +21,7 @@ import { activatePaperScoreStep } from './paper-score-action';
 import { activeScoringPaperIds, automaticScorePhase, completedScoringPaperIds, savedPaperScoreDisplay } from './paper-score-handoff';
 import { paperGenerationFailureNotice } from './paper-generation-error';
 import { createRoot } from 'react-dom/client';
+import { AlpogePublicationPage, PublicNotFoundPage } from './PublicationPage';
 import './style.css';
 import './workspace.css';
 import './project-entry.css';
@@ -10162,6 +10163,7 @@ function App() {
   }
   const qaBrowser = url.searchParams.get('qa_browser');
   if (qaBrowser) return <><ResearchQABrowserPage qaId={qaBrowser} path={url.searchParams.get('path') ?? ''}/><FloatingTooltip/></>;
+  if (url.pathname !== '/' && url.pathname !== '/project') return <PublicNotFoundPage/>;
   return <><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} cacheScope={cacheScope} getCachedView={getCachedProject} onOpen={async (view, openSettings, fromCache, revealPaperId) => {
       await preloadProjectArtwork();
@@ -11316,4 +11318,9 @@ function TermsOfServicePage() {
 
 
 installRequestErrorToasts();
-createRoot(document.getElementById('root')!).render(window.location.pathname === '/privacy' ? <PrivacyNoticePage/> : window.location.pathname === '/tos' ? <TermsOfServicePage/> : <><CloudAuthGate/><RequestErrorToasts/></>);
+createRoot(document.getElementById('root')!).render(
+  ['/papers/unpacking-alpoge', '/rh_alpoge'].includes(window.location.pathname) ? <AlpogePublicationPage/>
+    : window.location.pathname === '/privacy' ? <PrivacyNoticePage/>
+    : window.location.pathname === '/tos' ? <TermsOfServicePage/>
+    : <><CloudAuthGate/><RequestErrorToasts/></>
+);
