@@ -1,0 +1,54 @@
+/* Public manuscript and 404 pages use the same approved art as SIGMA Home. */
+.sigma-public-page {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding: 0 clamp(24px, 5.4vw, 90px) 72px;
+}
+.sigma-public-page .home-atmosphere { z-index: -1; }
+.sigma-public-header {
+  position: relative;
+  z-index: 1;
+  height: 112px;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 18px;
+}
+.sigma-public-brand { display: block; width: min(230px, 48vw); line-height: 0; }
+.sigma-public-brand img { display: block; width: 100%; height: auto; object-fit: contain; }
+.sigma-public-panel {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(780px, 100%);
+  margin: clamp(16px, 6vh, 66px) auto 0;
+  padding: clamp(28px, 4.5vw, 52px);
+  border: 1px solid rgba(174, 150, 109, .52);
+  border-radius: 16px;
+  background: rgba(5, 13, 27, .87);
+  box-shadow: 0 18px 65px rgba(0, 0, 0, .33);
+  color: #e8eff8;
+}
+.sigma-public-kicker { margin: 0 0 14px; color: #d2ad78; font-size: .85rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.sigma-public-panel h1 { margin: 0; font-size: clamp(1.8rem, 3.5vw, 2.9rem); line-height: 1.18; color: #fff; }
+.sigma-public-author { margin: 18px 0 24px; color: #c5d3e6; }
+.sigma-public-summary { line-height: 1.7; }
+.sigma-public-panel h2 { margin-top: 31px; font-size: 1.1rem; color: #fff; }
+.sigma-public-downloads { display: flex; flex-wrap: wrap; gap: 14px 30px; margin: 20px 0 28px; }
+.sigma-public-download, .sigma-public-home-link {
+  color: #f5c890;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-weight: 700;
+}
+.sigma-public-download:hover, .sigma-public-home-link:hover { color: #fff3d8; }
+.sigma-public-download:focus-visible, .sigma-public-home-link:focus-visible, .sigma-public-panel a:focus-visible { outline: 2px solid #f5c890; outline-offset: 5px; }
+.sigma-public-panel a { color: #f5c890; }
+.sigma-public-note, .sigma-public-feedback, .sigma-public-references { font-size: .9rem; line-height: 1.65; color: #c7d2df; }
+.sigma-public-note { border-top: 1px solid rgba(185, 169, 143, .3); padding-top: 20px; }
+.sigma-not-found-page .sigma-public-panel { max-width: 560px; }
+.sigma-not-found-page .sigma-public-panel h1 { margin-bottom: 20px; }
+@media (max-width: 550px) {
+ .sigma-public-header { height: 86px; }
+ .sigma-public-panel { margin-top: 12px; }
+ .sigma-public-downloads { flex-direction: column; }
+}
