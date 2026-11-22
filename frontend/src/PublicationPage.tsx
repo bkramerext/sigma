@@ -37,7 +37,6 @@ export function PublicNotFoundPage() {
   useEffect(() => { document.title = 'Page not found · SIGMA'; }, []);
   return <main className="home-page sigma-public-page sigma-not-found-page">
     <div className="home-atmosphere" aria-hidden="true"/>
-    <PublicArtworkHeader/>
     <section className="sigma-public-panel" aria-labelledby="not-found-title">
       <h1 id="not-found-title">Page not found</h1>
       <p>The requested page does not exist.</p>
