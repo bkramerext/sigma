@@ -506,6 +506,14 @@ def exercise(origin: str) -> None:
         expect(fresh_welcome).to_have_count(0)
         selected["mode"] = "sponsored"
         page.goto(origin + "/not-found", wait_until="domcontentloaded")
+        expect(page.get_by_role("heading", name="Page not found")).to_be_visible()
+        expect(page.locator(".sigma-public-header")).to_have_count(0)
+        expect(page.locator(".sigma-public-brand img")).to_have_count(0)
+        expect(page.get_by_role("link", name="Return Home")).to_have_attribute("href", "/")
+        expect(page.locator(".api-connection > summary")).to_have_count(0)
+        # Public 404 pages intentionally have no header controls or provider pill.
+        # Verify that Sponsored ChatGPT is preserved on Home after returning.
+        page.get_by_role("link", name="Return Home").click()
         dismiss_sponsor_welcome(page)
         fallback_pill = page.locator(".api-connection > summary")
         expect(fallback_pill).to_have_attribute(
