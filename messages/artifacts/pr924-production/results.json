@@ -1,0 +1,49 @@
+[
+  {
+    "download": "pdf",
+    "status": 200,
+    "bytes": 953997,
+    "sha256": "00ef439a09931b2c1d60ef24584f877872e8fe001442795d8ff5f56921920d48"
+  },
+  {
+    "download": "tex",
+    "status": 200,
+    "bytes": 278823,
+    "sha256": "e80efd6e4e68f8374c25ab7ebd9c0e8ae570d52acbbb86c05758f684153c4759"
+  },
+  {
+    "viewport": 1440,
+    "publication": "PASS anonymous",
+    "download_spacing": {
+      "headingBottomMargin": "7px",
+      "downloadsTopMargin": "0px",
+      "gap": 7
+    },
+    "404": "PASS no logo; background retained",
+    "background": {
+      "background": "url(\"https://sigma-research.duckdns.org/sigma-home-background-copper.png\")",
+      "before": "url(\"https://sigma-research.duckdns.org/sigma-atmosphere.svg\")",
+      "after": "linear-gradient(90deg, rgb(3, 9, 21) 0%, rgba(3, 9, 21, 0.933) 19%, rgba(3, 9, 21, 0.49) 46%, rgba(0, 0, 0, 0) 78%)"
+    },
+    "return_home": "PASS"
+  },
+  {
+    "viewport": 390,
+    "publication": "PASS anonymous",
+    "download_spacing": {
+      "headingBottomMargin": "7px",
+      "downloadsTopMargin": "0px",
+      "gap": 7
+    },
+    "404": "PASS no logo; background retained",
+    "background": {
+      "background": "linear-gradient(rgba(2, 7, 17, 0.85), rgba(2, 7, 17, 0.85)), url(\"https://sigma-research.duckdns.org/sigma-home-background-copper.png\")",
+      "before": "url(\"https://sigma-research.duckdns.org/sigma-atmosphere.svg\")",
+      "after": "linear-gradient(90deg, rgba(3, 9, 21, 0.925), rgba(3, 9, 21, 0.73) 70%, rgba(3, 9, 21, 0.4))"
+    },
+    "return_home": "PASS"
+  },
+  {
+    "authentication": "PASS enabled and ready; protected API returns 401"
+  }
+]
