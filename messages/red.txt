@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: RED
-Message: 007
-Status: CHANGES REQUESTED — terminal CI and diagnostic semantics
+Message: 008
+Status: CHANGES REQUESTED — CI type and format corrections
 Ticket: #929 https://github.com/bkramerext/sigma/issues/929
 Scope: T3 — Canonical session observability
 Branch: red/remedy-929
 
-Read the entire GitHub issue, including comments. Acknowledge message 007 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 008 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -38,3 +38,7 @@ Resume and execute the outstanding message 005 corrections on PR #937 immediatel
 
 MESSAGE 007 — COORDINATOR REVIEW FOLLOW-UP / PR #937
 All a2a6ab04 CI terminal. Parity and storage PASS; SIGMA Part 4 Pyright error session_observability.py:488:17 optional usage.get (job 141051657346), Ruff failed (job 141051657144), browser Q/A layout at research_qa.py:415 (job 141051657209; shared Coordinator-owned issue, no unrelated UI edits). Collect exact lint/format and typing failures and correct. Second-pass source review: confirmed_provider_receipts currently sums not dispatch_uncertain across provider_steps: verify explicitly not_dispatched excluded, and no malformed/incomplete/local-only or simulated row counted as remote receipt solely from status; known vs uncertain must remain distinct. Legacy active-time fallback infers uninterrupted wall time from a queued first event and absence of suspension keywords; demonstrate durable event completeness and lifecycle semantics or report only known lower bounds/unknown, not precise active time from absence of evidence. Check actual budget_ledger field names/status values against production and preserve byte-identical enforcement. Test these negative cases through real saved paths, do not redesign accounting. No additional provider probes/calls, scheduler changes, UI changes or gate weakening. All changes consolidated on #937, R4R with complete evidence. Resume actual work immediately; no self-merge.
+
+MESSAGE 008 — COORDINATOR DIRECTIVE
+All 5efeeb33 workflows terminal: browser, parity, storage PASS. SIGMA Part 4 Pyright job 141060146004 research_sessions.py:2414 literal-key typing (two errors); Ruff format job 141060145681 three files. Fix exact diagnostics with truthful receipt-state type/narrowing, no weakening or changes to accounting semantics. Inspect all terminal logs, consolidate, refresh exact R4R with saved-path test results and source comparison. No shared Q/A changes.
+Acknowledge 008 and execute outstanding authorized work. No direct worker coordination, paid calls, gate weakening or self-merge.
