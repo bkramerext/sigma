@@ -84,6 +84,10 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [importProgress, setImportProgress] = useState('');
+  const [alternatives, setAlternatives] = useState<{ url: string; title: string }[]>([]);
+  const [failedUrl, setFailedUrl] = useState('');
+  const [searchNote, setSearchNote] = useState('');
   const uploadInput = useRef<HTMLInputElement>(null);
   const linkInput = useRef<HTMLInputElement>(null);
   const saving = useRef(false);
@@ -115,6 +119,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
 
   useEffect(() => {
     setRows([]); setError(''); setAdding(false); setEditingId(null); setUrl('');
+    setImportProgress(''); setAlternatives([]); setFailedUrl(''); setSearchNote('');
     void reload().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
   }, [path, guest]);
 
@@ -129,12 +134,13 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
   function cancelLink() {
     cancelled.current = true;
     setAdding(false); setEditingId(null); editingOriginalUrl.current = null; setUrl(''); setError('');
+    setImportProgress(''); setAlternatives([]); setFailedUrl(''); setSearchNote('');
   }
 
-  async function saveLink() {
+  async function saveLink(acceptedUrl?: string) {
     if (saving.current || cancelled.current) return;
     const old = editingId ? rows.find(row => row.id === editingId) : undefined;
-    const candidate = sourceUrl(url, old?.url);
+    const candidate = sourceUrl(acceptedUrl ?? url, old?.url);
     if (!candidate) { cancelLink(); return; }
     const syntaxError = sourceUrlError(candidate);
     if (syntaxError) { setError(syntaxError); return; }
@@ -143,32 +149,50 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
       return;
     }
     saving.current = true; setBusy(true); setError('');
+    setAlternatives([]); setFailedUrl(''); setSearchNote('');
+    setImportProgress('Retrieving source material…');
     try {
-      // The same DNS/domain-status service used by Research/Publication Standards.
-      // An unverified lookup is transient; only definitive invalidity blocks saving.
-      const lookup = await fetch('/api/reference-title?url=' + encodeURIComponent(candidate), {
-        headers: { 'X-Sigma-Error-Handled': 'true' },
-      });
-      if (lookup.ok) {
-        const metadata = await lookup.json() as { domain_status?: string };
-        if (metadata.domain_status === 'invalid') throw new Error('Website could not be found. Check the address.');
-      }
       const endpoint = editingId
         ? '/api/projects/evidence/' + encodeURIComponent(editingId) + '/link'
         : '/api/projects/evidence/link';
       const response = await fetch(endpoint, {
         method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, url: candidate, ...(editingId ? { expected_url: old?.url } : {}) }),
+        body: JSON.stringify({ path, url: candidate, validate_content: true, ...(editingId ? { expected_url: old?.url } : {}) }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not save link.');
-      await reload();
+      if (currentPath.current !== path || cancelled.current) return;
+      if (result.status !== 'imported') {
+        setFailedUrl(candidate);
+        setError('Could not retrieve Source Material: ' + (result.reason || 'unavailable') + '.');
+        setImportProgress('Looking for an accessible copy…');
+        try {
+          const search = await fetch('/api/projects/evidence/link/alternatives', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
+            body: JSON.stringify({ path, url: candidate }),
+          });
+          const suggestions = await search.json();
+          if (currentPath.current !== path || cancelled.current) return;
+          if (search.ok && Array.isArray(suggestions.candidates)) setAlternatives(suggestions.candidates);
+          setSearchNote(suggestions.status === 'search_not_configured'
+            ? 'Automatic web search is not configured. Find an accessible copy or upload a PDF.'
+            : suggestions.status === 'candidates'
+              ? 'Possible alternative sources. Review the document before accepting; equivalence is not verified.'
+              : 'No accessible copy was established. Try another URL or upload a PDF.');
+        } catch {
+          setSearchNote('Alternative search is unavailable. Try another URL or upload a PDF.');
+        }
+        return;
+      }
+      // End editing before reconciliation so our own edit is not mistaken for a remote change.
+      setRows(current => [...current.filter(row => row.id !== result.entry.id), result.entry]);
       setAdding(false); setEditingId(null); editingOriginalUrl.current = null; setUrl('');
+      setError(''); setFailedUrl(''); setSearchNote(''); setAlternatives([]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      saving.current = false; setBusy(false);
+      saving.current = false; setBusy(false); setImportProgress('');
     }
   }
 
@@ -214,14 +238,30 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
   }
 
   function linkEditor() {
-    return <input ref={linkInput} className="sigma-evidence-link-input" aria-label="Source Material link"
+    return <><input ref={linkInput} className="sigma-evidence-link-input" aria-label="Source Material link"
       aria-invalid={!!error} inputMode="url" type="text" placeholder="example.org/document"
-      value={url} disabled={busy} onChange={event => { setUrl(event.target.value); setError(''); }}
-      onBlur={() => { if (!cancelled.current) void saveLink(); }}
+      value={url} disabled={busy} onChange={event => {
+        setUrl(event.target.value); setError(''); setFailedUrl(''); setSearchNote(''); setAlternatives([]);
+      }}
+      onBlur={() => { if (!cancelled.current && !failedUrl) void saveLink(); }}
       onKeyDown={event => {
         if (event.key === 'Enter') { event.preventDefault(); void saveLink(); }
         if (event.key === 'Escape') { event.preventDefault(); cancelLink(); }
-      }}/>;
+      }}/>
+      {importProgress && <span className="sigma-evidence-import-progress" role="status">{importProgress}</span>}
+      {failedUrl && !busy && <div className="sigma-evidence-import-feedback">
+        {searchNote && <span>{searchNote}</span>}
+        {alternatives.map(alternative => <div key={alternative.url} className="sigma-evidence-import-actions">
+          <a href={alternative.url} target="_blank" rel="noopener noreferrer">{alternative.title}</a>
+          <button type="button" className="text-view-link" onClick={() => void saveLink(alternative.url)}>Accept</button>
+        </div>)}
+        <div className="sigma-evidence-import-actions">
+          <button type="button" className="text-view-link" onClick={() => void saveLink(failedUrl)}>Retry</button>
+          <button type="button" className="text-view-link" onClick={() => { cancelLink(); uploadInput.current?.click(); }}>Upload PDF</button>
+          <button type="button" className="text-view-link" onClick={cancelLink}>Cancel</button>
+        </div>
+      </div>}
+    </>;
   }
 
   return <section className="sigma-description-field sigma-supplied-evidence">
@@ -235,7 +275,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
         onClick={() => {
           if (!expanded) onToggle();
           cancelled.current = false;
-          setError('');
+          setError(''); setFailedUrl(''); setAlternatives([]); setSearchNote('');
           if (editingId) setEditingId(null);
           if (!adding) { setUrl(''); setAdding(true); }
           else linkInput.current?.focus();
@@ -263,7 +303,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
             <EvidenceActionIcon kind={entry.enabled === false ? 'disabled' : 'enabled'}/>
           </button>
           {entry.kind === 'link' && <button type="button" aria-label="Edit Source Material link" data-tooltip="Edit link"
-            disabled={busy} onClick={() => { cancelled.current = false; setError(''); setAdding(false); editingOriginalUrl.current = entry.url || ''; setEditingId(entry.id); setUrl(entry.url || ''); }}>
+            disabled={busy} onClick={() => { cancelled.current = false; setError(''); setFailedUrl(''); setAlternatives([]); setSearchNote(''); setAdding(false); editingOriginalUrl.current = entry.url || ''; setEditingId(entry.id); setUrl(entry.url || ''); }}>
             <EvidenceActionIcon kind="edit"/>
           </button>}
           {entry.can_remove !== false && <button type="button" aria-label={'Remove ' + (entry.filename || entry.url)}

@@ -7,15 +7,17 @@ validation, including each redirect. No user-supplied text is an instruction.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import http.client
 import json
+import os
 import re
 import socket
 import ssl
 import time
 from datetime import UTC, datetime
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import unquote, urljoin, urlsplit
 
 from sigma import project_evidence, research_reference_content
 from sigma.projects import project_write_lock
@@ -168,9 +170,128 @@ def read_link(url: str, fetched: tuple[bytes, str, str] | None = None) -> dict:
             incomplete_extract=truncated,
             reason=None,
         )
-    except (ValueError, OSError, TimeoutError, ssl.SSLError, http.client.HTTPException) as exc:
+    except (ValueError, OSError, TimeoutError, ssl.SSLError, http.client.HTTPException,
+            project_evidence.ProjectError) as exc:
         result["reason"] = str(exc)[:160] or type(exc).__name__
     return result
+
+
+def _import_member(url: str) -> str:
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    return f"artifacts/source_material/imports/{digest}.json"
+
+
+def _imported_payload(path: str, url: str) -> tuple[bytes, str, str] | None:
+    raw = project_evidence._read(path, _import_member(url))
+    if raw is None:
+        return None
+    try:
+        record = json.loads(raw)
+        payload = base64.b64decode(record["data"], validate=True)
+        if (
+            record["url"] == url
+            and len(payload) <= MAX_REMOTE_BYTES
+            and hashlib.sha256(payload).hexdigest() == record["sha256"]
+            and record["content_type"] in _SUPPORTED_MEDIA_TYPES
+        ):
+            return payload, record["content_type"], record["resolved_url"]
+    except (ValueError, KeyError, TypeError):
+        pass
+    raise ValueError("imported_source_integrity_failed")
+
+
+def import_link(
+    path: str,
+    url: str,
+    *,
+    identifier: str | None = None,
+    expected_url: str | None = None,
+) -> dict:
+    """Validate the same bytes research will read before publishing a link."""
+    project_evidence._require_source_editor()
+    project_evidence.list_evidence(path)
+    canonical = project_evidence._validated_link_url(url)
+    try:
+        fetched = _fetch_url(canonical)
+    except (ValueError, OSError, http.client.HTTPException) as exc:
+        return {"status": "unavailable", "reason": str(exc)[:160]}
+    result = read_link(canonical, fetched)
+    if result["status"] != "retrieved" or result["incomplete_extract"]:
+        return {"status": "unavailable", "reason": result["reason"] or "incomplete_extract"}
+    payload, content_type, resolved = fetched
+    member = _import_member(canonical)
+    record = {
+        "url": canonical,
+        "resolved_url": resolved,
+        "content_type": content_type,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "retrieved_at": result["retrieved_at"],
+        "data": base64.b64encode(payload).decode("ascii"),
+    }
+    with project_write_lock(path):
+        # Publish the validated snapshot first, so a committed link never
+        # depends on an inaccessible second fetch. Roll back on a stale edit.
+        previous = project_evidence._read(path, member)
+        project_evidence._write(path, {member: json.dumps(record, sort_keys=True).encode()})
+        try:
+            if identifier is None:
+                entry = project_evidence.add_link(path, canonical)
+            else:
+                entry = project_evidence.edit_link(
+                    path, identifier, canonical, expected_url=expected_url
+                )
+        except Exception:
+            project_evidence._write(path, {member: previous})
+            raise
+    return {"status": "imported", "entry": entry}
+
+
+def discover_alternatives(path: str, url: str) -> dict:
+    """Search for candidate copies only when an operator configured a search key.
+
+    Search hits are suggestions, never authoritative evidence. Only normal
+    import can admit a user-approved candidate into Source Material.
+    """
+    import httpx
+
+    project_evidence._require_source_editor()
+    project_evidence.list_evidence(path)
+    canonical = project_evidence._validated_link_url(url)
+    key = os.environ.get("SIGMA_SOURCE_SEARCH_BRAVE_API_KEY", "").strip()
+    if not key:
+        return {"status": "search_not_configured", "candidates": []}
+    parsed = urlsplit(canonical)
+    if parsed.query or parsed.fragment:
+        return {"status": "manual_search_required", "candidates": []}
+    # Search for document wording from the public path; never send query
+    # parameters or fragments, which may carry access tokens.
+    words = re.sub(r"[^\w ]+", " ", unquote(parsed.path)).strip()
+    query = (words if len(words) >= 12 else f"{parsed.hostname} {words}")[:300]
+    try:
+        with httpx.Client(timeout=8, follow_redirects=False) as client:
+            response = client.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                params={"q": query, "count": 5},
+                headers={"Accept": "application/json", "X-Subscription-Token": key},
+            )
+            response.raise_for_status()
+            hits = response.json().get("web", {}).get("results", [])
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return {"status": "search_unavailable", "candidates": []}
+    candidates = []
+    for hit in hits[:5]:
+        if not isinstance(hit, dict):
+            continue
+        candidate = hit.get("url")
+        if not isinstance(candidate, str) or candidate == canonical or len(candidate) > 2048:
+            continue
+        try:
+            candidate = project_evidence._validated_link_url(candidate)
+        except project_evidence.ProjectError:
+            continue
+        # No assumption of equivalence based on search metadata.
+        candidates.append({"url": candidate, "title": str(hit.get("title") or candidate)[:200]})
+    return {"status": "candidates" if candidates else "no_candidates", "candidates": candidates}
 
 
 def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict:
@@ -237,7 +358,7 @@ def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict
                     pass
             if fetched is None:
                 try:
-                    fetched = _fetch_url(entry["url"])
+                    fetched = _imported_payload(path, entry["url"]) or _fetch_url(entry["url"])
                     new_fetch = True
                 except (
                     ValueError,
@@ -247,6 +368,11 @@ def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict
                     http.client.HTTPException,
                 ) as exc:
                     return {**entry, "status": "unavailable", "reason": str(exc)[:160]}
+        if session_id is None:
+            try:
+                fetched = _imported_payload(path, entry["url"])
+            except (ValueError, OSError) as exc:
+                return {**entry, "status": "unavailable", "reason": str(exc)[:160]}
         result = read_link(entry["url"], fetched)
         if new_fetch and result["status"] == "retrieved" and snapshot is not None:
             assert fetched is not None
