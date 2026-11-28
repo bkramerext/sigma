@@ -254,7 +254,8 @@ def _sources(rows: list[dict[str, Any]], key: str, *, complete: bool = False) ->
             result[identifier] = source
             originals[identifier] = row
         elif (
-            source["availability"] != "pointer_only" and row != originals[identifier]
+            source["availability"] != "pointer_only"
+            and row != originals[identifier]
             or source["strategy_id"] not in (None, previous["strategy_id"])
         ):
             previous["conflicted"] = True
