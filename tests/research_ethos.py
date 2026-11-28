@@ -48,7 +48,24 @@ def main() -> None:
             assert defaults["is_override"] is False
             assert isinstance(defaults["markdown"], str)
             assert isinstance(defaults["sha256"], str)
-            assert "Pursue discovery" in defaults["markdown"]
+            principles = [
+                line for line in defaults["markdown"].splitlines() if line[:1].isdigit()
+            ]
+            assert len(principles) == 5
+            for index, heading in enumerate(
+                (
+                    "Pursue discovery freely",
+                    "Let evidence govern conclusions",
+                    "Make obstacles productive",
+                    "Build understanding cumulatively",
+                    "Publish faithfully and respect the reader",
+                ),
+                start=1,
+            ):
+                assert principles[index - 1].startswith(f"{index}. **{heading}.**")
+            assert "conditional results" in defaults["markdown"]
+            assert "structural relationships" in defaults["markdown"]
+            assert defaults["version"] == "research-ethos-v2"
             assert len(defaults["sha256"]) == 64
 
             with TestClient(app) as client:
