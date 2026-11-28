@@ -15,7 +15,6 @@ EVIDENCE_PREFIX = f"fresh-{uuid4().hex}-"
 print(f"Fresh Q/A screenshot evidence prefix: {EVIDENCE_PREFIX}", flush=True)
 
 
-
 def evidence_path(name):
     return str(OUT / (EVIDENCE_PREFIX + name))
 

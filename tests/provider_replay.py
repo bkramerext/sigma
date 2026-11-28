@@ -14,6 +14,7 @@ import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime, tzinfo
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -380,6 +381,20 @@ def transport_checks() -> None:
     print("PASS strict matching, endpoint, order, exhaustion, sticky failure, and DNS guard")
 
 
+def fixed_scheduler_clock(timestamp: str) -> type[datetime]:
+    """Freeze only the research scheduler's wall clock, not asyncio or I/O."""
+    fixed = datetime.fromisoformat(timestamp)
+
+    class SchedulerClock(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> datetime:
+            if tz is None:
+                return fixed.astimezone().replace(tzinfo=None)
+            return fixed.astimezone(tz)
+
+    return SchedulerClock
+
+
 async def production_replay(root: Path) -> None:
     from research_sessions import investigation, provider_response, setup, skeptic, wait_for
 
@@ -415,7 +430,7 @@ async def production_replay(root: Path) -> None:
             patch.object(
                 research_sessions, "uuid4", side_effect=lambda: UUID(int=next(ids), version=4)
             ),
-            patch.object(research_sessions, "_now", return_value=fixed_time),
+            patch.object(research_sessions, "datetime", fixed_scheduler_clock(fixed_time)),
             synthetic_transport(credential, config, handler),
         ):
             started = await research_sessions.start_session(
@@ -525,8 +540,27 @@ def verify_history_migration(root: Path, source: Path, result: dict) -> None:
     )
 
 
+def outcome_difference_paths(left, right, path="outcome") -> list[str]:
+    """Report structural mismatch locations without dumping response contents."""
+    if type(left) is not type(right):
+        return [f"{path} (type mismatch)"]
+    if isinstance(left, dict):
+        differences = [
+            f"{path}.{key} (missing key)" for key in sorted(left.keys() ^ right.keys())
+        ]
+        for key in sorted(left.keys() & right.keys()):
+            differences.extend(outcome_difference_paths(left[key], right[key], f"{path}.{key}"))
+        return differences
+    if isinstance(left, list):
+        differences = [f"{path} (length mismatch)"] if len(left) != len(right) else []
+        for index, (first, second) in enumerate(zip(left, right, strict=False)):
+            differences.extend(outcome_difference_paths(first, second, f"{path}[{index}]"))
+        return differences
+    return [path] if left != right else []
+
+
 def assert_accepted_equivalence(left: dict, right: dict) -> None:
-    # Exclude runtime timing/diagnostic fields, not substantive research.
+    # Compare substantive artifact fields and the entire outcome, including metrics.
     fields = (
         "id",
         "strategy_id",
@@ -543,8 +577,12 @@ def assert_accepted_equivalence(left: dict, right: dict) -> None:
     for first, second in zip(left["artifacts"], right["artifacts"], strict=True):
         for field in fields:
             assert first[field] == second[field], field
-    assert left["outcome"] == right["outcome"]
+    assert left["outcome"] == right["outcome"], outcome_difference_paths(
+        left["outcome"], right["outcome"]
+    )[:20]
     assert left["termination_reason_code"] == right["termination_reason_code"]
+    assert left["calls_used"] == right["calls_used"]
+    assert left["status"] == right["status"]
     branch_fields = ("strategy_id", "status", "calls_used", "cycle", "current_question")
     for first, second in zip(left["strategy_runs"], right["strategy_runs"], strict=True):
         for field in branch_fields:
@@ -675,7 +713,7 @@ async def parallel_stream_replay(root: Path) -> None:
 
         with (
             patch.object(research_sessions, "uuid4", side_effect=deterministic_uuid),
-            patch.object(research_sessions, "_now", return_value=fixed_time),
+            patch.object(research_sessions, "datetime", fixed_scheduler_clock(fixed_time)),
             synthetic_transport(credential, config, overlap),
         ):
             results = await asyncio.gather(
