@@ -1508,6 +1508,58 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     assert research_sessions._read(str(path), session_id)["hard_budget_ledger"] == before
     assert ledger == before
 
+    # Duplicate receipt-critical evidence must project identically in either
+    # order, including optional Supervisor/Compiler attempts.
+    received = {
+        "id": "audit-duplicate",
+        "role": "investigator",
+        "status": "completed",
+        "provider_input_audit": {
+            "kind": "exact_provider_request_body",
+            "status": "provider_response_received",
+        },
+    }
+    unknown = {
+        **received,
+        "provider_input_audit": {"status": "call_failed_dispatch_unknown"},
+    }
+    review = {
+        "id": "review-duplicate",
+        "status": "completed",
+        "assessment": {"action": "continue"},
+        "provider_response_observed": True,
+    }
+    compiler = {
+        "number": 1,
+        "attempt_id": "compiler-duplicate",
+        "status": "completed",
+        "provider_http_status": 200,
+    }
+    permutations_record = deepcopy(record)
+    permutations_record["calls_used"] = 2
+    permutations_record["steps"] = [received, unknown]
+    permutations_record["supervisor_reviews"] = [review, {**review, "status": "failed"}]
+    permutations_record["reference_compilation"] = {
+        "status": "fallback",
+        "attempts": [compiler, {**compiler, "provider_http_status": 429}],
+    }
+    for _ in range(2):
+        research_sessions._save(str(path), permutations_record)
+        projection = research_sessions.get_session(str(path), session_id)["outcome"]["metrics"][
+            "observability"
+        ]
+        assert projection["confirmed_provider_receipts"] == 0
+        assert projection["provider_receipt_states"]["uncertain"] == 3
+        assert projection["conflicting_attempt_identities"] == 3
+        assert projection["recorded_attempts"] == 3
+        assert projection["unknown_budget_counted_attempts"] == 0
+        assert projection["attempt_inventory_complete"] is False
+        assert projection["supervisor_reviews"] == 0
+        assert projection["research_calls"] == 0
+        permutations_record["steps"].reverse()
+        permutations_record["supervisor_reviews"].reverse()
+        permutations_record["reference_compilation"]["attempts"].reverse()
+
     historical["simulated"] = True
     research_sessions._save(str(path), historical)
     simulated = research_sessions.get_session(str(path), session_id)["outcome"]["metrics"][

@@ -160,6 +160,31 @@ def _identity(row: dict[str, Any]) -> str | None:
     return key if isinstance(key, str) and key else None
 
 
+_AUDIT_EVIDENCE_FIELDS = (
+    "kind",
+    "status",
+    "request_body_sha256",
+    "provider_request_id",
+    "provider_response_id",
+    "attempt_id",
+)
+
+
+def _audit_evidence(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: value[key] for key in _AUDIT_EVIDENCE_FIELDS if value.get(key) is not None}
+
+
+def _disagree(first: dict[str, Any], second: dict[str, Any], fields: tuple[str, ...]) -> bool:
+    return any(
+        first.get(key) is not None
+        and second.get(key) is not None
+        and (type(first[key]) is not type(second[key]) or first[key] != second[key])
+        for key in fields
+    )
+
+
 def _conflicts(first: dict[str, Any], second: dict[str, Any]) -> bool:
     fields = (
         "status",
@@ -175,7 +200,9 @@ def _conflicts(first: dict[str, Any], second: dict[str, Any]) -> bool:
         "backend_build_commit",
         "started_at",
         "finished_at",
+        "id",
         "attempt_id",
+        "number",
         "assessment",
         "output",
         "provider_attempt_duration_seconds",
@@ -190,12 +217,46 @@ def _conflicts(first: dict[str, Any], second: dict[str, Any]) -> bool:
         "provider_response_observed",
         "simulated",
         "provider_response_channel",
+        "provider_response_status",
+        "provider_request_id",
+        "provider_response_id",
+        "provider_stream_event",
         "diagnostic_provider_http_status",
+        "diagnostic_provider_error_code",
+        "failure_kind",
+        "failure_type",
+        "failure_exception_type",
+        "validation_failure",
+        "mode",
     )
-    return any(
-        first.get(key) is not None and second.get(key) is not None and first[key] != second[key]
-        for key in fields
-    )
+    left_id, right_id = _identity(first), _identity(second)
+    if left_id is not None and right_id is not None and left_id != right_id:
+        return True
+    if _disagree(first, second, fields):
+        return True
+    left = first.get("provider_input_audit")
+    right = second.get("provider_input_audit")
+    if left is not None and right is not None:
+        if not isinstance(left, dict) or not isinstance(right, dict):
+            return True
+        if _disagree(_audit_evidence(left), _audit_evidence(right), _AUDIT_EVIDENCE_FIELDS):
+            return True
+    # Some historical schemas saved response/request IDs at the top level
+    # rather than inside the input audit. Compare both explicit locations.
+    for key in ("provider_request_id", "provider_response_id"):
+        values = [
+            value
+            for value in (
+                first.get(key),
+                second.get(key),
+                _audit_evidence(left).get(key),
+                _audit_evidence(right).get(key),
+            )
+            if value is not None
+        ]
+        if values and any(value != values[0] for value in values[1:]):
+            return True
+    return False
 
 
 def _combine(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
@@ -205,13 +266,22 @@ def _combine(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
         or _conflicts(first, second)
     ):
         # Preserve identity for the inventory, not a disputed usage/result.
+        left_id, right_id = _identity(first), _identity(second)
         return {
-            "id": _identity(first),
-            "number": first.get("number"),
-            "role": first.get("role"),
+            "id": left_id if left_id == right_id else None,
+            "number": first.get("number") if first.get("number") == second.get("number") else None,
+            "role": first.get("role") if first.get("role") == second.get("role") else None,
             "observability_conflict": True,
         }
-    return {**second, **{key: value for key, value in first.items() if value is not None}}
+    merged = {**second, **{key: value for key, value in first.items() if value is not None}}
+    # A sparse duplicate must not conceal affirmative or contradictory audit
+    # evidence. Project only the bounded audit fields; never compare/copy a
+    # provider request body into the reconciled observation.
+    left = first.get("provider_input_audit")
+    right = second.get("provider_input_audit")
+    if isinstance(left, dict) or isinstance(right, dict):
+        merged["provider_input_audit"] = {**_audit_evidence(right), **_audit_evidence(left)}
+    return merged
 
 
 def unique_rows(value: Any) -> list[dict[str, Any]]:
@@ -320,8 +390,10 @@ def attempts(record: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
     """
     rows = unique_rows(record.get("steps"))
     for review in unique_rows(record.get("supervisor_reviews")):
-        if review.get("status") in ("running", "completed", "failed", "interrupted") or (
-            review.get("attempt_status") == "not_dispatched"
+        if (
+            review.get("observability_conflict")
+            or review.get("status") in ("running", "completed", "failed", "interrupted")
+            or review.get("attempt_status") == "not_dispatched"
         ):
             rows.append({**review, "role": "supervisor"})
     rows = unique_rows(rows)
@@ -352,6 +424,7 @@ def attempts(record: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
                 _compiler_row(
                     {
                         **compiler_execution(compiler),
+                        "number": current,
                         "status": compiler["status"],
                         "usage_status": "unknown",
                         "started_at": compiler.get("attempt_started_at"),
@@ -375,15 +448,17 @@ def attempts(record: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
                     }
                 )
             )
-    return rows, gap
+    return unique_rows(rows), gap
 
 
 def accepted_counts(steps: list[dict[str, Any]], rows: list[dict[str, Any]]) -> dict[str, int]:
+    conflicts = {_identity(row) for row in rows if row.get("observability_conflict")}
     accepted = {
         role: sum(
             step.get("role") == role
             and step.get("status") == "completed"
             and not step.get("observability_conflict")
+            and _identity(step) not in conflicts
             and step.get("attempt_status") != "not_dispatched"
             for step in steps
         )
@@ -444,14 +519,15 @@ def receipt_state(
         return "not_dispatched"
     if simulated or row.get("simulated") is True or row.get("mode") == "mock":
         return "simulated"
+    if row.get("observability_conflict"):
+        return "uncertain"
     role = row.get("role")
     compiler = role == "reference_compiler"
     identified = _identity(row) is not None or (
         compiler and type(row.get("number")) is int and row["number"] > 0
     )
     if (
-        row.get("observability_conflict")
-        or not identified
+        not identified
         or role not in ("investigator", "skeptic", "supervisor", "reference_compiler")
         or attempt_status in ("preparing", "reserved")
         or row.get("status") not in ("completed", "incomplete", "failed", "interrupted", "running")

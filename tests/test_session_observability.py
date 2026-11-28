@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from itertools import permutations
 from typing import Any
 
 from sigma import session_observability as obs
@@ -266,6 +267,61 @@ def run() -> dict[str, Any]:
     assert len(conflicting) == 1 and conflicting[0]["observability_conflict"]
     assert obs.reported_usage(conflicting[0]) is None
     assert obs.dispatch_uncertain(conflicting[0])
+    received = {
+        "id": "audit",
+        "role": "investigator",
+        "status": "completed",
+        "provider_input_audit": {
+            "kind": "exact_provider_request_body",
+            "status": "provider_response_received",
+            "request_body_sha256": "a" * 64,
+            "request_body_compressed": "not part of the diagnostic comparison",
+        },
+    }
+    sparse = {"id": "audit", "provider_input_audit": {"kind": "exact_provider_request_body"}}
+    contrary = {
+        **received,
+        "provider_input_audit": {"status": "call_failed_dispatch_unknown"},
+    }
+    for order in permutations([received, sparse, contrary]):
+        reconciled = obs.unique_rows(list(order))
+        assert len(reconciled) == 1
+        assert reconciled[0]["observability_conflict"]
+        assert obs.receipt_state(reconciled[0]) == "uncertain"
+    for order in permutations([received, sparse]):
+        reconciled = obs.unique_rows(list(order))
+        assert obs.receipt_state(reconciled[0]) == "confirmed"
+        assert "request_body_compressed" not in reconciled[0]["provider_input_audit"]
+    for key, left, right in (
+        ("mode", "chatgpt", "mock"),
+        ("provider_request_id", "req-a", "req-b"),
+        ("diagnostic_provider_error_code", "rate_limit_exceeded", "insufficient_quota"),
+        ("failure_kind", "timeout", "provider_rejected"),
+    ):
+        for order in permutations([{**received, key: left}, {**received, key: right}]):
+            assert obs.receipt_state(obs.unique_rows(list(order))[0]) == "uncertain"
+    for order in permutations(
+        [
+            {**received, "provider_request_id": "req-a"},
+            {"id": "audit", "provider_input_audit": {"provider_request_id": "req-b"}},
+        ]
+    ):
+        assert obs.receipt_state(obs.unique_rows(list(order))[0]) == "uncertain"
+    assert received["provider_input_audit"]["request_body_compressed"]
+    compiler = {"number": 1, "status": "completed", "provider_http_status": 200}
+    for order in permutations(
+        [{**compiler, "id": "compiler-a"}, {**compiler, "attempt_id": "compiler-b"}]
+    ):
+        duplicate_record = {
+            "calls_used": 0,
+            "steps": [],
+            "reference_compilation": {"status": "fallback", "attempts": list(order)},
+        }
+        projected, missing = obs.attempts(duplicate_record)
+        assert len(projected) == 1
+        assert projected[0]["observability_conflict"]
+        assert obs.receipt_state(projected[0]) == "uncertain"
+        assert not obs.inventory_complete(duplicate_record, projected, missing)
     local = {"id": "local", "role": "investigator", "status": "completed"}
     metered = {**local, "token_usage_status": "reported", "token_usage": _usage(3, 2)}
     assert obs.receipt_state(local) == "uncertain"
