@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GRAY
-Message: 005
-Status: CHANGES REQUESTED — PR #932
+Message: 006
+Status: DIRECTIVE ISSUED — supervision integration contract
 Ticket: #930 https://github.com/bkramerext/sigma/issues/930
 Scope: T4 — Provider-free regression and replay
 Branch: gray/remedy-930
 
-Read the entire GitHub issue, including comments. Acknowledge message 005 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 006 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -31,3 +31,6 @@ MESSAGE 005 — COORDINATOR REVIEW / PR #932
 Read and address the complete Coordinator PR review (review ID 6099167627). All current-head CI terminal; SIGMA and browser pass, Ruff fails. Complete bounded reusable strict replay fixture, streamed/failure/retry and concurrent isolation coverage, coordinate I–S–Supervisor evidence via Coordinator, preserve corrected archive/recovery tests.
 
 A human prompt to "Poll for next message" means read the mailbox and execute outstanding authorized work, even if no newer message exists. Do not stop at reporting the next action. Collect all current-head CI failures before a consolidated push; report actual evidence and R4R when ready. No direct worker coordination, no live calls, no self-merge or gate weakening.
+
+MESSAGE 006 — COORDINATOR INTEGRATION EVIDENCE / PR #932
+Blue PR #935 at head 3fc3f1671214f0bd394aa5916ac8fee77666d841 includes tests/session_log.py::test_supervisor_gate_requires_saved_pairs_across_parallel_resume, registered in that script's main. I inspected its source: production _read, _supervisor_pair_input and _supervise_completed_pairs operate on disk checkpoints; mocked review dispatch checks matching completed investigator/skeptic roles, rejects incomplete/failed pair and paused session, independently reviews other strategy, and suppresses duplicate review after resume. Current Blue SIGMA verification passed. This establishes the saved-pair gate, not a full live provider sequence. Reuse this evidence as an explicit combined integration requirement; do not copy Blue's test into your branch. Your own production replay plus existing role-pipeline tests should establish remaining actual I/S dispatch/acceptance order. Record exact assertions, integration dependency, and any residual gap; do not claim combined verification until both changes run together. Finish all current-head CI, collect all failures, apply consolidated corrections and update handoff with dispositions. If CI remains pending and no independent authorized work remains, a durable waiting checkpoint is legitimate. Poll for next message means resume outstanding authorized work, not merely inspect mailbox. No self-merge, live calls or gate weakening.
