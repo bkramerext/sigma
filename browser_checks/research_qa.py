@@ -25,10 +25,23 @@ with sync_playwright() as playwright:
     page = context.new_page()
     errors = []
     fail_archive_reads = [0]
+    fail_background_archive_reads = [0]
     missing_archive_reads = [0]
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
+        # Never let background refresh consume a user-action failure injection.
+        if route.request.headers.get("x-sigma-error-handled") == "true":
+            if fail_background_archive_reads[0]:
+                fail_background_archive_reads[0] -= 1
+                route.fulfill(
+                    status=503,
+                    content_type="application/json",
+                    body='{"error":"fixture background archive outage"}',
+                )
+                return
+            route.continue_()
+            return
         if "/api/projects/research-qa?" in route.request.url and missing_archive_reads[0]:
             missing_archive_reads[0] -= 1
             route.fulfill(
@@ -239,10 +252,24 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("group", name="Recover interrupted Q/A request")).to_have_count(0)
     ask_button = dialog.get_by_role("button", name="Ask", exact=True)
     expect(ask_button).to_be_enabled()
+    fail_background_archive_reads[0] = 1
+    with page.expect_response(
+        lambda response: (
+            "/api/projects/research-qa?" in response.url
+            and response.status == 503
+            and response.request.headers.get("x-sigma-error-handled") == "true"
+        ),
+        timeout=15000,
+    ):
+        pass
+    expect(dialog.get_by_role("alert")).to_have_count(0)
+    expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(question)
     fail_archive_reads[0] = 1
     ask_button.click()
     expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")
+    assert fail_archive_reads[0] == 0
     expect(ask_button).to_be_enabled()
+    expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(question)
     saved_answers = []
     for _ in range(120):
         saved_answers = page.evaluate(
@@ -295,6 +322,8 @@ with sync_playwright() as playwright:
     ask_button.click()
     expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")
     expect(ask_button).to_be_enabled()
+    assert fail_archive_reads[0] == 0
+    expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(failed_question)
     failed_state_after_archive_error = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
     )
