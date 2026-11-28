@@ -891,8 +891,13 @@ def _session_start_limits(
         # The session owns its protocol budget. Only global safety limits
         # participate in admission; obsolete round defaults cannot block it.
         return _validate_limits(
-            {**stored, "scheduler_version": 2, "research_rounds": 1,
-             "turns_per_round": 1, "model_calls": 2}
+            {
+                **stored,
+                "scheduler_version": 2,
+                "research_rounds": 1,
+                "turns_per_round": 1,
+                "model_calls": 2,
+            }
         )
     paired = stored.get("scheduler_version") == 2 or (
         isinstance(expected, dict) and expected.get("scheduler_version") == 2
@@ -4850,6 +4855,14 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         }
     }
     if record.get("scheduler_version") == 2:
+        # Migrate historical paired session settings at the read boundary.
+        # cycle_limit is the durable flat slot count, independent of labels
+        # and immutable provider/audit history. The next edit persists it.
+        cycles = int(record.get("cycle_limit", 0))
+        if cycles > 0:
+            result["session_settings"] = _session_configuration(
+                record.get("session_settings"), default_turn_limit=cycles
+            )
         round_number, pair_number = _paired_round_position(record, int(record.get("cycle", 0)))
         result["research_round"] = round_number if record.get("cycle", 0) else 0
         result["paired_turn_in_round"] = pair_number if record.get("cycle", 0) else 0
