@@ -959,8 +959,9 @@ def check_private_diagnostic_api(
         saved = saved_session.json()
         assert saved["status"] == "stopped"
         assert saved["steps"][0]["provider_input_audit"]["request_body"] == body
-        assert saved["steps"][0]["provider_input_audit"]["request_body_sha256"] == (
-            audit["request_body_sha256"]
+        assert (
+            saved["steps"][0]["provider_input_audit"]["request_body_sha256"]
+            == (audit["request_body_sha256"])
         )
         assert saved["tokens_used"] == 70
     assert not (log_root / target_id).exists()
@@ -1027,9 +1028,7 @@ def check_private_diagnostic_api(
         owner, "GET", "/api/projects/download", params={"path": str(copy_path)}
     ).json()
     assert "diagnostics" not in plain_copy
-    expect_hidden(
-        request(other, "GET", "/api/projects/download", params={"path": str(copy_path)})
-    )
+    expect_hidden(request(other, "GET", "/api/projects/download", params={"path": str(copy_path)}))
     print("PASS authenticated nonempty diagnostic transfer, private backup and Save As")
 
 
