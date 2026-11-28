@@ -35,7 +35,7 @@ import './action-icons.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
-import AboutProvenanceVision from './about-provenance';
+import AboutProvenanceVision, { AboutResearchArchitecture } from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
@@ -6277,7 +6277,7 @@ function AboutArchitecture() {
     setSessionExpanded(next);
   }
 
-  return <section className="about-architecture" aria-label="How SIGMA Works: Multi-Agentic Research">
+  return <section className="about-architecture" aria-label="Multi-Agent Research">
     <div className="about-research-flow">
       <div className="about-flow-project">{card('project', 'Research Question', 'Start with a question you want to solve')}</div>
       <div className="about-flow-connector"><span>Try more than one way to answer it</span><i aria-hidden="true"/></div>
@@ -6409,6 +6409,7 @@ function privacyNoticeHref(returnDialog: 'invitation' | 'about') {
 const ABOUT_DISCLOSURE_KEY = 'sigma.aboutDisclosureState.v1';
 const ABOUT_DISCLOSURE_DEFAULTS: Record<string, boolean> = {
   workflow: true,
+  researchArchitecture: false,
   features: false,
   architecture: false,
   provenance: false,
@@ -6471,6 +6472,14 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <summary>Research Process</summary>
         <div className="about-disclosure-content"><AboutWorkflow/></div>
       </details>
+      <details className="about-disclosure" data-about-section="researchArchitecture" open={aboutDisclosureState('researchArchitecture')} onToggle={event => rememberAboutDisclosure(event, 'researchArchitecture')}>
+        <summary>Research Architecture</summary>
+        <div className="about-disclosure-content"><AboutResearchArchitecture/></div>
+      </details>
+      <details className="about-disclosure about-architecture-disclosure" data-about-section="architecture" open={aboutDisclosureState('architecture')} onToggle={event => rememberAboutDisclosure(event, 'architecture')}>
+        <summary>Multi-Agent Research</summary>
+        <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
+      </details>
       <details className="about-disclosure" data-about-section="features" open={aboutDisclosureState('features')} onToggle={event => rememberAboutDisclosure(event, 'features')}>
         <summary>Key Features</summary>
         <div className="about-disclosure-content">
@@ -6485,10 +6494,6 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
           <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
         </div>
-      </details>
-      <details className="about-disclosure about-architecture-disclosure" data-about-section="architecture" open={aboutDisclosureState('architecture')} onToggle={event => rememberAboutDisclosure(event, 'architecture')}>
-        <summary>How SIGMA Works: Multi-Agentic Research</summary>
-        <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
       <details className="about-disclosure about-provenance-disclosure" data-about-section="provenance" open={aboutDisclosureState('provenance')} onToggle={event => rememberAboutDisclosure(event, 'provenance')}>
         <summary>Vision for Investigation Provenance</summary>
