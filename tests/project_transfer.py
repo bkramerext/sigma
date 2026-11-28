@@ -283,9 +283,12 @@ def test_private_diagnostic_roundtrip() -> None:
             assert "diagnostics" not in json.loads(project_transfer.export_project(imported))
         finally:
             passive_file.chmod(0o600)
-        assert project_bundle._decode(project_bundle.snapshot(imported))[
-            passive_file.relative_to(imported).as_posix()
-        ] == raw
+        assert (
+            project_bundle._decode(project_bundle.snapshot(imported))[
+                passive_file.relative_to(imported).as_posix()
+            ]
+            == raw
+        )
         real_open = os.open
         saved_file = passive_file.with_suffix(".saved")
 
@@ -331,6 +334,19 @@ def test_private_diagnostic_roundtrip() -> None:
         preserved_export = json.loads(project_transfer.export_project(preserved, diagnostics=True))
         assert project_transfer.decode_bundle(preserved_export)
         assert preserved_export["diagnostics"]["blobs"] == archive["blobs"]
+        with patch.object(project_diagnostic_bundle, "MAX_DIAGNOSTIC_BYTES", len(raw)):
+            identical = json.loads(project_transfer.export_project(preserved, diagnostics=True))
+            assert identical["diagnostics"]["blobs"] == archive["blobs"]
+            original_log = log.read_bytes()
+            try:
+                session_log._append_frame(
+                    log, {"type": "session_event", "seq": 4, "message": "New evidence"}
+                )
+                _expect_failure(
+                    lambda: project_transfer.export_project(preserved, diagnostics=True)
+                )
+            finally:
+                log.write_bytes(original_log)
 
         digest = next(iter(archive["blobs"]))
         entry = archive["blobs"][digest]
@@ -500,6 +516,119 @@ def test_recorder_coverage_and_cross_mapping() -> None:
         )
         assert snapshot["availability"] == "partial"
         assert snapshot["events"][-1]["type"] == "retention_limit"
+
+
+def test_ambiguous_diagnostic_json_and_coverage() -> None:
+    from uuid import uuid4
+
+    from sigma import session_log
+
+    with TemporaryDirectory() as temporary:
+        origin = Path(temporary) / "ambiguous.sigma"
+        initialize_project(origin, "Ambiguous JSON", "Synthetic research")
+        project_id = inspect_project(origin).project.id
+        session_id = str(uuid4())
+        sessions = origin / "research-sessions"
+        sessions.mkdir(exist_ok=True)
+        (sessions / f"{session_id}.json").write_text(
+            json.dumps(
+                {
+                    "id": session_id,
+                    "project_id": project_id,
+                    "project_path": str(origin),
+                    "session_number": 1,
+                    "status": "stopped",
+                    "steps": [],
+                }
+            )
+        )
+        context = {"project_id": project_id, "id": session_id, "session_number": 1}
+        duplicate = (
+            '{"context":{"authoriz\\u0061tion":"fixture-duplicate-secret"},'
+            '"context":{"premise":"safe"}}'
+        )
+        duplicate_wire = '{"output_text":"Bearer fixture-wire-secret","output_text":"safe"}'
+        malformed = '{"authoriz\\u0061tion":"fixture-malformed-secret"'
+        valid = '{ "premise": "safe", "count": 3 }'
+        fixtures = [
+            {"type": "provider_request", "request": {"input": duplicate}},
+            {
+                "type": "provider_response",
+                "response": {"output_text": duplicate},
+                "response_wire": duplicate_wire,
+            },
+            {"type": "provider_request", "request": {"input": malformed}},
+            {
+                "type": "provider_response",
+                "response": {"output_text": valid},
+                "response_wire": '{"output_text": "safe"}',
+            },
+        ]
+        for event in fixtures:
+            session_log.append(str(origin), context, event)
+        session_log.flush()
+        log = session_log.log_path(str(origin), project_id, session_id)
+        original = log.read_bytes()
+        assert b"fixture-duplicate-secret" in original
+        payload = json.loads(project_transfer.export_project(origin, diagnostics=True))
+        members = project_transfer.decode_bundle(payload)
+        raw = next(
+            data
+            for name, data in members.items()
+            if name.startswith(project_diagnostic_bundle.PREFIX)
+        )
+        snapshot = json.loads(raw)
+        events = snapshot["events"]
+        assert snapshot["availability"] == "retained"
+        for sentinel in (
+            b"fixture-duplicate-secret",
+            b"fixture-wire-secret",
+            b"fixture-malformed-secret",
+        ):
+            assert sentinel not in raw
+        assert "security_or_schema_projection" in events[0]["omissions"]
+        assert "security_or_schema_projection" in events[1]["omissions"]
+        assert "opaque_wire_omitted" in events[1]["omissions"]
+        assert "security_or_schema_projection" in events[2]["omissions"]
+        assert events[3]["response"]["output_text"] == valid
+        assert events[3]["response_wire"] == fixtures[3]["response_wire"]
+        assert log.read_bytes() == original
+
+        # Forge the compressed payload directly, bypassing the safe encoder.
+        def crafted(candidate):
+            blob = project_diagnostic_bundle._json(candidate)
+            digest = hashlib.sha256(blob).hexdigest()
+            return {
+                **payload,
+                "diagnostics": {
+                    "version": 1,
+                    "private": True,
+                    "sessions": {session_id: [digest]},
+                    "blobs": {digest: project_bundle._compressed_member(blob)},
+                },
+            }
+
+        for event in fixtures[:3]:
+            unsafe = {**snapshot, "events": [{**event, "seq": 1}]}
+            _expect_failure(lambda: project_transfer.decode_bundle(crafted(unsafe)))
+        for inconsistent in (
+            [{"type": "provider_request"}],
+            [{"type": "provider_request", "seq": 2}],
+            [{"type": "provider_request", "seq": 1}] * 2,
+            [{"type": "provider_request", "seq": 2}, {"type": "provider_response", "seq": 1}],
+            [{"type": "retention_limit", "seq": 1}],
+            [{"type": "event_omitted", "seq": 1}],
+            [],
+        ):
+            candidate = {**snapshot, "events": inconsistent}
+            _expect_failure(lambda: project_transfer.decode_bundle(crafted(candidate)))
+            assert project_transfer.decode_bundle(
+                crafted({**candidate, "availability": "partial"})
+            )
+        assert project_transfer.decode_bundle(
+            crafted({**snapshot, "availability": "unavailable", "events": []})
+        )
+        assert log.read_bytes() == original
 
 
 def test_diagnostic_resource_budget() -> None:
@@ -735,6 +864,7 @@ if __name__ == "__main__":
     test_rejects_traversal_in_archive()
     test_private_diagnostic_roundtrip()
     test_recorder_coverage_and_cross_mapping()
+    test_ambiguous_diagnostic_json_and_coverage()
     test_diagnostic_resource_budget()
     test_diagnostic_mixed_entropy_budget()
     test_bounded_log_observation()

@@ -126,6 +126,20 @@ def _uuid(value: Any) -> bool:
         return False
 
 
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Never let duplicate keys hide an earlier credential-bearing value."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Ambiguous diagnostic JSON object")
+        result[key] = value
+    return result
+
+
+def _structured_json(value: str) -> Any:
+    return json.loads(value, object_pairs_hook=_unique_object)
+
+
 def _clean(value: Any, depth: int = 0) -> Any:
     if depth > 64:
         raise BundleError("Diagnostic nesting exceeds the allowed depth")
@@ -142,9 +156,11 @@ def _clean(value: Any, depth: int = 0) -> Any:
         # Parse recursively rather than relying on textual token patterns.
         if value.lstrip().startswith(("{", "[")):
             try:
-                parsed = json.loads(value)
+                parsed = _structured_json(value)
             except (ValueError, RecursionError):
-                pass
+                # A JSON-looking value may contain escaped or duplicate secret
+                # fields. Do not fall back to the original ambiguous text.
+                return "[OMITTED: ambiguous or malformed structured JSON]"
             else:
                 if isinstance(parsed, (dict, list)):
                     cleaned = _clean(parsed, depth + 1)
@@ -245,7 +261,7 @@ def sanitize_event(event: dict[str, Any]) -> dict[str, Any]:
             # Opaque SSE/HTTP wire text may contain transport metadata.
             if isinstance(value, str):
                 try:
-                    parsed = json.loads(value)
+                    parsed = _structured_json(value)
                 except (ValueError, RecursionError):
                     parsed = None
                 if isinstance(parsed, dict):
@@ -322,6 +338,15 @@ def _session_ids(members: dict[str, bytes]) -> tuple[str, set[str]]:
         raise BundleError("Invalid diagnostic project/session identity") from exc
 
 
+def _retained_events(events: list[dict[str, Any]]) -> bool:
+    return bool(events) and all(
+        type(event.get("seq")) is int
+        and event["seq"] == index
+        and event.get("type") not in {"retention_limit", "event_omitted"}
+        for index, event in enumerate(events, 1)
+    )
+
+
 def _validate_snapshot(raw: bytes, digest: str) -> None:
     if len(raw) > MAX_SNAPSHOT_BYTES or hashlib.sha256(raw).hexdigest() != digest:
         raise BundleError("Diagnostic snapshot size or digest mismatch")
@@ -377,6 +402,8 @@ def _validate_snapshot(raw: bytes, digest: str) -> None:
                 != snapshot["source_session_id"]
             ):
                 raise BundleError("Unsafe diagnostic event")
+        if snapshot["availability"] == "retained" and not _retained_events(snapshot["events"]):
+            raise BundleError("Retained diagnostic coverage contradicts recorded events")
         if _json(snapshot) != raw:
             raise BundleError("Diagnostic snapshot is not canonical JSON")
     except (ValueError, TypeError, KeyError, RecursionError, UnicodeError) as exc:
@@ -490,7 +517,12 @@ def read_passive(
                         not stat.S_ISREG(observed.st_mode)
                         or observed.st_uid != os.geteuid()
                         or observed.st_mode & 0o077
-                        or (observed.st_dev, observed.st_ino, observed.st_size, observed.st_mtime_ns)
+                        or (
+                            observed.st_dev,
+                            observed.st_ino,
+                            observed.st_size,
+                            observed.st_mtime_ns,
+                        )
                         != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
                     ):
                         raise BundleError("Passive diagnostic member changed during read")
@@ -599,28 +631,20 @@ def capture(source: Path, members: dict[str, bytes], *, budget: int) -> dict[str
                 del raw, observation
                 if len(frames) > MAX_EVENTS:
                     raise BundleError("Too many diagnostic events")
-                remaining = min(budget, MAX_DIAGNOSTIC_BYTES) - sum(map(len, passive.values()))
+                # A candidate may duplicate an existing passive snapshot.
+                # Bound one candidate independently; _add charges net-new
+                # bytes only after comparing its digest and mapping.
                 event_bytes = 0
                 for frame in frames:
                     event = sanitize_event(frame)
                     event_bytes += len(_json(event)) + 1
-                    if event_bytes > min(remaining, MAX_SNAPSHOT_BYTES):
+                    if event_bytes > MAX_SNAPSHOT_BYTES:
                         raise BundleError("Diagnostic event budget exceeded")
                     events.append(event)
                 if events:
-                    sequences = [event.get("seq") for event in events]
-                    gap = any(
-                        type(seq) is not int or seq != index
-                        for index, seq in enumerate(sequences, 1)
-                    )
                     availability = (
                         "partial"
-                        if availability == "partial"
-                        or gap
-                        or any(
-                            event.get("type") in {"retention_limit", "event_omitted"}
-                            for event in events
-                        )
+                        if availability == "partial" or not _retained_events(events)
                         else "retained"
                     )
         # Imported originals already explain missing live history; don't add a
