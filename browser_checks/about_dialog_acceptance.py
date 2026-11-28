@@ -96,7 +96,9 @@ def main() -> None:
                 expect(dialog.locator("#about-architecture-details")).to_be_visible()
                 expect(architecture.locator("summary")).to_have_text("Multi-Agent Research Process")
                 overview = dialog.locator('[data-about-section="researchArchitecture"]')
-                expect(overview.locator("summary")).to_have_text("Research Information Architecture")
+                expect(overview.locator("summary")).to_have_text(
+                    "Research Information Architecture"
+                )
                 expect(overview).not_to_have_attribute("open", "")
                 overview.locator("summary").click()
                 expect(overview.locator("svg.about-provenance-diagram")).to_be_visible()
