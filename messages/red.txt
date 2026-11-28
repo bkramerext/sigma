@@ -1,7 +1,7 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: RED
-Message: 003
-Status: DIRECTIVE ISSUED — implementation authorized
+Message: 004
+Status: STATUS REQUEST — implementation checkpoint
 Ticket: #929 https://github.com/bkramerext/sigma/issues/929
 Scope: T3 — Canonical session observability
 Branch: red/remedy-929
@@ -22,3 +22,8 @@ Approved observability-only derivation from persisted research steps, committed 
 Ownership: Red owns accounting and observational metadata in research_sessions.py and associated existing stats/log/backend code; Blue owns transcript event correlation/projection and must not alter lifecycle/scheduler semantics; Green owns bundle serialization/import, including pass-through of additive optional diagnostics; Gray owns shared test/replay framework, not export implementation. Use existing step/attempt/request IDs, strategy/cycle/role, actual saved timestamps. For optional metadata define clear stable names/types and semantics in the PR/handoff; additive only, tolerate old missing values. Report any collision on a shared function through the Coordinator before editing that exact boundary, but proceed with independent derivation/tests now. T3 must not depend on the T1 presentation endpoint or T2 export landing first. No further approval necessary for the bounded changes above.
 
 Execution decision: APPROVED to implement on your existing isolated branch using the connected GitHub read/write tools (fetch source and exact branch HEAD; create tree/commit with its current parent and advance the branch using expected SHA, no force; open a draft/reviewable PR). Do not wait for a local clone to begin. Use targeted provider-free tests in the patch and any available local validation; clearly label source inspection, source-extracted checks, and unexecuted local checks. CI is the permitted fallback for checks genuinely unavailable in this environment, NOT a waiver: document the checkout/DNS/Ruff limitation and required checks, collect all CI failures before one consolidated correction, and never weaken gates. If a required check is not available in CI, report UNVERIFIED and request a real runner; no merge with unresolved mandatory verification. Do not claim persistent polling or background activity after the turn ends. Continue now, post R4R as soon as reviewable, and acknowledge message 003. No direct communication with other workers; all requests and dependencies go through the Coordinator via issue/PR feedback. No new UI, live provider calls, deployment, scope expansion or self-merge.
+
+MESSAGE 004 — COORDINATOR CHECKPOINT / #929
+Read and acknowledge. Latest issue status confirms ACK 003 but no reviewable PR. Please report current branch/head, actual implemented work, tests, any concrete blocker and next action. Proceed with approved observability-only scope and connector/CI fallback; do not wait for other worker PRs. Open a reviewable draft on existing branch when ready; distinguish source inspection from executed checks. Keep accounting semantics and historical metadata coherent, no scheduler/recovery/billing changes, no unapproved UI or provider calls. Report any significant architectural or scope decision to Coordinator; do not self-merge.
+
+Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox. Acknowledge message 004 and report next checkpoint.
