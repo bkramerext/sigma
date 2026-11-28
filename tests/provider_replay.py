@@ -10,8 +10,9 @@ import os
 import re
 import shutil
 import socket
+import ssl
 import sys
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
@@ -245,7 +246,7 @@ class StrictReplay:
 
 @contextmanager
 def deny_network():
-    """Fail closed for Python network connections, including DNS and local RPC."""
+    """Guard Python socket/DNS paths; not a native-code or subprocess sandbox."""
     attempts = []
 
     def blocked(*args, **kwargs):
@@ -256,16 +257,80 @@ def deny_network():
         if attempts:
             raise ReplayMismatch(attempts[0])
 
-    with (
-        patch.object(socket, "getaddrinfo", side_effect=blocked),
-        patch.object(socket.socket, "connect", blocked),
-        patch.object(socket.socket, "connect_ex", blocked),
-        patch.object(socket.socket, "sendto", blocked),
-    ):
+    def guard_send(original):
+        def send(sock, *args, **kwargs):
+            # asyncio uses an already-connected local socketpair for wakeups.
+            # New connections (including local RPC) remain forbidden.
+            if sock.family == socket.AF_UNIX:
+                return original(sock, *args, **kwargs)
+            return blocked()
+
+        return send
+
+    with ExitStack() as stack:
+        for name in (
+            "getaddrinfo",
+            "gethostbyname",
+            "gethostbyname_ex",
+            "gethostbyaddr",
+            "getnameinfo",
+        ):
+            stack.enter_context(patch.object(socket, name, side_effect=blocked))
+        for name in ("connect", "connect_ex", "sendto"):
+            stack.enter_context(patch.object(socket.socket, name, blocked))
+        for cls in (socket.socket, ssl.SSLSocket):
+            for name in ("send", "sendall", "sendmsg", "sendfile", "write"):
+                if hasattr(cls, name):
+                    original = getattr(cls, name)
+                    stack.enter_context(patch.object(cls, name, guard_send(original)))
         try:
             yield verify
         finally:
             verify()
+
+
+def network_guard_checks() -> None:
+    # No actual network activity: unconnected Internet socket calls must fail
+    # before the OS sees them, and DNS names are never resolved.
+    def expect_sticky_failure(action):
+        try:
+            with deny_network():
+                try:
+                    action()
+                except ReplayMismatch:
+                    pass
+                else:
+                    raise AssertionError("Network guard allowed an unexpected operation")
+        except ReplayMismatch:
+            pass
+        else:
+            raise AssertionError("Caught network violation was not sticky")
+
+    expect_sticky_failure(lambda: socket.getaddrinfo("example.invalid", 443))
+    expect_sticky_failure(lambda: socket.gethostbyname("example.invalid"))
+    expect_sticky_failure(lambda: socket.gethostbyname_ex("example.invalid"))
+    expect_sticky_failure(lambda: socket.gethostbyaddr("127.0.0.1"))
+    expect_sticky_failure(lambda: socket.getnameinfo(("127.0.0.1", 443), 0))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as internet_socket:
+        expect_sticky_failure(lambda: internet_socket.connect(("127.0.0.1", 1)))
+        expect_sticky_failure(lambda: internet_socket.connect_ex(("127.0.0.1", 1)))
+        expect_sticky_failure(lambda: internet_socket.send(b"fixture"))
+        expect_sticky_failure(lambda: internet_socket.sendall(b"fixture"))
+        if hasattr(internet_socket, "sendmsg"):
+            expect_sticky_failure(lambda: internet_socket.sendmsg([b"fixture"]))
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as datagram:
+        expect_sticky_failure(lambda: datagram.sendto(b"fixture", ("127.0.0.1", 1)))
+    with ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).wrap_socket(
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM), server_hostname="example.invalid"
+    ) as tls_socket:
+        expect_sticky_failure(lambda: tls_socket.send(b"fixture"))
+        expect_sticky_failure(lambda: tls_socket.sendall(b"fixture"))
+        expect_sticky_failure(lambda: tls_socket.write(b"fixture"))
+    local, peer = socket.socketpair()
+    with local, peer, deny_network():
+        local.sendall(b"x")
+        assert peer.recv(1) == b"x"
+    print("PASS sticky DNS/socket egress guard and local event-loop wakeups")
 
 
 @contextmanager
@@ -371,13 +436,7 @@ def transport_checks() -> None:
         pass
     else:
         raise AssertionError("An extra request received a recorded response")
-    try:
-        with deny_network():
-            socket.getaddrinfo("example.invalid", 443)
-    except ReplayMismatch:
-        pass
-    else:
-        raise AssertionError("Offline network guard did not block DNS")
+    network_guard_checks()
     print("PASS strict matching, endpoint, order, exhaustion, sticky failure, and DNS guard")
 
 
@@ -545,9 +604,7 @@ def outcome_difference_paths(left, right, path="outcome") -> list[str]:
     if type(left) is not type(right):
         return [f"{path} (type mismatch)"]
     if isinstance(left, dict):
-        differences = [
-            f"{path}.{key} (missing key)" for key in sorted(left.keys() ^ right.keys())
-        ]
+        differences = [f"{path}.{key} (missing key)" for key in sorted(left.keys() ^ right.keys())]
         for key in sorted(left.keys() & right.keys()):
             differences.extend(outcome_difference_paths(left[key], right[key], f"{path}.{key}"))
         return differences
