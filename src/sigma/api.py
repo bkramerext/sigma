@@ -1681,7 +1681,7 @@ def global_research_settings_view():
     principal = cloud_auth.current_principal()
     if principal is not None and principal.role == "guest":
         raise HTTPException(403, "Sign in to view research settings.")
-    return global_research_settings.load_config()
+    return global_research_settings.user_config(global_research_settings.load_config())
 
 
 @app.put("/api/user-preferences/research-settings")
@@ -1693,7 +1693,7 @@ def global_research_settings_update(body: GlobalResearchSettingsRequest):
         raise HTTPException(403, "Sign in to change research settings.")
     changes = body.model_dump(exclude_none=True)
     # Explicit null limits are not meaningful; omit unchanged fields.
-    return global_research_settings.save_config(changes)
+    return global_research_settings.save_config(changes, flat_limits=True)
 
 
 class ResearchEthosPreference(BaseModel):
