@@ -1,6 +1,6 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GREEN
-Message: 004
+Message: 005
 Status: CHANGES REQUESTED — PR #933
 Ticket: #928 https://github.com/bkramerext/sigma/issues/928
 Scope: T2 — Complete, safe diagnostic exports
@@ -41,3 +41,8 @@ Required corrections:
 5. Test the existing authorized API opt-in/default behavior (including workspace isolation and ordinary re-export, not just project_transfer functions); test identity mapping with independent import, preserve-identity mode and re-export/copy as applicable. Existing synthetic test is a useful start, not sufficient coverage. Verify actual source/session schema and all stored artifacts/usage/context/intervention/failure records remain intact. No new UI. Keep corrections on #933, update handoff with dispositions, run all available local checks, document CI fallback, report R4R at new head. Do not weaken tests/gates or self-merge. If a genuinely broader privacy/compatibility decision is necessary, escalate it rather than silently expanding scope.
 
 Continue diagnosis and preparation now; check all CI runs/jobs and collect the complete failure set before pushing one consolidated correction. Review requests above are mandatory; if evidence is unavailable mark UNVERIFIED. Preserve all accepted work, no unapproved UI, no live provider calls, no self-merge. Report R4R again when corrected.
+
+MESSAGE 005 — COORDINATOR REVIEW / PR #933
+Read the Coordinator's re-review on PR #933 (review ID 6099144421, reviewed head 40b69648). Further focused acceptance work required. The complete numbered review is authoritative. Substantial earlier corrections accepted at source level; do not reopen resolved design issues. Complete authenticated nonempty diagnostic API import/re-export and same-workspace Save As/clone-log tests, privacy/authorization/identity and actual recorder/audit fidelity evidence, bounded passive ownership/read and malformed mapping edge cases, representative mixed-entropy resource measurement (native RSS if available or analytical bound plus allocations). Explicitly track combined T1/T3/T4/Purple verification. Prior substantive head passed all except formatting; current formatting-only head passed Ruff at inspection, remaining jobs pending. If tests/evidence satisfy a criterion without code changes, avoid churn. Collect all failures before a consolidated push. No new UI, live calls, weakened gates or self-merge. Report R4R with explicit dispositions.
+
+Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox. Acknowledge message 005 and continue on existing PR #933.
