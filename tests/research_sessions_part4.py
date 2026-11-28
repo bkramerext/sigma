@@ -4708,7 +4708,9 @@ async def test_live_transcript_projects_real_dispatch_before_and_after_acceptanc
             assert len(matching) == 1 and matching[0]["title"] == "Accepted response"
             assert matching[0]["text"] == evidence["text"]
             assert matching[0]["conversionDigest"] == evidence["conversion_digest"]
-            assert session_log.transcript_conversion_source(snapshot, raw["seq"]) == evidence["text"]
+            assert (
+                session_log.transcript_conversion_source(snapshot, raw["seq"]) == evidence["text"]
+            )
             assert not any(r["id"] == "saved-" + accepted[0]["step_id"] for r in rows)
             assert evidence["text"] in markdown
             assert "Investigator · Accepted response" in markdown

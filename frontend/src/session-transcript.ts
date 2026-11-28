@@ -454,6 +454,11 @@ export function projectTranscript(
       strategyId: intervention.target_strategy_ids?.length === 1 ? intervention.target_strategy_ids[0] : undefined,
     });
   });
+  // Historical events can omit their timestamps. Preserve unknown-time
+  // semantics rather than fabricating a timestamp or sorting undefined.
+  for (const entry of entries) {
+    if (typeof entry.timestamp !== 'string') entry.timestamp = '';
+  }
   return entries.sort(transcriptOrder);
 }
 

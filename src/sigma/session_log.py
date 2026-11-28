@@ -1280,9 +1280,7 @@ def _transcript_event_evidence(event: dict[str, Any]) -> dict[str, Any]:
     if event.get("type") == "provider_response":
         evidence = _transcript_response_evidence(event.get("response"))
         evidence["conversion_digest"] = (
-            _transcript_conversion_digest(evidence["text"])
-            if evidence["content_digest"]
-            else None
+            _transcript_conversion_digest(evidence["text"]) if evidence["content_digest"] else None
         )
         return evidence
     message = str(event.get("message") or "")

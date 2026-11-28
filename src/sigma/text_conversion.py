@@ -334,7 +334,9 @@ async def _convert_text(
                     or expected_digest is None
                 ):
                     raise ProjectError("Transcript conversion requires a saved event and Markdown")
-                raw_block = _saved_transcript_text(path, session_id, field_path, expected_project_id)
+                raw_block = _saved_transcript_text(
+                    path, session_id, field_path, expected_project_id
+                )
                 source = {
                     "source_format": "plain",
                     "source_digest": digest(raw_block),

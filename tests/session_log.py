@@ -1785,9 +1785,11 @@ def test_transcript_legacy_strings_and_contradictory_terminal_evidence() -> None
             input=json.dumps([events, [], saved, status, evidence]),
             text=True,
             capture_output=True,
-            check=True,
             timeout=15,
         )
+        # Only synthetic fixture data is passed to this process. Surface a
+        # bounded redacted diagnostic instead of hiding the failing JS stack.
+        assert result.returncode == 0, session_log._redact(result.stderr[-2000:])
         return report, json.loads(result.stdout)
 
     base = {
@@ -1836,6 +1838,7 @@ def test_transcript_legacy_strings_and_contradictory_terminal_evidence() -> None
         assert not any(row.get("pending") for row in rows)
         assert any(row.get("reconstructed") for row in rows)
         assert any("contradictory terminal evidence" in row["title"] for row in rows)
+        assert all(row["timestamp"] == "" for row in rows)
 
 
 def test_transcript_checkpoint_skips_unchanged_large_projection(root: Path) -> None:

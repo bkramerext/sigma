@@ -532,3 +532,17 @@ test('contradictory terminal evidence never suppresses a running saved step', ()
     assert.ok(rows.every(row => row.requestSequence === undefined));
   }
 });
+
+test('missing or null raw timestamps remain unknown during multi-row reconciliation and grouping', () => {
+  const request = { seq: 1, type: 'provider_request', request_id: 'r',
+    step_id: 's', strategy_id: 'a', role: 'investigator', round: 1 };
+  const terminal = { ...request, seq: 2, type: 'provider_failure', strategy_id: 'b', timestamp: null };
+  const saved = { step_id: 's', request_id: 'r', strategy_id: 'a', role: 'investigator',
+    round: 1, status: 'running' };
+  const rows = projectTranscript([request, terminal], [], [saved], 'running');
+  assert.equal(rows.length, 3);
+  assert.ok(rows.every(row => row.timestamp === '' && !row.pending));
+  assert.ok(rows.some(row => row.reconstructed));
+  assert.ok(rows.some(row => row.title.includes('contradictory terminal evidence')));
+  assert.equal(groupTranscriptTurns(rows).flatMap(group => group.entries).length, 3);
+});
