@@ -22,7 +22,11 @@ def main():
         page.evaluate(
             """async () => {
                 const React = (await import('/node_modules/.vite/deps/react.js')).default;
-                const { createRoot } = await import('/node_modules/.vite/deps/react-dom_client.js');
+                const ReactDOM = await import('/node_modules/.vite/deps/react-dom_client.js');
+                // Vite's optimized CommonJS dependency may expose only a default export.
+                const createRoot = ReactDOM.createRoot ?? ReactDOM.default?.createRoot;
+                if (typeof createRoot !== 'function')
+                    throw new Error('React DOM createRoot unavailable in browser fixture');
                 const { default: SessionLogPage } = await import('/src/SessionLogPage.tsx');
                 const host = document.createElement('main');
                 document.body.replaceChildren(host);
@@ -114,10 +118,12 @@ def main():
         expect(page).to_have_title("Fixture B, Session 2")
         expect(markdown).to_have_attribute("aria-pressed", "false")
         page.evaluate(
-            """() => {
+            """async () => {
                 const f = window.transcriptFixture;
                 f.pendingConfig();
                 f.oldPolls.splice(0).forEach(release => release());
+                // Wait through a frame so both stale promises can settle.
+                await new Promise(resolve => requestAnimationFrame(resolve));
             }"""
         )
         accepted.locator("button[aria-expanded]").click()
@@ -137,7 +143,12 @@ def main():
         page.wait_for_function("() => !!window.transcriptFixture.pendingConversion")
         page.evaluate("window.transcriptFixture.navigate('b')")
         expect(page).to_have_title("Fixture B, Session 2")
-        page.evaluate("window.transcriptFixture.pendingConversion()")
+        page.evaluate(
+            """async () => {
+                window.transcriptFixture.pendingConversion();
+                await new Promise(resolve => requestAnimationFrame(resolve));
+            }"""
+        )
         expect(markdown).to_have_attribute("aria-pressed", "false")
         accepted.locator("button[aria-expanded]").click()
         expect(accepted).to_contain_text("Session B accepted original text")

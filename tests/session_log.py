@@ -1581,9 +1581,7 @@ def test_transcript_checkpoint_skips_unchanged_large_projection(root: Path) -> N
         assert projection.call_count == 1
         project_file.write_bytes(b"resumed and checkpointed")
         record["status"] = "running"
-        record["steps"].append(
-            {"id": "new", "role": "skeptic", "cycle": 1200, "status": "running"}
-        )
+        record["steps"].append({"id": "new", "role": "skeptic", "cycle": 1200, "status": "running"})
         third = session_log.read(
             str(project_file), session_id, second["cursor"], second["transcript_state_version"]
         )
@@ -1592,9 +1590,12 @@ def test_transcript_checkpoint_skips_unchanged_large_projection(root: Path) -> N
         assert len(third["transcript_state"]) == 1201
         checkpoint = session_log._transcript_checkpoint(project_file, session_id)
         assert checkpoint is not None
-        assert session_log._transcript_state_version(
-            project_file, project_id, "other-session", checkpoint
-        ) != third["transcript_state_version"]
+        assert (
+            session_log._transcript_state_version(
+                project_file, project_id, "other-session", checkpoint
+            )
+            != third["transcript_state_version"]
+        )
 
 
 def test_supervisor_gate_requires_saved_pairs_across_parallel_resume(root: Path) -> None:
