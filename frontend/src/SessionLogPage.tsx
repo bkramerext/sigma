@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry, type TranscriptSavedStep, type TranscriptResponseEvidence } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -35,9 +35,21 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const params = new URLSearchParams(window.location.search);
   const sessionId = params.get('session_log') ?? '';
   const path = params.get('path') ?? '';
+  // The key makes state, cursor, selected Markdown rows and async work
+  // session-local even when navigation reuses this route.
+  return <SessionLogContent key={JSON.stringify([path, sessionId])}
+    path={path} sessionId={sessionId} onSessionChange={onSessionChange} resetSignal={resetSignal}/>;
+}
+
+function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
+  path: string; sessionId: string; onSessionChange?: (session: SessionState) => void; resetSignal: number;
+}) {
   const [events, setEvents] = useState<SessionLogEvent[]>([]);
+  const [responseEvidence, setResponseEvidence] = useState<TranscriptResponseEvidence | undefined>(undefined);
   const cursor = useRef(0);
   const seen = useRef(new Set<number>());
+  const stateVersion = useRef('');
+  const [savedSteps, setSavedSteps] = useState<TranscriptSavedStep[]>([]);
   const [session, setSession] = useState<SessionState | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [shortName, setShortName] = useState('Research Project');
@@ -61,33 +73,65 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const [, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
   const [visibleTurnCount, setVisibleTurnCount] = useState(20);
+  const entries = useMemo(() => projectTranscript(events, interventions, savedSteps, session?.status, responseEvidence),
+    [events, interventions, savedSteps, session?.status, responseEvidence]);
+  const convertibleEntries = useRef(new Map<string, string>());
+  useEffect(() => {
+    convertibleEntries.current = new Map(entries.filter(entry => convertibleTranscriptEntry(entry) && !!entry.conversionDigest)
+      .map(entry => [entry.id, entry.conversionDigest!]));
+  }, [entries]);
   useEffect(() => {
     if (!sessionId || !path) { setError('Session transcript link is incomplete.'); return; }
+    cursor.current = 0;
+    seen.current.clear();
+    stateVersion.current = '';
+    setEvents([]);
+    setResponseEvidence(undefined);
+    setSavedSteps([]);
+    setInterventions([]);
+    setSession(null);
+    setInitialLoadComplete(false);
     let alive = true;
     let timer = 0;
     let fetching = false;
+    let delay = 1000;
+    const controller = new AbortController();
     const refresh = async () => {
       if (!alive || fetching) return;
       fetching = true;
       try {
-        const query = new URLSearchParams({ path, after: String(cursor.current) });
-        const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin', headers: { 'X-Sigma-Error-Handled': 'true' } });
+        const query = new URLSearchParams({
+          path, after: String(cursor.current), state_version: stateVersion.current,
+        });
+        const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session transcript.' : 'This session transcript is unavailable or access was denied.');
-        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; project_id?: string; session: SessionState; interventions?: TranscriptIntervention[] };
+        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; project_id?: string; session: SessionState; interventions?: TranscriptIntervention[];
+          transcript_state?: TranscriptSavedStep[]; transcript_state_version?: string; transcript_responses?: TranscriptResponseEvidence };
         if (!alive) return;
         const fresh = data.events.filter(event => !seen.current.has(event.seq));
         fresh.forEach(event => seen.current.add(event.seq));
+        if (data.transcript_responses !== undefined) {
+          const next = data.transcript_responses;
+          setResponseEvidence(current => Object.keys(next).length || current === undefined
+            ? { ...current, ...next } : current);
+        }
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
-        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); onSessionChange?.(data.session); setInterventions(data.interventions ?? []); setError(''); setInitialLoadComplete(true);
+        if (data.transcript_state !== undefined) setSavedSteps(data.transcript_state);
+        if (data.transcript_state_version !== undefined) stateVersion.current = data.transcript_state_version;
+        setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); onSessionChange?.(data.session);
+        const nextInterventions = data.interventions ?? [];
+        setInterventions(current => JSON.stringify(current) === JSON.stringify(nextInterventions) ? current : nextInterventions);
+        delay = ['running', 'queued'].includes(data.session.status) ? 1000 : 5000;
+        setError(''); setInitialLoadComplete(true);
       } catch (cause) { if (alive) { setError(displayError(cause)); setInitialLoadComplete(true); } }
       finally {
         fetching = false;
-        if (alive) timer = window.setTimeout(() => { void refresh(); }, 1000);
+        if (alive) timer = window.setTimeout(() => { void refresh(); }, delay);
       }
     };
     void refresh();
-    return () => { alive = false; window.clearTimeout(timer); };
+    return () => { alive = false; controller.abort(); window.clearTimeout(timer); };
   }, [sessionId, path]);
   useEffect(() => {
     if (!session) return;
@@ -121,14 +165,14 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   // transcript content is queued; never send arbitrary browser-authored text.
   useEffect(() => {
     if (!markdownEntries.size || !projectId) return;
-    const entries = projectTranscript(events, interventions).filter(entry =>
+    const eligible = entries.filter(entry =>
       markdownEntries.has(entry.id) &&
       seenMarkdownEntries.has(entry.id) &&
       entry.role !== 'other' &&
       (expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry)) &&
-      convertibleTranscriptEntry(entry));
-    for (const entry of entries) {
-      if (formattedEntriesRef.current[entry.id]?.source === entry.text || conversionQueued.current.has(entry.id)) continue;
+      convertibleTranscriptEntry(entry) && !!entry.conversionDigest);
+    for (const entry of eligible) {
+      if (formattedEntriesRef.current[entry.id]?.source === entry.conversionDigest || conversionQueued.current.has(entry.id)) continue;
       conversionQueued.current.add(entry.id);
       conversionQueue.current.push(entry);
     }
@@ -140,7 +184,8 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
           const entry = conversionQueue.current.shift()!;
           // An entry may have been deselected while another paid conversion ran.
           // Do not dispatch formatting for a row the user has switched off.
-          if (!selectedMarkdownEntries.current.has(entry.id)) {
+          if (!selectedMarkdownEntries.current.has(entry.id)
+            || convertibleEntries.current.get(entry.id) !== entry.conversionDigest) {
             conversionQueued.current.delete(entry.id);
             continue;
           }
@@ -154,21 +199,25 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
             const settings = await settingsResponse.json();
             if (!settingsResponse.ok || !settings.available || !settings.binding)
               throw new Error(settings.message ?? 'Markdown formatting is unavailable.');
+            if (controller.signal.aborted || !selectedMarkdownEntries.current.has(entry.id)
+              || convertibleEntries.current.get(entry.id) !== entry.conversionDigest) continue;
             const response = await fetch('/api/projects/text/convert', {
               method: 'POST', signal: controller.signal,
               headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
               body: JSON.stringify({
                 path, scope: 'session-transcript', session_id: sessionId,
                 field_path: `event.${entry.sequence}`, target: 'markdown',
-                expected_digest: 'server-snapshot',
+                expected_digest: entry.conversionDigest,
                 expected_project_id: projectId, expected_binding: settings.binding,
               }),
             });
             const result = await response.json();
-            if (!response.ok || typeof result.body !== 'string')
+            if (!response.ok || typeof result.body !== 'string' || result.source_digest !== entry.conversionDigest)
               throw new Error(result.error ?? result.detail ?? 'Transcript Markdown formatting failed.');
-            if (!controller.signal.aborted && markdownEnabled.current) {
-              const next = { ...formattedEntriesRef.current, [entry.id]: { source: entry.text, body: result.body } };
+            if (!controller.signal.aborted && markdownEnabled.current
+              && convertibleEntries.current.get(entry.id) === entry.conversionDigest
+              && selectedMarkdownEntries.current.has(entry.id)) {
+              const next = { ...formattedEntriesRef.current, [entry.id]: { source: entry.conversionDigest!, body: result.body } };
               formattedEntriesRef.current = next;
               setFormattedEntries(next);
               setMarkdownError('');
@@ -188,7 +237,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
       }
     };
     void drain();
-  }, [markdownEntries, events, interventions, projectId, path, sessionId, expandedEntries, seenMarkdownEntries]);
+  }, [markdownEntries, entries, projectId, path, sessionId, expandedEntries, seenMarkdownEntries]);
 
   const toggleEntryMarkdown = (entry: TranscriptEntry) => {
     const next = new Set(markdownEntries);
@@ -208,18 +257,24 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
       setMarkdownError('');
     }
   };
-  useEffect(() => () => { conversionAbort.current?.abort(); }, []);
-  const allGroups = groupTranscriptTurns(
-    projectTranscript(events, interventions).filter(entry => entry.role !== 'other'),
-  );
+  useEffect(() => () => {
+    markdownEnabled.current = false;
+    selectedMarkdownEntries.current.clear();
+    convertibleEntries.current.clear();
+    conversionQueue.current = [];
+    conversionAbort.current?.abort();
+  }, []);
+  const allGroups = useMemo(() => groupTranscriptTurns(entries
+    .filter(entry => entry.role !== 'other' || entry.historyNotice || entry.correlationUnknown
+      || entry.title.startsWith('Raw response') || entry.title.startsWith('Provider '))), [entries]);
   const { shownGroups, remainingTurns } = paginateTranscriptTurns(allGroups, visibleTurnCount);
   const activeTurnKey = ['running', 'queued'].includes(session?.status ?? '')
-    ? allGroups.find(group => group.entries.some(entry => typeof entry.round === 'number' && entry.round > 0))?.key
+    ? allGroups.find(group => group.entries.some(entry => !entry.correlationUnknown && typeof entry.round === 'number' && entry.round > 0))?.key
     : undefined;
   const strategyIds = [...new Set(allGroups.flatMap(group =>
-    group.entries.map(entry => entry.strategyId).filter((id): id is string => !!id)))].sort();
+    group.entries.filter(entry => !entry.correlationUnknown).map(entry => entry.strategyId).filter((id): id is string => !!id)))].sort();
   const strategySuffix = (group: (typeof allGroups)[number]) => {
-    const id = group.entries.find(entry => entry.strategyId)?.strategyId;
+    const id = group.entries.find(entry => !entry.correlationUnknown && entry.strategyId)?.strategyId;
     return id ? ` · Strategy ${strategyIds.indexOf(id) + 1}` : '';
   };
   const formatTimestamp = (timestamp: string) => {
@@ -229,7 +284,18 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     }).format(date);
   };
   const entryName = (entry: TranscriptEntry): string => {
-    return transcriptRoleLabel(entry.role, entry.brainstormMode === true) || entry.title;
+    const roleLabel = transcriptRoleLabel(entry.role, entry.brainstormMode === true);
+    const needsLabel = entry.reconstructed || (!entry.pending &&
+      (entry.title.startsWith('Provider ') || entry.title.startsWith('Raw ')
+        || entry.title === 'Response not retained' || entry.title === 'Accepted response'));
+    const name = roleLabel && needsLabel ? `${roleLabel} · ${entry.title}` : roleLabel || entry.title;
+    if (entry.reconstructed && !entry.timestamp) return name + ' · Time unavailable';
+    if (!entry.reconstructed && (entry.correlationUnknown || entry.title.startsWith('Provider ')
+      || entry.title.startsWith('Raw ') || entry.title === 'Response not retained')) {
+      return name + ` · Raw #${entry.sequence}`
+        + (entry.requestSequence !== undefined ? ` · Request #${entry.requestSequence}` : '');
+    }
+    return name;
   };
   if (!initialLoadComplete) return <main className="session-log-page session-conversation-page"><div className="workspace-state project-opening-state session-opening-state" role="status" aria-live="polite"><p className="intro">Opening session…</p></div></main>;
   return <main className="session-log-page session-conversation-page">
@@ -259,7 +325,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
               const name = entryName(entry);
               const asMarkdown = markdownEntries.has(entry.id);
               const supervisor = entry.role === 'supervisor' ? supervisorDisplay(entry.text) : null;
-              const formatted = formattedEntries[entry.id]?.source === entry.text ? formattedEntries[entry.id].body : entry.text;
+              const formatted = entry.conversionDigest && formattedEntries[entry.id]?.source === entry.conversionDigest ? formattedEntries[entry.id].body : entry.text;
               const formattedSupervisor = supervisor?.scores ? supervisorDisplay(formatted) : null;
               // A converter may rephrase the rating block; fall back to the saved
               // observation so a formatted view never repeats scores as prose.

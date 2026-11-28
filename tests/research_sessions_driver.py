@@ -505,6 +505,11 @@ def main(part: int = 1):
                 root / "human-intervention-resume.sigma"
             )
         )
+        asyncio.run(
+            test_live_transcript_projects_real_dispatch_before_and_after_acceptance(
+                root / "live-transcript-dispatch.sigma"
+            )
+        )
         test_intervention_recovery_supersession_and_rejection(
             root / "human-intervention-recovery.sigma"
         )

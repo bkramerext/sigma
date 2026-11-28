@@ -2042,8 +2042,12 @@ def project_diagnostics_download(path: str):
 
 
 @app.get("/api/projects/research-sessions/{session_id}/log")
-def research_session_log_view(session_id: str, path: str, after: int = 0):
+def research_session_log_view(
+    session_id: str, path: str, after: int = 0, state_version: str | None = None
+):
     try:
+        if state_version is not None:
+            return session_log.read(path, session_id, max(0, after), state_version)
         return session_log.read(path, session_id, max(0, after))
     except (ProjectError, ValueError, OSError) as exc:
         raise HTTPException(404, "Session log not found or access denied.") from exc
@@ -2085,6 +2089,7 @@ def research_session_log_download_view(session_id: str, path: str, format: str =
                 result["interventions"],
                 result["session"],
                 result["project_title"],
+                result.get("transcript_state"),
             )
             filename = (
                 session_log.export_filename(

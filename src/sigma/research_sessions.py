@@ -8728,6 +8728,16 @@ async def _call_provider(
         ),
         {},
     )
+    log_attribution = {
+        "step_id": step_id,
+        "strategy_id": strategy_id,
+        "round": context.get("cycle", branch.get("cycle", record.get("cycle"))),
+        "brainstorm_mode": (
+            isinstance(record.get("session_settings"), dict)
+            and record["session_settings"].get("brainstorm_mode") is True
+        ),
+    }
+    context["_session_log_attribution"] = log_attribution
     if log_context:
         peer_handoffs = context.get("peer_handoffs", [])
         peer_evidence = context.get("other_strategy_evidence", [])
@@ -8737,16 +8747,10 @@ async def _call_provider(
             log_context,
             {
                 "type": "provider_request",
-                "brainstorm_mode": (
-                    isinstance(record.get("session_settings"), dict)
-                    and record["session_settings"].get("brainstorm_mode") is True
-                ),
+                **log_attribution,
                 "request_id": request_id,
                 "role": role,
-                "round": context.get("cycle", branch.get("cycle", record.get("cycle"))),
-                "strategy_id": strategy_id,
                 "turn": step.get("sequence", record.get("calls_used")),
-                "step_id": step_id,
                 "peer_handoffs_available": [
                     item.get("handoff_id")
                     for item in peer_handoffs
@@ -8862,6 +8866,7 @@ async def _call_provider(
                         log_context,
                         {
                             "type": "provider_failure",
+                            **log_attribution,
                             "request_id": request_id,
                             "role": role,
                             "status": "provider_rejected",
@@ -8977,6 +8982,7 @@ async def _call_provider(
             log_context,
             {
                 "type": "provider_response",
+                **log_attribution,
                 "request_id": request_id,
                 "role": role,
                 "status": "completed",
@@ -9207,6 +9213,16 @@ def _session_log_context(record: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _save_transcript_acceptance(step: dict[str, Any], context: dict[str, Any]) -> None:
+    """Bind a saved accepted result to the request that actually produced it."""
+    request_id = context.get("_session_log_request_id")
+    if isinstance(request_id, str) and request_id:
+        step["request_id"] = request_id
+    attribution = context.get("_session_log_attribution")
+    if isinstance(attribution, dict) and type(attribution.get("brainstorm_mode")) is bool:
+        step["brainstorm_mode"] = attribution["brainstorm_mode"]
+
+
 async def _call(
     record: dict[str, Any],
     role: str,
@@ -9214,6 +9230,8 @@ async def _call(
     timeout_seconds: float | None = None,
     step_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, int | None] | None]:
+    context.pop("_session_log_request_id", None)
+    context.pop("_session_log_attribution", None)
     _sponsor_inference_diagnostic(record, "call_started")
     try:
         result = await _call_provider(record, role, context, timeout_seconds, step_id)
@@ -9226,6 +9244,10 @@ async def _call(
                 log_context,
                 {
                     "type": "provider_failure",
+                    "step_id": step_id,
+                    "strategy_id": context.get("strategy_id"),
+                    "round": context.get("cycle"),
+                    **context.get("_session_log_attribution", {}),
                     "request_id": context.get("_session_log_request_id"),
                     "role": role,
                     "status": "timeout",
@@ -9241,6 +9263,10 @@ async def _call(
                 log_context,
                 {
                     "type": "provider_failure",
+                    "step_id": step_id,
+                    "strategy_id": context.get("strategy_id"),
+                    "round": context.get("cycle"),
+                    **context.get("_session_log_attribution", {}),
                     "request_id": context.get("_session_log_request_id"),
                     "role": role,
                     "status": "failed",
@@ -13262,6 +13288,7 @@ async def _portfolio_role_call(
                 output=output,
             )
             step.update({"status": "completed", "finished_at": _now(), "output": output})
+            _save_transcript_acceptance(step, context)
             branch.pop("termination_reason_code", None)
             if cloud_research.billing_enabled():
                 estimate = (
@@ -15388,6 +15415,7 @@ async def _portfolio_supervisor_call(
                                 "role": "supervisor",
                                 "round": cycle,
                                 "strategy_id": strategy_id,
+                                "step_id": call_id,
                                 "message": observation + candidate,
                             },
                         )
@@ -17981,6 +18009,7 @@ async def _worker(session_id: str, path: str) -> None:
             record = current
             step = record["steps"][-1]
             step.update({"status": "completed", "finished_at": _now(), "output": output})
+            _save_transcript_acceptance(step, context)
             if usage is not None:
                 step["token_usage"] = usage
                 step["token_usage_status"] = (

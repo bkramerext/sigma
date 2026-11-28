@@ -4580,6 +4580,148 @@ def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None
     assert research_sessions._affordable_portfolio_branches(queued[1:], 1, 0)[0] == []
 
 
+async def test_live_transcript_projects_real_dispatch_before_and_after_acceptance(path: Path):
+    """Inspect both real projections during actual mocked transport and resume."""
+    from sigma import session_log
+
+    view, strategy, credential, config = await setup(path)
+    limits = {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4}
+    research_sessions.save_limits(str(path), limits)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    retry_entered = asyncio.Event()
+    investigator_calls = 0
+    transcript_module = (
+        Path(__file__).resolve().parents[1] / "frontend/src/session-transcript.ts"
+    ).as_uri()
+
+    async def handler(request):
+        nonlocal investigator_calls
+        payload = json.loads(request.content)
+        if payload["text"]["format"]["name"] == "research_investigator":
+            investigator_calls += 1
+            if investigator_calls == 1:
+                entered.set()
+                await release.wait()
+            else:
+                retry_entered.set()
+                await release.wait()
+            # Real strict Investigator schema, but provider order differs
+            # from Pydantic's declaration order (including nested keys).
+            result = json.loads(json.dumps(investigation(1), sort_keys=True))
+        else:
+            result = skeptic(1, "stop", "no_progress")
+        return httpx.Response(200, json=provider_response(result))
+
+    def project(session_id):
+        session_log.flush()
+        snapshot = session_log.read(str(path), session_id)
+        saved = snapshot["transcript_state"]
+        markdown = session_log.transcript_markdown_export(
+            snapshot["events"], snapshot["interventions"], snapshot["session"], "Fixture", saved
+        )
+        # Node 22 is already required by SIGMA verification. Run the exact TS
+        # projection on the same actual producer/reader snapshot, not a re-created fixture.
+        result = subprocess.run(
+            [
+                "node",
+                "--experimental-strip-types",
+                "--input-type=module",
+                "-e",
+                (
+                    f"import {{ projectTranscript }} from {json.dumps(transcript_module)};"
+                    "import fs from 'node:fs';"
+                    "const s=JSON.parse(fs.readFileSync(0,'utf8'));"
+                    "console.log(JSON.stringify(projectTranscript(s.events,s.interventions,"
+                    "s.transcript_state,s.session.status,s.transcript_responses)));"
+                ),
+            ],
+            input=json.dumps(snapshot),
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=15,
+        )
+        return snapshot, markdown, json.loads(result.stdout)
+
+    def assert_live(session_id):
+        snapshot, markdown, rows = project(session_id)
+        possible = [r for r in rows if "possibly active; attempt unconfirmed" in r["title"]]
+        assert len(possible) == 1, rows
+        assert not possible[0]["pending"]
+        assert "possibly active; attempt unconfirmed" in markdown
+        assert any(s["status"] == "running" for s in snapshot["transcript_state"])
+        assert any(r.get("reconstructed") and "running" in r["text"] for r in rows)
+        return possible[0]["id"]
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        session_id = started["id"]
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            first_id = assert_live(session_id)
+            paused = await research_sessions.control_session(str(path), session_id, "pause")
+            assert paused["status"] == "paused"
+            _, markdown, rows = project(session_id)
+            assert not any(r.get("pending") or "possibly active" in r["title"] for r in rows)
+            assert "possibly active" not in markdown
+            assert any(r.get("reconstructed") and "interrupted" in r["text"] for r in rows)
+            await research_sessions.control_session(str(path), session_id, "resume")
+            await asyncio.wait_for(retry_entered.wait(), 5)
+            second_id = assert_live(session_id)
+            assert second_id != first_id
+            release.set()
+            finished = await wait_for(path, session_id)
+            assert finished["status"] in {"completed", "ended"}
+            snapshot, markdown, rows = project(session_id)
+            assert not any(r.get("pending") or "possibly active" in r["title"] for r in rows)
+            assert "possibly active" not in markdown
+            accepted = [
+                s
+                for s in snapshot["transcript_state"]
+                if s["status"] == "completed" and s["role"] == "investigator"
+            ]
+            assert len(accepted) == 1
+            assert accepted[0]["request_id"] == second_id.removeprefix("pending-")
+            raw = next(
+                event
+                for event in snapshot["events"]
+                if event["type"] == "provider_response"
+                and event.get("request_id") == accepted[0]["request_id"]
+            )
+            evidence = snapshot["transcript_responses"][str(raw["seq"])]
+            assert evidence["text"] != accepted[0]["text"]
+            assert evidence["content_digest"] == accepted[0]["content_digest"]
+            assert evidence["content_digest"]
+            matching = [r for r in rows if r["id"] == "response-" + accepted[0]["request_id"]]
+            assert len(matching) == 1 and matching[0]["title"] == "Accepted response"
+            assert matching[0]["text"] == evidence["text"]
+            assert matching[0]["conversionDigest"] == evidence["conversion_digest"]
+            assert (
+                session_log.transcript_conversion_source(snapshot, raw["seq"]) == evidence["text"]
+            )
+            assert not any(r["id"] == "saved-" + accepted[0]["step_id"] for r in rows)
+            assert evidence["text"] in markdown
+            assert "Investigator · Accepted response" in markdown
+            assert any(r.get("reconstructed") and "interrupted" in r["text"] for r in rows)
+        finally:
+            release.set()
+            worker = research_sessions._tasks.get(session_id)
+            if worker is not None and not worker.done():
+                await research_sessions.control_session(str(path), session_id, "pause")
+
+
 if __name__ == "__main__":
     from research_sessions_split_runner import run
 
