@@ -1098,11 +1098,174 @@ def markdown_export(
     return "\n".join(output).rstrip() + "\n"
 
 
+def _saved_supervisor_text(assessment: dict[str, Any]) -> str:
+    """Render only the saved assessment, without inventing raw provider history."""
+    labels = {
+        "objective_alignment": "Objective alignment",
+        "originality": "Originality",
+        "substantive_advancement": "Substantive advancement",
+        "evidence_validation": "Evidence & validation",
+        "research_health": "Research health",
+    }
+    scores = assessment.get("dimensions")
+    dimension_text = ""
+    if isinstance(scores, dict):
+        dimension_text = "\n".join(
+            f"{label}: {float(scores[key]):.1f}/10.0"
+            for key, label in labels.items()
+            if type(scores.get(key)) in {int, float}
+        )
+    recipient_labels = {
+        "ai_1": "AI #1",
+        "ai_2": "AI #2",
+        "both": "both investigators",
+    }
+    if assessment.get("action") == "continue":
+        intervention = "No intervention."
+    else:
+        recipient = recipient_labels.get(str(assessment.get("recipient")), "both investigators")
+        intervention = f"Intervention to {recipient}: {assessment.get('guidance', '')}"
+    candidate = (
+        " Unverified breakthrough candidate: "
+        + str(assessment.get("breakthrough_detail", ""))[:1200]
+        if assessment.get("breakthrough_candidate")
+        else ""
+    )
+    return (
+        str(assessment.get("assessment", ""))[:1000]
+        + "\n\n"
+        + intervention
+        + ("\n\n" + dimension_text if dimension_text else "")
+        + candidate
+    )
+
+
+def transcript_saved_steps(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read-only, redacted saved state; never append reconstructed raw events."""
+    rows: list[dict[str, Any]] = []
+    for key in ("steps", "supervisor_reviews"):
+        items = session.get(key)
+        if not isinstance(items, list):
+            continue
+        for step in items:
+            if not isinstance(step, dict) or not isinstance(step.get("id"), str):
+                continue
+            role = "supervisor" if key == "supervisor_reviews" else step.get("role")
+            if role not in ("investigator", "skeptic", "supervisor"):
+                continue
+            status = step.get("status")
+            if not isinstance(status, str):
+                continue
+            row: dict[str, Any] = {"step_id": step["id"], "role": role, "status": status}
+            for field in (
+                "strategy_id",
+                "request_id",
+                "started_at",
+                "finished_at",
+                "attempt_status",
+                "failure_kind",
+                "interruption_reason",
+                "incomplete_reason",
+                "reason",
+            ):
+                value = step.get(field)
+                if isinstance(value, str) and value:
+                    row[field] = value
+            if type(step.get("cycle")) is int and step["cycle"] > 0:
+                row["round"] = step["cycle"]
+            if type(step.get("brainstorm_mode")) is bool:
+                row["brainstorm_mode"] = step["brainstorm_mode"]
+            if status == "completed":
+                output = step.get("output")
+                if role == "supervisor" and isinstance(step.get("assessment"), dict):
+                    row["text"] = _saved_supervisor_text(_redact(step["assessment"]))
+                elif isinstance(output, (dict, list)):
+                    row["text"] = _readable_response(
+                        {"output_text": json.dumps(_redact(output), ensure_ascii=False)}
+                    )
+                elif isinstance(output, str):
+                    row["text"] = _readable_response({"output_text": output})
+            if isinstance(step.get("partial_output"), str):
+                row["partial_text"] = step["partial_output"]
+            rows.append(_redact(row))
+    return rows
+
+
+def _transcript_saved_by_id(
+    saved_steps: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    counts: dict[str, int] = {}
+    by_id: dict[str, dict[str, Any]] = {}
+    for step in saved_steps:
+        identifier = step.get("step_id")
+        if isinstance(identifier, str):
+            counts[identifier] = counts.get(identifier, 0) + 1
+            by_id[identifier] = step
+    return {identifier: step for identifier, step in by_id.items() if counts[identifier] == 1}
+
+
+def _transcript_correlated_step(
+    event: dict[str, Any],
+    request: dict[str, Any],
+    by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    identifiers = {
+        value
+        for row in (event, request)
+        if isinstance(value := row.get("step_id"), str) and value
+    }
+    if len(identifiers) > 1:
+        return None
+    if identifiers:
+        step = by_id.get(next(iter(identifiers)))
+    else:
+        request_id = event.get("request_id")
+        matches = [
+            item
+            for item in by_id.values()
+            if request_id and item.get("request_id") == request_id
+        ]
+        step = matches[0] if len(matches) == 1 else None
+    if step is None:
+        return None
+    for field in ("role", "strategy_id", "round"):
+        known = step.get(field)
+        if known is not None and any(
+            row.get(field) is not None and row[field] != known for row in (event, request)
+        ):
+            return None
+    return step
+
+
+def _transcript_saved_message(step: dict[str, Any]) -> str:
+    status = str(step.get("status") or "unknown")
+    if status == "completed":
+        return str(step.get("text") or "Saved completion has no retained response text.")
+    details = [
+        str(step[field])
+        for field in (
+            "attempt_status",
+            "failure_kind",
+            "interruption_reason",
+            "incomplete_reason",
+            "reason",
+        )
+        if step.get(field)
+    ]
+    message = f"Saved step status: {status}."
+    if details:
+        message += " " + "; ".join(details) + "."
+    if step.get("partial_text"):
+        message += "\n\nSaved partial output (not accepted):\n\n" + str(step["partial_text"])
+    return message
+
+
 def transcript_markdown_export(
     events: list[dict[str, Any]],
     interventions: list[dict[str, Any]],
     session: dict[str, Any],
     title: str,
+    saved_steps: list[dict[str, Any]] | None = None,
 ) -> str:
     """Project durable provider and human records into a complete readable transcript.
 
@@ -1110,11 +1273,44 @@ def transcript_markdown_export(
     Preserve retention notices and show newest turns first; preserve author
     order inside each paired turn.
     """
-    requests = {
-        str(event["request_id"]): event
-        for event in events
-        if event.get("type") == "provider_request" and event.get("request_id")
-    }
+    requests: dict[str, dict[str, Any]] = {}
+    ambiguous_requests: set[str] = set()
+    failed_requests: set[str] = set()
+    raw_response_counts: dict[str, int] = {}
+    for event in events:
+        request_id = str(event.get("request_id") or "")
+        if not request_id:
+            continue
+        if event.get("type") == "provider_request":
+            if request_id in requests:
+                ambiguous_requests.add(request_id)
+            requests[request_id] = event
+        elif event.get("type") == "provider_failure":
+            failed_requests.add(request_id)
+        elif event.get("type") == "provider_response":
+            raw_response_counts[request_id] = raw_response_counts.get(request_id, 0) + 1
+    for request_id in ambiguous_requests:
+        requests.pop(request_id)
+    # Exact step identity is required; a role/turn slot is not an attempt ID.
+    by_id = _transcript_saved_by_id(saved_steps or [])
+    correlated: dict[int, dict[str, Any]] = {}
+    response_counts: dict[str, int] = {}
+    failed_steps: set[str] = set()
+    for index, event in enumerate(events):
+        request_id = str(event.get("request_id") or "")
+        if request_id in ambiguous_requests:
+            continue
+        request = requests.get(request_id, {})
+        step = _transcript_correlated_step(event, request, by_id)
+        if step is None:
+            continue
+        correlated[index] = step
+        identifier = step["step_id"]
+        if event.get("type") == "provider_response":
+            response_counts[identifier] = response_counts.get(identifier, 0) + 1
+        elif event.get("type") == "provider_failure":
+            failed_steps.add(identifier)
+    represented: set[str] = set()
     responded = {
         str(event["request_id"])
         for event in events
@@ -1125,15 +1321,22 @@ def transcript_markdown_export(
     # Intervention target metadata is used solely for grouping, never to alter
     # the retained Human content.
     human_targets: dict[int, str] = {}
-    for event in events:
+    for index, event in enumerate(events):
         kind = event.get("type")
         stamp = str(event.get("timestamp") or "")
         sequence = int(event.get("seq") or 0)
+        step = correlated.get(index)
         if kind in {"provider_response", "provider_failure"}:
             request = requests.get(str(event.get("request_id") or ""), {})
-            role = _event_role_label(request or event)
-            turn = request.get("round", event.get("round", "—"))
-            strategy = request.get("strategy_id", event.get("strategy_id"))
+            role = _event_role_label(
+                {"role": event.get("role") or request.get("role") or (step or {}).get("role")}
+            )
+            turn = event.get("round") or request.get("round") or (step or {}).get("round", "—")
+            strategy = (
+                event.get("strategy_id")
+                or request.get("strategy_id")
+                or (step or {}).get("strategy_id")
+            )
             message = (
                 _readable_response(event.get("response"))
                 if kind == "provider_response"
@@ -1141,6 +1344,31 @@ def transcript_markdown_export(
                     event.get("provider_error") or event.get("message") or "Provider call failed."
                 )
             )
+            label = role
+            if kind == "provider_failure":
+                label += " · Provider failure"
+                if (
+                    step is not None
+                    and step["status"] not in {"completed", "running"}
+                    and not step.get("partial_text")
+                ):
+                    represented.add(step["step_id"])
+            elif saved_steps is not None:
+                accepted = (
+                    step is not None
+                    and step["status"] == "completed"
+                    and response_counts.get(step["step_id"]) == 1
+                    and step["step_id"] not in failed_steps
+                    and str(event.get("request_id") or "") not in failed_requests
+                    and raw_response_counts.get(str(event.get("request_id") or ""), 0) <= 1
+                    and bool(message)
+                )
+                if accepted:
+                    label += " · Accepted"
+                    message = str(step.get("text") or message)
+                    represented.add(step["step_id"])
+                else:
+                    label += " · Raw response (acceptance unverified or not accepted)"
             group_key = f"{strategy or 'session'}:{turn}"
             group_label = f"Turn {turn}" + (f" · Strategy {strategy}" if strategy else "")
             rows.append(
@@ -1149,12 +1377,27 @@ def transcript_markdown_export(
                     sequence,
                     group_key,
                     group_label,
-                    f"### {role}\n\n*{stamp}*\n\n"
+                    f"### {label}\n\n*{stamp}*\n\n"
                     + _markdown_payload(message or "Historical reply text unavailable.", role),
                 )
             )
         elif kind == "provider_request":
-            if str(event.get("request_id")) not in responded:
+            if (
+                str(event.get("request_id")) not in responded
+                or str(event.get("request_id")) in ambiguous_requests
+            ):
+                if step is not None and step["status"] != "running":
+                    # The saved step below represents the known terminal outcome.
+                    continue
+                pending = saved_steps is None or (
+                    step is not None
+                    and step["status"] == "running"
+                    and session.get("status") in {"running", "queued"}
+                )
+                if step is not None:
+                    represented.add(step["step_id"])
+                title_suffix = "Request pending" if pending else "Response not retained"
+                body = "Awaiting response." if pending else "Raw response unavailable; outcome unverified."
                 turn = event.get("round", "—")
                 strategy = event.get("strategy_id")
                 group_key = f"{strategy or 'session'}:{turn}"
@@ -1166,11 +1409,40 @@ def transcript_markdown_export(
                         group_key,
                         group_label,
                         (
-                            f"### {_event_role_label(event)} · Request pending\n\n"
-                            f"*{stamp}*\n\nAwaiting response."
+                            f"### {_event_role_label(event)} · {title_suffix}\n\n"
+                            f"*{stamp}*\n\n{body}"
                         ),
                     )
                 )
+        elif kind == "session_event" and event.get("event_kind") == "supervisor.review":
+            strategy, turn = event.get("strategy_id"), event.get("round", "—")
+            message = str(event.get("message") or "")
+            # Old reviews lack a step ID. Match only a unique saved review with
+            # identical strategy, turn and text; do not guess among retries.
+            if step is None and saved_steps is not None and not event.get("step_id"):
+                matches = [
+                    item
+                    for item in saved_steps
+                    if item.get("role") == "supervisor"
+                    and item.get("status") == "completed"
+                    and item.get("strategy_id") == strategy
+                    and item.get("round") == turn
+                    and item.get("text") == message
+                ]
+                if len(matches) == 1:
+                    step = matches[0]
+            if step is not None and step["status"] == "completed" and message:
+                represented.add(step["step_id"])
+            rows.append(
+                (
+                    stamp,
+                    sequence,
+                    f"{strategy or 'session'}:{turn}",
+                    f"Turn {turn}" + (f" · Strategy {strategy}" if strategy else ""),
+                    f"### Supervisor\n\n*{stamp}*\n\n"
+                    + _markdown_payload(message, "Supervisor"),
+                )
+            )
         elif kind == "session_event" and event.get("event_kind") == "intervention.accepted":
             # The full Human text is projected from the Session below.
             continue
@@ -1186,6 +1458,27 @@ def transcript_markdown_export(
                     f"### {label}\n\n*{stamp}*\n\n{_markdown_payload(message, label)}",
                 )
             )
+    for step in saved_steps or []:
+        if step["step_id"] in represented:
+            continue
+        strategy, turn = step.get("strategy_id"), step.get("round", "—")
+        stamp = str(
+            (step.get("started_at") if step["status"] == "running" else step.get("finished_at"))
+            or ""
+        )
+        label = _event_role_label(step)
+        stamp_line = f"*{stamp}*\n\n" if stamp else ""
+        rows.append(
+            (
+                stamp,
+                0,
+                f"{strategy or 'session'}:{turn}",
+                f"Turn {turn}" + (f" · Strategy {strategy}" if strategy else ""),
+                f"### {label} · Reconstructed from saved state\n\n"
+                + stamp_line
+                + _markdown_payload(_transcript_saved_message(step), label),
+            )
+        )
     for index, intervention in enumerate(interventions):
         if not isinstance(intervention, dict) or not intervention.get("submitted_at"):
             continue
@@ -1228,7 +1521,7 @@ def transcript_markdown_export(
         f"# {title}, Session {session.get('number', '—')} — Transcript",
         "",
         "Newest turns first, with entries chronological within each turn.",
-        "Unavailable historical content is never reconstructed.",
+        "Raw history is not fabricated; entries marked reconstructed come from saved state.",
         "",
     ]
     for group in sorted(groups.values(), key=lambda item: item["latest"], reverse=True):
@@ -1252,7 +1545,9 @@ def _has_limit_marker(path: Path) -> bool:
     return any(row.get("type") == "retention_limit" for row in events)
 
 
-def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
+def read(
+    path_value: str, session_id: str, after: int = 0, state_version: str | None = None
+) -> dict[str, Any]:
     UUID(session_id)
     view = inspect_project(path_value)
     project_file = project_path(path_value).resolve(strict=True)
@@ -1288,9 +1583,15 @@ def read(path_value: str, session_id: str, after: int = 0) -> dict[str, Any]:
             finally:
                 fcntl.flock(lockfile_fd, fcntl.LOCK_UN)
                 os.close(lockfile_fd)
+    saved_steps = transcript_saved_steps(session)
+    version = hashlib.sha256(
+        json.dumps(saved_steps, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
     return {
         "events": events,
         "cursor": cursor,
+        "transcript_state_version": version,
+        **({"transcript_state": saved_steps} if state_version != version else {}),
         "short_name": short_name,
         "saved_short_name": short_name if has_saved_short_name else None,
         "reference_preparation": reference_preparation_summary(session),

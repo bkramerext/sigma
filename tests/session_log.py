@@ -1346,6 +1346,75 @@ def test_live_settings_recheck_latest_checkpoint_before_persisting() -> None:
         assert save.call_args.args[1]["steps"] == advanced["steps"]
 
 
+def test_transcript_reconciles_saved_steps_without_inventing_history() -> None:
+    session = {
+        "number": 1,
+        "status": "completed",
+        "steps": [
+            {
+                "id": "attempt-a",
+                "role": "investigator",
+                "strategy_id": "s1",
+                "cycle": 1,
+                "status": "completed",
+                "finished_at": "2026-01-01T00:00:02Z",
+                "output": {"summary": "accepted A"},
+            },
+            {
+                "id": "attempt-b",
+                "role": "skeptic",
+                "strategy_id": "s1",
+                "cycle": 1,
+                "status": "completed",
+                "output": {"summary": "accepted B"},
+            },
+            {
+                "id": "attempt-f",
+                "role": "investigator",
+                "strategy_id": "s2",
+                "cycle": 1,
+                "status": "failed",
+            },
+        ],
+    }
+    events = [
+        {
+            "seq": 1,
+            "type": "provider_request",
+            "request_id": "a",
+            "step_id": "attempt-a",
+            "timestamp": "2026-01-01T00:00:01Z",
+        },
+        {
+            "seq": 2,
+            "type": "provider_response",
+            "request_id": "f",
+            "step_id": "attempt-f",
+            "response": {"output_text": "invalid raw output"},
+        },
+        {
+            "seq": 3,
+            "type": "provider_failure",
+            "request_id": "f",
+            "step_id": "attempt-f",
+            "message": "validation failed",
+        },
+        {"seq": 4, "type": "retention_limit", "message": "Raw retention limit reached."},
+    ]
+    before = json.dumps([session, events], sort_keys=True)
+    saved = session_log.transcript_saved_steps(session)
+    assert len(saved) == 3
+    assert "finished_at" not in saved[1]
+    report = session_log.transcript_markdown_export(events, [], session, "Test", saved)
+    assert "Awaiting response" not in report
+    assert report.count("Reconstructed from saved state") == 2
+    assert "accepted A" in report and "accepted B" in report
+    assert "invalid raw output" in report and "validation failed" in report
+    assert "Raw retention limit reached." in report
+    assert "Raw response (acceptance unverified or not accepted)" in report
+    assert json.dumps([session, events], sort_keys=True) == before
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="sigma-session-log-") as directory:
         root = Path(directory)
@@ -1367,6 +1436,7 @@ def main() -> None:
         test_flat_turn_settings_convert_legacy_rounds_without_relabeling()
         test_user_turn_default_migration_and_validation(root)
         test_complete_transcript_export_groups_turns_newest_first()
+        test_transcript_reconciles_saved_steps_without_inventing_history()
         test_extended_completed_session_plans_new_slots_without_replaying_history()
         test_extension_preserves_partial_pair_and_refuses_duplicate_accepted_steps()
         test_unlimited_turn_growth_does_not_extend_finished_branches()

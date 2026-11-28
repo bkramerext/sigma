@@ -121,7 +121,7 @@ test('Supervisor groups after its paired agents and the newest exchange displays
   assert.deepEqual(groups[1].entries.map(entry => entry.text), ['AI one reply', 'AI two reply', 'Process-only assessment']);
 });
 
-test('reading view keeps one accepted reply per turn and omits audit chatter', () => {
+test('reading view retains failed attempts and omits non-response audit chatter', () => {
   const entries = projectTranscript([
     { seq: 1, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'first', role: 'investigator', round: 1, strategy_id: 'x' },
     { seq: 2, timestamp: '2026-11-18T01:00:02Z', type: 'provider_failure', request_id: 'first', provider_error: 'transient failure' },
@@ -135,12 +135,12 @@ test('reading view keeps one accepted reply per turn and omits audit chatter', (
     { seq: 10, timestamp: '2026-11-18T01:00:10Z', type: 'session_event', role: 'supervisor', event_kind: 'supervisor.review', round: 1, strategy_id: 'x', message: 'Process check' },
   ]);
   assert.deepEqual(entries.map(entry => entry.text), [
-    'Substantive AI one result', 'Substantive AI two result', 'Process check',
+    'transient failure', 'Substantive AI one result', 'Substantive AI two result', 'Process check',
   ]);
   const turns = groupTranscriptTurns(entries);
   assert.deepEqual(turns.map(group => group.label), ['Turn 1']);
   assert.deepEqual(turns[0].entries.map(entry => entry.role), [
-    'investigator', 'skeptic', 'supervisor',
+    'investigator', 'investigator', 'skeptic', 'supervisor',
   ]);
 });
 
@@ -237,4 +237,126 @@ test('Markdown presentation fences nested JSON and formats artifact GUIDs', () =
   assert.ok(output.includes('- Original artifact `' + id + '` is unavailable.'));
   assert.ok(output.includes('Already formatted `' + id + '` remains.'));
   assert.equal(formatTranscriptMarkdown(output), output);
+});
+
+test('accepted saved results survive missing raw history, with no false pending or invented times', () => {
+  const events = [
+    { seq: 1, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'a', role: 'investigator', round: 1, strategy_id: 'x', step_id: 'step-a' },
+    { seq: 2, timestamp: '2026-11-18T01:00:02Z', type: 'retention_limit', message: 'Raw history limit reached' },
+  ];
+  const before = JSON.stringify(events);
+  const saved = [
+    { step_id: 'step-a', role: 'investigator', round: 1, strategy_id: 'x', status: 'completed',
+      started_at: '2026-11-18T01:00:01Z', finished_at: '2026-11-18T01:00:03Z', text: 'Saved investigator result' },
+    { step_id: 'step-b', role: 'skeptic', round: 1, strategy_id: 'x', status: 'completed', text: 'Saved critique' },
+    { step_id: 'step-c', role: 'supervisor', round: 1, strategy_id: 'x', status: 'completed',
+      finished_at: '2026-11-18T01:00:05Z', text: 'Saved process review' },
+  ];
+  const entries = projectTranscript(events, [], saved, 'completed');
+  assert.equal(JSON.stringify(events), before);
+  assert.equal(entries.filter(entry => entry.reconstructed).length, 3);
+  assert.ok(entries.every(entry => !entry.pending && !convertibleTranscriptEntry(entry)));
+  assert.equal(entries.find(entry => entry.id === 'saved-step-b').timestamp, '');
+  assert.equal(entries.find(entry => entry.id === 'saved-step-a').timestamp, saved[0].finished_at);
+  assert.ok(entries.some(entry => entry.historyNotice && entry.text === 'Raw history limit reached'));
+  assert.equal(groupTranscriptTurns(entries).find(group => group.key === 'x:1').entries.length, 3);
+});
+
+test('raw response and subsequent validation failure are retained separately from accepted retry', () => {
+  const events = [
+    { seq: 1, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'a', role: 'investigator', round: 1, strategy_id: 'x', step_id: 'step-a' },
+    { seq: 2, timestamp: '2026-11-18T01:00:02Z', type: 'provider_response', request_id: 'a', response: { output_text: 'A long raw result that subsequently fails schema validation.' } },
+    { seq: 3, timestamp: '2026-11-18T01:00:03Z', type: 'provider_failure', request_id: 'a', message: 'Schema validation failed' },
+    { seq: 4, timestamp: '2026-11-18T01:00:04Z', type: 'provider_request', request_id: 'b', role: 'investigator', round: 1, strategy_id: 'x', step_id: 'step-b' },
+    { seq: 5, timestamp: '2026-11-18T01:00:05Z', type: 'provider_response', request_id: 'b', response: { output_text: 'A substantive accepted research result with a full explanation.' } },
+  ];
+  const saved = [
+    { step_id: 'step-a', role: 'investigator', round: 1, strategy_id: 'x', status: 'failed' },
+    { step_id: 'step-b', role: 'investigator', round: 1, strategy_id: 'x', status: 'completed' },
+  ];
+  const entries = projectTranscript(events, [], saved, 'completed');
+  assert.deepEqual(entries.map(entry => entry.title), [
+    'Provider response with recorded failure', 'Provider failure', 'Accepted response',
+  ]);
+  assert.equal(new Set(entries.map(entry => entry.id)).size, 3);
+  assert.deepEqual(entries.filter(convertibleTranscriptEntry).map(entry => entry.id), ['response-b']);
+  assert.deepEqual(entries.map(entry => entry.sequence), [2, 3, 5]);
+});
+
+test('orphan terminal attribution, interruption, and concurrent strategies reconcile by exact ID', () => {
+  const events = [
+    { seq: 1, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'a', role: 'investigator', round: 1, strategy_id: 'x', step_id: 'interrupted' },
+    { seq: 2, timestamp: '2026-11-18T01:00:02Z', type: 'provider_response', request_id: 'b', role: 'investigator', round: 1, strategy_id: 'y', step_id: 'accepted-y', response: { output_text: 'Accepted Y result' } },
+    { seq: 3, timestamp: '2026-11-18T01:00:03Z', type: 'provider_response', request_id: 'c', role: 'investigator', round: 1, strategy_id: 'x', step_id: 'accepted-y', response: { output_text: 'Conflicting strategy attribution' } },
+    { seq: 4, timestamp: '2026-11-18T01:00:04Z', type: 'provider_request', request_id: 'd', role: 'skeptic', round: 1, strategy_id: 'y', step_id: 'running-y' },
+  ];
+  const saved = [
+    { step_id: 'interrupted', role: 'investigator', round: 1, strategy_id: 'x', status: 'interrupted',
+      finished_at: '2026-11-18T01:00:02Z', interruption_reason: 'backend_restart' },
+    { step_id: 'accepted-y', role: 'investigator', round: 1, strategy_id: 'y', status: 'completed', text: 'Accepted Y result' },
+    { step_id: 'running-y', role: 'skeptic', round: 1, strategy_id: 'y', status: 'running' },
+  ];
+  const entries = projectTranscript(events, [], saved, 'running');
+  assert.equal(entries.find(entry => entry.id === 'saved-interrupted').pending, undefined);
+  assert.match(entries.find(entry => entry.id === 'saved-interrupted').text, /interrupted/);
+  assert.equal(entries.find(entry => entry.id === 'response-b').strategyId, 'y');
+  assert.equal(entries.find(entry => entry.id === 'raw-response-c-3').title, 'Raw response (acceptance unverified)');
+  assert.equal(entries.find(entry => entry.id === 'pending-d').pending, true);
+  assert.equal(entries.filter(entry => entry.pending).length, 1);
+  assert.equal(projectTranscript(events, [], saved, 'paused').filter(entry => entry.pending).length, 0);
+});
+
+test('multiple raw responses sharing an attempt remain separate and cannot establish acceptance', () => {
+  const events = [
+    { seq: 1, timestamp: '2026-11-18T01:00:01Z', type: 'provider_request', request_id: 'a', role: 'investigator', round: 1, strategy_id: 'x', step_id: 'step-a' },
+    { seq: 2, timestamp: '2026-11-18T01:00:02Z', type: 'provider_response', request_id: 'a', response: { output_text: 'First retained response' } },
+    { seq: 3, timestamp: '2026-11-18T01:00:03Z', type: 'provider_response', request_id: 'a', response: { output_text: 'Second retained response' } },
+  ];
+  const entries = projectTranscript(events, [], [{ step_id: 'step-a', role: 'investigator', status: 'completed',
+    round: 1, strategy_id: 'x', text: 'Persisted accepted result' }], 'completed');
+  assert.equal(entries.length, 3);
+  assert.equal(new Set(entries.map(entry => entry.id)).size, 3);
+  assert.equal(entries.filter(entry => entry.reconstructed).length, 1);
+  assert.ok(entries.every(entry => !convertibleTranscriptEntry(entry)));
+});
+
+test('raw execution chronology is independent of grouped presentation for four turns and three strategies', () => {
+  let seq = 0;
+  const events = [];
+  const saved = [];
+  const time = n => new Date(Date.UTC(2026, 0, 1, 0, 0, n)).toISOString();
+  for (let round = 1; round <= 4; round++) {
+    for (const role of ['investigator', 'skeptic', 'supervisor']) {
+      for (const strategy_id of ['a', 'b', 'c']) {
+        const step_id = `${strategy_id}-${round}-${role}`;
+        const started_at = time(++seq);
+        if (role !== 'supervisor')
+          events.push({ seq, timestamp: started_at, type: 'provider_request', request_id: step_id,
+            step_id, role, round, strategy_id });
+        const finished_at = time(++seq);
+        if (role === 'supervisor')
+          events.push({ seq, timestamp: finished_at, type: 'session_event', event_kind: 'supervisor.review',
+            step_id, role, round, strategy_id, message: step_id });
+        else
+          events.push({ seq, timestamp: finished_at, type: 'provider_response', request_id: step_id,
+            step_id, role, round, strategy_id, response: { output_text: step_id } });
+        saved.push({ step_id, role, strategy_id, round, status: 'completed', started_at, finished_at, text: step_id });
+      }
+    }
+  }
+  // Assert chronological evidence independently of grouping, before simulating
+  // a retention gap. This fixture is synthetic, not a claim about ONP execution.
+  for (const strategy of ['a', 'b', 'c']) for (let turn = 1; turn <= 4; turn++) {
+    const pair = saved.filter(s => s.strategy_id === strategy && s.round === turn);
+    assert.ok(pair[0].finished_at < pair[1].started_at);
+    assert.ok(pair[1].finished_at < pair[2].started_at);
+  }
+  const retained = events.slice(0, 17);
+  const entries = projectTranscript(retained, [], saved, 'completed');
+  assert.equal(entries.filter(e => e.role === 'investigator' || e.role === 'skeptic').length, 24);
+  assert.equal(entries.filter(e => e.role === 'supervisor').length, 12);
+  assert.ok(entries.every(e => !e.pending));
+  const groups = groupTranscriptTurns(entries);
+  assert.equal(groups.length, 12);
+  for (const group of groups) assert.equal(group.entries.length, 3);
 });

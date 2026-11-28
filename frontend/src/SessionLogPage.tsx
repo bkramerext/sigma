@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry, type TranscriptSavedStep } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -38,6 +38,8 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const [events, setEvents] = useState<SessionLogEvent[]>([]);
   const cursor = useRef(0);
   const seen = useRef(new Set<number>());
+  const stateVersion = useRef('');
+  const [savedSteps, setSavedSteps] = useState<TranscriptSavedStep[]>([]);
   const [session, setSession] = useState<SessionState | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [shortName, setShortName] = useState('Research Project');
@@ -63,6 +65,14 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   const [visibleTurnCount, setVisibleTurnCount] = useState(20);
   useEffect(() => {
     if (!sessionId || !path) { setError('Session transcript link is incomplete.'); return; }
+    cursor.current = 0;
+    seen.current.clear();
+    stateVersion.current = '';
+    setEvents([]);
+    setSavedSteps([]);
+    setInterventions([]);
+    setSession(null);
+    setInitialLoadComplete(false);
     let alive = true;
     let timer = 0;
     let fetching = false;
@@ -70,15 +80,20 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
       if (!alive || fetching) return;
       fetching = true;
       try {
-        const query = new URLSearchParams({ path, after: String(cursor.current) });
+        const query = new URLSearchParams({
+          path, after: String(cursor.current), state_version: stateVersion.current,
+        });
         const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin', headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session transcript.' : 'This session transcript is unavailable or access was denied.');
-        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; project_id?: string; session: SessionState; interventions?: TranscriptIntervention[] };
+        const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; project_id?: string; session: SessionState; interventions?: TranscriptIntervention[];
+          transcript_state?: TranscriptSavedStep[]; transcript_state_version?: string };
         if (!alive) return;
         const fresh = data.events.filter(event => !seen.current.has(event.seq));
         fresh.forEach(event => seen.current.add(event.seq));
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
+        if (data.transcript_state !== undefined) setSavedSteps(data.transcript_state);
+        if (data.transcript_state_version !== undefined) stateVersion.current = data.transcript_state_version;
         setShortName(data.short_name); setProjectTitle(data.project_title); if (data.project_id) setProjectId(data.project_id); setSession(data.session); onSessionChange?.(data.session); setInterventions(data.interventions ?? []); setError(''); setInitialLoadComplete(true);
       } catch (cause) { if (alive) { setError(displayError(cause)); setInitialLoadComplete(true); } }
       finally {
@@ -121,7 +136,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   // transcript content is queued; never send arbitrary browser-authored text.
   useEffect(() => {
     if (!markdownEntries.size || !projectId) return;
-    const entries = projectTranscript(events, interventions).filter(entry =>
+    const entries = projectTranscript(events, interventions, savedSteps, session?.status).filter(entry =>
       markdownEntries.has(entry.id) &&
       seenMarkdownEntries.has(entry.id) &&
       entry.role !== 'other' &&
@@ -188,7 +203,7 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
       }
     };
     void drain();
-  }, [markdownEntries, events, interventions, projectId, path, sessionId, expandedEntries, seenMarkdownEntries]);
+  }, [markdownEntries, events, interventions, savedSteps, session?.status, projectId, path, sessionId, expandedEntries, seenMarkdownEntries]);
 
   const toggleEntryMarkdown = (entry: TranscriptEntry) => {
     const next = new Set(markdownEntries);
@@ -210,7 +225,8 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
   };
   useEffect(() => () => { conversionAbort.current?.abort(); }, []);
   const allGroups = groupTranscriptTurns(
-    projectTranscript(events, interventions).filter(entry => entry.role !== 'other'),
+    projectTranscript(events, interventions, savedSteps, session?.status)
+      .filter(entry => entry.role !== 'other' || entry.historyNotice || entry.title.startsWith('Raw response') || entry.title.startsWith('Provider ')),
   );
   const { shownGroups, remainingTurns } = paginateTranscriptTurns(allGroups, visibleTurnCount);
   const activeTurnKey = ['running', 'queued'].includes(session?.status ?? '')
@@ -229,7 +245,11 @@ export default function SessionLogPage({ onSessionChange, resetSignal = 0 }: { o
     }).format(date);
   };
   const entryName = (entry: TranscriptEntry): string => {
-    return transcriptRoleLabel(entry.role, entry.brainstormMode === true) || entry.title;
+    const roleLabel = transcriptRoleLabel(entry.role, entry.brainstormMode === true);
+    const needsLabel = entry.reconstructed || (!entry.pending &&
+      (entry.title.startsWith('Provider ') || entry.title.startsWith('Raw ')
+        || entry.title === 'Response not retained' || entry.title === 'Accepted response'));
+    return roleLabel && needsLabel ? `${roleLabel} · ${entry.title}` : roleLabel || entry.title;
   };
   if (!initialLoadComplete) return <main className="session-log-page session-conversation-page"><div className="workspace-state project-opening-state session-opening-state" role="status" aria-live="polite"><p className="intro">Opening session…</p></div></main>;
   return <main className="session-log-page session-conversation-page">

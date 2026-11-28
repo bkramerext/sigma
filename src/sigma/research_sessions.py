@@ -8728,6 +8728,16 @@ async def _call_provider(
         ),
         {},
     )
+    log_attribution = {
+        "step_id": step_id,
+        "strategy_id": strategy_id,
+        "round": context.get("cycle", branch.get("cycle", record.get("cycle"))),
+        "brainstorm_mode": (
+            isinstance(record.get("session_settings"), dict)
+            and record["session_settings"].get("brainstorm_mode") is True
+        ),
+    }
+    context["_session_log_attribution"] = log_attribution
     if log_context:
         peer_handoffs = context.get("peer_handoffs", [])
         peer_evidence = context.get("other_strategy_evidence", [])
@@ -8737,16 +8747,10 @@ async def _call_provider(
             log_context,
             {
                 "type": "provider_request",
-                "brainstorm_mode": (
-                    isinstance(record.get("session_settings"), dict)
-                    and record["session_settings"].get("brainstorm_mode") is True
-                ),
+                **log_attribution,
                 "request_id": request_id,
                 "role": role,
-                "round": context.get("cycle", branch.get("cycle", record.get("cycle"))),
-                "strategy_id": strategy_id,
                 "turn": step.get("sequence", record.get("calls_used")),
-                "step_id": step_id,
                 "peer_handoffs_available": [
                     item.get("handoff_id")
                     for item in peer_handoffs
@@ -8862,6 +8866,7 @@ async def _call_provider(
                         log_context,
                         {
                             "type": "provider_failure",
+                            **log_attribution,
                             "request_id": request_id,
                             "role": role,
                             "status": "provider_rejected",
@@ -8977,6 +8982,7 @@ async def _call_provider(
             log_context,
             {
                 "type": "provider_response",
+                **log_attribution,
                 "request_id": request_id,
                 "role": role,
                 "status": "completed",
@@ -9214,6 +9220,8 @@ async def _call(
     timeout_seconds: float | None = None,
     step_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, int | None] | None]:
+    context.pop("_session_log_request_id", None)
+    context.pop("_session_log_attribution", None)
     _sponsor_inference_diagnostic(record, "call_started")
     try:
         result = await _call_provider(record, role, context, timeout_seconds, step_id)
@@ -9226,6 +9234,10 @@ async def _call(
                 log_context,
                 {
                     "type": "provider_failure",
+                    "step_id": step_id,
+                    "strategy_id": context.get("strategy_id"),
+                    "round": context.get("cycle"),
+                    **context.get("_session_log_attribution", {}),
                     "request_id": context.get("_session_log_request_id"),
                     "role": role,
                     "status": "timeout",
@@ -9241,6 +9253,10 @@ async def _call(
                 log_context,
                 {
                     "type": "provider_failure",
+                    "step_id": step_id,
+                    "strategy_id": context.get("strategy_id"),
+                    "round": context.get("cycle"),
+                    **context.get("_session_log_attribution", {}),
                     "request_id": context.get("_session_log_request_id"),
                     "role": role,
                     "status": "failed",
@@ -15388,6 +15404,7 @@ async def _portfolio_supervisor_call(
                                 "role": "supervisor",
                                 "round": cycle,
                                 "strategy_id": strategy_id,
+                                "step_id": call_id,
                                 "message": observation + candidate,
                             },
                         )
