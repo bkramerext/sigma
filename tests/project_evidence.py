@@ -378,6 +378,40 @@ def test_source_material_edit_rejects_overlap_but_accepts_unrelated_additions() 
         )
 
 
+def test_validated_link_import_survives_network_failure() -> None:
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "imported.sigma"
+        initialize_project(path, "Imported evidence", "Inspect the source")
+        original = "https://example.org/blocked"
+        mirror = "https://example.org/readable"
+        with patch.object(
+            research_supplied_evidence, "_fetch_url", side_effect=ValueError("http_403")
+        ):
+            failed = research_supplied_evidence.import_link(str(path), original)
+        assert failed["status"] == "unavailable"
+        assert not project_evidence.list_evidence(str(path))
+        with patch.object(
+            research_supplied_evidence,
+            "_fetch_url",
+            return_value=(b"Complete premise", "text/plain", mirror),
+        ):
+            imported = research_supplied_evidence.import_link(
+                str(path), mirror, requested_url=original
+            )
+        assert imported["status"] == "imported"
+        entry = {"id": "uploaded-link:" + imported["entry"]["id"], "url": mirror}
+        with patch.object(
+            research_supplied_evidence, "_fetch_url", side_effect=ValueError("http_403")
+        ) as fetch:
+            compiled = research_supplied_evidence.compile_entry(
+                str(path), entry, "11111111-1111-4111-8111-111111111111"
+            )
+        fetch.assert_not_called()
+        assert compiled["status"] == "retrieved"
+        assert compiled["excerpt"] == "Complete premise"
+        assert compiled["requested_url"] == original
+
+
 if __name__ == "__main__":
     test_project_evidence_lifecycle()
     test_project_collaborator_can_remove_another_users_source_material()
@@ -393,4 +427,5 @@ if __name__ == "__main__":
     test_enable_disable_and_edit_applies_to_future_session_inputs()
     test_distinct_source_material_additions_survive_and_duplicate_additions_collapse()
     test_source_material_edit_rejects_overlap_but_accepts_unrelated_additions()
+    test_validated_link_import_survives_network_failure()
     print("Project evidence tests passed.")

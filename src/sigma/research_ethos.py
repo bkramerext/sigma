@@ -18,19 +18,18 @@ from typing import Any
 from sigma import project_types
 from sigma.projects import ProjectError
 
-DEFAULT_VERSION = "research-ethos-v1"
-DEFAULT_MARKDOWN = """1. **Pursue discovery, not predetermined answers.** Research should follow promising ideas wherever they lead, rather than manufacture support for an expected conclusion.
-2. **An unsuccessful hypothesis is not unsuccessful research.** Disproving an idea, discovering limitations, or establishing that a problem remains unresolved can constitute valuable scientific progress.
-3. **Let evidence determine conclusions.** Distinguish established findings, plausible interpretations, speculation, and unresolved questions. Never overstate certainty.
-4. **Be intellectually adventurous.** Explore unconventional hypotheses, unexpected connections, and novel approaches when they offer a credible path toward new understanding.
-5. **Make criticism productive.** Skepticism should expose weaknesses, test assumptions, and improve the investigation, not merely obstruct or dismiss promising ideas.
-6. **Build on what has been learned.** Preserve valid findings, failed approaches, useful evidence, and unresolved questions. Each research iteration should advance understanding rather than unnecessarily repeat previous work.
-7. **Publish what was actually discovered.** The final paper should faithfully represent the investigation, including its findings, limitations, uncertainty, and open questions. Do not disguise incomplete research as a completed breakthrough.
-8. **Judge progress by knowledge gained.** Evaluate research by the understanding it produces, not simply whether its original objectives were achieved.
-9. **Ground hypothetical scenarios in reality.** Fictional or hypothetical situations are not permission to invent evidence, facts, or established rules. Ground analysis in verifiable knowledge, distinguish assumptions from reality, and rigorously test novel conclusions.
-10. **Respect the reader's attention.** Papers should be succinct and non-repetitive. Give every paragraph a distinct explanatory purpose; state each result, proof step, caveat, or limitation where it is needed, without recycling it across the abstract, introduction, methods, body, and conclusion. Keep essential scientific depth and precise qualifications; omit padding, process narration, and repeated disclaimers.
+DEFAULT_VERSION = "research-ethos-v2"
+DEFAULT_MARKDOWN = """1. **Pursue discovery freely.** Follow promising ideas wherever they lead. Explore unconventional hypotheses, unexpected connections, and novel approaches that offer credible paths toward understanding. Never manufacture support for predetermined conclusions.
 
-**Pursue discovery freely, report findings faithfully, and never disguise incomplete work as success.**"""
+2. **Let evidence govern conclusions.** Distinguish established findings, plausible interpretations, assumptions, speculation, and unresolved questions. Ground hypothetical scenarios in verifiable reality, never invent evidence or established rules, and rigorously test novel conclusions without overstating certainty.
+
+3. **Make obstacles productive.** Use skepticism to expose weaknesses, challenge assumptions, and improve promising ideas rather than merely dismiss them. When unconditional conclusions are unavailable, seek conditional results, alternative formulations, structural relationships, counterexamples, or narrower discoveries. Uncertainty should stimulate exploration, not suppress it.
+
+4. **Build understanding cumulatively.** Preserve valid findings, failed approaches, useful evidence, and unresolved questions. Each iteration should advance understanding rather than repeat previous work. Judge success by knowledge gained: disproving a hypothesis, discovering limitations, or establishing that a problem remains unresolved can constitute valuable progress.
+
+5. **Publish faithfully and respect the reader.** Communicate what was actually discovered, including substantive reasoning, limitations, uncertainty, and open questions. Never disguise incomplete research as a breakthrough. Give every paragraph a distinct explanatory purpose, preserving scientific depth and precise qualifications while eliminating padding, unnecessary process narration, and repeated results or disclaimers.
+
+**Pursue discovery freely, advance understanding rigorously, and report findings faithfully.**"""
 FILENAME = ".sigma-research-ethos.json"
 LOCK = ".sigma-research-ethos.lock"
 MAX_CHARS = 16_000

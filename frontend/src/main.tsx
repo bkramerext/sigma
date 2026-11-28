@@ -14,7 +14,7 @@ import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
-import { sourceMaterialOverflowCopy } from './source-material-error';
+import { sourceMaterialOverflowCopy, currentSourceMaterialWarnings } from './source-material-error';
 import { publicationAwaitingLibrary, publishedRunActivityLabel, publishedRunReadyForHandoff, publishedRunStillFinishing, savedPaperAwaitingGenerationFinish, unlistedPublicationIds } from './paper-publication-handoff';
 import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper, orderPaperRunsDescending } from './paper-completion-transition';
 import { activatePaperScoreStep } from './paper-score-action';
@@ -35,7 +35,7 @@ import './action-icons.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
-import AboutProvenanceVision from './about-provenance';
+import AboutProvenanceVision, { AboutResearchArchitecture } from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 import SigmaSelect from './SigmaSelect';
@@ -418,6 +418,12 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   // A frozen Source Material overflow is not a model context failure. Use
   // the saved backend measurement (or its historical blocked event) so users
   // can see the size and reduce their source selection before a new session.
+  if (/Cannot research with incomplete Source Material/i.test(message)) {
+    return {
+      cause: message,
+      next: 'Open Project → Source Material. Replace inaccessible links, upload readable copies, or disable sources you do not need. Then click Resume to retry. Saved research remains preserved.',
+    };
+  }
   if (/source material contains|source material exceeds context limit/i.test(evidence)) {
     return sourceMaterialOverflowCopy(
       session.message,
@@ -929,7 +935,7 @@ function SessionNotice({ number, onDismiss, title, kind, ariaLabel, dismissLabel
   };
   return <div className={`session-notice-exit-slot${exiting ? ' is-exiting' : ''}`}>
     <div className="session-notice-exit-inner">
-      <div className={kind} role={kind.includes('paper-contextual-error') ? 'alert' : kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
+      <div className={kind} role={kind.includes('paper-contextual-error') || kind.includes('session-source-warning') ? 'alert' : kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
         <div className="session-notice-header">
           <strong className="session-notice-title">{title}</strong>
           {kind.includes('paper-contextual-error')
@@ -1606,7 +1612,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
-  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
+  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string } | null>(null);
   // Serialize auto-saves so a slower earlier request cannot overwrite newer edits.
   const sessionSettingsSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const [pendingStartSettings, setPendingStartSettings] = useState<SessionSettings | null>(null);
@@ -2325,7 +2331,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   });
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     {settingsDialog && <SessionSettingsDialog key={settingsDialog.sessionId ?? 'new-session'}
-      settings={settingsDialog.initial} mode={settingsDialog.mode} minTurns={settingsDialog.minTurns ?? 0}
+      settings={settingsDialog.initial} mode={settingsDialog.mode}
       onClose={next => {
         if (settingsDialog.mode === 'start') {
           setPendingStartSettings(next);
@@ -2354,6 +2360,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         {sessionControls.confirming ? sessionControls.starting
           ? null // The pending Session row owns the one visible green pulse.
           : <>
+          <button type="button" className="text-view-link session-start-link" aria-label="Session settings" data-tooltip="Session settings" disabled={controlsDisabled || !sessionControls.configure} onClick={sessionControls.configure}>Settings</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.start}>Start Session</button>
           <button type="button" className="text-view-link session-start-link" disabled={controlsDisabled} onClick={sessionControls.cancel}>Cancel</button>
         </> : <button ref={playButtonRef} type="button" className="text-view-link sessions-new-action sigma-heading-icon-action" disabled={controlsDisabled || (!guest && sessionControls.playDisabled)} aria-label="New session" data-tooltip="New session" onClick={sessionControls.play}><CirclePlusIcon/></button>}
@@ -2406,11 +2413,6 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                     onClick={() => setSettingsDialog({
                       mode: 'edit',
                       sessionId: item.id, initial: existingSessionSettings(item),
-                      minTurns: Math.max(0,
-                        ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
-                          .map(step => step.cycle),
-                        ...(item.strategy_runs ?? []).map(branch => branch.cycle ?? 0),
-                      ),
                     })}>
                     <SlidersSettingsIcon/>
                   </button>;
@@ -2454,6 +2456,22 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                     </SessionNotice>)
                   : (['paused', 'stopped', 'failed'].includes(item.status) || (item.provider_usage_limited && item.status === 'ended'))
                     && <SessionRenderBoundary key={`${item.id}:notice:${sessionNoticeKey(item)}`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} status notice could not be displayed; its saved record remains in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
+                {currentSourceMaterialWarnings(item.events).map(warning => {
+                  const key = `${item.id}:source-warning:${warning.sequence}`;
+                  if (dismissedNoticeKeys.has(key)) return null;
+                  return <SessionNotice key={key} number={item.session_number}
+                    title="Source Material Warning" kind="stopped-session-guidance session-source-warning"
+                    ariaLabel={`Source Material warning for Session ${item.session_number}`}
+                    dismissLabel={`Dismiss source warning for Session ${item.session_number}`}
+                    onDismiss={() => dismissSessionNotice(key)}>
+                    <p>{warning.message}</p>
+                    <p>In Project → <a href="#sigma-supplied-evidence-heading" className="session-notice-source-link"
+                      onClick={event => {
+                        event.preventDefault();
+                        window.dispatchEvent(new Event('sigma-reveal-source-material'));
+                      }}>Source Material</a>, replace the link or upload a readable copy, or disable the source if unnecessary. Then Resume.</p>
+                  </SessionNotice>;
+                })}
                 <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel}` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
                 <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
                   ? 'Stopping · findings remain available'
@@ -6260,7 +6278,7 @@ function AboutArchitecture() {
     setSessionExpanded(next);
   }
 
-  return <section className="about-architecture" aria-label="How SIGMA Works: Multi-Agentic Research">
+  return <section className="about-architecture" aria-label="Multi-Agent Research">
     <div className="about-research-flow">
       <div className="about-flow-project">{card('project', 'Research Question', 'Start with a question you want to solve')}</div>
       <div className="about-flow-connector"><span>Try more than one way to answer it</span><i aria-hidden="true"/></div>
@@ -6392,6 +6410,7 @@ function privacyNoticeHref(returnDialog: 'invitation' | 'about') {
 const ABOUT_DISCLOSURE_KEY = 'sigma.aboutDisclosureState.v1';
 const ABOUT_DISCLOSURE_DEFAULTS: Record<string, boolean> = {
   workflow: true,
+  researchArchitecture: false,
   features: false,
   architecture: false,
   provenance: false,
@@ -6454,6 +6473,14 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <summary>Research Process</summary>
         <div className="about-disclosure-content"><AboutWorkflow/></div>
       </details>
+      <details className="about-disclosure" data-about-section="researchArchitecture" open={aboutDisclosureState('researchArchitecture')} onToggle={event => rememberAboutDisclosure(event, 'researchArchitecture')}>
+        <summary>Research Architecture</summary>
+        <div className="about-disclosure-content"><AboutResearchArchitecture/></div>
+      </details>
+      <details className="about-disclosure about-architecture-disclosure" data-about-section="architecture" open={aboutDisclosureState('architecture')} onToggle={event => rememberAboutDisclosure(event, 'architecture')}>
+        <summary>Multi-Agent Research</summary>
+        <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
+      </details>
       <details className="about-disclosure" data-about-section="features" open={aboutDisclosureState('features')} onToggle={event => rememberAboutDisclosure(event, 'features')}>
         <summary>Key Features</summary>
         <div className="about-disclosure-content">
@@ -6468,10 +6495,6 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
           <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
         </div>
-      </details>
-      <details className="about-disclosure about-architecture-disclosure" data-about-section="architecture" open={aboutDisclosureState('architecture')} onToggle={event => rememberAboutDisclosure(event, 'architecture')}>
-        <summary>How SIGMA Works: Multi-Agentic Research</summary>
-        <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
       <details className="about-disclosure about-provenance-disclosure" data-about-section="provenance" open={aboutDisclosureState('provenance')} onToggle={event => rememberAboutDisclosure(event, 'provenance')}>
         <summary>Vision for Investigation Provenance</summary>

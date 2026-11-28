@@ -302,3 +302,14 @@
   transform: rotate(90deg);
 }
 .sigma-description-field [hidden] { display: none; }
+
+/* Temporary import status and recovery stay directly under the URL field. */
+.sigma-evidence-import-progress, .sigma-evidence-import-feedback {
+  color: var(--sigma-copper-foreground);
+  font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+}
+.sigma-evidence-import-feedback { display: grid; gap: 5px; }
+.sigma-evidence-import-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+.sigma-evidence-import-actions button { text-decoration: underline; }
