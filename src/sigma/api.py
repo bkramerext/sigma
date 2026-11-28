@@ -2494,14 +2494,20 @@ def export_project_view(path: str):
 
 @app.get("/api/projects/export")
 @app.get("/api/projects/download")
-def download_project_bundle(path: str):
+def download_project_bundle(path: str, diagnostics: bool = False):
     """Export every project file as one complete, importable JSON bundle."""
+    from sigma.project_bundle import BundleError
     from sigma.project_transfer import export_project
     from sigma.projects import project_path
 
     authorized = project_path(path)
     inspect_project(authorized)
-    content = export_project(authorized)
+    try:
+        content = export_project(authorized, diagnostics=diagnostics)
+    except BundleError as exc:
+        raise ProjectError(f"Cannot export project bundle: {exc}") from exc
+    except OSError as exc:
+        raise ProjectError("Cannot safely read project bundle for export") from exc
     return Response(
         content=content,
         media_type="application/json",
@@ -2517,7 +2523,12 @@ class ImportBundleRequest(BaseModel):
 def import_project_bundle(body: ImportBundleRequest):
     """Import into the authenticated workspace without replacing existing work."""
     from sigma.project_bundle import BundleError
-    from sigma.project_transfer import VERSION, bundle_document, import_project
+    from sigma.project_transfer import (
+        VERSION,
+        decode_bundle,
+        document_from_members,
+        import_decoded_project,
+    )
     from sigma.projects import (
         _occupied_titles,
         _project_name,
@@ -2532,7 +2543,8 @@ def import_project_bundle(body: ImportBundleRequest):
         # separate artifact archive that v4 requires.
         if type(body.bundle.get("version")) is not int or body.bundle["version"] != VERSION:
             raise BundleError("Only version 4 project exports can be imported")
-        document = bundle_document(body.bundle)
+        members = decode_bundle(body.bundle)
+        document = document_from_members(members)
         title = document["title"]
         if not isinstance(document.get("id"), str):
             raise ProjectError("Imported project identity is invalid")
@@ -2558,8 +2570,8 @@ def import_project_bundle(body: ImportBundleRequest):
                     or os.path.lexists(root / name)
                 ):
                     continue
-                imported = import_project(
-                    body.bundle,
+                imported = import_decoded_project(
+                    members,
                     destination,
                     title_override=candidate if candidate != title else None,
                 )
