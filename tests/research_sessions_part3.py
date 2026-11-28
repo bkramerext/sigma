@@ -342,12 +342,12 @@ async def test_session7_context_pause_recovers_original_18_turn_research(path: P
     old_guard_active = False
     original_context = research_sessions._agent_context
 
-    def context_with_reproduction(record, role, cycle):
+    def context_with_reproduction(record, role, cycle, *, finalize=True):
         if old_guard_active:
             raise research_sessions.ResearchContextLimitError(
                 "Synthetic old 256 KB context guard; saved original is intact."
             )
-        return original_context(record, role, cycle)
+        return original_context(record, role, cycle, finalize=finalize)
 
     async def handler(request):
         nonlocal requests, old_guard_active

@@ -27,7 +27,7 @@ def rejected(action, message):
         raise AssertionError("Expected explicit refusal")
 
 
-async def review_contract(context):
+async def review_contract(context, desired_outcomes):
     credential = {"mode": "api_key", "identity": "fixture-account", "token": "fixture-token"}
     record = {
         "model": "gpt-6.1-sol",
@@ -35,6 +35,7 @@ async def review_contract(context):
         "mode": "api_key",
         "identity_hash": engine._digest(credential["identity"]),
         "output_token_limit": 12000,
+        "desired_outcomes": desired_outcomes,
     }
     reviews = [
         {
@@ -59,11 +60,41 @@ async def review_contract(context):
         ),
     ]
     real_client = httpx.AsyncClient
+    audit = engine._role_input_audit(record, "investigator", context, credential["token"])
+    decoded = dict(audit)
+    engine._expand_role_input_audit(decoded)
+    expected_body = decoded["request_body"]
+    record["steps"] = [
+        {
+            "id": "continuation-step",
+            "role": "investigator",
+            "status": "running",
+            "provider_input_audit": audit,
+        }
+    ]
+    wire = json.loads(expected_body["input"])
+    assert wire["desired_outcomes"] == desired_outcomes
+    assert wire["context_manifest"]["assembled_context_bytes"] == len(
+        expected_body["input"].encode("utf-8")
+    )
+    assert wire["evidence_catalog"] == engine.build_catalog(wire)
     for value, expected in variants:
         output = helpers.investigation(1)
         output["continuation_reviews"] = value
+        output["human_guidance_reviews"] = [
+            {
+                "intervention_id": row["intervention_id"],
+                "uptake": "considered",
+                "rationale": "Consider the supplied boundary.",
+            }
+            for row in context.get("human_guidance", [])
+        ]
 
-        async def handler(request, response_output=output):
+        dispatched = []
+
+        async def handler(request, response_output=output, requests=dispatched):
+            requests.append(json.loads(request.content))
+            assert requests[-1] == expected_body
             return httpx.Response(200, json=helpers.provider_response(response_output))
 
         with (
@@ -75,11 +106,12 @@ async def review_contract(context):
             ),
         ):
             try:
-                await engine._call(record, "investigator", context)
+                await engine._call(record, "investigator", context, step_id="continuation-step")
             except ProjectError:
                 assert not expected
             else:
                 assert expected
+            assert dispatched == [expected_body], "Legitimate request must reach offline transport"
 
 
 def main():
@@ -172,7 +204,30 @@ def main():
         assert len(json.dumps(pooled_context)) < len(json.dumps(context))
         assert "unselected-parent-artifact" not in json.dumps(pooled_context)
         assert len({s["source"]["strategy_id"] for s in packet["sources"]}) == 2
-        asyncio.run(review_contract(context))
+        desired = "Retain the exact approved negative boundary and investigate the gap."
+        dispatch_record["desired_outcomes"] = desired
+        for pooling in (False, True):
+            with patch.object(engine, "EXPERIMENTAL_EXACT_TEXT_POOL", pooling):
+                final = _agent_context(dispatch_record, "investigator", 1, finalize=False)
+            final["human_guidance"] = [
+                {
+                    "intervention_id": "00000000-0000-0000-0000-000000000001",
+                    "text": "Keep the boundary explicit.",
+                }
+            ]
+            final["prior_artifacts"] = [
+                {"id": "large-history", "method": "x" * engine.MAX_AGENT_CONTEXT_BYTES}
+            ]
+            engine._finalize_role_context(dispatch_record, final)
+            assert (
+                final["evidence_catalog"]["own"]["large-history"]["availability"] == "pointer_only"
+            )
+            assert c.expand_dispatch_packet(final["approved_continuation"]) == packet
+            assert all(
+                source["availability"] in {"complete", "extract"}
+                for source in final["evidence_catalog"]["continuation"].values()
+            )
+            asyncio.run(review_contract(final, desired))
         fresh_records, _ = read_session_snapshot(path)
         assert {s["id"]: s for s in fresh_records} == original
         file = Path(path) / "continuations" / f"{new.id}.json"
