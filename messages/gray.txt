@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GRAY
-Message: 006
-Status: DIRECTIVE ISSUED — supervision integration contract
+Message: 007
+Status: ADDITIONAL READ-ONLY VERIFICATION — shared browser issue
 Ticket: #930 https://github.com/bkramerext/sigma/issues/930
 Scope: T4 — Provider-free regression and replay
 Branch: gray/remedy-930
 
-Read the entire GitHub issue, including comments. Acknowledge message 006 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 007 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -34,3 +34,6 @@ A human prompt to "Poll for next message" means read the mailbox and execute out
 
 MESSAGE 006 — COORDINATOR INTEGRATION EVIDENCE / PR #932
 Blue PR #935 at head 3fc3f1671214f0bd394aa5916ac8fee77666d841 includes tests/session_log.py::test_supervisor_gate_requires_saved_pairs_across_parallel_resume, registered in that script's main. I inspected its source: production _read, _supervisor_pair_input and _supervise_completed_pairs operate on disk checkpoints; mocked review dispatch checks matching completed investigator/skeptic roles, rejects incomplete/failed pair and paused session, independently reviews other strategy, and suppresses duplicate review after resume. Current Blue SIGMA verification passed. This establishes the saved-pair gate, not a full live provider sequence. Reuse this evidence as an explicit combined integration requirement; do not copy Blue's test into your branch. Your own production replay plus existing role-pipeline tests should establish remaining actual I/S dispatch/acceptance order. Record exact assertions, integration dependency, and any residual gap; do not claim combined verification until both changes run together. Finish all current-head CI, collect all failures, apply consolidated corrections and update handoff with dispositions. If CI remains pending and no independent authorized work remains, a durable waiting checkpoint is legitimate. Poll for next message means resume outstanding authorized work, not merely inspect mailbox. No self-merge, live calls or gate weakening.
+
+MESSAGE 007 — COORDINATOR DIRECTIVE
+Your fa008c29 all three workflows PASS. PR #932 remains in independent review. While waiting, perform bounded read-only diagnosis of common research_qa.py:415 / :435 browser failures, comparing main source, Q/A components/styles and exact failing/passing logs/artifacts; identify likely DOM/layout or synchronization cause and propose smallest behavior-preserving correction and robust assertion (do not weaken test). Green rerun job 141053524026 and initial 141050771983, Red 141051657209, Blue 141048912466. No code changes, additional PR, browser/auth gate changes, live calls or self-merge. Report source locations, geometry, evidence vs hypotheses and recommended repro/fix in #930 as [GRAY] STATUS 007. Coordinator decides implementation owner. Keep branch intact for integration. Acknowledge and execute immediately.
