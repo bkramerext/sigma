@@ -556,9 +556,9 @@ async def production_replay(root: Path) -> None:
         timing_replay.assert_complete()
         assert changed["calls_used"] == original["calls_used"]
         assert changed["status"] == original["status"]
-        assert [step["provider_input_audit"]["request_body_sha256"] for step in changed["steps"]] == [
-            item.request_sha256 for item in tape
-        ]
+        assert [
+            step["provider_input_audit"]["request_body_sha256"] for step in changed["steps"]
+        ] == [item.request_sha256 for item in tape]
         differences = outcome_difference_paths(original["outcome"], changed["outcome"])
         assert "outcome.metrics.observability.provider_attempt_seconds" in differences, differences
         try:
