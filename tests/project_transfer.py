@@ -624,6 +624,76 @@ def test_diagnostic_mixed_entropy_budget() -> None:
     )
 
 
+def test_bounded_log_observation() -> None:
+    from sigma import session_log
+
+    with TemporaryDirectory() as temporary:
+        target = Path(temporary) / "fixture.md"
+        legacy = json.dumps({"type": "provider_request", "seq": 1}).encode()
+        target.write_bytes(
+            b"Header\n<!-- SIGMA_EVENT "
+            + str(len(legacy)).encode()
+            + b" -->\n"
+            + legacy
+            + b"\n<!-- END_SIGMA_EVENT -->\n"
+        )
+        target.chmod(0o600)
+        session_log._append_frame(
+            target,
+            {"type": "provider_failure", "seq": 2},
+            "Synthetic failure",
+        )
+        original = target.read_bytes()
+        raw, changed = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        assert raw == original and not changed
+        assert session_log._parse_frames(raw) == session_log._frames(target)[0]
+        assert [event["seq"] for event in session_log._parse_frames(raw)] == [1, 2]
+        with target.open("ab") as stream:
+            stream.write(b"\n<!-- SIGMA_EVENT 999 -->\n{")
+        torn, changed = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        assert not changed
+        assert len(session_log._parse_frames(torn)) == 2
+        assert torn.count(b"\n<!-- SIGMA_EVENT ") == 3
+        target.write_bytes(original)
+        _expect_failure(lambda: project_diagnostic_bundle._observe_log(target, len(original) - 1))
+
+        real_fstat = project_diagnostic_bundle.os.fstat
+        calls = 0
+
+        def grow_after_open(fd: int):
+            nonlocal calls
+            calls += 1
+            info = real_fstat(fd)
+            if calls == 1:
+                with target.open("ab") as stream:
+                    stream.write(b"\nnew data")
+            return info
+
+        with patch.object(project_diagnostic_bundle.os, "fstat", side_effect=grow_after_open):
+            observed, partial = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        assert observed == original and partial
+        target.write_bytes(original)
+        calls = 0
+
+        def replace_after_open(fd: int):
+            nonlocal calls
+            calls += 1
+            info = real_fstat(fd)
+            if calls == 1:
+                target.rename(target.with_suffix(".old"))
+                target.write_bytes(b"Replacement")
+                target.chmod(0o600)
+            return info
+
+        with patch.object(project_diagnostic_bundle.os, "fstat", side_effect=replace_after_open):
+            _expect_failure(
+                lambda: project_diagnostic_bundle._observe_log(target, len(original) + 100)
+            )
+        target.unlink()
+        target.symlink_to(target.with_suffix(".old"))
+        _expect_failure(lambda: project_diagnostic_bundle._observe_log(target, len(original) + 100))
+
+
 if __name__ == "__main__":
     test_single_archive_roundtrip()
     test_multiframe_artifact_archive_is_lossless_and_bounded()
@@ -633,4 +703,5 @@ if __name__ == "__main__":
     test_recorder_coverage_and_cross_mapping()
     test_diagnostic_resource_budget()
     test_diagnostic_mixed_entropy_budget()
+    test_bounded_log_observation()
     print("PASS v4 artifact archive, source links, restored files and unsafe path rejection.")

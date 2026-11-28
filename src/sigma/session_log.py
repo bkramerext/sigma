@@ -536,6 +536,11 @@ def _frames(
     with path.open("rb") as stream:
         stream.seek(base)
         raw = stream.read()
+    return _parse_frames(raw), file_size
+
+
+def _parse_frames(raw: bytes) -> list[dict[str, Any]]:
+    """Parse one caller-supplied observation without filesystem access."""
     marker = b"\n<!-- SIGMA_EVENT "
     terminator = b"\n<!-- END_SIGMA_EVENT -->"
     cursor = raw.find(marker)
@@ -588,7 +593,7 @@ def _frames(
         if isinstance(item, dict):
             events.append(item)
         cursor = raw.find(marker, terminator_start + len(terminator))
-    return events, file_size
+    return events
 
 
 def _event_role_label(event: dict[str, Any]) -> str:

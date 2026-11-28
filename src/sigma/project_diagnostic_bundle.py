@@ -63,6 +63,11 @@ _EVENT_FIELDS = {
     "settled_cost_usd",
     "cost_status",
     "usage_status",
+    "attempt_status",
+    "token_usage",
+    "token_usage_status",
+    "request_body_sha256",
+    "request_body_bytes",
     "request",
     "response",
     "response_wire",
@@ -508,6 +513,52 @@ def _saved_evidence(raw: bytes) -> dict[str, Any]:
     }
 
 
+def _observe_log(target: Path, limit: int) -> tuple[bytes, bool] | None:
+    """Read a single bounded regular-file observation without following symlinks."""
+    try:
+        info = target.lstat()
+    except FileNotFoundError:
+        return None
+
+    def safe(value: os.stat_result) -> bool:
+        return (
+            stat.S_ISREG(value.st_mode)
+            and value.st_uid == os.geteuid()
+            and not value.st_mode & 0o077
+            and value.st_size <= limit
+        )
+
+    def identity(value: os.stat_result) -> tuple[int, int]:
+        return value.st_dev, value.st_ino
+
+    if not safe(info):
+        raise BundleError("Unsafe diagnostic log ownership, permissions or size")
+    # NONBLOCK prevents a concurrent replacement by a FIFO from hanging open.
+    try:
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as exc:
+        raise BundleError("Diagnostic log changed before open") from exc
+    with os.fdopen(fd, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if not safe(opened) or identity(opened) != identity(info):
+            raise BundleError("Unsafe diagnostic log replacement")
+        raw = stream.read(opened.st_size)
+        after = os.fstat(stream.fileno())
+        try:
+            current = target.lstat()
+        except FileNotFoundError as exc:
+            raise BundleError("Diagnostic log disappeared during read") from exc
+        if not safe(after) or not safe(current) or identity(current) != identity(opened):
+            raise BundleError("Unsafe diagnostic log change during read")
+        partial = (
+            len(raw) != opened.st_size
+            or (info.st_size, info.st_mtime_ns) != (opened.st_size, opened.st_mtime_ns)
+            or (after.st_size, after.st_mtime_ns) != (opened.st_size, opened.st_mtime_ns)
+            or (current.st_size, current.st_mtime_ns) != (after.st_size, after.st_mtime_ns)
+        )
+    return raw, partial
+
+
 def capture(source: Path, members: dict[str, bytes], *, budget: int) -> dict[str, bytes]:
     """Read only authorized project-owned logs, without creating or replaying them."""
     from sigma import session_log
@@ -521,31 +572,13 @@ def capture(source: Path, members: dict[str, bytes], *, budget: int) -> dict[str
         # Logs are best effort; do not block research or flush unrelated queues.
         # A read can observe a torn record, so retained is never "complete".
         with session_log._lock(target):
-            if target.is_symlink():
-                raise BundleError("Unsafe diagnostic log path")
-            if target.is_file():
-                info = target.lstat()
-                if (
-                    info.st_size > session_log.MAX_LOG_BYTES + 4096
-                    or info.st_uid != os.geteuid()
-                    or info.st_mode & 0o077
-                ):
-                    raise BundleError("Unsafe diagnostic log ownership, permissions or size")
-                frames, observed_size = session_log._frames(target)
-                # The recorder may be in another process. Compare bounded
-                # observations instead of blocking that process on export.
-                with target.open("rb") as stream:
-                    raw = stream.read(info.st_size + 1)
-                    after = os.fstat(stream.fileno())
-                marker_count = raw.count(b"\n<!-- SIGMA_EVENT ")
-                if (
-                    marker_count != len(frames)
-                    or observed_size != info.st_size
-                    or len(raw) != info.st_size
-                    or (after.st_size, after.st_mtime_ns) != (info.st_size, info.st_mtime_ns)
-                ):
+            observation = _observe_log(target, session_log.MAX_LOG_BYTES + 4096)
+            if observation is not None:
+                raw, changed = observation
+                frames = session_log._parse_frames(raw)
+                if changed or raw.count(b"\n<!-- SIGMA_EVENT ") != len(frames):
                     availability = "partial"
-                del raw
+                del raw, observation
                 if len(frames) > MAX_EVENTS:
                     raise BundleError("Too many diagnostic events")
                 remaining = min(budget, MAX_DIAGNOSTIC_BYTES) - sum(map(len, passive.values()))
