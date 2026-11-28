@@ -24,10 +24,9 @@ export function defaultSessionSettings(limits?: { research_rounds: number; turns
 }
 
 /** Save valid edits as they are made; the X also flushes the last pending change. */
-export default function SessionSettingsDialog({ settings, mode, minTurns = 0, onClose, onApply }: {
+export default function SessionSettingsDialog({ settings, mode, onClose, onApply }: {
   settings: SessionSettings;
   mode: 'start' | 'edit';
-  minTurns?: number;
   onClose: (next: SessionSettings) => void;
   onApply: (next: SessionSettings) => void | Promise<void>;
 }) {
@@ -78,7 +77,7 @@ export default function SessionSettingsDialog({ settings, mode, minTurns = 0, on
       closing.current = false;
     }
   };
-  const minAllowedTurns = Math.max(1, minTurns);
+  const minAllowedTurns = 1;
   const updateTurns = (value: string) => {
     setTurns(value);
     const parsed = Number(value);

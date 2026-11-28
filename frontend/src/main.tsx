@@ -1612,7 +1612,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
-  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string; minTurns?: number } | null>(null);
+  const [settingsDialog, setSettingsDialog] = useState<{ mode: 'start' | 'edit'; initial: SessionSettings; sessionId?: string } | null>(null);
   // Serialize auto-saves so a slower earlier request cannot overwrite newer edits.
   const sessionSettingsSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const [pendingStartSettings, setPendingStartSettings] = useState<SessionSettings | null>(null);
@@ -2331,7 +2331,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   });
   return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     {settingsDialog && <SessionSettingsDialog key={settingsDialog.sessionId ?? 'new-session'}
-      settings={settingsDialog.initial} mode={settingsDialog.mode} minTurns={settingsDialog.minTurns ?? 0}
+      settings={settingsDialog.initial} mode={settingsDialog.mode}
       onClose={next => {
         if (settingsDialog.mode === 'start') {
           setPendingStartSettings(next);
@@ -2412,11 +2412,6 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                     onClick={() => setSettingsDialog({
                       mode: 'edit',
                       sessionId: item.id, initial: existingSessionSettings(item),
-                      minTurns: Math.max(0,
-                        ...item.steps.filter(step => typeof step.cycle === 'number' && step.cycle > 0)
-                          .map(step => step.cycle),
-                        ...(item.strategy_runs ?? []).map(branch => branch.cycle ?? 0),
-                      ),
                     })}>
                     <SlidersSettingsIcon/>
                   </button>;

@@ -5953,11 +5953,14 @@ async def update_session_configuration(
                         if isinstance(branch, dict) and type(branch.get("cycle")) is int
                     ]
                 )
-                if new_settings["turn_limit"] < executed_turns:
-                    raise ProjectError(
-                        "Turns cannot be lower than the number of turns already executed"
-                    )
                 new_cycles = new_settings["turn_limit"]
+                # A lowered finite limit is a graceful stop request once the
+                # session has reached it. Preserve accepted work and let
+                # already-started pairs settle; never start another pair.
+                if new_settings["unlimited_turns"] or new_cycles > executed_turns:
+                    record.pop("turn_limit_stop_requested", None)
+                elif active and (new_cycles < old_cycles or current["unlimited_turns"]):
+                    record["turn_limit_stop_requested"] = True
                 if (
                     new_settings["unlimited_turns"]
                     and not current["unlimited_turns"]
@@ -12295,6 +12298,8 @@ async def _portfolio_role_call(
             # provider request. A second Investigator cannot start after its
             # result was saved but before the matching Skeptic has dispatched.
             if role == "investigator":
+                if record.get("turn_limit_stop_requested") or cycle > record["cycle_limit"]:
+                    return False
                 prior_cycle = branch.get("cycle", 0)
                 # Transient failures retry the same cycle under a new durable
                 # request ID. Do not block a legitimate retry, and never
@@ -14210,7 +14215,15 @@ def _protocol_completion_recovery_plan(
         for step in steps
         if step.get("status") == "completed"
     }
-    if not completed <= expected_slots:
+    # A reduced limit may leave accepted historical pairs above the target.
+    historical_ceiling = max(cycles, int(record.get("call_ceiling_cycles", cycles)))
+    historical_slots = {
+        (strategy_id, role, cycle)
+        for strategy_id in strategy_ids
+        for role in ("investigator", "skeptic")
+        for cycle in range(cycles + 1, historical_ceiling + 1)
+    }
+    if not completed <= expected_slots | historical_slots:
         return None, (
             "Accepted research turns contain an unknown strategy or an out-of-range "
             "role/round. Correct the saved protocol record before resuming."
@@ -14503,7 +14516,10 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             for branch in runs:
                 if (
                     branch["status"] == "queued"
-                    and branch["cycle"] >= record["cycle_limit"]
+                    and (
+                        branch["cycle"] >= record["cycle_limit"]
+                        or record.get("turn_limit_stop_requested")
+                    )
                     and not branch.get("pending_investigation")
                 ):
                     branch["status"] = "ended"
@@ -14788,7 +14804,10 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     _commit_portfolio_review_safely(record, session_id, branch)
             for branch in record["strategy_runs"]:
                 if branch["status"] == "running":
-                    if branch["cycle"] >= record["cycle_limit"]:
+                    if (
+                        branch["cycle"] >= record["cycle_limit"]
+                        or record.get("turn_limit_stop_requested")
+                    ) and not branch.get("pending_investigation"):
                         branch["status"] = "ended"
                         branch["current_action"] = "Round limit"
                         branch["reason"] = "Configured research-round limit reached."
