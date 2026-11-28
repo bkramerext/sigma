@@ -124,7 +124,7 @@ export function AboutResearchArchitecture() {
     <figure className="about-provenance-figure about-research-architecture-figure">
       <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Research architecture diagram; scroll horizontally on narrow screens">
         <svg className="about-provenance-diagram about-research-architecture-diagram" viewBox="0 0 500 570" role="img" aria-label="Research architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
-          <desc id="about-research-architecture-description">Human direction, the overarching objective, selected strategies, Research Ethos and Source Material guide context selection. Persistent Research Knowledge feeds Context Selection and Budgeting, which supplies bounded context to the Investigator and Skeptic in a research session. Their contributions return to the persistent record for possible later inquiry. The optional Supervisor provides process guidance only. Current Understanding and research papers are interpretations derived from the record, subject to human review. Broader context selection and budgeting remain architectural direction.</desc>
+          <desc id="about-research-architecture-description">Human direction, the overarching objective, selected strategies, Research Ethos and Source Material guide context selection. Persistent Research Knowledge feeds Context Selection and Budgeting, which supplies bounded context to the Investigator and Skeptic in a research session. Their contributions return to the persistent record for possible later inquiry. The optional Supervisor provides process guidance only. Research Perspectives groups Current Understanding, Research Q/A, research papers and ELI5 explanations of papers. These are ways to interpret and communicate the record, subject to human review. Broader context selection and budgeting remain architectural direction.</desc>
           <defs>
             {(Object.keys(colors) as (keyof typeof colors)[]).map(tone => <marker key={tone} id={`about-research-architecture-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill={colors[tone]}/></marker>)}
           </defs>
@@ -147,10 +147,8 @@ export function AboutResearchArchitecture() {
           <Arrow d="M214 428.5 H231 V218 H258" tone="gold"/>
           <text x="237" y="323.25" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)" transform="rotate(90 237 323.25)">Save contributions</text>
 
-          {/* Both interpretations derive from the record, not from each other. */}
-          <Arrow d="M367 235 V315" tone="blue"/>
-          <Arrow d="M476 215 H490 V455 H476" tone="violet"/>
-          <text x="380" y="297" textAnchor="start" fill="#9cb5c8" fontSize="11">Interpretations</text>
+          {/* Group the available perspectives without implying a pipeline. */}
+          <Arrow d="M367 235 V270.5" tone="blue"/>
 
           <DiagramCard x={24} y={18} width={452} height={82} title="Human Direction & Research Inputs" lines={['Overarching objective · selected strategies', 'Research Ethos · Source Material (external evidence)']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
           <DiagramCard x={24} y={135} width={190} height={100} title="Context Selection" lines={['and Budgeting', 'Bounded evidence today', 'Broader selection: direction']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
@@ -158,14 +156,24 @@ export function AboutResearchArchitecture() {
           <DiagramCard x={40} y={307.5} width={158} height={56} title="Investigator" lines={['Develops ideas and tests']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
           <DiagramCard x={40} y={392.5} width={158} height={56} title="Skeptic" lines={['Critiques & contributes']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
           <DiagramCard x={24} y={498} width={190} height={58} title="Supervisor (optional)" lines={['Process guidance only']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
-          <DiagramCard x={258} y={315} width={218} height={70} title="Current Understanding" lines={['Evolving interpretation', 'of findings and uncertainty']} fill="#133741" stroke="#7ac4c7" titleColor="#b7f1ed"/>
-          <DiagramCard x={258} y={420} width={218} height={70} title="Research Paper" lines={['Optional synthesis', 'Review before publication']} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
+          <g data-about-perspectives="true">
+            <rect x="258" y="270.5" width="218" height="285.5" rx="14" fill="#0a1b2a" stroke="#5483a1" strokeWidth="1.5"/>
+            <text x="367" y="294.5" textAnchor="middle" fontSize="13" fontWeight="650" fill="#c2d9e9">Research Perspectives</text>
+            <DiagramCard x={270} y={305} width={194} height={54} title="Current Understanding" lines={['Evolving interpretation']} fill="#133741" stroke="#7ac4c7" titleColor="#b7f1ed"/>
+            <DiagramCard x={270} y={367} width={194} height={54} title="Research Q/A" lines={['Ask about the research']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
+            <DiagramCard x={270} y={429} width={194} height={54} title="Research Paper" lines={['Optional formal synthesis']} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
+            <DiagramCard x={270} y={491} width={194} height={54} title="ELI5" lines={['Explain a paper simply']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+            <g transform="translate(321 498) scale(.65)" aria-hidden="true" fill="var(--sigma-copper-foreground)">
+              <path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6C20.6 5.7 17.5 1.6 12 1.6Z M9.5 22.3l2.5 3 2.5-3Z"/>
+              <path d="M12 25c-1.2 1.7 2.8 2.5 0 4.5" fill="none" stroke="var(--sigma-copper-foreground)" strokeWidth="1.35" strokeLinecap="round"/>
+            </g>
+          </g>
         </svg>
       </div>
       <figcaption>Conceptual research flow. Broader context selection and budgeting are architectural direction, not a promise of complete retrieval or autonomous research. The saved record is not proof.</figcaption>
     </figure>
     <p><strong>Context Selection and Budgeting.</strong> Today, later turns can receive bounded selections of prior local and peer evidence; oversized context can be compacted for dispatch without changing the saved originals. The architectural direction is to improve relevance, coverage of unresolved questions and economy of context across future work. A selection is not the complete record, and omitted evidence is not resolved or verified.</p>
     <p>The Investigator develops approaches, arguments and tests. The Skeptic reasons independently within its role: it can challenge assumptions, contribute new ideas, redirect the investigation or identify missing information. Distinct roles do not imply independent verification by different models. Optional Python or SageMath computation can supply execution evidence when configured. The optional Supervisor observes and guides the process, not the substantive conclusions.</p>
-    <p>Contributions are saved so a later turn or a deliberately selected session can build on them. The loop represents cumulative inquiry, not unbounded autonomous self-direction. <strong>Current Understanding</strong> and research papers are projections of the record, not additional sources of established truth. Both remain subject to human review; a publication is one possible outcome of an investigation, not its purpose or a required endpoint.</p>
+    <p>Contributions are saved so a later turn or a deliberately selected session can build on them. The loop represents cumulative inquiry, not unbounded autonomous self-direction. <strong>Research Perspectives</strong> groups Current Understanding, Research Q/A, optional research papers and ELI5 (a plain-language explanation of a generated paper). These are ways to interpret and communicate the research, not additional sources of established truth. All remain subject to human review; a publication is one possible outcome of an investigation, not its purpose or a required endpoint.</p>
   </section>;
 }

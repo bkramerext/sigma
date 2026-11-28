@@ -54,6 +54,9 @@ with sync_playwright() as playwright:
             "Supervisor (optional)",
             "Current Understanding",
             "Research Paper",
+            "Research Q/A",
+            "ELI5",
+            "Research Perspectives",
             "Save contributions",
         ):
             expect(diagram.locator("text").filter(has_text=label)).to_have_count(1)
@@ -66,17 +69,22 @@ with sync_playwright() as playwright:
         assert float(context_card.locator("rect").get_attribute("x")) < float(
             record_card.locator("rect").get_attribute("x")
         )
-        # These routes connect the record, context, participants, and both projections.
+        # These routes connect the record, context, participants, and grouped perspectives.
         for route in (
             "M258 175 H214",
             "M119 235 V270.5",
             "M93 498 V462.5",
             "M148 462.5 V498",
             "M214 428.5 H231 V218 H258",
-            "M367 235 V315",
-            "M476 215 H490 V455 H476",
+            "M367 235 V270.5",
         ):
             expect(diagram.locator(f'path[d="{route}"][marker-end]')).to_have_count(1)
+        perspectives = diagram.locator('[data-about-perspectives="true"]')
+        expect(perspectives.locator("path[marker-end]")).to_have_count(0)
+        expect(diagram.locator("path[marker-end]")).to_have_count(9)
+        for label in ("Current Understanding", "Research Q/A", "Research Paper", "ELI5"):
+            expect(perspectives.locator("text").filter(has_text=label)).to_have_count(1)
+        expect(perspectives.locator('g[aria-hidden="true"]')).to_have_count(1)
         expect(overview).to_contain_text("not a new database or a collection of verified truths")
         expect(overview).to_contain_text("omitted evidence is not resolved or verified")
         expect(overview.locator("figcaption")).to_contain_text("architectural direction")
