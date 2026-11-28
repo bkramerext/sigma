@@ -1407,12 +1407,294 @@ def test_transcript_reconciles_saved_steps_without_inventing_history() -> None:
     assert "finished_at" not in saved[1]
     report = session_log.transcript_markdown_export(events, [], session, "Test", saved)
     assert "Awaiting response" not in report
-    assert report.count("Reconstructed from saved state") == 2
+    assert report.count("Reconstructed from saved state") == 3
+    assert "Saved step status: failed." in report
+    assert "Response not retained" in report
     assert "accepted A" in report and "accepted B" in report
     assert "invalid raw output" in report and "validation failed" in report
     assert "Raw retention limit reached." in report
-    assert "Raw response (acceptance unverified or not accepted)" in report
+    assert "Provider response with recorded failure" in report
     assert json.dumps([session, events], sort_keys=True) == before
+
+
+def test_transcript_exact_attempt_binding_and_uncertainty() -> None:
+    saved = {
+        "step_id": "step",
+        "request_id": "accepted",
+        "strategy_id": "strategy-a",
+        "round": 1,
+        "role": "investigator",
+        "status": "completed",
+        "text": "Accepted saved completion",
+    }
+    raw = {
+        "type": "provider_response",
+        "seq": 1,
+        "step_id": "step",
+        "request_id": "older",
+        "strategy_id": "strategy-a",
+        "round": 1,
+        "role": "investigator",
+        "response": {"output_text": "Old raw response"},
+    }
+    for event, step in (
+        (raw, saved),
+        ({**raw, "request_id": "accepted"}, saved),
+        ({**raw, "request_id": None}, saved),
+        (raw, {**saved, "request_id": None}),
+        ({**raw, "request_id": "accepted", "strategy_id": "other"}, saved),
+    ):
+        report = session_log.transcript_markdown_export(
+            [event], [], {"status": "completed"}, "Test", [step]
+        )
+        assert "Raw response (acceptance unverified)" in report
+        assert "Reconstructed from saved state" in report
+        assert "Old raw response" in report and "Accepted saved completion" in report
+        assert "· Accepted response" not in report
+    matched = {
+        **raw,
+        "request_id": "accepted",
+        "response": {"output_text": saved["text"]},
+    }
+    report = session_log.transcript_markdown_export(
+        [matched], [], {"status": "completed"}, "Test", [saved]
+    )
+    assert "· Accepted response" in report
+    assert "Reconstructed from saved state" not in report
+    duplicate = session_log.transcript_markdown_export(
+        [matched], [], {"status": "completed"}, "Test", [saved, saved]
+    )
+    assert duplicate.count("Reconstructed from saved state") == 2
+    assert "Uncertain attribution" in duplicate
+    assert "· Accepted response" not in duplicate
+    duplicate_request = {**saved, "step_id": "different"}
+    report = session_log.transcript_markdown_export(
+        [matched], [], {"status": "completed"}, "Test", [saved, duplicate_request]
+    )
+    assert report.count("Reconstructed from saved state") == 2
+    assert "· Accepted response" not in report
+
+
+def test_transcript_unanswered_attempts_and_supervisor_mismatch() -> None:
+    saved = {
+        "step_id": "step",
+        "request_id": "new",
+        "role": "skeptic",
+        "strategy_id": "strategy-a",
+        "round": 1,
+        "status": "running",
+    }
+    request = {
+        "type": "provider_request",
+        "seq": 1,
+        "step_id": "step",
+        "request_id": "old",
+        "strategy_id": "strategy-a",
+        "round": 1,
+        "role": "skeptic",
+    }
+    events = [request, {**request, "seq": 2, "request_id": "new"}]
+    active = session_log.transcript_markdown_export(
+        events, [], {"status": "running"}, "Test", [saved]
+    )
+    assert active.count("Awaiting response.") == 1
+    assert active.count("Response not retained") == 1
+    for status in ("paused", "ended"):
+        interrupted = {**saved, "status": "interrupted", "interruption_reason": "backend_restart"}
+        report = session_log.transcript_markdown_export(
+            events, [], {"status": status}, "Test", [interrupted]
+        )
+        assert report.count("Response not retained") == 2
+        assert "Awaiting response" not in report
+        assert "backend_restart" in report
+    review = {
+        "step_id": "review",
+        "role": "supervisor",
+        "strategy_id": "strategy-a",
+        "round": 1,
+        "status": "completed",
+        "text": "Saved assessment",
+    }
+    event = {
+        "type": "session_event",
+        "event_kind": "supervisor.review",
+        "seq": 1,
+        "step_id": "review",
+        "role": "supervisor",
+        "strategy_id": "strategy-a",
+        "round": 1,
+        "message": "Wrong assessment",
+    }
+    report = session_log.transcript_markdown_export(
+        [event], [], {"status": "completed"}, "Test", [review]
+    )
+    assert "Raw review (acceptance unverified)" in report
+    assert "Saved assessment" in report and "Wrong assessment" in report
+    event["message"] = "Saved assessment"
+    report = session_log.transcript_markdown_export(
+        [event, {**event, "seq": 2}], [], {"status": "completed"}, "Test", [review]
+    )
+    assert report.count("Raw review (acceptance unverified)") == 2
+    assert "Reconstructed from saved state" in report
+
+
+def test_transcript_checkpoint_skips_unchanged_large_projection(root: Path) -> None:
+    project_file = root / "large.json"
+    project_file.write_bytes(b"synthetic checkpoint")
+    project_id = "a12ca401-2210-4c88-8fe6-84a33b1e5eea"
+    session_id = "d0231c99-5425-4a20-8ff2-fc52c1800b8c"
+    record = {
+        "session_number": 1,
+        "status": "completed",
+        "steps": [
+            {
+                "id": f"step-{index}",
+                "role": "investigator",
+                "cycle": index + 1,
+                "status": "completed",
+                "output": {"summary": "synthetic result " * 300},
+            }
+            for index in range(1200)
+        ],
+    }
+    from sigma import research_sessions
+
+    view = SimpleNamespace(
+        project=SimpleNamespace(id=project_id, title="Synthetic", problem="Test"),
+    )
+    with (
+        patch.object(session_log, "inspect_project", return_value=view),
+        patch.object(session_log, "project_path", return_value=project_file),
+        patch.object(session_log, "_root", return_value=root / "large-logs"),
+        patch.object(research_sessions, "get_session", return_value=record),
+        patch.object(
+            session_log, "transcript_saved_steps", wraps=session_log.transcript_saved_steps
+        ) as projection,
+    ):
+        first = session_log.read(str(project_file), session_id)
+        assert len(first["transcript_state"]) == 1200
+        assert projection.call_count == 1
+        second = session_log.read(
+            str(project_file), session_id, first["cursor"], first["transcript_state_version"]
+        )
+        assert "transcript_state" not in second
+        assert projection.call_count == 1
+        project_file.write_bytes(b"resumed and checkpointed")
+        record["status"] = "running"
+        record["steps"].append(
+            {"id": "new", "role": "skeptic", "cycle": 1200, "status": "running"}
+        )
+        third = session_log.read(
+            str(project_file), session_id, second["cursor"], second["transcript_state_version"]
+        )
+        assert projection.call_count == 2
+        assert third["transcript_state_version"] != second["transcript_state_version"]
+        assert len(third["transcript_state"]) == 1201
+        checkpoint = session_log._transcript_checkpoint(project_file, session_id)
+        assert checkpoint is not None
+        assert session_log._transcript_state_version(
+            project_file, project_id, "other-session", checkpoint
+        ) != third["transcript_state_version"]
+
+
+def test_supervisor_gate_requires_saved_pairs_across_parallel_resume(root: Path) -> None:
+    """Exercise production pair selection and reader against on-disk checkpoints."""
+    from sigma import research_sessions
+
+    project = root / "transcript-replay.sigma"
+    directory = project / "research-sessions"
+    directory.mkdir(parents=True)
+    session_id = "d0231c99-5425-4a20-8ff2-fc52c1800b8c"
+    target = directory / f"{session_id}.json"
+    first = {
+        **_completed_pair_step("investigator", 1),
+        "output": {"claim": "accepted A"},
+    }
+    skeptic = {
+        **_completed_pair_step("skeptic", 1),
+        "output": {"response": "accepted B"},
+    }
+    other_i = {**first, "id": "other-i", "strategy_id": "other"}
+    other_s = {**skeptic, "id": "other-s", "strategy_id": "other"}
+    record = {
+        "id": session_id,
+        "project_path": str(project),
+        "status": "running",
+        "session_settings": {"supervisor_mode": "light"},
+        "steps": [first, {**other_s, "id": "other-failed", "status": "failed"}],
+        "supervisor_reviews": [],
+    }
+    observed: list[tuple[str, int]] = []
+
+    def checkpoint() -> None:
+        target.write_text(json.dumps(record), encoding="utf-8")
+
+    async def supervise(_session_id, _path, strategy_id, cycle, _lock):
+        # Read the actual checkpoint using the production reader; a review
+        # cannot dispatch until both accepted steps of this exact pair exist.
+        persisted = research_sessions._read(str(project), session_id)
+        pair = research_sessions._supervisor_pair_input(persisted, strategy_id, cycle)
+        assert pair is not None
+        completed_roles = {
+            step["role"]
+            for step in persisted["steps"]
+            if step["status"] == "completed"
+            and step["strategy_id"] == strategy_id
+            and step["cycle"] == cycle
+        }
+        assert completed_roles == {"investigator", "skeptic"}
+        observed.append((strategy_id, cycle))
+        record["supervisor_reviews"].append(
+            {"pair_key": f"{strategy_id}:{cycle}", "status": "completed"}
+        )
+        checkpoint()
+
+    async def run():
+        with (
+            patch.object(research_sessions, "project_path", return_value=project),
+            patch.object(research_sessions, "_portfolio_supervisor_call", supervise),
+        ):
+            lock = asyncio.Lock()
+            checkpoint()
+            await research_sessions._supervise_completed_pairs(session_id, str(project), lock)
+            assert not observed
+            record["steps"].extend([other_i, other_s])
+            checkpoint()
+            await research_sessions._supervise_completed_pairs(session_id, str(project), lock)
+            assert observed == [("other", 1)]
+            record["status"] = "paused"
+            record["steps"].append(skeptic)
+            checkpoint()
+            await research_sessions._supervise_completed_pairs(session_id, str(project), lock)
+            assert observed == [("other", 1)]
+            record["status"] = "running"
+            checkpoint()
+            await research_sessions._supervise_completed_pairs(session_id, str(project), lock)
+            await research_sessions._supervise_completed_pairs(session_id, str(project), lock)
+            assert observed == [("other", 1), ("strategy-a", 1)]
+
+    asyncio.run(run())
+
+
+def test_transcript_structured_output_retains_nested_fields_and_redacts_keys() -> None:
+    saved = session_log.transcript_saved_steps(
+        {
+            "steps": [
+                {
+                    "id": "step",
+                    "role": "investigator",
+                    "status": "completed",
+                    "output": {
+                        "mixed": ["visible", {"nested": "retained", "password": "never disclose"}],
+                    },
+                }
+            ]
+        }
+    )
+    assert "visible" in saved[0]["text"]
+    assert "retained" in saved[0]["text"]
+    assert "[REDACTED]" in saved[0]["text"]
+    assert "never disclose" not in saved[0]["text"]
 
 
 def main() -> None:
@@ -1437,6 +1719,11 @@ def main() -> None:
         test_user_turn_default_migration_and_validation(root)
         test_complete_transcript_export_groups_turns_newest_first()
         test_transcript_reconciles_saved_steps_without_inventing_history()
+        test_transcript_exact_attempt_binding_and_uncertainty()
+        test_transcript_unanswered_attempts_and_supervisor_mismatch()
+        test_transcript_checkpoint_skips_unchanged_large_projection(root)
+        test_supervisor_gate_requires_saved_pairs_across_parallel_resume(root)
+        test_transcript_structured_output_retains_nested_fields_and_redacts_keys()
         test_extended_completed_session_plans_new_slots_without_replaying_history()
         test_extension_preserves_partial_pair_and_refuses_duplicate_accepted_steps()
         test_unlimited_turn_growth_does_not_extend_finished_branches()

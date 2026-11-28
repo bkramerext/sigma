@@ -31,6 +31,7 @@ export type TranscriptEntry = {
   text: string; round?: number; strategyId?: string; sequence: number;
   request?: unknown; response?: unknown; pending?: boolean; brainstormMode?: boolean;
   reconstructed?: boolean; historyNotice?: boolean; correlationUnknown?: boolean;
+  claimedAttribution?: string; requestTimestamp?: string; requestSequence?: number;
 };
 /** Strip the scored metadata from the rendered assessment while retaining the
  * saved text unmodified for Copy and Download. Old four-score reviews continue
@@ -55,7 +56,7 @@ function responseText(value: unknown): string {
   if (typeof value === 'string') {
     try {
       const parsed: unknown = JSON.parse(value);
-      if (parsed && typeof parsed === 'object') return responseText(parsed);
+      if (parsed && typeof parsed === 'object') return responseText(parsed) || value;
     } catch { /* Provider-authored text is not necessarily JSON. */ }
     return value;
   }
@@ -172,14 +173,42 @@ function savedStepMessage(step: TranscriptSavedStep): string {
     + (step.partial_text ? '\n\nSaved partial output (not accepted):\n\n' + step.partial_text : '');
 }
 
-/** Only exact persisted identity can establish acceptance, never strategy/turn/role alone. */
+/** Missing timestamps are not chronological evidence; place them last. */
+function transcriptOrder(left: TranscriptEntry, right: TranscriptEntry): number {
+  return Number(!left.timestamp) - Number(!right.timestamp)
+    || left.timestamp.localeCompare(right.timestamp)
+    || left.sequence - right.sequence || left.id.localeCompare(right.id);
+}
+
+function consistentAttribution(left: TranscriptEvent, right: TranscriptEvent): boolean {
+  return (['step_id', 'role', 'strategy_id', 'round'] as const).every(field =>
+    left[field] == null || right[field] == null || left[field] === right[field]);
+}
+
+function claimedAttribution(event: TranscriptEvent, request?: TranscriptEvent): string {
+  const describe = (row: TranscriptEvent) => [
+    row.strategy_id ? 'strategy ' + row.strategy_id : '',
+    row.round != null ? 'turn ' + row.round : '',
+    row.step_id ? 'step ' + row.step_id : '',
+    row.request_id ? 'request ' + row.request_id : '',
+  ].filter(Boolean).join(', ');
+  const own = describe(event);
+  const paired = request ? describe(request) : '';
+  return [own, paired && paired !== own ? 'request claims ' + paired : ''].filter(Boolean).join('; ');
+}
+
+function reviewKey(strategy: string | undefined, turn: number | undefined, message: string): string {
+  return JSON.stringify([strategy ?? null, turn ?? null, message]);
+}
+
+/** Keep raw attempts and authoritative saved results distinct. A logical step
+ * ID alone cannot prove which provider invocation produced accepted content. */
 export function projectTranscript(
   events: TranscriptEvent[], interventions: TranscriptIntervention[] = [],
   savedSteps?: TranscriptSavedStep[], sessionStatus?: string,
 ): TranscriptEntry[] {
   const requests = new Map<string, TranscriptEvent>();
   const ambiguousRequests = new Set<string>();
-  const responses = new Set<string>();
   const failedRequests = new Set<string>();
   const responseCounts = new Map<string, number>();
   for (const event of events) {
@@ -187,56 +216,85 @@ export function projectTranscript(
       if (requests.has(event.request_id)) ambiguousRequests.add(event.request_id);
       requests.set(event.request_id, event);
     }
-    if ((event.type === 'provider_response' || event.type === 'provider_failure') && event.request_id) {
-      responses.add(event.request_id);
-      if (event.type === 'provider_failure') failedRequests.add(event.request_id);
-      else responseCounts.set(event.request_id, (responseCounts.get(event.request_id) ?? 0) + 1);
-    }
+    if (event.request_id && event.type === 'provider_failure') failedRequests.add(event.request_id);
+    if (event.request_id && event.type === 'provider_response')
+      responseCounts.set(event.request_id, (responseCounts.get(event.request_id) ?? 0) + 1);
   }
   for (const id of ambiguousRequests) requests.delete(id);
+  const requestFor = (event: TranscriptEvent) =>
+    event.request_id ? requests.get(event.request_id) : undefined;
+  const responded = new Set<string>();
+  for (const event of events) {
+    if (!event.request_id || !['provider_response', 'provider_failure'].includes(event.type)) continue;
+    const request = requestFor(event);
+    if (request && consistentAttribution(event, request)) responded.add(event.request_id);
+  }
+
   const savedById = new Map<string, TranscriptSavedStep>();
+  const savedByRequest = new Map<string, TranscriptSavedStep>();
   const ambiguousSteps = new Set<string>();
+  const ambiguousSavedRequests = new Set<string>();
+  const savedReviews = new Map<string, TranscriptSavedStep[]>();
   for (const step of savedSteps ?? []) {
     if (savedById.has(step.step_id)) ambiguousSteps.add(step.step_id);
     savedById.set(step.step_id, step);
+    if (step.request_id) {
+      if (savedByRequest.has(step.request_id)) ambiguousSavedRequests.add(step.request_id);
+      savedByRequest.set(step.request_id, step);
+    }
+    if (step.role === 'supervisor' && step.status === 'completed' && step.text) {
+      const key = reviewKey(step.strategy_id, step.round, step.text);
+      const matches = savedReviews.get(key) ?? [];
+      matches.push(step);
+      savedReviews.set(key, matches);
+    }
   }
   for (const id of ambiguousSteps) savedById.delete(id);
-  const requestFor = (event: TranscriptEvent) =>
-    event.request_id ? requests.get(event.request_id) : undefined;
+  for (const id of ambiguousSavedRequests) savedByRequest.delete(id);
   const correlate = (event: TranscriptEvent): TranscriptSavedStep | undefined => {
     const request = requestFor(event);
+    if (request && !consistentAttribution(event, request)) return undefined;
     const ids = new Set([event.step_id, request?.step_id].filter(
       (id): id is string => typeof id === 'string' && !!id));
     if (ids.size > 1 || (event.request_id && ambiguousRequests.has(event.request_id))) return undefined;
-    let step = ids.size === 1 ? savedById.get([...ids][0]) : undefined;
-    if (!ids.size && event.request_id) {
-      const matches = (savedSteps ?? []).filter(item => item.request_id === event.request_id);
-      if (matches.length === 1 && !ambiguousSteps.has(matches[0].step_id)) step = matches[0];
-    }
-    if (!step) return undefined;
+    const step = ids.size === 1 ? savedById.get([...ids][0])
+      : event.request_id ? savedByRequest.get(event.request_id) : undefined;
+    if (!step || ambiguousSteps.has(step.step_id)) return undefined;
+    if (step.request_id && (ambiguousSavedRequests.has(step.request_id)
+      || (event.request_id && step.request_id !== event.request_id))) return undefined;
     for (const field of ['role', 'strategy_id', 'round'] as const) {
       if (step[field] !== undefined && [event, request].some(row =>
-        row !== undefined && row[field] !== undefined && row[field] !== null && row[field] !== step![field])) return undefined;
+        row !== undefined && row[field] != null && row[field] !== step[field])) return undefined;
     }
     return step;
   };
-  const correlated = new Map<TranscriptEvent, TranscriptSavedStep>();
-  const responsesByStep = new Map<TranscriptSavedStep, number>();
-  const failedSteps = new Set<TranscriptSavedStep>();
+  const isBound = (event: TranscriptEvent, step: TranscriptSavedStep | undefined) =>
+    !!step?.request_id && event.request_id === step.request_id;
+  const reviewsByEvent = new Map<TranscriptEvent, TranscriptSavedStep>();
+  const reviewCounts = new Map<TranscriptSavedStep, number>();
   for (const event of events) {
-    const step = correlate(event);
-    if (!step) continue;
-    correlated.set(event, step);
-    if (event.type === 'provider_response')
-      responsesByStep.set(step, (responsesByStep.get(step) ?? 0) + 1);
-    if (event.type === 'provider_failure') failedSteps.add(step);
+    if (event.type !== 'session_event' || event.event_kind !== 'supervisor.review'
+      || roleOf(event.role) !== 'supervisor') continue;
+    const message = String(event.message ?? '');
+    let review = correlate(event);
+    if (!review && !event.step_id) {
+      const matches = savedReviews.get(reviewKey(event.strategy_id, event.round, message)) ?? [];
+      if (matches.length === 1 && !ambiguousSteps.has(matches[0].step_id)) review = matches[0];
+    }
+    if (review?.role === 'supervisor' && review.status === 'completed'
+      && !!message && review.text === message) {
+      reviewsByEvent.set(event, review);
+      reviewCounts.set(review, (reviewCounts.get(review) ?? 0) + 1);
+    }
   }
+
   const entries: TranscriptEntry[] = [];
   const represented = new Set<TranscriptSavedStep>();
   const active = sessionStatus === 'running' || sessionStatus === 'queued';
   for (const event of events) {
-    const step = correlated.get(event);
-    if (event.type === 'provider_request' && event.request_id && responses.has(event.request_id)
+    const step = correlate(event);
+    const bound = isBound(event, step);
+    if (event.type === 'provider_request' && event.request_id && responded.has(event.request_id)
       && !ambiguousRequests.has(event.request_id)) continue;
     if (event.type === 'provider_response' || event.type === 'provider_failure') {
       const request = requestFor(event);
@@ -248,15 +306,13 @@ export function projectTranscript(
       const ambiguous = !!event.request_id && ((responseCounts.get(event.request_id) ?? 0) > 1
         || ambiguousRequests.has(event.request_id));
       const recordedFailure = !!event.request_id && failedRequests.has(event.request_id);
-      const accepted = !failure && !!step && step.status === 'completed'
-        && responsesByStep.get(step) === 1 && !failedSteps.has(step)
-        && !ambiguous && !recordedFailure && !!rawText;
-      if (step && (accepted || (failure && !['completed', 'running'].includes(step.status)
-        && !step.partial_text))) represented.add(step);
-      // Preserve each terminal event; only a unique, confirmed response can be
-      // converted through the existing raw-event Markdown endpoint.
+      const accepted = !failure && !!step && step.status === 'completed' && bound
+        && !ambiguous && !recordedFailure && !!rawText && step.text === rawText;
+      if (step && accepted) represented.add(step);
+      // A failure event is not the saved terminal status or its reason. Keep
+      // both, and never overwrite raw text with a normalized saved result.
       const convertible = !failure && !ambiguous && !recordedFailure && !!event.request_id
-        && (savedSteps === undefined || (accepted && (!step?.text || step.text === rawText)));
+        && (savedSteps === undefined || accepted);
       const id = failure ? `failure-${event.request_id ?? 'unknown'}-${event.seq}`
         : convertible ? `response-${event.request_id}`
           : `raw-response-${event.request_id ?? 'unknown'}-${event.seq}`;
@@ -264,26 +320,30 @@ export function projectTranscript(
         : recordedFailure ? 'Provider response with recorded failure'
           : ambiguous ? 'Provider response with ambiguous correlation'
             : accepted ? 'Accepted response'
-              : savedSteps !== undefined ? (step && step.status !== 'running'
-                ? 'Raw response (not accepted)' : 'Raw response (acceptance unverified)')
+              : savedSteps !== undefined ? 'Raw response (acceptance unverified)'
                 : role === 'other' ? 'Provider response' : role[0].toUpperCase() + role.slice(1);
-      const strategyId = event.strategy_id ?? request?.strategy_id ?? step?.strategy_id;
+      const unknown = savedSteps !== undefined && !bound;
       entries.push({
         id, timestamp: event.timestamp, role, title,
-        text: (accepted && step?.text ? step.text : rawText) || 'The response text was not retained in this historical log.',
-        round: event.round ?? request?.round ?? step?.round, strategyId,
+        text: rawText || 'The response text was not retained in this historical log.',
+        round: event.round ?? request?.round ?? step?.round,
+        strategyId: event.strategy_id ?? request?.strategy_id ?? step?.strategy_id,
         sequence: event.seq, request: request?.request, response: event.response,
-        brainstormMode: brainstormAtDispatch(request ?? event) || step?.brainstorm_mode === true,
-        correlationUnknown: savedSteps !== undefined && !strategyId && !step,
+        requestTimestamp: request && consistentAttribution(event, request) ? request.timestamp : undefined,
+        requestSequence: request && consistentAttribution(event, request) ? request.seq : undefined,
+        brainstormMode: request || typeof event.brainstorm_mode === 'boolean'
+          ? brainstormAtDispatch(request ?? event) : step?.brainstorm_mode === true,
+        correlationUnknown: unknown,
+        claimedAttribution: unknown ? claimedAttribution(event, request) : undefined,
       });
       continue;
     }
     if (event.type === 'provider_request') {
-      // A saved terminal result supersedes an unanswered raw request in the
-      // reading view, not in the immutable log. Render the saved result below.
-      if (step && step.status !== 'running') continue;
-      const pending = savedSteps === undefined || (!!step && active && step.status === 'running');
-      if (step) represented.add(step);
+      // Every unmatched raw request survives, even if its logical step ended.
+      // Only a uniquely bound running attempt can be called pending.
+      const pending = savedSteps === undefined || (!!step && bound && active && step.status === 'running');
+      if (step && pending) represented.add(step);
+      const unknown = savedSteps !== undefined && !bound;
       entries.push({
         id: 'pending-' + (event.request_id && !ambiguousRequests.has(event.request_id)
           ? event.request_id : event.seq), timestamp: event.timestamp,
@@ -292,7 +352,8 @@ export function projectTranscript(
         round: event.round ?? step?.round, strategyId: event.strategy_id ?? step?.strategy_id,
         sequence: event.seq, request: event.request, pending,
         brainstormMode: brainstormAtDispatch(event),
-        correlationUnknown: savedSteps !== undefined && !event.strategy_id && !step,
+        correlationUnknown: unknown,
+        claimedAttribution: unknown ? claimedAttribution(event) : undefined,
       });
       continue;
     }
@@ -304,41 +365,35 @@ export function projectTranscript(
       });
       continue;
     }
-    // Lifecycle events are audit metadata, not agent replies.
     if (event.type === 'session_event' && event.event_kind === 'supervisor.review'
       && roleOf(event.role) === 'supervisor') {
-      let review = step;
-      const message = String(event.message ?? '');
-      if (!review && !event.step_id && savedSteps !== undefined) {
-        // Historical review events lack IDs. Require an exact, unique saved
-        // review with the same strategy, turn and observation.
-        const matches = savedSteps.filter(item => item.role === 'supervisor'
-          && item.status === 'completed' && item.strategy_id === event.strategy_id
-          && item.round === event.round && item.text === message);
-        if (matches.length === 1 && !ambiguousSteps.has(matches[0].step_id)) review = matches[0];
-      }
-      const accepted = !!review && review.status === 'completed' && !!message;
+      const review = reviewsByEvent.get(event);
+      const accepted = !!review && reviewCounts.get(review) === 1;
       if (review && accepted) represented.add(review);
+      const unknown = savedSteps !== undefined && !accepted;
       entries.push({
-        id: (savedSteps === undefined || accepted ? 'event-' : 'raw-event-') + event.seq,
+        id: (unknown ? 'raw-event-' : 'event-') + event.seq,
         timestamp: event.timestamp, role: 'supervisor',
-        title: savedSteps === undefined || accepted ? 'Supervisor' : 'Raw review (acceptance unverified)',
-        text: message, round: event.round ?? review?.round,
+        title: unknown ? 'Raw review (acceptance unverified)' : 'Supervisor',
+        text: String(event.message ?? ''), round: event.round ?? review?.round,
         strategyId: event.strategy_id ?? review?.strategy_id, sequence: event.seq,
+        correlationUnknown: unknown,
+        claimedAttribution: unknown ? claimedAttribution(event) : undefined,
       });
     }
   }
-  // This is a separate, explicitly labelled projection of saved state.
-  // No raw event ID, timestamp or provider dispatch is manufactured.
   (savedSteps ?? []).forEach((step, index) => {
     if (represented.has(step)) return;
     const role = roleOf(step.role);
+    const duplicate = ambiguousSteps.has(step.step_id);
     entries.push({
-      id: `saved-${step.step_id}${ambiguousSteps.has(step.step_id) ? '-' + index : ''}`,
+      id: `saved-${step.step_id}${duplicate ? '-' + index : ''}`,
       timestamp: (step.status === 'running' ? step.started_at : step.finished_at) ?? '',
-      role, title: 'Reconstructed from saved state',
+      role, title: 'Reconstructed from saved state' + (duplicate ? ' (duplicate step identity)' : ''),
       text: savedStepMessage(step), round: step.round, strategyId: step.strategy_id,
       sequence: 0, reconstructed: true, brainstormMode: step.brainstorm_mode,
+      correlationUnknown: duplicate,
+      claimedAttribution: duplicate ? [step.strategy_id, step.round, step.step_id].filter(Boolean).join(' · ') : undefined,
     });
   });
   interventions.forEach((intervention, index) => {
@@ -350,16 +405,12 @@ export function projectTranscript(
       strategyId: intervention.target_strategy_ids?.length === 1 ? intervention.target_strategy_ids[0] : undefined,
     });
   });
-  // The raw sequence and actual saved timestamps are independent of the
-  // logical grouping below; display order is not proof of execution order.
-  return entries.sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp)
-    || left.sequence - right.sequence || left.id.localeCompare(right.id));
+  return entries.sort(transcriptOrder);
 }
 
 /** Only accepted saved research or supervisor text should incur AI formatting calls. */
 export function convertibleTranscriptEntry(entry: TranscriptEntry): boolean {
-  return !entry.pending &&
+  return !entry.pending && !entry.reconstructed && !entry.correlationUnknown &&
     entry.title !== 'Provider failure' &&
     entry.text.length >= 40 && entry.text.length <= 20000 &&
     (entry.id.startsWith('response-') || (entry.role === 'supervisor' && entry.id.startsWith('event-'))) &&
@@ -382,7 +433,7 @@ export function paginateTranscriptTurns(groups: TranscriptTurnGroup[], limit: nu
 } {
   const key = (group: TranscriptTurnGroup): string => {
     const number = group.entries.find(entry =>
-      typeof entry.round === 'number' && Number.isInteger(entry.round) && entry.round > 0)?.round;
+      !entry.correlationUnknown && typeof entry.round === 'number' && Number.isInteger(entry.round) && entry.round > 0)?.round;
     return number === undefined ? `event:${group.key}` : `turn:${number}`;
   };
   const keys = [...new Set(groups.map(key))];
@@ -400,8 +451,7 @@ export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurn
   // Only attach a Human entry to a prior turn when its explicitly targeted
   // strategy identifies that turn. Never infer an arbitrary concurrent branch.
   const latestTurnByStrategy = new Map<string, string>();
-  for (const entry of [...entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp)
-    || a.sequence - b.sequence)) {
+  for (const entry of [...entries].sort(transcriptOrder)) {
     const hasTurn = typeof entry.round === 'number' && entry.round > 0;
     const turnKey = hasTurn && !entry.correlationUnknown
       ? `${entry.strategyId ?? 'session'}:${entry.round}` : null;
@@ -409,9 +459,11 @@ export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurn
       ? latestTurnByStrategy.get(entry.strategyId) : undefined;
     const key = turnKey ?? humanTurn ?? `event:${entry.id}`;
     if (turnKey && entry.strategyId) latestTurnByStrategy.set(entry.strategyId, turnKey);
-    const label = turnKey ? `Turn ${entry.round}`
-      : humanTurn ? groups.get(humanTurn)?.label ?? 'Human' 
-      : entry.role === 'human' ? 'Human' : 'Session activity';
+    const label = entry.correlationUnknown
+      ? 'Uncertain attribution' + (entry.claimedAttribution ? ' · Claimed ' + entry.claimedAttribution : '')
+      : turnKey ? `Turn ${entry.round}`
+        : humanTurn ? groups.get(humanTurn)?.label ?? 'Human'
+        : entry.role === 'human' ? 'Human' : 'Session activity';
     const existing = groups.get(key);
     if (existing) {
       existing.entries.push(entry);
@@ -423,8 +475,8 @@ export function groupTranscriptTurns(entries: TranscriptEntry[]): TranscriptTurn
   return [...groups.values()].sort((a, b) => {
     // Newest turn first; within each turn, display strategies in ascending
     // order rather than ordering concurrent work by completion timestamp.
-    const aTurn = a.entries.find(entry => entry.round)?.round;
-    const bTurn = b.entries.find(entry => entry.round)?.round;
+    const aTurn = a.entries.find(entry => !entry.correlationUnknown && entry.round)?.round;
+    const bTurn = b.entries.find(entry => !entry.correlationUnknown && entry.round)?.round;
     if (aTurn !== undefined && bTurn !== undefined && aTurn !== bTurn)
       return bTurn - aTurn;
     const aStrategy = a.entries.find(entry => entry.strategyId)?.strategyId;

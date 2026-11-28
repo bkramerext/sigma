@@ -9213,6 +9213,16 @@ def _session_log_context(record: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _save_transcript_acceptance(step: dict[str, Any], context: dict[str, Any]) -> None:
+    """Bind a saved accepted result to the request that actually produced it."""
+    request_id = context.get("_session_log_request_id")
+    if isinstance(request_id, str) and request_id:
+        step["request_id"] = request_id
+    attribution = context.get("_session_log_attribution")
+    if isinstance(attribution, dict) and type(attribution.get("brainstorm_mode")) is bool:
+        step["brainstorm_mode"] = attribution["brainstorm_mode"]
+
+
 async def _call(
     record: dict[str, Any],
     role: str,
@@ -13278,6 +13288,7 @@ async def _portfolio_role_call(
                 output=output,
             )
             step.update({"status": "completed", "finished_at": _now(), "output": output})
+            _save_transcript_acceptance(step, context)
             branch.pop("termination_reason_code", None)
             if cloud_research.billing_enabled():
                 estimate = (
@@ -17998,6 +18009,7 @@ async def _worker(session_id: str, path: str) -> None:
             record = current
             step = record["steps"][-1]
             step.update({"status": "completed", "finished_at": _now(), "output": output})
+            _save_transcript_acceptance(step, context)
             if usage is not None:
                 step["token_usage"] = usage
                 step["token_usage_status"] = (
