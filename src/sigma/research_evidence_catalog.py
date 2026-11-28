@@ -317,7 +317,7 @@ def _groups(context: dict[str, Any]) -> dict[Category, dict[str, Source]]:
 def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
     """Return only actual non-pointer execution records in the supplied packet."""
     targets: dict[tuple[str | None, str], list[dict[str, Any]]] = {}
-    execution_examples: dict[str, list[dict[str, Any]]] = {}
+    execution_examples: dict[str, dict[str, dict[str, Any]]] = {}
     conflicting_executions: set[str] = set()
     blocked = {
         identifier
@@ -354,16 +354,20 @@ def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
                 and execution.get("evidence_availability") != POINTER
             ):
                 identifier = execution["id"]
-                examples = execution_examples.setdefault(identifier, [])
-                # A sparse first record does not establish agreement between
-                # later records. Compare all distinct supplied pairs.
-                if execution not in examples:
+                examples = execution_examples.setdefault(identifier, {})
+                # Python equality equates False/0 and True/1. Distinguish
+                # JSON types before deduplicating any supplied representation.
+                identity = json.dumps(execution, sort_keys=True, ensure_ascii=False)
+                if identity not in examples:
                     if identifier not in conflicting_executions and (
                         not _compatible_executions(execution, execution)
-                        or any(not _compatible_executions(other, execution) for other in examples)
+                        or any(
+                            not _compatible_executions(other, execution)
+                            for other in examples.values()
+                        )
                     ):
                         conflicting_executions.add(identifier)
-                    examples.append(execution)
+                    examples[identity] = execution
                 if artifact_id not in blocked:
                     targets.setdefault((artifact_id, identifier), []).append(execution)
 
@@ -435,7 +439,9 @@ def _compatible_text(
 
 def _compatible_inspections(first: dict[str, Any], second: dict[str, Any]) -> bool:
     for field in ("sha256", "size_bytes", "media_type", "execution_id"):
-        if field in first and field in second and first[field] != second[field]:
+        if field in first and field in second and (
+            type(first[field]) is not type(second[field]) or first[field] != second[field]
+        ):
             return False
     a, b = first.get("inspection"), second.get("inspection")
     if not isinstance(a, dict) or not isinstance(b, dict):
@@ -479,10 +485,10 @@ def _consistent_execution_files(first: dict[str, Any], second: dict[str, Any]) -
             filename = item.get("filename")
             if not isinstance(filename, str):
                 continue
-            for manifest in manifests:
-                if manifest is None:
+            for supplied_manifest in manifests:
+                if supplied_manifest is None:
                     continue
-                saved = manifest.get(filename)
+                saved = supplied_manifest.get(filename)
                 if saved is None:
                     # An available result must not claim a file absent from
                     # a supplied manifest. An omitted preview is not a result.
@@ -491,8 +497,10 @@ def _consistent_execution_files(first: dict[str, Any], second: dict[str, Any]) -
                     continue
                 for field in ("sha256", "size_bytes", "media_type"):
                     actual, expected = item.get(field), saved.get(field)
-                    if actual is not None and expected is not None and (
-                        type(actual) is not type(expected) or actual != expected
+                    if (
+                        actual is not None
+                        and expected is not None
+                        and (type(actual) is not type(expected) or actual != expected)
                     ):
                         return False
     return True
@@ -514,12 +522,19 @@ def _compatible_executions(first: dict[str, Any], second: dict[str, Any]) -> boo
         "stdout_base64",
         "stderr_base64",
     ):
-        if field in first and field in second and first[field] != second[field]:
+        if field in first and field in second and (
+            type(first[field]) is not type(second[field]) or first[field] != second[field]
+        ):
             return False
     for field in ("stdout", "stderr"):
         if not _compatible_text(first, second, field, f"{field}_truncated"):
             return False
-    if "artifacts" in first and "artifacts" in second and first["artifacts"] != second["artifacts"]:
+    if (
+        "artifacts" in first
+        and "artifacts" in second
+        and json.dumps(first["artifacts"], sort_keys=True)
+        != json.dumps(second["artifacts"], sort_keys=True)
+    ):
         return False
     if not _consistent_execution_files(first, second):
         return False

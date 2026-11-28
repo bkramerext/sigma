@@ -5131,6 +5131,7 @@ def _check_execution_conflict_permutations(
         (prefix, {**prefix, "stdout": "AX"}),
         (full, {**full, "stdout_truncated": True}),
         (full, {**full, "exit_code": 1}),
+        (full, {**full, "exit_code": False}),
         (full, {**full, "source_sha256": "b" * 64}),
         (full, {**full, "stderr": "different", "source": "print(2)"}),
         (
@@ -5327,8 +5328,8 @@ def _check_file_inspection_provenance(
 
     def check_denied(rows: tuple[dict[str, Any], ...]) -> None:
         context = packet(rows)
-        assert not computation_targets(context)
-        assert not context["evidence_catalog"]["computations"]
+        assert not computation_targets(context), rows
+        assert not context["evidence_catalog"]["computations"], rows
         for row in context["other_strategy_evidence"]:
             identifier = row["artifact_id"]
             item = {
