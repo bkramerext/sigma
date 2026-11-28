@@ -804,9 +804,7 @@ def test_user_turn_default_migration_and_validation(root: Path) -> None:
         target.write_text(json.dumps({"version": 1, **legacy}), encoding="utf-8")
         target.chmod(0o600)
         assert global_research_settings.load_config()["default_turn_limit"] == 12
-        saved = global_research_settings.save_config(
-            {"default_turn_limit": 3}, flat_limits=True
-        )
+        saved = global_research_settings.save_config({"default_turn_limit": 3}, flat_limits=True)
         assert saved["default_turn_limit"] == 3
         persisted = json.loads(target.read_text(encoding="utf-8"))
         assert persisted["version"] == 2
@@ -816,7 +814,9 @@ def test_user_turn_default_migration_and_validation(root: Path) -> None:
         assert global_research_settings.load_config()["default_turn_limit"] == 3
         for invalid in (0, 1201, True, "3"):
             try:
-                global_research_settings.save_config({"default_turn_limit": invalid}, flat_limits=True)
+                global_research_settings.save_config(
+                    {"default_turn_limit": invalid}, flat_limits=True
+                )
             except ProjectError:
                 pass
             else:
