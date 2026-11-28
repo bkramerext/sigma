@@ -492,3 +492,24 @@ test('Supervisor historical fallback cannot override explicit request identity',
     assert.ok(rows.every(r => !convertibleTranscriptEntry(r)));
   }
 });
+
+test('server content evidence handles lossless numeric text and field order without false acceptance', () => {
+  const event = { seq: 1, timestamp: '', type: 'provider_response', request_id: 'r',
+    step_id: 's', response: { output_text: '{"b":9007199254740993,"a":1.0}' } };
+  const saved = { step_id: 's', request_id: 'r', role: 'investigator', status: 'completed',
+    text: 'saved ordered text', content_digest: 'same' };
+  const evidence = { '1': { text: 'raw 9007199254740993, 1.0', content_digest: 'same' } };
+  const rows = projectTranscript([event], [], [saved], 'completed', evidence);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].title, 'Accepted response');
+  assert.equal(rows[0].text, evidence['1'].text);
+  for (const invalid of [{ '1': { text: saved.text, content_digest: 'different' } },
+    { '1': { text: saved.text, content_digest: null } }, {}]) {
+    const rejected = projectTranscript([event], [], [saved], 'completed', invalid);
+    assert.equal(rejected.length, 2);
+    assert.ok(rejected.every(r => !convertibleTranscriptEntry(r)));
+  }
+  const conflict = projectTranscript([{ ...event, request_id: 'other' }], [], [saved], 'completed', evidence);
+  assert.equal(conflict.length, 2);
+  assert.ok(conflict.every(r => !convertibleTranscriptEntry(r)));
+});

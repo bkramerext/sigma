@@ -12,6 +12,7 @@ import re
 import threading
 import unicodedata
 from datetime import UTC, datetime
+from decimal import Decimal, DecimalException
 from pathlib import Path
 from stat import S_ISREG
 from typing import Any
@@ -1141,13 +1142,29 @@ def _saved_supervisor_text(assessment: dict[str, Any]) -> str:
     )
 
 
-def _transcript_readable_response(value: Any) -> str:
-    """Match the browser's readable projection without dropping nested fields."""
-    raw = _response_text(value)
-    try:
-        decoded = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return raw
+def _transcript_json_display(value: Any, depth: int = 0) -> str:
+    """Pretty-print decoded JSON without converting exact decimals to floats."""
+    if isinstance(value, dict):
+        opening, closing = "{", "}"
+        items = [
+            json.dumps(key, ensure_ascii=False) + ": " + _transcript_json_display(item, depth + 1)
+            for key, item in value.items()
+        ]
+    elif isinstance(value, list):
+        opening, closing = "[", "]"
+        items = [_transcript_json_display(item, depth + 1) for item in value]
+    elif isinstance(value, Decimal):
+        return str(value)
+    else:
+        return json.dumps(value, ensure_ascii=False)
+    if not items:
+        return opening + closing
+    prefix = "  " * (depth + 1)
+    return opening + "\n" + prefix + (",\n" + prefix).join(items) + "\n" + "  " * depth + closing
+
+
+def _transcript_readable_response(decoded: Any, raw: str) -> str:
+    """Retain provider field order and all nested values in display text."""
     if not isinstance(decoded, dict):
         return raw
     parts: list[str] = []
@@ -1156,14 +1173,90 @@ def _transcript_readable_response(value: Any) -> str:
         label = label[:1].upper() + label[1:]
         if isinstance(item, str):
             body = item
-        elif isinstance(item, list) and all(type(entry) in {str, int, float} for entry in item):
+        elif isinstance(item, list) and all(type(entry) in {str, int, Decimal} for entry in item):
             body = "\n".join(f"- {entry}" for entry in item)
-        elif isinstance(item, (dict, list)):
-            body = json.dumps(item, ensure_ascii=False, indent=2)
         else:
-            body = json.dumps(item, ensure_ascii=False)
+            body = _transcript_json_display(item)
         parts.append(f"#### {label}\n\n{body}")
     return "\n\n".join(parts)
+
+
+def _transcript_unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON key in transcript response")
+        result[key] = value
+    return result
+
+
+def _transcript_reject_constant(value: str) -> Any:
+    raise ValueError(f"Nonfinite JSON number: {value}")
+
+
+def _transcript_canonical_content(value: Any) -> str:
+    """Type-preserving, ordered object encoding; never round through JS Number."""
+    if isinstance(value, dict):
+        return (
+            "{"
+            + ",".join(
+                json.dumps(key, ensure_ascii=True) + ":" + _transcript_canonical_content(value[key])
+                for key in sorted(value)
+            )
+            + "}"
+        )
+    if isinstance(value, list):
+        return "[" + ",".join(_transcript_canonical_content(item) for item in value) + "]"
+    if isinstance(value, Decimal):
+        # A decimal token cannot collide with an integer or quoted JSON string.
+        # Retain exact decimal precision; conservatively distinguish scales.
+        return "d" + str(value)
+    return json.dumps(value, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
+
+
+def _transcript_response_evidence(value: Any) -> dict[str, Any]:
+    """Derive display text and content identity from the same retained reply.
+
+    Evidence is disposable and separate from the raw event; malformed, duplicate
+    or redacted content must never prove exact acceptance.
+    """
+    try:
+        raw = _response_text(value)
+    except (ValueError, RecursionError):
+        return {"text": "", "content_digest": None}
+    safe_raw = _redact(raw)
+    evidence: dict[str, Any] = {"text": safe_raw, "content_digest": None}
+    if not raw:
+        return evidence
+    try:
+        decoded = json.loads(
+            raw,
+            object_pairs_hook=_transcript_unique_object,
+            parse_float=Decimal,
+            parse_constant=_transcript_reject_constant,
+        )
+    except (ValueError, RecursionError, DecimalException):
+        if raw.lstrip().startswith(("{", "[")):
+            return evidence
+        decoded = None
+    try:
+        if isinstance(decoded, (dict, list)):
+            safe_decoded = _redact(decoded)
+            if safe_decoded != decoded:
+                evidence["text"] = _transcript_readable_response(
+                    safe_decoded, _transcript_json_display(safe_decoded)
+                )
+                return evidence
+            canonical = "json:" + _transcript_canonical_content(decoded)
+        else:
+            canonical = "text:" + json.dumps(raw, ensure_ascii=True)
+        evidence["text"] = _redact(_transcript_readable_response(decoded, raw))
+        if safe_raw == raw and "[REDACTED]" not in raw:
+            evidence["content_digest"] = hashlib.sha256(canonical.encode("ascii")).hexdigest()
+    except (ValueError, RecursionError):
+        # Never let unusable historical content establish acceptance.
+        return {"text": safe_raw, "content_digest": None}
+    return evidence
 
 
 def transcript_saved_steps(session: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1215,8 +1308,10 @@ def transcript_saved_steps(session: dict[str, Any]) -> list[dict[str, Any]]:
                 if role == "supervisor" and isinstance(step.get("assessment"), dict):
                     row["text"] = _saved_supervisor_text(_redact(step["assessment"]))
                 elif isinstance(output, (dict, list)):
-                    row["text"] = _transcript_readable_response(
-                        {"output_text": json.dumps(_redact(output), ensure_ascii=False)}
+                    row.update(
+                        _transcript_response_evidence(
+                            {"output_text": json.dumps(_redact(output), ensure_ascii=False)}
+                        )
                     )
                 elif isinstance(output, str):
                     # Legacy records may store JSON as text. Redact its
@@ -1227,7 +1322,7 @@ def transcript_saved_steps(session: dict[str, Any]) -> list[dict[str, Any]]:
                         decoded = None
                     if isinstance(decoded, (dict, list)):
                         output = json.dumps(_redact(decoded), ensure_ascii=False)
-                    row["text"] = _transcript_readable_response({"output_text": output})
+                    row.update(_transcript_response_evidence({"output_text": output}))
             if isinstance(step.get("partial_output"), str):
                 row["partial_text"] = step["partial_output"]
             rows.append(_redact(row))
@@ -1505,8 +1600,13 @@ def transcript_markdown_export(
                 or request.get("strategy_id")
                 or (step or {}).get("strategy_id")
             )
+            evidence = (
+                _transcript_response_evidence(event.get("response"))
+                if kind == "provider_response"
+                else {}
+            )
             message = (
-                _transcript_readable_response(event.get("response"))
+                str(evidence["text"])
                 if kind == "provider_response"
                 else str(
                     event.get("provider_error") or event.get("message") or "Provider call failed."
@@ -1523,7 +1623,14 @@ def transcript_markdown_export(
                     and request_id not in failed_requests
                     and raw_response_counts.get(request_id) == 1
                     and bool(message)
-                    and step.get("text") == message
+                    and (
+                        (
+                            bool(evidence.get("content_digest"))
+                            and evidence["content_digest"] == step.get("content_digest")
+                        )
+                        if "content_digest" in step
+                        else step.get("text") == message
+                    )
                 ):
                     label += " · Accepted response"
                     represented.add(step["step_id"])
@@ -1777,7 +1884,7 @@ def _transcript_state_version(
 ) -> str:
     # Scope the opaque version to the authorized canonical path and both IDs;
     # an import, atomic replacement or in-place write changes file identity.
-    identity = ("transcript-v2", str(project_file), project_id, session_id, checkpoint)
+    identity = ("transcript-v3", str(project_file), project_id, session_id, checkpoint)
     return hashlib.sha256(repr(identity).encode("utf-8")).hexdigest()
 
 
@@ -1844,6 +1951,11 @@ def read(
             state["transcript_state"] = saved_steps
     return {
         "events": events,
+        "transcript_responses": {
+            str(event["seq"]): _transcript_response_evidence(event.get("response"))
+            for event in events
+            if event.get("type") == "provider_response"
+        },
         "cursor": cursor,
         "transcript_state_version": version,
         **state,

@@ -46,6 +46,7 @@ def main():
                         step_id: 'shared-step', request_id: id,
                         role: 'investigator', strategy_id: 'strategy', round: 1,
                         status: 'completed', text, finished_at: stamp,
+                        content_digest: 'fixture-digest-' + name,
                     };
                     return {
                         events: [{
@@ -53,6 +54,9 @@ def main():
                             step_id: 'shared-step', request_id: id,
                             response: { output_text: text },
                         }],
+                        transcript_responses: {
+                            '1': { text, content_digest: 'fixture-digest-' + name },
+                        },
                         cursor: 1, project_id: 'project-' + name,
                         project_title: 'Fixture ' + name.toUpperCase(),
                         short_name: 'Fixture ' + name.toUpperCase(),

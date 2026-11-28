@@ -4606,7 +4606,9 @@ async def test_live_transcript_projects_real_dispatch_before_and_after_acceptanc
             else:
                 retry_entered.set()
                 await release.wait()
-            result = investigation(1)
+            # Real strict Investigator schema, but provider order differs
+            # from Pydantic's declaration order (including nested keys).
+            result = json.loads(json.dumps(investigation(1), sort_keys=True))
         else:
             result = skeptic(1, "stop", "no_progress")
         return httpx.Response(200, json=provider_response(result))
@@ -4631,7 +4633,7 @@ async def test_live_transcript_projects_real_dispatch_before_and_after_acceptanc
                     "import fs from 'node:fs';"
                     "const s=JSON.parse(fs.readFileSync(0,'utf8'));"
                     "console.log(JSON.stringify(projectTranscript(s.events,s.interventions,"
-                    "s.transcript_state,s.session.status)));"
+                    "s.transcript_state,s.session.status,s.transcript_responses)));"
                 ),
             ],
             input=json.dumps(snapshot),
@@ -4692,12 +4694,22 @@ async def test_live_transcript_projects_real_dispatch_before_and_after_acceptanc
             ]
             assert len(accepted) == 1
             assert accepted[0]["request_id"] == second_id.removeprefix("pending-")
-            assert any(
-                r["title"] == "Accepted response"
-                or (r.get("reconstructed") and r["text"] == accepted[0]["text"])
-                for r in rows
+            raw = next(
+                event
+                for event in snapshot["events"]
+                if event["type"] == "provider_response"
+                and event.get("request_id") == accepted[0]["request_id"]
             )
-            assert accepted[0]["text"] in markdown
+            evidence = snapshot["transcript_responses"][str(raw["seq"])]
+            assert evidence["text"] != accepted[0]["text"]
+            assert evidence["content_digest"] == accepted[0]["content_digest"]
+            assert evidence["content_digest"]
+            matching = [r for r in rows if r["id"] == "response-" + accepted[0]["request_id"]]
+            assert len(matching) == 1 and matching[0]["title"] == "Accepted response"
+            assert matching[0]["text"] == evidence["text"]
+            assert not any(r["id"] == "saved-" + accepted[0]["step_id"] for r in rows)
+            assert evidence["text"] in markdown
+            assert "Investigator · Accepted response" in markdown
             assert any(r.get("reconstructed") and "interrupted" in r["text"] for r in rows)
         finally:
             release.set()

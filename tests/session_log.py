@@ -14,6 +14,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 from sigma import session_log
@@ -1571,6 +1572,50 @@ def test_transcript_unanswered_attempts_and_supervisor_mismatch() -> None:
     assert "Response not retained" in contradictory
 
 
+def test_transcript_content_evidence_preserves_types_and_rejects_malformed() -> None:
+    def evidence(raw: str) -> dict[str, Any]:
+        return session_log._transcript_response_evidence({"output_text": raw})
+
+    first = evidence('{"b":[1.0,9007199254740993],"a":{"10":"x","2":"y"}}')
+    reordered = evidence('{"a":{"2":"y","10":"x"},"b":[1.0,9007199254740993]}')
+    assert first["content_digest"] == reordered["content_digest"]
+    assert first["text"] != reordered["text"]
+    assert "9007199254740993" in first["text"]
+    assert "1.0000000000000001" in evidence('{"a":1.0000000000000001}')["text"]
+    for different in (
+        '{"b":[1.0,9007199254740992],"a":{"10":"x","2":"y"}}',
+        '{"b":[1,9007199254740993],"a":{"10":"x","2":"y"}}',
+        '{"b":["1.0",9007199254740993],"a":{"10":"x","2":"y"}}',
+        '{"b":[1.0000000000000001,9007199254740993],"a":{"10":"x","2":"y"}}',
+    ):
+        assert evidence(different)["content_digest"] != first["content_digest"]
+    for invalid in ('{"a":1,"a":2}', '{"a":NaN}', '{"a":', '{"password":"secret"}'):
+        row = evidence(invalid)
+        assert row["content_digest"] is None
+        if "password" in invalid:
+            assert "secret" not in row["text"]
+    saved = {
+        "step_id": "step",
+        "request_id": "request",
+        "status": "completed",
+        "role": "investigator",
+        **first,
+    }
+    raw = {
+        "seq": 1,
+        "type": "provider_response",
+        "request_id": "request",
+        "response": {"output_text": '{"a":{"2":"y","10":"x"},"b":[1.0,9007199254740993]}'},
+    }
+    report = session_log.transcript_markdown_export([raw], [], {}, "Test", [saved])
+    assert "Accepted response" in report
+    assert "Reconstructed from saved state" not in report
+    wrong = {**raw, "response": {"output_text": '{"b":[1.0,9007199254740992]}'}}
+    report = session_log.transcript_markdown_export([wrong], [], {}, "Test", [saved])
+    assert "Raw response (acceptance unverified)" in report
+    assert "Reconstructed from saved state" in report
+
+
 def test_transcript_checkpoint_skips_unchanged_large_projection(root: Path) -> None:
     project_file = root / "large.json"
     project_file.write_bytes(b"synthetic checkpoint")
@@ -1755,6 +1800,7 @@ def main() -> None:
         test_transcript_reconciles_saved_steps_without_inventing_history()
         test_transcript_exact_attempt_binding_and_uncertainty()
         test_transcript_unanswered_attempts_and_supervisor_mismatch()
+        test_transcript_content_evidence_preserves_types_and_rejects_malformed()
         test_transcript_checkpoint_skips_unchanged_large_projection(root)
         test_supervisor_gate_requires_saved_pairs_across_parallel_resume(root)
         test_transcript_structured_output_retains_nested_fields_and_redacts_keys()

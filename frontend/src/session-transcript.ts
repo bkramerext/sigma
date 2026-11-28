@@ -23,9 +23,12 @@ export type TranscriptIntervention = {
 export type TranscriptSavedStep = {
   step_id: string; role: string; status: string; strategy_id?: string; round?: number;
   request_id?: string; started_at?: string; finished_at?: string; text?: string;
+  content_digest?: string | null;
   attempt_status?: string; failure_kind?: string; interruption_reason?: string;
   incomplete_reason?: string; reason?: string; partial_text?: string; brainstorm_mode?: boolean;
 };
+/** Disposable server evidence, separate from retained raw events. */
+export type TranscriptResponseEvidence = Record<string, { text: string; content_digest: string | null }>;
 export type TranscriptEntry = {
   id: string; timestamp: string; role: TranscriptRole; title: string;
   text: string; round?: number; strategyId?: string; sequence: number;
@@ -206,6 +209,7 @@ function reviewKey(strategy: string | undefined, turn: number | undefined, messa
 export function projectTranscript(
   events: TranscriptEvent[], interventions: TranscriptIntervention[] = [],
   savedSteps?: TranscriptSavedStep[], sessionStatus?: string,
+  responseEvidence?: TranscriptResponseEvidence,
 ): TranscriptEntry[] {
   const requests = new Map<string, TranscriptEvent>();
   const ambiguousRequests = new Set<string>();
@@ -312,14 +316,18 @@ export function projectTranscript(
       const request = requestFor(event);
       const role = roleOf(event.role ?? request?.role ?? step?.role);
       const failure = event.type === 'provider_failure';
+      const evidence = responseEvidence?.[String(event.seq)];
       const rawText = failure
         ? String(event.provider_error ?? event.message ?? 'Provider call failed.')
-        : readableTranscriptResponse(event.response);
+        : evidence?.text ?? readableTranscriptResponse(event.response);
       const ambiguous = !!event.request_id && ((responseCounts.get(event.request_id) ?? 0) > 1
         || ambiguousRequests.has(event.request_id));
       const recordedFailure = !!event.request_id && failedRequests.has(event.request_id);
+      const contentMatches = step?.content_digest !== undefined || responseEvidence !== undefined
+        ? !!evidence?.content_digest && evidence.content_digest === step?.content_digest
+        : step?.text === rawText;
       const accepted = !failure && !!step && step.status === 'completed' && bound
-        && !ambiguous && !recordedFailure && !!rawText && step.text === rawText;
+        && !ambiguous && !recordedFailure && !!rawText && contentMatches;
       if (step && accepted) represented.add(step);
       // A failure event is not the saved terminal status or its reason. Keep
       // both, and never overwrite raw text with a normalized saved result.

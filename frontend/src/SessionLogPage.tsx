@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './style.css';
 import RenderedMarkdown from './RenderedMarkdown';
-import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry, type TranscriptSavedStep } from './session-transcript';
+import { projectTranscript, groupTranscriptTurns, paginateTranscriptTurns, transcriptDefaultExpanded, convertibleTranscriptEntry, supervisorDisplay, transcriptRoleLabel, formatTranscriptMarkdown, type TranscriptIntervention, type TranscriptEntry, type TranscriptSavedStep, type TranscriptResponseEvidence } from './session-transcript';
 import './session-transcript.css';
 
 type SessionLogEvent = { seq: number; timestamp: string; type: string; request_id?: string; role?: string; round?: number; strategy_id?: string; step_id?: string; status?: string; [key: string]: unknown };
@@ -45,6 +45,7 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
   path: string; sessionId: string; onSessionChange?: (session: SessionState) => void; resetSignal: number;
 }) {
   const [events, setEvents] = useState<SessionLogEvent[]>([]);
+  const [responseEvidence, setResponseEvidence] = useState<TranscriptResponseEvidence | undefined>(undefined);
   const cursor = useRef(0);
   const seen = useRef(new Set<number>());
   const stateVersion = useRef('');
@@ -72,8 +73,8 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
   const [, setError] = useState('');
   const list = useRef<HTMLOListElement>(null);
   const [visibleTurnCount, setVisibleTurnCount] = useState(20);
-  const entries = useMemo(() => projectTranscript(events, interventions, savedSteps, session?.status),
-    [events, interventions, savedSteps, session?.status]);
+  const entries = useMemo(() => projectTranscript(events, interventions, savedSteps, session?.status, responseEvidence),
+    [events, interventions, savedSteps, session?.status, responseEvidence]);
   const convertibleEntries = useRef(new Map<string, string>());
   useEffect(() => {
     convertibleEntries.current = new Map(entries.filter(convertibleTranscriptEntry)
@@ -85,6 +86,7 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
     seen.current.clear();
     stateVersion.current = '';
     setEvents([]);
+    setResponseEvidence(undefined);
     setSavedSteps([]);
     setInterventions([]);
     setSession(null);
@@ -104,10 +106,15 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
         const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(sessionId)}/log?${query}`, { credentials: 'same-origin', signal: controller.signal, headers: { 'X-Sigma-Error-Handled': 'true' } });
         if (!response.ok) throw new Error(response.status === 401 ? 'Sign in to view this session transcript.' : 'This session transcript is unavailable or access was denied.');
         const data = await response.json() as { events: SessionLogEvent[]; cursor: number; short_name: string; project_title: string; project_id?: string; session: SessionState; interventions?: TranscriptIntervention[];
-          transcript_state?: TranscriptSavedStep[]; transcript_state_version?: string };
+          transcript_state?: TranscriptSavedStep[]; transcript_state_version?: string; transcript_responses?: TranscriptResponseEvidence };
         if (!alive) return;
         const fresh = data.events.filter(event => !seen.current.has(event.seq));
         fresh.forEach(event => seen.current.add(event.seq));
+        if (data.transcript_responses !== undefined) {
+          const next = data.transcript_responses;
+          setResponseEvidence(current => Object.keys(next).length || current === undefined
+            ? { ...current, ...next } : current);
+        }
         if (fresh.length) setEvents(current => [...current, ...fresh]);
         cursor.current = Math.max(cursor.current, data.cursor);
         if (data.transcript_state !== undefined) setSavedSteps(data.transcript_state);
