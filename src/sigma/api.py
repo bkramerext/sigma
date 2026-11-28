@@ -845,6 +845,7 @@ class EvidenceLinkRequest(BaseModel):
     path: str
     url: str
     validate_content: bool = False
+    requested_url: str | None = None
 
 
 @app.post("/api/projects/evidence/link")
@@ -854,7 +855,9 @@ def project_evidence_add_link(body: EvidenceLinkRequest):
     if body.validate_content:
         from sigma import research_supplied_evidence
 
-        return research_supplied_evidence.import_link(body.path, body.url)
+        return research_supplied_evidence.import_link(
+            body.path, body.url, requested_url=body.requested_url
+        )
     return project_evidence.add_link(body.path, body.url)
 
 
@@ -871,6 +874,7 @@ class EvidenceLinkEditRequest(BaseModel):
     url: str
     expected_url: str | None = None
     validate_content: bool = False
+    requested_url: str | None = None
 
 
 @app.put("/api/projects/evidence/{evidence_id}/link")
@@ -881,7 +885,11 @@ def project_evidence_edit_link(evidence_id: str, body: EvidenceLinkEditRequest):
         from sigma import research_supplied_evidence
 
         return research_supplied_evidence.import_link(
-            body.path, body.url, identifier=evidence_id, expected_url=body.expected_url
+            body.path,
+            body.url,
+            identifier=evidence_id,
+            expected_url=body.expected_url,
+            requested_url=body.requested_url,
         )
     return project_evidence.edit_link(
         body.path, evidence_id, body.url, expected_url=body.expected_url

@@ -47,8 +47,7 @@ async def check_barrier() -> None:
         assert "example.org/unavailable.txt" in paused["message"]
         assert "source_unavailable" in paused["message"]
         warnings = [
-            event for event in paused["events"]
-            if event["kind"] == "source_material.source_failed"
+            event for event in paused["events"] if event["kind"] == "source_material.source_failed"
         ]
         assert len(warnings) == 1
         assert "example.org/unavailable.txt" in warnings[0]["message"]
@@ -90,7 +89,8 @@ async def check_partial_resume() -> None:
             saved = paused["supplied_evidence_compilation"]["sources"]
             assert saved[0]["status"] == "retrieved" and saved[1]["status"] == "unavailable"
             warnings = [
-                event for event in paused["events"]
+                event
+                for event in paused["events"]
                 if event["kind"] == "source_material.source_failed"
             ]
             assert len(warnings) == 1

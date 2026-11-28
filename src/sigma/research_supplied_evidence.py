@@ -170,8 +170,14 @@ def read_link(url: str, fetched: tuple[bytes, str, str] | None = None) -> dict:
             incomplete_extract=truncated,
             reason=None,
         )
-    except (ValueError, OSError, TimeoutError, ssl.SSLError, http.client.HTTPException,
-            project_evidence.ProjectError) as exc:
+    except (
+        ValueError,
+        OSError,
+        TimeoutError,
+        ssl.SSLError,
+        http.client.HTTPException,
+        project_evidence.ProjectError,
+    ) as exc:
         result["reason"] = str(exc)[:160] or type(exc).__name__
     return result
 
@@ -181,7 +187,7 @@ def _import_member(url: str) -> str:
     return f"artifacts/source_material/imports/{digest}.json"
 
 
-def _imported_payload(path: str, url: str) -> tuple[bytes, str, str] | None:
+def _imported_payload(path: str, url: str) -> tuple[tuple[bytes, str, str], dict] | None:
     raw = project_evidence._read(path, _import_member(url))
     if raw is None:
         return None
@@ -194,7 +200,10 @@ def _imported_payload(path: str, url: str) -> tuple[bytes, str, str] | None:
             and hashlib.sha256(payload).hexdigest() == record["sha256"]
             and record["content_type"] in _SUPPORTED_MEDIA_TYPES
         ):
-            return payload, record["content_type"], record["resolved_url"]
+            return (payload, record["content_type"], record["resolved_url"]), {
+                "retrieved_at": record.get("retrieved_at"),
+                "requested_url": record.get("requested_url", url),
+            }
     except (ValueError, KeyError, TypeError):
         pass
     raise ValueError("imported_source_integrity_failed")
@@ -206,11 +215,15 @@ def import_link(
     *,
     identifier: str | None = None,
     expected_url: str | None = None,
+    requested_url: str | None = None,
 ) -> dict:
     """Validate the same bytes research will read before publishing a link."""
     project_evidence._require_source_editor()
     project_evidence.list_evidence(path)
     canonical = project_evidence._validated_link_url(url)
+    original = requested_url or canonical
+    if len(original) > 2048 or any(ord(char) < 32 for char in original):
+        raise project_evidence.ProjectError("Invalid original Source Material URL.")
     try:
         fetched = _fetch_url(canonical)
     except (ValueError, OSError, http.client.HTTPException) as exc:
@@ -222,6 +235,7 @@ def import_link(
     member = _import_member(canonical)
     record = {
         "url": canonical,
+        "requested_url": original,
         "resolved_url": resolved,
         "content_type": content_type,
         "sha256": hashlib.sha256(payload).hexdigest(),
@@ -332,6 +346,7 @@ def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict
             return {**entry, "status": "unavailable", "reason": str(exc)[:160], "excerpt": ""}
     if entry["id"].startswith("uploaded-link:"):
         fetched = None
+        import_metadata: dict = {}
         snapshot = None
         new_fetch = False
         if session_id is not None:
@@ -354,11 +369,16 @@ def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict
                         and saved["sha256"] == hashlib.sha256(binary).hexdigest()
                     ):
                         fetched = (binary, saved["content_type"], saved["resolved_url"])
+                        import_metadata = saved.get("import_metadata", {})
                 except (ValueError, KeyError, TypeError):
                     pass
             if fetched is None:
                 try:
-                    fetched = _imported_payload(path, entry["url"]) or _fetch_url(entry["url"])
+                    imported = _imported_payload(path, entry["url"])
+                    if imported is None:
+                        fetched = _fetch_url(entry["url"])
+                    else:
+                        fetched, import_metadata = imported
                     new_fetch = True
                 except (
                     ValueError,
@@ -370,10 +390,14 @@ def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict
                     return {**entry, "status": "unavailable", "reason": str(exc)[:160]}
         if session_id is None:
             try:
-                fetched = _imported_payload(path, entry["url"])
+                imported = _imported_payload(path, entry["url"])
+                if imported is not None:
+                    fetched, import_metadata = imported
             except (ValueError, OSError) as exc:
                 return {**entry, "status": "unavailable", "reason": str(exc)[:160]}
         result = read_link(entry["url"], fetched)
+        if result["status"] == "retrieved" and import_metadata:
+            result.update(import_metadata)
         if new_fetch and result["status"] == "retrieved" and snapshot is not None:
             assert fetched is not None
             binary, content_type, resolved = fetched
@@ -389,6 +413,7 @@ def compile_entry(path: str, entry: dict, session_id: str | None = None) -> dict
                                     "resolved_url": resolved,
                                     "content_type": content_type,
                                     "sha256": hashlib.sha256(binary).hexdigest(),
+                                    "import_metadata": import_metadata,
                                 },
                                 sort_keys=True,
                             ).encode(),

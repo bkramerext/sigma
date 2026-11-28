@@ -158,7 +158,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
       const response = await fetch(endpoint, {
         method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
-        body: JSON.stringify({ path, url: candidate, validate_content: true, ...(editingId ? { expected_url: old?.url } : {}) }),
+        body: JSON.stringify({ path, url: candidate, validate_content: true, ...(acceptedUrl && failedUrl && candidate !== failedUrl ? { requested_url: failedUrl } : {}), ...(editingId ? { expected_url: old?.url } : {}) }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not save link.');
@@ -186,7 +186,9 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
         return;
       }
       // End editing before reconciliation so our own edit is not mistaken for a remote change.
-      setRows(current => [...current.filter(row => row.id !== result.entry.id), result.entry]);
+      setRows(current => current.some(row => row.id === result.entry.id)
+        ? current.map(row => row.id === result.entry.id ? { ...row, ...result.entry } : row)
+        : [...current, { ...result.entry, can_remove: true }]);
       setAdding(false); setEditingId(null); editingOriginalUrl.current = null; setUrl('');
       setError(''); setFailedUrl(''); setSearchNote(''); setAlternatives([]);
     } catch (cause) {
@@ -204,6 +206,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.detail ?? 'Could not attach file.');
+      if (adding || editingId) cancelLink();
       await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); if (uploadInput.current) uploadInput.current.value = ''; }
@@ -257,7 +260,7 @@ function SuppliedEvidence({ path, expanded, onToggle, guest, collaborationRevisi
         </div>)}
         <div className="sigma-evidence-import-actions">
           <button type="button" className="text-view-link" onClick={() => void saveLink(failedUrl)}>Retry</button>
-          <button type="button" className="text-view-link" onClick={() => { cancelLink(); uploadInput.current?.click(); }}>Upload PDF</button>
+          <button type="button" className="text-view-link" onClick={() => uploadInput.current?.click()}>Upload PDF</button>
           <button type="button" className="text-view-link" onClick={cancelLink}>Cancel</button>
         </div>
       </div>}
