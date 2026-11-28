@@ -70,4 +70,4 @@
 
 /* The conceptual overview is deliberately narrow and vertical. */
 .home-page .about-research-architecture-figure { max-width: 560px; margin: 14px auto; }
-.home-page .about-research-architecture-diagram { min-width: 380px; max-width: none; }
+.home-page .about-research-architecture-diagram { min-width: 500px; max-width: none; }

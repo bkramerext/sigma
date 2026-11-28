@@ -50,6 +50,49 @@ with sync_playwright() as playwright:
         expect(dialog.get_by_role("button", name="Close", exact=True)).to_be_focused()
         assert len(api_requests) == before, "Opening About made an API request"
         assert dialog.evaluate("element => element.matches(':modal')")
+        # The architecture is a static explanation, separate from provenance.
+        overview = dialog.locator('[data-about-section="researchArchitecture"]')
+        expect(overview).not_to_have_attribute("open", "")
+        overview.locator("summary").click()
+        diagram = overview.get_by_role("img", name="Research architecture and evidence flow")
+        expect(diagram).to_be_visible()
+        expect(diagram.locator("desc")).to_contain_text(
+            "Their contributions return to the persistent record for possible later inquiry."
+        )
+        for label in (
+            "Persistent Research",
+            "Context Selection",
+            "Bounded Research Session",
+            "Investigator",
+            "Skeptic",
+            "Supervisor (optional)",
+            "Current Understanding",
+            "Research Paper",
+            "Save contributions",
+        ):
+            expect(diagram.locator("text").filter(has_text=label)).to_have_count(1)
+        expect(overview).to_contain_text("not a new database or a collection of verified truths")
+        expect(overview).to_contain_text("omitted evidence is not resolved or verified")
+        expect(overview.locator("figcaption")).to_contain_text("architectural direction")
+        expect(overview).to_contain_text("not unbounded autonomous self-direction")
+        expect(overview).to_contain_text("subject to human review")
+        expect(overview.locator("button, a, input")).to_have_count(0)
+        expect(dialog.locator(".about-provenance-disclosure summary")).to_have_text(
+            "Vision for Investigation Provenance"
+        )
+        scrollport = overview.locator(".about-provenance-diagram-scroll")
+        expect(scrollport).to_have_attribute("tabindex", "0")
+        metrics = scrollport.evaluate(
+            "e => ({scroll: e.scrollWidth, client: e.clientWidth})"
+        )
+        width = page.evaluate("innerWidth")
+        if width > 600:
+            assert metrics["scroll"] <= metrics["client"] + 1, metrics
+        else:
+            assert metrics["scroll"] > metrics["client"], metrics
+        scrollport.screenshot(path=f"{screenshots}/sigma-about-research-architecture-{width}.png")
+        overview.locator("summary").click()
+        expect(overview).not_to_have_attribute("open", "")
         return button, dialog
 
     def assert_dialog_fits(viewport_width):
