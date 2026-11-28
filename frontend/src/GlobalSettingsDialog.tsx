@@ -13,10 +13,6 @@ const effortTitles: Record<string, string> = { low: 'Low', medium: 'Medium', hig
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
 const unitMinutes: Record<Exclude<DurationUnit, 'unlimited'>, number> = { minutes: 1, hours: 60, days: 1440 };
 type LimitSettings = {
-  research_rounds: number;
-  turns_per_round: number;
-  scheduler_version: number;
-  model_calls: number;
   session_duration_minutes: number | null;
   output_tokens_per_call: number;
   maximum_estimated_cost_usd: number | null;
@@ -214,7 +210,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       .catch(cause => { if (!controller.signal.aborted) setEthosError(String(cause)); });
     return () => { controller.abort(); element?.removeEventListener("cancel", preventCancel); };
   }, []);
-  const setLimit = (key: Exclude<keyof LimitSettings, 'research_rounds' | 'turns_per_round' | 'scheduler_version' | 'model_calls'>, value: number | string | null) => {
+  const setLimit = (key: keyof LimitSettings, value: number | string | null) => {
     setError(''); setSaved(false);
     setConfig(current => current ? { ...current, limits: { ...current.limits, [key]: value } } : current);
   };
@@ -271,8 +267,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           }
           (limits as any)[field] = value;
         }
-        // Preserve legacy protocol fields from the loaded settings unchanged.
-        // New browser sessions take their turn limit from Session Settings.
         for (const field of ['session_duration_minutes', 'maximum_input_tokens_per_session'] as const) {
           const raw = limits[field] as number | string | null;
           (limits as any)[field] = raw === '' || raw === null ? null : Number(raw);
