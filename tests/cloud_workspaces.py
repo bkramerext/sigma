@@ -747,6 +747,292 @@ def stat_mode(path: Path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
 
 
+def check_private_diagnostic_api(
+    owner: httpx.Client, other: httpx.Client, source: str, source_id: str
+) -> None:
+    """Exercise actual authenticated transfer and Save As with nonempty history."""
+    import base64
+    import hashlib
+    import json
+    import zlib
+
+    from sigma import project_bundle, project_diagnostic_bundle, project_transfer, session_log
+
+    source_path = Path(source)
+    session_id, step_id = str(uuid4()), str(uuid4())
+    strategy = request(owner, "GET", "/api/projects/strategies", params={"path": source}).json()[
+        "strategies"
+    ][0]
+    context = {"context_manifest": {"sources": [{"status": "retrieved"}]}}
+    body = {
+        "model": "fixture-model",
+        "input": json.dumps(context),
+        "instructions": "Synthetic research only.",
+        "store": False,
+    }
+    body_bytes = json.dumps(body, separators=(",", ":")).encode()
+    audit = {
+        "version": 1,
+        "kind": "exact_provider_request_body",
+        "status": "prepared_before_dispatch",
+        "headers_included": False,
+        "encoding": "zlib+base64-json",
+        "request_body_sha256": hashlib.sha256(body_bytes).hexdigest(),
+        "request_body_bytes": len(body_bytes),
+        "request_body_compressed": base64.b64encode(zlib.compress(body_bytes)).decode(),
+    }
+    record = {
+        "schema_version": 1,
+        "id": session_id,
+        "project_id": source_id,
+        "project_path": source,
+        "session_number": 1,
+        "strategy_id": strategy["id"],
+        "strategy_title": strategy["title"],
+        "status": "stopped",
+        "model": "fixture-model",
+        "mode": "mock",
+        "reasoning_effort": "low",
+        "calls_used": 1,
+        "call_limit": 2,
+        "cycle": 1,
+        "cycle_limit": 1,
+        "artifacts": [],
+        "events": [],
+        "strategy_assessments": [],
+        "interventions": [{"id": str(uuid4()), "text": "Check the saved premise."}],
+        "supervisor_reviews": [
+            {
+                "status": "completed",
+                "token_usage": {"input_tokens": 13, "output_tokens": 5},
+            }
+        ],
+        "cost_status": "available",
+        "steps": [
+            {
+                "id": step_id,
+                "role": "investigator",
+                "status": "completed",
+                "strategy_id": strategy["id"],
+                "provider_input_audit": audit,
+                "context_manifest": context["context_manifest"],
+                "token_usage": {"input_tokens": 40, "output_tokens": 12, "total_tokens": 52},
+                "estimated_cost_usd": 0.001,
+            }
+        ],
+    }
+    sessions = source_path / "research-sessions"
+    sessions.mkdir(exist_ok=True)
+    checkpoint = sessions / f"{session_id}.json"
+    checkpoint.write_text(json.dumps(record))
+    before_checkpoint = checkpoint.read_bytes()
+
+    log_context = {"project_id": source_id, "id": session_id, "session_number": 1}
+    response = {
+        "id": "synthetic-response",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Synthetic finding."}],
+            }
+        ],
+        "usage": {"input_tokens": 40, "output_tokens": 12, "total_tokens": 52},
+        "metadata": {"token": "synthetic-transport-secret"},
+    }
+    for event in (
+        {
+            "type": "provider_request",
+            "request_id": "fixture-attempt",
+            "step_id": step_id,
+            "role": "investigator",
+            "request": {**body, "headers": {"Authorization": "Bearer synthetic-header"}},
+        },
+        {
+            "type": "provider_response",
+            "request_id": "fixture-attempt",
+            "step_id": step_id,
+            "response": response,
+            "response_wire": json.dumps(response),
+            "usage": response["usage"],
+            "estimated_cost_usd": 0.001,
+        },
+        {
+            "type": "provider_failure",
+            "request_id": "fixture-retry",
+            "status": "timeout",
+            "elapsed_seconds": 0.5,
+        },
+        {
+            "type": "session_event",
+            "event_kind": "supervisor.review",
+            "role": "supervisor",
+            "message": "Check the evidence.",
+        },
+    ):
+        session_log.append(source, log_context, event)
+    session_log.flush()
+    log_root = source_path.parent / ".sigma-session-logs"
+    source_log = log_root / source_id / f"{session_id}.md"
+    before_log = source_log.read_bytes()
+
+    for endpoint in ("/api/projects/export", "/api/projects/download"):
+        expect_hidden(request(other, "GET", endpoint, params={"path": source, "diagnostics": True}))
+        ordinary = request(owner, "GET", endpoint, params={"path": source}).json()
+        assert "diagnostics" not in ordinary
+    diagnostic = request(
+        owner, "GET", "/api/projects/download", params={"path": source, "diagnostics": True}
+    ).json()
+    archive = diagnostic["diagnostics"]
+    assert len(archive["blobs"]) == 1
+    digest = archive["sessions"][session_id][0]
+    decoded = project_transfer.decode_bundle(diagnostic)
+    raw = decoded[f"{project_diagnostic_bundle.PREFIX}{session_id}/{digest}.bin"]
+    snapshot = json.loads(raw)
+    assert snapshot["availability"] == "retained"
+    assert snapshot["saved_evidence"]["request_audits"] == 1
+    assert snapshot["saved_evidence"]["interventions"] == 1
+    assert snapshot["events"][0]["request"] == body
+    assert snapshot["events"][1]["usage"] == response["usage"]
+    assert snapshot["events"][1]["response"]["output"] == response["output"]
+    assert snapshot["events"][2]["elapsed_seconds"] == 0.5
+    assert snapshot["events"][3]["role"] == "supervisor"
+    assert "security_or_schema_projection" in snapshot["events"][1]["omissions"]
+    assert b"synthetic-header" not in raw and b"synthetic-transport-secret" not in raw
+    assert checkpoint.read_bytes() == before_checkpoint
+    assert source_log.read_bytes() == before_log
+
+    # Public API rejects malformed reserved namespaces and duplicate mappings.
+    malformed = {
+        **ordinary,
+        "files": {**ordinary["files"], "diagnostics/not-a-snapshot.bin": "invalid"},
+    }
+    rejected = request(owner, "POST", "/api/projects/import", json={"bundle": malformed})
+    assert rejected.status_code == 400, rejected.text
+    duplicate = {
+        **diagnostic,
+        "diagnostics": {**archive, "sessions": {session_id: [digest, digest]}},
+    }
+    rejected = request(owner, "POST", "/api/projects/import", json={"bundle": duplicate})
+    assert rejected.status_code == 400, rejected.text
+    imported = request(owner, "POST", "/api/projects/import", json={"bundle": diagnostic})
+    assert imported.status_code == 201, imported.text
+    imported_view = imported.json()
+    target = imported_view["path"]
+    target_id = imported_view["project"]["id"]
+    assert target_id != source_id
+    target_path = Path(target)
+    assert not (log_root / target_id).exists()
+    for endpoint in ("/api/projects/export", "/api/projects/download"):
+        plain = request(owner, "GET", endpoint, params={"path": target}).json()
+        assert "diagnostics" not in plain and not any(
+            name.startswith("diagnostics/") for name in plain["files"]
+        )
+        expect_hidden(request(other, "GET", endpoint, params={"path": target, "diagnostics": True}))
+    again = request(
+        owner, "GET", "/api/projects/export", params={"path": target, "diagnostics": True}
+    ).json()
+    assert again["diagnostics"]["blobs"] == archive["blobs"]
+    target_session = next(iter(again["diagnostics"]["sessions"]))
+    assert target_session != session_id
+    stored = target_path / "research-sessions" / f"{target_session}.json"
+    restored = json.loads(stored.read_text())
+    assert restored["status"] == "stopped" and restored["project_id"] == target_id
+    assert restored["steps"][0]["provider_input_audit"] == audit
+    assert restored["steps"][0]["context_manifest"] == context["context_manifest"]
+    assert restored["interventions"] == record["interventions"]
+    assert restored["supervisor_reviews"] == record["supervisor_reviews"]
+    assert restored["steps"][0]["token_usage"] == record["steps"][0]["token_usage"]
+    passive = target_path / f"{project_diagnostic_bundle.PREFIX}{target_session}/{digest}.bin"
+    assert passive.read_bytes() == raw
+    assert stat_mode(passive) == 0o600
+    assert stat_mode(passive.parent) == 0o700
+    assert stat_mode(passive.parent.parent) == 0o700
+    assert stat_mode(target_path / "diagnostics") == 0o700
+    assert not (log_root / target_id).exists(), "Passive export hydrated a live log"
+    for path, identifier in ((source, session_id), (target, target_session)):
+        saved_session = request(
+            owner, "GET", f"/api/projects/research-sessions/{identifier}", params={"path": path}
+        )
+        assert saved_session.status_code == 200, saved_session.text
+        saved = saved_session.json()
+        assert saved["status"] == "stopped"
+        assert saved["steps"][0]["provider_input_audit"]["request_body"] == body
+        assert saved["steps"][0]["provider_input_audit"]["request_body_sha256"] == (
+            audit["request_body_sha256"]
+        )
+        assert saved["tokens_used"] == 70
+    assert not (log_root / target_id).exists()
+
+    # A trusted internal snapshot is deliberately different from outward transfer.
+    with TemporaryDirectory() as temporary:
+        backup = Path(temporary) / "restored.sigma"
+        project_bundle.restore(project_bundle.snapshot(target_path), backup)
+        restored_passive = backup / passive.relative_to(target_path)
+        assert restored_passive.read_bytes() == raw and stat_mode(restored_passive) == 0o600
+        assert "diagnostics" not in json.loads(project_transfer.export_project(backup))
+
+    # Ordinary historical v4 roundtrip does not attach private evidence.
+    ordinary_import = request(owner, "POST", "/api/projects/import", json={"bundle": plain})
+    assert ordinary_import.status_code == 201, ordinary_import.text
+    ordinary_target = Path(ordinary_import.json()["path"])
+    assert not (ordinary_target / "diagnostics").exists()
+
+    # Actual new recorder events on the imported session can coexist with
+    # passive history. Save As copies both, with distinct live identities.
+    target_context = {"project_id": target_id, "id": target_session, "session_number": 1}
+    session_log.append(
+        target,
+        target_context,
+        {
+            "type": "session_event",
+            "event_kind": "stopped",
+            "project_id": target_id,
+            "session_id": target_session,
+            "message": "New local synthetic history.",
+        },
+    )
+    session_log.flush()
+    target_log = log_root / target_id / f"{target_session}.md"
+    target_log_before = target_log.read_bytes()
+    copied = request(
+        owner, "POST", "/api/projects/save-as", json={"path": target, "title": "Diagnostic copy"}
+    )
+    assert copied.status_code == 201, copied.text
+    copied_view = copied.json()
+    copy_path = Path(copied_view["path"])
+    copy_id = copied_view["project"]["id"]
+    copied_export = request(
+        owner,
+        "GET",
+        "/api/projects/export",
+        params={"path": str(copy_path), "diagnostics": True},
+    ).json()
+    copied_archive = copied_export["diagnostics"]
+    copy_session_id = next(iter(copied_archive["sessions"]))
+    copy_session = copy_path / "research-sessions" / f"{copy_session_id}.json"
+    assert copy_session_id not in {session_id, target_session}
+    assert copy_id not in {source_id, target_id}
+    assert digest in copied_archive["sessions"][copy_session_id]
+    assert copied_archive["blobs"][digest] == archive["blobs"][digest]
+    copy_log = log_root / copy_id / f"{copy_session_id}.md"
+    cloned, _ = session_log._frames(copy_log)
+    assert cloned[0]["project_id"] == copy_id and cloned[0]["session_id"] == copy_session_id
+    assert cloned[0]["message"] == "New local synthetic history."
+    assert json.loads(copy_session.read_text())["steps"][0]["provider_input_audit"] == audit
+    assert target_log.read_bytes() == target_log_before
+    assert passive.read_bytes() == raw and source_log.read_bytes() == before_log
+    plain_copy = request(
+        owner, "GET", "/api/projects/download", params={"path": str(copy_path)}
+    ).json()
+    assert "diagnostics" not in plain_copy
+    expect_hidden(
+        request(other, "GET", "/api/projects/download", params={"path": str(copy_path)})
+    )
+    print("PASS authenticated nonempty diagnostic transfer, private backup and Save As")
+
+
 def main() -> None:
     check_proposal_cancellation_scope()
     with TemporaryDirectory(prefix="sigma-cloud-workspaces-") as temporary:
@@ -858,6 +1144,11 @@ def main() -> None:
                     params={"path": a_path},
                 )
                 assert paper.content.startswith(b"%PDF-1.4") and paper.content.endswith(b"%%EOF\n")
+            with (
+                httpx.Client(base_url=restored.url, headers=identity("subject-a")) as user_a,
+                httpx.Client(base_url=restored.url, headers=identity("subject-b")) as user_b,
+            ):
+                check_private_diagnostic_api(user_b, user_a, b_path, first_b)
         finally:
             restored.stop()
 

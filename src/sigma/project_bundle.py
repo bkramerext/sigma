@@ -479,8 +479,12 @@ def restore_members(files: dict[str, bytes], destination: str | Path) -> None:
         for name, data in files.items():
             target = destination / name
             if private_diagnostic_member(name):
-                (destination / "diagnostics").mkdir(mode=0o700, exist_ok=True)
-                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                # mkdir(parents=True) applies mode only to the final parent.
+                # Every directory in the reserved namespace must be private.
+                private_parent = destination
+                for part in target.parent.relative_to(destination).parts:
+                    private_parent = private_parent / part
+                    private_parent.mkdir(mode=0o700, exist_ok=True)
                 fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                 stream = os.fdopen(fd, "wb")
             else:
@@ -791,6 +795,8 @@ def import_bundle(
     only that internal path skips a second session rekey.
     """
     members = _normalized_import_members(_decode(payload))
+    if any(private_diagnostic_member(name) for name in members):
+        raise BundleError("Private diagnostics require validated v4 transfer")
     _verify_imported_papers(members)
     path = Path(destination)
     if path.suffix != ".json" or path.parent.is_symlink() or not path.parent.is_dir():

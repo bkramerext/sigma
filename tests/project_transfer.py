@@ -259,6 +259,14 @@ def test_private_diagnostic_roundtrip() -> None:
             "files": {**legacy_out["files"], next(iter(passive)): raw.decode()},
         }
         _expect_failure(lambda: project_transfer.decode_bundle(injected))
+        _expect_failure(
+            lambda: project_bundle.import_bundle(injected, root / "legacy-injection.json")
+        )
+        _expect_failure(
+            lambda: project_bundle.import_independent_bundle(
+                injected, root / "independent-injection.json"
+            )
+        )
         invalid = {
             **ordinary,
             "files": {**ordinary["files"], "diagnostics/invalid.bin": "private"},
@@ -266,6 +274,14 @@ def test_private_diagnostic_roundtrip() -> None:
         _expect_failure(lambda: project_transfer.decode_bundle(invalid))
         again = json.loads(project_transfer.export_project(imported, diagnostics=True))
         assert again["diagnostics"]["blobs"] == archive["blobs"]
+        passive_file = next((imported / "diagnostics").rglob("*.bin"))
+        assert passive_file.stat().st_mode & 0o777 == 0o600
+        passive_file.chmod(0o644)
+        try:
+            _expect_failure(lambda: project_transfer.export_project(imported, diagnostics=True))
+            assert "diagnostics" not in json.loads(project_transfer.export_project(imported))
+        finally:
+            passive_file.chmod(0o600)
         assert session_id not in again["diagnostics"]["sessions"]
         assert len(again["diagnostics"]["sessions"]) == 1
         assert not (root / ".sigma-session-logs" / inspect_project(imported).project.id).exists()
@@ -414,6 +430,33 @@ def test_recorder_coverage_and_cross_mapping() -> None:
             },
         }
         _expect_failure(lambda: project_transfer.decode_bundle({**payload, "diagnostics": swapped}))
+        foreign = {**snapshots[first], "source_project_id": str(uuid4())}
+        foreign_raw = project_diagnostic_bundle._json(foreign)
+        foreign_digest = hashlib.sha256(foreign_raw).hexdigest()
+        duplicated = project_diagnostic_bundle.encode(
+            {
+                f"{project_diagnostic_bundle.PREFIX}{current}/{foreign_digest}.bin": foreign_raw
+                for current in (first, missing)
+            }
+        )
+        _expect_failure(
+            lambda: project_transfer.decode_bundle({**payload, "diagnostics": duplicated})
+        )
+        malformed = {**foreign, "source_session_id": "not-a-uuid"}
+        malformed_raw = project_diagnostic_bundle._json(malformed)
+        malformed_digest = hashlib.sha256(malformed_raw).hexdigest()
+        _expect_failure(
+            lambda: project_diagnostic_bundle.encode(
+                {f"{project_diagnostic_bundle.PREFIX}{first}/{malformed_digest}.bin": malformed_raw}
+            )
+        )
+        empty_mapping = {
+            **archive,
+            "sessions": {**archive["sessions"], missing: []},
+        }
+        _expect_failure(
+            lambda: project_transfer.decode_bundle({**payload, "diagnostics": empty_mapping})
+        )
         log = session_log.log_path(str(origin), project_id, first)
         session_log._append_frame(
             log,
@@ -498,6 +541,89 @@ def test_diagnostic_resource_budget() -> None:
     )
 
 
+def test_diagnostic_mixed_entropy_budget() -> None:
+    import random
+    import resource
+    import tracemalloc
+    from uuid import uuid4
+
+    rng = random.Random(928)
+    project_id = str(uuid4())
+    members = {"project.json": json.dumps({"schema_version": 13, "id": project_id}).encode()}
+    passive = {}
+    for _ in range(3):
+        session_id = str(uuid4())
+        members[f"research-sessions/{session_id}.json"] = json.dumps(
+            {"project_id": project_id, "id": session_id}
+        ).encode()
+        # Repeated scientific prose plus deterministic high-entropy mock result.
+        # No actual user or provider bytes are used.
+        text = "Synthetic scientific reasoning. " * 4000
+        result = base64.b64encode(rng.randbytes(160_000)).decode()
+        snapshot = project_diagnostic_bundle._json(
+            {
+                "source_project_id": project_id,
+                "source_session_id": session_id,
+                "availability": "retained",
+                "coverage": "best_effort_not_complete",
+                "saved_evidence": {
+                    "steps": None,
+                    "request_audits": None,
+                    "context_manifests": None,
+                    "strategy_assessments": None,
+                    "interventions": None,
+                    "cost_status": None,
+                },
+                "events": [
+                    {
+                        "type": "provider_request",
+                        "seq": 1,
+                        "request_id": "synthetic",
+                        "request": {"input": text},
+                    },
+                    {
+                        "type": "provider_response",
+                        "seq": 2,
+                        "request_id": "synthetic",
+                        "response": {
+                            "output": [
+                                {
+                                    "type": "message",
+                                    "content": [{"type": "output_text", "text": result}],
+                                }
+                            ],
+                        },
+                    },
+                ],
+            }
+        )
+        digest = hashlib.sha256(snapshot).hexdigest()
+        passive[f"{project_diagnostic_bundle.PREFIX}{session_id}/{digest}.bin"] = snapshot
+    raw_bytes = sum(map(len, passive.values()))
+    rss_before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    tracemalloc.start()
+    try:
+        archive = project_diagnostic_bundle.encode(passive)
+        assert project_diagnostic_bundle.decode(archive, members, budget=raw_bytes) == passive
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    rss_after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    encoded_bytes = len(json.dumps(archive).encode())
+    assert encoded_bytes < raw_bytes
+    assert encoded_bytes > raw_bytes // 4
+    # Reject before entering the compressed-member decoder.
+    with patch.object(project_bundle, "_decode", side_effect=AssertionError("decode entered")):
+        _expect_failure(
+            lambda: project_diagnostic_bundle.decode(archive, members, budget=raw_bytes - 1)
+        )
+    print(
+        f"Diagnostic mixed entropy: 3 snapshots, raw={raw_bytes}, encoded={encoded_bytes}, "
+        f"Python allocation peak={peak}; process RSS high-water before/after="
+        f"{rss_before}/{rss_after} (KiB on Linux, bytes on macOS)"
+    )
+
+
 if __name__ == "__main__":
     test_single_archive_roundtrip()
     test_multiframe_artifact_archive_is_lossless_and_bounded()
@@ -506,4 +632,5 @@ if __name__ == "__main__":
     test_private_diagnostic_roundtrip()
     test_recorder_coverage_and_cross_mapping()
     test_diagnostic_resource_budget()
+    test_diagnostic_mixed_entropy_budget()
     print("PASS v4 artifact archive, source links, restored files and unsafe path rejection.")

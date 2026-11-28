@@ -426,7 +426,8 @@ def read_passive(
                     raise BundleError("Invalid passive diagnostic identity")
                 _add(passive, session_id, raw, budget=budget)
         return passive
-    if base.is_symlink() or not base.is_dir():
+    info = base.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
         raise BundleError("Unsafe passive diagnostic directory")
     total = 0
     for root, dirs, files in os.walk(base, followlinks=False):
@@ -434,8 +435,11 @@ def read_passive(
         if len(relative) > 2 or len(dirs) > MAX_SNAPSHOTS:
             raise BundleError("Unsafe passive diagnostic directory")
         for name in dirs:
+            info = (Path(root) / name).lstat()
             if (
-                (Path(root) / name).is_symlink()
+                not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077
                 or (not relative and name != "private-v1")
                 or (len(relative) == 1 and (not _uuid(name) or name not in session_ids))
                 or len(relative) >= 2
@@ -448,12 +452,24 @@ def read_passive(
             if (
                 session_id not in session_ids
                 or not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077
                 or info.st_size > MAX_SNAPSHOT_BYTES
                 or total + info.st_size > min(budget, MAX_DIAGNOSTIC_BYTES)
                 or len(passive) >= MAX_SNAPSHOTS
             ):
                 raise BundleError("Unsafe or oversized passive diagnostic member")
-            with target.open("rb") as stream:
+            fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as stream:
+                opened = os.fstat(stream.fileno())
+                if (
+                    not stat.S_ISREG(opened.st_mode)
+                    or opened.st_uid != os.geteuid()
+                    or opened.st_mode & 0o077
+                    or (opened.st_dev, opened.st_ino, opened.st_size)
+                    != (info.st_dev, info.st_ino, info.st_size)
+                ):
+                    raise BundleError("Passive diagnostic member changed before read")
                 raw = stream.read(info.st_size + 1)
             if len(raw) != info.st_size or hashlib.sha256(raw).hexdigest() != digest:
                 raise BundleError("Passive diagnostic member changed or failed integrity check")
@@ -515,11 +531,21 @@ def capture(source: Path, members: dict[str, bytes], *, budget: int) -> dict[str
                     or info.st_mode & 0o077
                 ):
                     raise BundleError("Unsafe diagnostic log ownership, permissions or size")
-                frames, _ = session_log._frames(target)
+                frames, observed_size = session_log._frames(target)
+                # The recorder may be in another process. Compare bounded
+                # observations instead of blocking that process on export.
                 with target.open("rb") as stream:
-                    marker_count = sum(line.startswith(b"<!-- SIGMA_EVENT ") for line in stream)
-                if marker_count != len(frames):
+                    raw = stream.read(info.st_size + 1)
+                    after = os.fstat(stream.fileno())
+                marker_count = raw.count(b"\n<!-- SIGMA_EVENT ")
+                if (
+                    marker_count != len(frames)
+                    or observed_size != info.st_size
+                    or len(raw) != info.st_size
+                    or (after.st_size, after.st_mtime_ns) != (info.st_size, info.st_mtime_ns)
+                ):
                     availability = "partial"
+                del raw
                 if len(frames) > MAX_EVENTS:
                     raise BundleError("Too many diagnostic events")
                 remaining = min(budget, MAX_DIAGNOSTIC_BYTES) - sum(map(len, passive.values()))
@@ -603,6 +629,7 @@ def decode(payload: Any, members: dict[str, bytes], *, budget: int) -> dict[str,
         if (
             session_id not in session_ids
             or not isinstance(digests, list)
+            or not digests
             or len(digests) > MAX_SNAPSHOTS
         ):
             raise BundleError("Invalid diagnostic session mapping")

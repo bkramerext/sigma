@@ -2496,12 +2496,18 @@ def export_project_view(path: str):
 @app.get("/api/projects/download")
 def download_project_bundle(path: str, diagnostics: bool = False):
     """Export every project file as one complete, importable JSON bundle."""
+    from sigma.project_bundle import BundleError
     from sigma.project_transfer import export_project
     from sigma.projects import project_path
 
     authorized = project_path(path)
     inspect_project(authorized)
-    content = export_project(authorized, diagnostics=diagnostics)
+    try:
+        content = export_project(authorized, diagnostics=diagnostics)
+    except BundleError as exc:
+        raise ProjectError(f"Cannot export project bundle: {exc}") from exc
+    except OSError as exc:
+        raise ProjectError("Cannot safely read project bundle for export") from exc
     return Response(
         content=content,
         media_type="application/json",
