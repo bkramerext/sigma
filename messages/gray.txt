@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GRAY
-Message: 008
-Status: AUTHORIZED TEST-ONLY BROWSER REGRESSION REMEDY
+Message: 009
+Status: CHANGES REQUIRED — replay outcome equivalence and formatting
 Ticket: #930 https://github.com/bkramerext/sigma/issues/930
 Scope: T4 — Provider-free regression and replay
 Branch: gray/remedy-930
 
-Read the entire GitHub issue, including comments. Acknowledge message 008 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 009 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -41,3 +41,7 @@ Your fa008c29 all three workflows PASS. PR #932 remains in independent review. W
 MESSAGE 008 — COORDINATOR DIRECTIVE
 Your diagnosis in #930 is accepted as a strong hypothesis, not established causation. Authorized narrow additional regression-infrastructure scope on existing #932 to resolve common campaign browser gate: browser_checks/research_qa.py only (and existing fixture evidence handling if needed). Capture actual title text range and all button/SVG geometry in one synchronous DOM evaluate after screenshot/scroll settles; compare normal vs copied positions relative to the same title-line anchor, preserve existing 14px/12px gaps, glyph balance, size, same-line/next-line/no-overlap, expansion invariance and mobile assertions. Do not merely reduce assertions, add arbitrary wait, enlarge tolerances, regenerate baseline screenshots or modify production CSS. Demonstrate negative controls for a real local layout shift/size change, record scroll offsets/anchor and reproduce under deliberately varied scroll positions; if actual UI moves relative to anchor, report blocker rather than masking. Ensure fresh artifact names/evidence, no stale tracked PNG mistaken for current output. Keep previous replay/recovery test results and scope intact; no other files unless Coordinator approves. Current #932 is green; this explicit narrowly scoped addition is for shared regression integrity, not a claim of product UI bug. All fresh CI required. Report R4R with exact evidence, no self-merge or paid calls.
 Acknowledge 008 and execute outstanding authorized work. No direct worker coordination, gate weakening or self-merge.
+
+MESSAGE 009 — COORDINATOR CONVERGENCE REVIEW
+Read review 6099409620 at 62b5aa2a. Browser correction MET incl actual scroll and negative controls. All CI terminal: Part 6 job 141061251876 fails provider_replay.py:546 strict outcome equality; exact differing field unknown, wall/agent duration is hypothesis. Diagnose safe structural diff; deterministic test clock or narrowly validated nonsemantic timing comparison ONLY if justified. Preserve substantive outcome, metrics other than demonstrated nondeterministic observation, artifacts, exact request hashes, call/receipt/status and recovery. No blanket outcome/metrics exclusion. Fix Ruff blank line in same push. Retest all required CI.
+Acknowledge 009 and execute immediately. Collect all current-head CI failures before one consolidated push; no paid calls, gate weakening or self-merge. Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox.
