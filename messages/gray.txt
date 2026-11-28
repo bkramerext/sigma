@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GRAY
-Message: 012
-Status: STAGE 2 — AUTHORIZED SHARED CLOCK CONTRACT
+Message: 013
+Status: CI CORRECTION BATCH
 Ticket: #930 https://github.com/bkramerext/sigma/issues/930
 Scope: T4 — Provider-free regression and replay
 Branch: gray/remedy-930
 
-Read the entire GitHub issue, including comments. Acknowledge message 012 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 013 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -60,3 +60,7 @@ STAGE 2 — CORRECT ONLY AFTER EXPLICIT OPERATOR RELEASE. The operator will wait
 MESSAGE 012 — COORDINATOR STAGE 2 SHARED-CONTRACT DIRECTIVE
 Stage 2 shared-contract correction authorized. Red is assigned the narrow production _provider_attempt_clock() -> float seam on #937, default time.monotonic(), for persisted attempt start/end only. Own replay fixture on #932: use task/lane-local deterministic timing for actual persisted durations via this seam once present in combined source; preserve real dispatch, deadlines, async and IO time, exact full outcome/metrics equality, and strict hashes. Add deliberate timing drift negative assertion; keep tests valid on standalone Gray head without pretending that absent Red seam has been tested (explicit integrated verification pending). Coordinate seam details directly with Red via #932/#937; no other branch edits, no global time patch, no ignored metrics. Consolidate terminal CI failures before any push. Report exact SHA and executed/inspected evidence. No outgoing AR until next operator review round.
 Acknowledge 012 and execute outstanding scoped correction. No self-merge, paid/live calls, new UI, gate weakening or deployment. Report completion on own issue/PR; direct Red/Gray communication for this seam only is authorized.
+
+MESSAGE 013 — COORDINATOR CI OVERSIGHT / OPERATOR BATCHING RULE
+Head 962c287a: all three terminal, SIGMA/browser pass, Ruff formatting-only job 141076369217. Apply exact formatter diff. Integrated Red seam remains UNVERIFIED; preserve exact metrics equality and negative control.
+MANDATORY BATCHING: Before a corrective push, collect every required workflow/job/shard conclusion for the exact current PR head. Inspect all failed job logs, including lint, format, typing and functional/browser checks. Wait for all relevant workflows to reach terminal state; prepare corrections in parallel but do not push intermediate fixes. Consolidate ALL known CI failures and scoped outstanding review corrections into ONE corrective push, run available checks locally first, then report exact head, complete failure inventory, corrections and verification limitations. Do not rerun individual jobs as a substitute for diagnosing a defect. If a workflow is genuinely stuck or unavailable, escalate instead of waiving it. No new outgoing peer AR until operator starts next review round; no self-merge, paid/live calls, new UI, gate weakening or deployment. ACK 013 and execute only the authorized outstanding work; report directly on own issue/PR.
