@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: PURPLE
-Message: 008
-Status: FINAL FORMATTING CORRECTION / PR #936
+Message: 009
+Status: CHANGES REQUIRED — order-independent evidence conflict detection
 Ticket: #447 https://github.com/bkramerext/sigma/issues/447
 Scope: Existing research context provenance contract — first context workstream
 Branch: purple/remedy-447
 
-Read the entire GitHub issue, including comments. Acknowledge message 008 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. First inspect existing #447 implementation and related tests, identify what remains and propose a bounded implementation/contract covering authoritative per-turn evidence, final dispatched context and current peer argument availability. Report cross-worker dependencies involving Blue/Green/Gray to the Coordinator only; do not undertake the entire C-series or change role prompts/scheduler/UI. Report the proposed boundary before invasive shared context changes.
+Read the entire GitHub issue, including comments. Acknowledge message 009 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. First inspect existing #447 implementation and related tests, identify what remains and propose a bounded implementation/contract covering authoritative per-turn evidence, final dispatched context and current peer argument availability. Report cross-worker dependencies involving Blue/Green/Gray to the Coordinator only; do not undertake the entire C-series or change role prompts/scheduler/UI. Report the proposed boundary before invasive shared context changes.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -62,3 +62,7 @@ HANDOFF: GitHub alone must suffice to reconstruct current engineering state: rec
 MESSAGE 008 — COORDINATOR DIRECTIVE
 All ec23c019 workflows terminal: SIGMA all shards/PDF, browser, storage and semantic parity PASS, Ruff lint PASS, format only fails in one file (job 141059370440). Apply exact formatter diagnostic only, unless a material new defect discovered and reported. Preserve substantive implementation, no extra refactor or guard changes. Update PR body with current exact head and latest actual evidence, including residual 844/958 and 523 unchanged, 0/4 invalids and context overhead; no claim of scientific improvement. Fresh CI required; no self-merge, no paid calls. Execute immediately and report R4R.
 Acknowledge 008 and execute outstanding authorized work. No direct worker coordination, gate weakening or self-merge.
+
+MESSAGE 009 — COORDINATOR CONVERGENCE REVIEW
+Read review 6099409509 at 913319ab (all five workflows green). First-representation-only execution comparison misses conflicts across three representations under different artifact keys when first sparse. Make all relevant conflicts order-independent and fail closed; preserve compatible bounded prefixes, actual supplied representation, and distinguish file inspection content/availability. Add permutation negatives and actual validator/closure denial. No broad refactor; retain exact finalized wire/manifest, continuation and parity. Report exact evidence and overhead, no scientific gain claim.
+Acknowledge 009 and execute immediately. Collect all current-head CI failures before one consolidated push; no paid calls, gate weakening or self-merge. Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox.
