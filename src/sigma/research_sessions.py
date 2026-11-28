@@ -63,7 +63,8 @@ from sigma.research_budget import (
 )
 from sigma.research_context_budget import (
     compact_dispatch_context,
-    restrict_obligation_citations_to_supplied_context,
+    finalize_dispatch_evidence,
+    restrict_obligation_citations_to_supplied_context as restrict_obligation_citations_to_supplied_context,
 )
 from sigma.research_epistemics import (
     OUTCOME_POLICY_VERSION,
@@ -71,6 +72,14 @@ from sigma.research_epistemics import (
     execution_provenance,
     objective_obligation_impacts,
     verification_label,
+)
+from sigma.research_evidence_catalog import (
+    EvidenceContext,
+    artifact_permissions,
+    audit_inventory,
+    citable,
+    computation_targets,
+    step_permissions,
 )
 from sigma.research_feedback import ComputationFeedback, validate_feedback
 from sigma.research_method_sources import (
@@ -3877,6 +3886,9 @@ def _transient_failure_kind(exc: Exception) -> str | None:
 
 def _supplied_peer_artifact_ids(context: dict[str, Any]) -> set[str]:
     """Only selected, non-pointer peer extracts may be cited as peer evidence."""
+    catalog = context.get("evidence_catalog")
+    if isinstance(catalog, dict):
+        return citable(catalog["peer"])
     return {
         item["artifact_id"]
         for item in context.get("other_strategy_evidence", [])
@@ -3905,6 +3917,12 @@ def _validate_obligation_review_basis(context: dict[str, Any], review: dict[str,
         supplied_artifacts.update(_supplied_peer_artifact_ids(context))
     current_step = context.get("investigator_step_id")
     supplied_steps = {current_step} if isinstance(current_step, str) else set()
+    catalog = context.get("evidence_catalog")
+    if isinstance(catalog, dict):
+        supplied_artifacts = artifact_permissions(
+            catalog, include_peer=context.get("scheduler_version") == 2
+        )
+        supplied_steps = step_permissions(catalog)
     missing_artifacts = sorted(set(review["basis_artifact_ids"]) - supplied_artifacts)
     missing_steps = sorted(set(review["basis_step_ids"]) - supplied_steps)
     if missing_artifacts or missing_steps:
@@ -4213,6 +4231,11 @@ def _role_input_audit(
         "request_body_sha256": hashlib.sha256(encoded).hexdigest(),
         "request_body_bytes": len(encoded),
         "request_body_compressed": base64.b64encode(zlib.compress(encoded, 9)).decode("ascii"),
+        **(
+            {"evidence_provenance": audit_inventory(context)}
+            if isinstance(context, EvidenceContext) and "evidence_catalog" in context
+            else {}
+        ),
     }
 
 
@@ -8730,7 +8753,7 @@ async def _call_provider(
     )
     if log_context:
         peer_handoffs = context.get("peer_handoffs", [])
-        peer_evidence = context.get("other_strategy_evidence", [])
+        peer_catalog = context.get("evidence_catalog", {}).get("peer", {})
         serialized_request = _serialized_role_request(payload).decode("utf-8")
         session_log.append(
             record["project_path"],
@@ -8752,11 +8775,7 @@ async def _call_provider(
                     for item in peer_handoffs
                     if isinstance(item, dict) and isinstance(item.get("handoff_id"), str)
                 ],
-                "peer_evidence_available": [
-                    item.get("artifact_id")
-                    for item in peer_evidence
-                    if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
-                ],
+                "peer_evidence_available": sorted(_supplied_peer_artifact_ids(context)),
                 "methodology_retrieved_excerpts_in_actual_request": [
                     {
                         "url": item.get("url"),
@@ -8769,12 +8788,11 @@ async def _call_provider(
                     and isinstance(item["retrieval"].get("excerpt"), str)
                     and item["retrieval"]["excerpt"] in serialized_request
                 ],
-                "peer_evidence_in_actual_request": [
-                    item["artifact_id"]
-                    for item in peer_evidence
-                    if isinstance(item, dict)
-                    and isinstance(item.get("artifact_id"), str)
-                    and item["artifact_id"] in serialized_request
+                "peer_evidence_in_actual_request": sorted(_supplied_peer_artifact_ids(context)),
+                "peer_arguments_in_actual_request": [
+                    identifier
+                    for identifier, source in peer_catalog.items()
+                    if source["argument"] != "not_supplied"
                 ],
                 "peer_handoff_artifacts_in_actual_request": [
                     artifact_id
@@ -8784,7 +8802,7 @@ async def _call_provider(
                         item.get("source_artifact_id"),
                         item.get("target_artifact_id"),
                     )
-                    if isinstance(artifact_id, str) and artifact_id in serialized_request
+                    if isinstance(artifact_id, str)
                 ],
                 "provider": "openai",
                 "model": record.get("model"),
@@ -9041,6 +9059,9 @@ async def _call_provider(
         and isinstance(item.get("artifact_id"), str)
         and item.get("evidence_availability") != "pointer_only_original_not_supplied"
     )
+    catalog = context.get("evidence_catalog")
+    if isinstance(catalog, dict):
+        supplied_reasoning_sources = artifact_permissions(catalog, include_peer=True)
     reasoning_items = (
         validated.get("reasoning_steps", [])
         if role == "investigator"
@@ -9077,6 +9098,12 @@ async def _call_provider(
             if isinstance(item, dict)
             and item.get("evidence_availability") != "pointer_only_original_not_supplied"
         }
+        if isinstance(catalog, dict):
+            supplied = {
+                (source["strategy_id"], identifier)
+                for identifier, source in catalog["peer"].items()
+                if identifier in citable(catalog["peer"])
+            }
         seen: set[tuple[str, str]] = set()
         for relation in validated["cross_strategy_relations"]:
             reference = (relation["strategy_id"], relation["artifact_id"])
@@ -9086,6 +9113,8 @@ async def _call_provider(
                 )
             seen.add(reference)
         supplied_own = set(context.get("context_artifact_ids", []))
+        if isinstance(catalog, dict):
+            supplied_own = citable(catalog["own"])
         seen_retractions: set[str] = set()
         for artifact_id in validated["retracted_cross_strategy_source_artifact_ids"]:
             if artifact_id not in supplied_own or artifact_id in seen_retractions:
@@ -9144,7 +9173,13 @@ async def _call_provider(
                 )
             if (
                 review["status"] == "addressed"
-                and not review["basis_step_ids"]
+                and not (
+                    review["basis_step_ids"]
+                    and (
+                        not isinstance(catalog, dict)
+                        or catalog["current_investigator"]["availability"] == "complete"
+                    )
+                )
                 and not any(
                     _usable_addressed_obligation_basis(
                         closure_sources.get(artifact_id),
@@ -9293,7 +9328,9 @@ async def _call(
     return result
 
 
-def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, Any]:
+def _agent_context(
+    record: dict[str, Any], role: str, cycle: int, *, finalize: bool = True
+) -> dict[str, Any]:
     """Deterministic, durable role context; no dependence on provider conversation state."""
     artifacts = record["artifacts"]
     prior_session_findings = record.get("prior_session_findings")
@@ -9379,6 +9416,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         project_id=record.get("project_id"),
         strategy_id=strategy_id,
         prior_obligations=prior_session_obligations,
+        full_omission_ids=True,
         identity_path=record.get("project_path")
         if record.get("obligation_id_format") == "compact-v1"
         else None,
@@ -9501,7 +9539,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "question": record["current_question"],
         # These are deterministic extracts, not replacements for durable originals.
         "prior_artifacts": selected,
-        "prior_session_findings": prior_session_findings,
+        "prior_session_findings": list(prior_session_findings),
         "prior_session_obligations_omitted": relevant_omission_count,
         "prior_session_obligation_omitted_ids": (
             record.get("prior_session_obligation_omitted_ids_by_strategy", {}).get(strategy_id, [])
@@ -9513,7 +9551,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "prior_session_findings_omitted_source_ids": (
             [] if packet else record.get("prior_session_findings_omitted_source_ids", [])
         ),
-        "prior_session_failures": prior_session_failures,
+        "prior_session_failures": list(prior_session_failures),
         "prior_session_failures_omitted": prior_session_failures_omitted,
         "prior_session_failure_omitted_attempt_ids": prior_failure_omitted_attempt_ids,
         "prior_session_failure_attempt_ids": [
@@ -9522,7 +9560,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "obligation_ledger": obligations,
         "incomplete_unresolved_obligation_count": incomplete_unresolved_count,
         "obligation_ledger_omitted_count": omitted_obligation_count,
-        "obligation_ledger_omitted_ids": omitted_obligation_ids,
+        "obligation_ledger_omitted_ids": omitted_obligation_ids[:MAX_CONTEXT_OMISSION_POINTERS],
         "outstanding_obligations": [
             item["text"] for item in obligations if item["status"] == "unresolved"
         ],
@@ -9712,7 +9750,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     }
     manifest["omitted_obligations"] = {
         "count": omitted_obligation_count,
-        "obligation_ids": omitted_obligation_ids,
+        "obligation_ids": omitted_obligation_ids[:MAX_CONTEXT_OMISSION_POINTERS],
         "reason": "recent unresolved obligations take priority; older unresolved and lower-priority dispositions may be omitted from this packet but remain open in saved research",
     }
     manifest["incomplete_unresolved_obligations"] = {
@@ -9758,9 +9796,38 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     # configured UTF-8 budget, even when history fills the context.
     if isinstance(record.get("desired_outcomes"), str) and record["desired_outcomes"]:
         context["desired_outcomes"] = record["desired_outcomes"]
+    dispatch = EvidenceContext(context)
+    dispatch.remember("own", artifacts)
+    dispatch.remember("prior", prior_session_findings)
+    dispatch.original_obligations = [
+        {
+            key: item[key]
+            for key in (
+                "obligation_id",
+                "source_artifact_ids",
+                "source_artifact_count",
+                "source_refs",
+                "source_step_ids",
+                "basis_artifact_ids",
+                "basis_step_ids",
+            )
+            if key in item
+        }
+        for item in obligations
+        if isinstance(item.get("obligation_id"), str)
+    ]
+    dispatch.omission_metadata = {
+        key: deepcopy(value) for key, value in manifest.items() if key.startswith("omitted_")
+    }
+    dispatch.omission_metadata["obligation_ledger"] = {
+        "count": omitted_obligation_count,
+        "ids": omitted_obligation_ids,
+        "reason": "bounded obligation selection; saved originals retained",
+    }
+    context = dispatch
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
-    # Preserve durable lineage but do not offer omitted evidence as citable.
-    restrict_obligation_citations_to_supplied_context(context)
+    if finalize:
+        finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -10021,6 +10088,7 @@ def _obligation_ledger(
     strategy_id: Any = None,
     prior_obligations: list[dict[str, Any]] | None = None,
     unbounded_for_admission: bool = False,
+    full_omission_ids: bool = False,
     identity_path: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, list[str]]:
     """Apply obligation events chronologically; missing later notes do not resolve."""
@@ -10354,7 +10422,10 @@ def _obligation_ledger(
     return (
         selected,
         len(omitted),
-        [item["obligation_id"] for item in omitted[:MAX_CONTEXT_OMISSION_POINTERS]],
+        [
+            item["obligation_id"]
+            for item in (omitted if full_omission_ids else omitted[:MAX_CONTEXT_OMISSION_POINTERS])
+        ],
     )
 
 
@@ -10693,7 +10764,31 @@ def _select_context_artifacts(
         # Repeated restatements are supporting history, not 32 mandatory
         # artifacts. Preserve origin and latest material support, while the
         # ledger retains the complete bounded pointer/count accounting.
-        chosen = list(dict.fromkeys(sources[:1] + sources[-2:]))
+        # Prefer a whole visible saved derivation over another recent
+        # repetition of the same obligation. This is a representation check,
+        # not acceptance of the argument's correctness.
+        structured = next(
+            (
+                identifier
+                for identifier in reversed(sources)
+                if not by_id[identifier].get("retracted_by_artifact_ids")
+                and isinstance(by_id[identifier].get("reasoning_steps"), list)
+                and by_id[identifier]["reasoning_steps"]
+                and all(
+                    isinstance(step, dict)
+                    and isinstance(step.get("argument"), str)
+                    and step["argument"].strip()
+                    for step in by_id[identifier]["reasoning_steps"]
+                )
+                and _json_bytes(by_id[identifier]["reasoning_steps"]) <= 20_000
+            ),
+            None,
+        )
+        chosen = list(
+            dict.fromkeys(
+                sources[:1] + ([structured] + sources[-1:] if structured else sources[-2:])
+            )
+        )
         unresolved_source_ids.update(chosen)
         omitted_sources = [source for source in sources if source not in chosen]
         omitted_source_count = max(
@@ -10750,7 +10845,18 @@ def _select_context_artifacts(
     if mandatory_bytes > MAX_AGENT_CONTEXT_BYTES // 2:
         # Keep recent decisive material in full where possible. Older sources
         # become pointer-only, not silently truncated or treated as reviewed.
-        for index, item in enumerate(selected):
+        indices = sorted(
+            range(len(selected)),
+            key=lambda index: (
+                _artifact_is_critical(by_id[selected[index]["id"]]),
+                bool(selected[index].get("reasoning_steps"))
+                and not selected[index].get("extract_truncated_fields"),
+                index == len(selected) - 1,
+                index,
+            ),
+        )
+        for index in indices:
+            item = selected[index]
             if mandatory_bytes <= MAX_AGENT_CONTEXT_BYTES // 2:
                 break
             pointer = {
@@ -10843,40 +10949,18 @@ def _select_context_artifacts(
 
 
 def _computation_citation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
-    targets: list[dict[str, Any]] = []
-
-    def add(artifact_id: Any, value: Any) -> None:
-        if isinstance(value, dict) and isinstance(value.get("id"), str):
-            targets.append({"research_artifact_id": artifact_id, "execution": value})
-
-    def add_research_artifact(artifact: Any) -> None:
-        if not isinstance(artifact, dict):
-            return
-        output = artifact.get("investigator_output")
-        if isinstance(output, dict):
-            for field in ("python_execution", "sage_execution"):
-                add(artifact.get("id"), output.get(field))
-
-    for finding in context.get("prior_session_findings", []):
-        if not isinstance(finding, dict):
-            continue
-        for field in ("python_execution", "sage_execution"):
-            add(finding.get("id"), finding.get(field))
-    for artifact in context.get("prior_artifacts", []):
-        add_research_artifact(artifact)
-    for peer in context.get("other_strategy_evidence", []):
-        if isinstance(peer, dict):
-            for field in ("python_execution", "sage_execution"):
-                add(peer.get("artifact_id"), peer.get(field))
-    pending = context.get("investigator_output")
-    if isinstance(pending, dict):
-        for field in ("python_execution", "sage_execution"):
-            add(None, pending.get(field))
-    unique: dict[tuple[Any, str], dict[str, Any]] = {}
-    for target in targets:
-        execution = target["execution"]
-        unique[(target["research_artifact_id"], execution["id"])] = target
-    return list(unique.values())
+    targets = computation_targets(context)
+    catalog = context.get("evidence_catalog")
+    if not isinstance(catalog, dict):
+        return targets
+    allowed = {
+        (item["artifact_id"], item["execution_id"]) for item in catalog["computations"]
+    }
+    return [
+        item
+        for item in targets
+        if (item["research_artifact_id"], item["execution"]["id"]) in allowed
+    ]
 
 
 def _validate_computation_citations(
@@ -11084,8 +11168,40 @@ def _execution_with_inspections(
     return result
 
 
+def _peer_argument_extract(artifact: dict[str, Any]) -> dict[str, Any]:
+    """Bound accepted saved arguments, not in-flight or hidden reasoning."""
+    investigation = artifact.get("investigator_output")
+    investigation = investigation if isinstance(investigation, dict) else {}
+    steps = artifact.get("reasoning_steps") or investigation.get("reasoning_steps")
+    rows = steps if isinstance(steps, list) else []
+    indices = sorted({0, len(rows) // 2, len(rows) - 1}) if rows else []
+    supplied = [
+        {
+            "original_position": index + 1,
+            "title": _bounded_note(rows[index].get("title"), 150),
+            "argument": _bounded_note(rows[index].get("argument"), 700),
+        }
+        for index in indices
+        if isinstance(rows[index], dict)
+        and isinstance(rows[index].get("argument"), str)
+        and rows[index]["argument"].strip()
+    ]
+    return {
+        "method": _bounded_note(artifact.get("method") or investigation.get("method"), 800),
+        "reasoning_steps": supplied,
+        "reasoning_steps_total": len(rows),
+        "reasoning_steps_omitted": len(rows) - len(supplied),
+        "qualification": "Bounded saved peer argument, unverified; omitted details not supplied.",
+    }
+
+
 def _portfolio_context(
-    record: dict[str, Any], branch: dict[str, Any], role: str, cycle: int
+    record: dict[str, Any],
+    branch: dict[str, Any],
+    role: str,
+    cycle: int,
+    *,
+    finalize: bool = True,
 ) -> dict[str, Any]:
     strategy_id = branch["strategy_id"]
     branch_artifacts = [
@@ -11107,7 +11223,7 @@ def _portfolio_context(
         "pending_investigation": branch.get("pending_investigation"),
         "protocol_completion_recovery": branch.get("protocol_completion_recovery"),
     }
-    context = _agent_context(branch_record, role, cycle)
+    context = _agent_context(branch_record, role, cycle, finalize=False)
     recipient = "ai_1" if role == "investigator" else "ai_2"
     # Supervisor notes are delivered to the intended recipient's NEXT role
     # turn only. Never include private assessments or breakthrough scoring.
@@ -11152,6 +11268,10 @@ def _portfolio_context(
         artifact for artifact in record["artifacts"] if artifact.get("strategy_id") != strategy_id
     ]
     peer_artifacts, omitted_peer_ids = _select_peer_artifacts(peer_candidates)
+    latest_peer_by_strategy = {
+        artifact["strategy_id"]: artifact["id"] for artifact in peer_candidates
+    }
+    current_peer_ids = set(latest_peer_by_strategy.values())
     context["other_strategy_evidence"] = [
         {
             "artifact_id": artifact["id"],
@@ -11162,6 +11282,12 @@ def _portfolio_context(
             "assumptions": _bounded_notes(artifact.get("assumptions"), 6, 250),
             "claim_or_question": _bounded_note(artifact.get("claim_or_question"), 500),
             "evidence_status": _bounded_note(artifact.get("evidence_status"), 200),
+            "current_peer_argument": artifact["id"] in current_peer_ids,
+            **(
+                {"argument_extract": _peer_argument_extract(artifact)}
+                if artifact["id"] in current_peer_ids or _artifact_is_critical(artifact)
+                else {}
+            ),
             "python_execution": _peer_python_evidence(
                 artifact, project_path_value=record.get("project_path")
             ),
@@ -11236,9 +11362,14 @@ def _portfolio_context(
         )
         if handoff_group is not None:
             context["context_manifest"]["sources"].append(handoff_group)
+    if isinstance(context, EvidenceContext):
+        context.remember("peer", peer_candidates)
+        context.omission_metadata["omitted_peer_evidence"] = deepcopy(
+            context["context_manifest"]["omitted_peer_evidence"]
+        )
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
-    # Preserve durable lineage but do not offer omitted evidence as citable.
-    restrict_obligation_citations_to_supplied_context(context)
+    if finalize:
+        finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
     context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
     _bound_context_manifest(context["context_manifest"])
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -12367,7 +12498,7 @@ async def _portfolio_role_call(
             ):
                 return False
             try:
-                context = _portfolio_context(record, branch, role, cycle)
+                context = _portfolio_context(record, branch, role, cycle, finalize=False)
                 clipped_prior_attempts = sum(
                     step.get("status") == "incomplete"
                     and step.get("incomplete_reason") == "max_output_tokens"
@@ -12390,6 +12521,7 @@ async def _portfolio_role_call(
                 if guidance_group is not None:
                     context["context_manifest"]["sources"].append(guidance_group)
                 compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
+                finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
                 context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
                 _bound_context_manifest(context["context_manifest"])
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
@@ -17817,7 +17949,7 @@ async def _worker(session_id: str, path: str) -> None:
                 return
             cycle_num = len(record["artifacts"]) + 1
             role = "investigator" if record.get("pending_investigation") is None else "skeptic"
-            context = _agent_context(record, role, cycle_num)
+            context = _agent_context(record, role, cycle_num, finalize=False)
             context["execution_tools"] = [
                 {
                     **tool,
@@ -17837,6 +17969,7 @@ async def _worker(session_id: str, path: str) -> None:
             if guidance_group is not None:
                 context["context_manifest"]["sources"].append(guidance_group)
             compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
+            finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
             context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
             _bound_context_manifest(context["context_manifest"])
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:

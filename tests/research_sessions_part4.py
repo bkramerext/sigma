@@ -4580,6 +4580,189 @@ def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None
     assert research_sessions._affordable_portfolio_branches(queued[1:], 1, 0)[0] == []
 
 
+
+def test_final_evidence_catalog_after_guidance_compaction() -> None:
+    """The final packet is the only evidence authority, including peer duplicates."""
+    from sigma.research_evidence_catalog import (
+        EvidenceContext,
+        artifact_permissions,
+        build_catalog,
+        step_permissions,
+    )
+
+    original = {
+        "obligation_id": "open",
+        "status": "unresolved",
+        "text": "Resolve the boundary.",
+        "source_artifact_ids": ["old", "peer", "approved", "omitted"],
+        "source_artifact_count": 4,
+        "basis_artifact_ids": ["old", "peer", "approved", "omitted"],
+        "source_step_ids": ["historical-step", "current-step"],
+        "source_refs": [
+            {"artifact_id": identifier}
+            for identifier in ("old", "peer", "approved", "omitted")
+        ],
+    }
+    current = {"claim": "Current candidate", "method": "Current argument"}
+    context = EvidenceContext(
+        {
+            "scheduler_version": 2,
+            "context_manifest": {"sources": []},
+            "context_artifact_ids": ["old"],
+            "prior_session_artifact_ids": ["approved"],
+            "prior_artifacts": [{"id": "old", "method": "x" * 8000}],
+            "prior_session_findings": [
+                {
+                    "id": "approved",
+                    "evidence_availability": "pointer_only_original_not_supplied",
+                }
+            ],
+            "obligation_ledger": [deepcopy(original)],
+            "investigator_step_id": "current-step",
+            "investigator_output": current,
+            "approved_continuation": {
+                "sources": [
+                    {
+                        "artifact_id": "approved",
+                        "artifact": {"id": "approved", "method": "Frozen complete argument"},
+                    }
+                ]
+            },
+        }
+    )
+    context.remember("own", [{"id": "old"}, {"id": "omitted"}])
+    context.original_obligations = [deepcopy(original)]
+    # The base builder must not discard a peer ID before the peer is attached.
+    assert research_sessions.compact_dispatch_context(context, limit=30_000)
+    assert context["obligation_ledger"][0]["basis_artifact_ids"] == original["basis_artifact_ids"]
+    context["other_strategy_evidence"] = [
+        {
+            "artifact_id": "peer",
+            "strategy_id": "independent-strategy",
+            "claim_or_question": "Peer candidate",
+            "argument_extract": {
+                "reasoning_steps": [{"argument": "Visible saved argument"}],
+            },
+            "python_execution": {
+                "id": "supplied-execution",
+                "status": "completed",
+                "stdout": "bounded observation",
+            },
+        },
+        {
+            "artifact_id": "peer-pointer",
+            "strategy_id": "independent-strategy",
+            "evidence_availability": "pointer_only_original_not_supplied",
+            "python_execution": {"id": "hidden-execution", "status": "failed"},
+        },
+    ]
+    context["human_guidance"] = [{"text": "g" * 1000}]
+    research_sessions.finalize_dispatch_evidence(context, limit=6000)
+    catalog = context["evidence_catalog"]
+    assert catalog == build_catalog(context)
+    assert catalog["version"] == 1
+    assert catalog["own"]["old"]["availability"] == "pointer_only"
+    assert catalog["prior"]["approved"]["availability"] == "pointer_only"
+    assert catalog["continuation"]["approved"]["availability"] == "complete"
+    assert catalog["peer"]["peer"]["argument"] == "structured"
+    assert catalog["peer"]["peer-pointer"]["availability"] == "pointer_only"
+    assert artifact_permissions(catalog, include_peer=True) == {"approved", "peer"}
+    assert artifact_permissions(catalog, include_peer=False) == {"approved"}
+    assert step_permissions(catalog) == {"current-step"}
+    assert context["context_artifact_ids"] == []
+    assert context["prior_session_artifact_ids"] == ["approved"]
+    assert context["obligation_ledger"][0]["basis_artifact_ids"] == ["peer", "approved"]
+    assert context["obligation_ledger"][0]["supplied_source_artifact_ids"] == ["peer", "approved"]
+    assert context["obligation_ledger"][0]["source_step_ids"] == ["current-step"]
+    assert context["obligation_ledger"][0]["unsupplied_source_artifact_count"] == 2
+    assert research_sessions._json_bytes(context) <= 6000
+    assert context.original_obligations == [original]
+    assert current == {"claim": "Current candidate", "method": "Current argument"}
+
+    review = {
+        "obligation_id": "open",
+        "basis_artifact_ids": ["peer", "approved"],
+        "basis_step_ids": ["current-step"],
+    }
+    research_sessions._validate_obligation_review_basis(context, review)
+    for unavailable in ("old", "omitted", "peer-pointer"):
+        try:
+            research_sessions._validate_obligation_review_basis(
+                context, {**review, "basis_artifact_ids": [unavailable]}
+            )
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError(f"Unavailable evidence accepted: {unavailable}")
+    assert [
+        item["execution"]["id"] for item in research_sessions._computation_citation_targets(context)
+    ] == ["supplied-execution"]
+    assert catalog["computations"][0]["evidence"] == ["output"]
+
+    record = {"model": MODEL, "reasoning_effort": "high", "mode": "chatgpt"}
+    payload = research_sessions._role_request_payload(record, "skeptic", context)
+    exact = json.loads(payload["input"][0]["content"])
+    assert exact["evidence_catalog"] == catalog
+    audit = research_sessions._role_input_audit(record, "skeptic", context, None)
+    assert audit["evidence_provenance"]["original_obligation_references"] == [original]
+    assert audit["evidence_provenance"]["omitted"]["own"]["ids"] == ["omitted"]
+    research_sessions._expand_role_input_audit(audit)
+    assert audit["request_body"] == payload
+    assert "original_obligation_references" not in exact
+    saved = {
+        "steps": [
+            {
+                "id": "step",
+                "status": "running",
+                "role": "skeptic",
+                "provider_input_audit": audit,
+            }
+        ]
+    }
+    research_sessions._assert_saved_role_input_matches(saved, "skeptic", payload, "step")
+    # Distinct project/attempt inventories must never leak through shared state.
+    another = EvidenceContext(
+        {"context_manifest": {"sources": []}, "prior_artifacts": [{"id": "other", "claim": "Other"}]}
+    )
+    research_sessions.finalize_dispatch_evidence(another, limit=6000)
+    assert artifact_permissions(another["evidence_catalog"], include_peer=True) == {"other"}
+    assert "other" not in artifact_permissions(catalog, include_peer=True)
+    legacy = research_sessions._role_input_audit(record, "skeptic", {"problem": "Old"}, None)
+    assert "evidence_provenance" not in legacy
+
+
+def test_peer_argument_extract_is_bounded_and_attributed() -> None:
+    from sigma.research_evidence_catalog import build_catalog
+
+    artifact = {
+        "id": "peer",
+        "strategy_id": "peer-strategy",
+        "method": "Saved method",
+        "reasoning_steps": [
+            {"title": f"Step {index}", "argument": f"Visible {index} " + "a" * 900}
+            for index in range(10)
+        ],
+        "private_supervisor_assessment": "must not be supplied",
+    }
+    original = deepcopy(artifact)
+    extract = research_sessions._peer_argument_extract(artifact)
+    assert extract["reasoning_steps_total"] == 10
+    assert extract["reasoning_steps_omitted"] == 7
+    assert [step["original_position"] for step in extract["reasoning_steps"]] == [1, 6, 10]
+    assert all("truncated" in step["argument"] for step in extract["reasoning_steps"])
+    assert "must not be supplied" not in json.dumps(extract)
+    assert original == artifact
+    catalog = build_catalog(
+        {"other_strategy_evidence": [{"artifact_id": "peer", "argument_extract": extract}]}
+    )
+    assert catalog["peer"]["peer"]["argument"] == "structured"
+    assert catalog["peer"]["peer"]["availability"] == "extract"
+    assert catalog["current_investigator"]["availability"] == "omitted"
+    assert build_catalog({"investigator_step_id": "historical"})["current_investigator"][
+        "step_id"
+    ] is None
+
+
 if __name__ == "__main__":
     from research_sessions_split_runner import run
 

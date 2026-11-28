@@ -10,6 +10,16 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from sigma.research_evidence_catalog import (
+    POINTER,
+    Catalog,
+    EvidenceContext,
+    artifact_permissions,
+    build_catalog,
+    citable,
+    step_permissions,
+)
+
 
 def _bytes(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
@@ -358,7 +368,13 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
             item = items[index]
             return isinstance(item, dict) and item.get(key) in ids
 
-        indices = sorted(range(len(rows)), key=lambda i: (is_material(i), i))
+        def has_current_peer_argument(index: int, *, items: list[Any] = rows) -> bool:
+            row = items[index]
+            return isinstance(row, dict) and row.get("current_peer_argument") is True
+
+        indices = sorted(
+            range(len(rows)), key=lambda i: (is_material(i), has_current_peer_argument(i), i)
+        )
         for index in indices:
             entry = entries[index]
             if _bytes(context) <= limit:
@@ -421,7 +437,12 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
             for item_id in context.get("prior_session_artifact_ids", [])
             if item_id not in pointer_findings or item_id in approved_ids
         ]
-    for obligation in context.get("obligation_ledger", []):
+    # Real dispatch assembly retains original references until finalization.
+    # Keep the historical standalone compactor behavior for plain contexts.
+    obligations = (
+        [] if isinstance(context, EvidenceContext) else context.get("obligation_ledger", [])
+    )
+    for obligation in obligations:
         if not isinstance(obligation, dict):
             continue
         supplied_ids = obligation.get("supplied_source_artifact_ids", [])
@@ -505,7 +526,9 @@ def compact_dispatch_context(context: dict[str, Any], *, limit: int) -> bool:
     return _bytes(context) <= limit
 
 
-def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -> None:
+def restrict_obligation_citations_to_supplied_context(
+    context: dict[str, Any], catalog: Catalog | None = None
+) -> None:
     """Keep dispatch-only obligation references inside the actual evidence allowlist.
 
     The authoritative session ledger and original artifacts are untouched.
@@ -533,12 +556,27 @@ def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -
         )
     current_step = context.get("investigator_step_id")
     allowed_steps = {current_step} if isinstance(current_step, str) else set()
+    if catalog is not None:
+        allowed_artifacts = artifact_permissions(
+            catalog, include_peer=context.get("scheduler_version") == 2
+        )
+        allowed_steps = step_permissions(catalog)
     ledger = context.get("obligation_ledger")
     if not isinstance(ledger, list):
         return
     for obligation in ledger:
         if not isinstance(obligation, dict):
             continue
+        if catalog is not None:
+            # The early projection cannot know which peer or continuation
+            # source will be supplied; derive this list from original IDs now.
+            source_ids = obligation.get("source_artifact_ids", [])
+            if isinstance(source_ids, list):
+                obligation["supplied_source_artifact_ids"] = [
+                    identifier
+                    for identifier in source_ids
+                    if isinstance(identifier, str) and identifier in allowed_artifacts
+                ]
         for field in (
             "source_artifact_ids",
             "basis_artifact_ids",
@@ -583,3 +621,63 @@ def restrict_obligation_citations_to_supplied_context(context: dict[str, Any]) -
             "withheld_pointer_source_count", 0
         ):
             obligation["source_artifact_availability"] = "incomplete_extract_original_not_supplied"
+
+
+def finalize_dispatch_evidence(context: dict[str, Any], *, limit: int) -> None:
+    """Finalize the dispatch-only evidence contract, after all guidance/tools.
+
+    Include catalog bytes in compaction. A bounded number of passes is enough
+    to account for pointer substitutions without accumulating nested catalogs.
+    The caller applies the existing hard byte guard after manifest accounting.
+    """
+    catalog = build_catalog(context)
+    for _ in range(3):
+        context["evidence_catalog"] = catalog
+        if _bytes(context) <= limit:
+            break
+        before = _bytes(context)
+        compact_dispatch_context(context, limit=limit)
+        catalog = build_catalog(context)
+        if _bytes(context) >= before:
+            break
+    context["evidence_catalog"] = catalog
+    if not step_permissions(catalog):
+        context.pop("investigator_step_id", None)
+    own = citable(catalog["own"])
+    prior = citable(catalog["prior"]) | citable(catalog["continuation"])
+    context["context_artifact_ids"] = [
+        identifier for identifier in catalog["own"] if identifier in own
+    ]
+    context["prior_session_artifact_ids"] = [
+        identifier
+        for identifier in dict.fromkeys([*catalog["prior"], *catalog["continuation"]])
+        if identifier in prior
+    ]
+    restrict_obligation_citations_to_supplied_context(context, catalog)
+    # Historical reference records are audit lineage, not citation candidates.
+    # Their original values are retained in the out-of-band inventory.
+    allowed = artifact_permissions(catalog, include_peer=context.get("scheduler_version") == 2)
+
+    def visible_refs(refs: list[Any]) -> list[Any]:
+        return [ref for ref in refs if isinstance(ref, dict) and ref.get("artifact_id") in allowed]
+
+    dictionary = context.get("obligation_ledger_dictionary")
+    if isinstance(dictionary, dict) and isinstance(dictionary.get("source_refs"), list):
+        dictionary["source_refs"] = [
+            visible_refs(refs) if isinstance(refs, list) else []
+            for refs in dictionary["source_refs"]
+        ]
+    for obligation in context.get("obligation_ledger", []):
+        if not isinstance(obligation, dict):
+            continue
+        refs = obligation.get("source_refs")
+        if isinstance(refs, list):
+            obligation["source_refs"] = visible_refs(refs)
+        if obligation.get("status") == "unresolved" and not (
+            obligation.get("supplied_source_artifact_ids")
+            or obligation.get("source_step_ids")
+            or obligation.get("basis_artifact_ids")
+            or obligation.get("basis_step_ids")
+        ):
+            obligation["source_artifact_availability"] = POINTER
+            obligation["evidence_review_status"] = "no_supplied_basis; investigate or defer"
