@@ -250,15 +250,10 @@ def _sources(rows: list[dict[str, Any]], key: str, *, complete: bool = False) ->
         elif (
             previous["availability"] == "pointer_only" and source["availability"] != "pointer_only"
         ):
-            if previous["strategy_id"] not in (None, source["strategy_id"]):
-                source["conflicted"] = True
+            source["conflicted"] = previous["conflicted"]
             result[identifier] = source
             originals[identifier] = row
-        elif (
-            source["availability"] != "pointer_only"
-            and row != originals[identifier]
-            or source["strategy_id"] not in (None, previous["strategy_id"])
-        ):
+        elif source["availability"] != "pointer_only" and row != originals[identifier]:
             previous["conflicted"] = True
     return result
 
@@ -279,9 +274,15 @@ def _groups(context: dict[str, Any]) -> dict[Category, dict[str, Source]]:
         for category, rows in raw.items()
     }
     exact_claims: dict[str, set[str]] = {}
+    explicit_strategies: dict[str, set[str]] = {}
     for category, rows in raw.items():
         for row in rows:
             identifier = row.get("artifact_id" if category == "peer" else "id")
+            strategy = row.get("strategy_id")
+            # Record every explicit identity, including replaced pointers.
+            # Missing metadata is unknown, not a contradictory identity.
+            if isinstance(identifier, str) and isinstance(strategy, str) and strategy:
+                explicit_strategies.setdefault(identifier, set()).add(strategy)
             claim = row.get("claim_or_question") or row.get("claim")
             if (
                 isinstance(identifier, str)
@@ -298,7 +299,7 @@ def _groups(context: dict[str, Any]) -> dict[Category, dict[str, Source]]:
         for identifier, source in sources.items():
             by_id.setdefault(identifier, []).append((category, source))
     for identifier, rows in by_id.items():
-        strategies = {source["strategy_id"] for _, source in rows if source["strategy_id"]}
+        strategies = explicit_strategies.get(identifier, set())
         categories = {category for category, _ in rows}
         if (
             len(strategies) > 1
@@ -445,6 +446,58 @@ def _compatible_inspections(first: dict[str, Any], second: dict[str, Any]) -> bo
     return _compatible_text(a, b, "representation", "truncated")
 
 
+def _consistent_execution_files(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    """Check explicit inspection provenance against every supplied file manifest.
+
+    Absent metadata remains unknown; contradictions or duplicate manifest
+    filenames make the execution unsafe to cite, including under another alias.
+    """
+    manifests: list[dict[str, dict[str, Any]] | None] = []
+    for execution in (first, second):
+        manifest: dict[str, dict[str, Any]] = {}
+        for item in _rows(execution.get("artifacts")):
+            filename = item.get("filename")
+            if not isinstance(filename, str) or not filename.strip():
+                continue
+            if filename in manifest:
+                return False
+            manifest[filename] = item
+        manifests.append(manifest if isinstance(execution.get("artifacts"), list) else None)
+    for execution in (first, second):
+        for flag in ("stdout_truncated", "stderr_truncated"):
+            if flag in execution and type(execution[flag]) is not bool:
+                return False
+        for item in _rows(execution.get("artifact_inspections")):
+            identity = item.get("execution_id")
+            if identity is not None and identity != execution.get("id"):
+                return False
+            inspection = item.get("inspection")
+            if not isinstance(inspection, dict):
+                continue
+            if "truncated" in inspection and type(inspection["truncated"]) is not bool:
+                return False
+            filename = item.get("filename")
+            if not isinstance(filename, str):
+                continue
+            for manifest in manifests:
+                if manifest is None:
+                    continue
+                saved = manifest.get(filename)
+                if saved is None:
+                    # An available result must not claim a file absent from
+                    # a supplied manifest. An omitted preview is not a result.
+                    if inspection.get("status") == "available":
+                        return False
+                    continue
+                for field in ("sha256", "size_bytes", "media_type"):
+                    actual, expected = item.get(field), saved.get(field)
+                    if actual is not None and expected is not None and (
+                        type(actual) is not type(expected) or actual != expected
+                    ):
+                        return False
+    return True
+
+
 def _compatible_executions(first: dict[str, Any], second: dict[str, Any]) -> bool:
     for field in (
         "status",
@@ -467,6 +520,8 @@ def _compatible_executions(first: dict[str, Any], second: dict[str, Any]) -> boo
         if not _compatible_text(first, second, field, f"{field}_truncated"):
             return False
     if "artifacts" in first and "artifacts" in second and first["artifacts"] != second["artifacts"]:
+        return False
+    if not _consistent_execution_files(first, second):
         return False
     # Missing inspections are unknown. Explicit contradictory states or
     # content of the same file cannot authorize a result.
@@ -491,6 +546,14 @@ def execution_permissions(execution: dict[str, Any]) -> dict[str, Any]:
         value = execution.get(key)
         return isinstance(value, str) and bool(value.strip())
 
+    if not _compatible_executions(execution, execution):
+        return {
+            "evidence": [],
+            "filenames": [],
+            "result_filenames": [],
+            "closure_output": False,
+            "closure_filenames": [],
+        }
     evidence = [
         field
         for field, available in (

@@ -8726,24 +8726,14 @@ def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, An
                 or citation.get("use") != "result"
             ):
                 continue
+            permission = execution_permissions(execution)
+            if citation.get("evidence") == "output" and permission["closure_output"]:
+                return True
             if (
-                citation.get("evidence") == "output"
-                and isinstance(execution.get("stdout"), str)
-                and bool(execution["stdout"].strip())
-                and not execution.get("stdout_truncated")
+                citation.get("evidence") == "artifact"
+                and citation.get("filename") in permission["closure_filenames"]
             ):
                 return True
-            if citation.get("evidence") == "artifact":
-                inspections = execution.get("artifact_inspections", [])
-                if any(
-                    isinstance(item, dict)
-                    and item.get("filename") == citation.get("filename")
-                    and isinstance(item.get("inspection"), dict)
-                    and item["inspection"].get("status") == "available"
-                    and not item["inspection"].get("truncated")
-                    for item in inspections
-                ):
-                    return True
     return False
 
 
@@ -11184,7 +11174,9 @@ def _peer_python_evidence(
     execution = investigation.get(field) if isinstance(investigation, dict) else None
     if not isinstance(execution, dict):
         return None
-    stdout, stderr = str(execution.get("stdout", "")), str(execution.get("stderr", ""))
+    stdout_value, stderr_value = execution.get("stdout"), execution.get("stderr")
+    stdout = stdout_value if isinstance(stdout_value, str) else ""
+    stderr = stderr_value if isinstance(stderr_value, str) else ""
     evidence = {
         key: execution.get(key)
         for key in (

@@ -4886,6 +4886,76 @@ def test_evidence_catalog_conflicts_and_incomplete_closure() -> None:
     )
     assert claim_only["current_investigator"]["availability"] == "extract"
     assert not claim_only["current_investigator"]["closure_argument"]
+    _check_artifact_identity_conflict_permutations(complete)
+
+
+def _check_artifact_identity_conflict_permutations(complete: dict[str, Any]) -> None:
+    from itertools import permutations
+
+    from sigma.continuations import digest
+    from sigma.research_evidence_catalog import EvidenceContext, artifact_permissions
+
+    pointer = {
+        "id": "own",
+        "strategy_id": "first",
+        "evidence_availability": "pointer_only_original_not_supplied",
+    }
+    contradictory = {**pointer, "strategy_id": "second"}
+    unknown = {key: value for key, value in pointer.items() if key != "strategy_id"}
+    review = {"obligation_id": "open", "basis_artifact_ids": ["own"], "basis_step_ids": []}
+
+    def packet(rows: tuple[dict[str, Any], ...], *, split: bool) -> EvidenceContext:
+        context = EvidenceContext(
+            {
+                "scheduler_version": 2,
+                "context_manifest": {"sources": []},
+                "prior_session_findings": list(rows[:2] if split else rows),
+                "obligation_ledger": [
+                    {
+                        "obligation_id": "open",
+                        "status": "unresolved",
+                        "source_artifact_ids": ["own"],
+                    }
+                ],
+            }
+        )
+        if split:
+            context["approved_continuation"] = {
+                "sources": [
+                    {"artifact_id": "own", "artifact_digest": digest(rows[2]), "artifact": rows[2]}
+                ]
+            }
+        research_sessions.finalize_dispatch_evidence(context, limit=32_000)
+        return context
+
+    for rows in permutations((pointer, contradictory, complete)):
+        for split in (False, True):
+            context = packet(rows, split=split)
+            catalog = context["evidence_catalog"]
+            assert all(
+                group["own"]["conflicted"] and not group["own"]["closure_argument"]
+                for group in (catalog["prior"], catalog["continuation"])
+                if "own" in group
+            )
+            assert "own" not in artifact_permissions(catalog, include_peer=True)
+            try:
+                research_sessions._validate_obligation_review_basis(context, review)
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Contradictory artifact identity was citable")
+            assert not research_sessions._catalog_addressed_basis(
+                context, review, [], {"own": complete}
+            )
+    for rows in permutations((pointer, unknown, complete)):
+        for split in (False, True):
+            context = packet(rows, split=split)
+            catalog = context["evidence_catalog"]
+            assert "own" in artifact_permissions(catalog, include_peer=True)
+            research_sessions._validate_obligation_review_basis(context, review)
+            assert research_sessions._catalog_addressed_basis(
+                context, review, [], {"own": complete}
+            )
 
 
 def test_computation_catalog_permissions_and_closure() -> None:
@@ -4989,6 +5059,12 @@ def test_computation_catalog_permissions_and_closure() -> None:
     research_sessions.finalize_dispatch_evidence(duplicate, limit=16_000)
     assert duplicate["evidence_catalog"]["computations"] == []
     _check_execution_conflict_permutations(execution, peer, citation)
+    _check_file_inspection_provenance(execution, peer, citation)
+    projected = research_sessions._peer_python_evidence(
+        {"investigator_output": {"python_execution": {**execution, "stdout": None, "stderr": 17}}}
+    )
+    assert projected is not None
+    assert projected["stdout"] == projected["stderr"] == ""
 
 
 def _check_execution_conflict_permutations(
@@ -5191,9 +5267,7 @@ def _check_execution_conflict_permutations(
     # A sparse inspection labeled available is not visible file content.
     metadata_only = {
         **full,
-        "artifact_inspections": [
-            {"filename": "result.txt", "inspection": {"status": "available"}}
-        ],
+        "artifact_inspections": [{"filename": "result.txt", "inspection": {"status": "available"}}],
     }
     context = packet((metadata_only, sparse, sparse))
     item = {
@@ -5209,6 +5283,117 @@ def _check_execution_conflict_permutations(
     else:
         raise AssertionError("Metadata-only inspection was citable as a result")
     assert not research_sessions._catalog_addressed_basis(
+        context,
+        {"basis_artifact_ids": ["peer-0"], "basis_step_ids": []},
+        [item],
+        {"peer-0": context["other_strategy_evidence"][0]},
+    )
+
+
+def _check_file_inspection_provenance(
+    execution: dict[str, Any], peer: dict[str, Any], citation: dict[str, Any]
+) -> None:
+    from itertools import permutations
+
+    from sigma.research_evidence_catalog import EvidenceContext, computation_targets
+
+    manifest = {
+        "filename": "result.txt",
+        "sha256": "b" * 64,
+        "size_bytes": 10,
+        "media_type": "text/plain",
+    }
+    inspection = {
+        **manifest,
+        "execution_id": "run",
+        "inspection": {"status": "available", "representation": "Observation", "truncated": False},
+    }
+    valid = {**execution, "artifacts": [manifest], "artifact_inspections": [inspection]}
+    sparse = {"id": "run", "status": "completed"}
+
+    def packet(rows: tuple[dict[str, Any], ...]) -> EvidenceContext:
+        context = EvidenceContext(
+            {
+                "scheduler_version": 2,
+                "context_manifest": {"sources": []},
+                "other_strategy_evidence": [
+                    {**peer, "artifact_id": f"peer-{index}", "python_execution": row}
+                    for index, row in enumerate(rows)
+                ],
+            }
+        )
+        research_sessions.finalize_dispatch_evidence(context, limit=32_000)
+        return context
+
+    def check_denied(rows: tuple[dict[str, Any], ...]) -> None:
+        context = packet(rows)
+        assert not computation_targets(context)
+        assert not context["evidence_catalog"]["computations"]
+        for row in context["other_strategy_evidence"]:
+            identifier = row["artifact_id"]
+            item = {
+                **citation,
+                "research_artifact_id": identifier,
+                "evidence": "artifact",
+                "filename": "result.txt",
+            }
+            try:
+                research_sessions._validate_computation_citations(context, [item])
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Inconsistent file provenance was citable")
+            assert not research_sessions._catalog_addressed_basis(
+                context,
+                {"basis_artifact_ids": [identifier], "basis_step_ids": []},
+                [item],
+                {identifier: row},
+            )
+
+    malformed = [
+        {**valid, "artifact_inspections": [{**inspection, field: value}]}
+        for field, value in (
+            ("execution_id", "different-run"),
+            ("sha256", "c" * 64),
+            ("size_bytes", 11),
+            ("media_type", "image/png"),
+        )
+    ]
+    malformed.extend(
+        [
+            {**valid, "artifacts": [manifest, manifest]},
+            {**valid, "artifacts": []},
+            {**valid, "stdout_truncated": "false"},
+            {
+                **valid,
+                "artifact_inspections": [
+                    {**inspection, "inspection": {**inspection["inspection"], "truncated": 0}}
+                ],
+            },
+        ]
+    )
+    for bad in malformed:
+        check_denied((bad,))
+        for rows in permutations((sparse, valid, bad)):
+            check_denied(rows)
+    # A partial alias without its own manifest still contradicts a supplied
+    # original's manifest; the other representation cannot legitimize it.
+    inspection_only = {
+        **sparse,
+        "artifact_inspections": [{**inspection, "sha256": "c" * 64}],
+    }
+    manifest_only = {**sparse, "artifacts": [manifest]}
+    for rows in permutations((sparse, inspection_only, manifest_only)):
+        check_denied(rows)
+    context = packet((valid,))
+    item = {
+        **citation,
+        "research_artifact_id": "peer-0",
+        "evidence": "artifact",
+        "filename": "result.txt",
+    }
+    research_sessions._validate_computation_citations(context, [item])
+    assert research_sessions._catalog_addressed_basis(
         context,
         {"basis_artifact_ids": ["peer-0"], "basis_step_ids": []},
         [item],
