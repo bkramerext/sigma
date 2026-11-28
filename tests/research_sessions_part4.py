@@ -4580,7 +4580,6 @@ def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None
     assert research_sessions._affordable_portfolio_branches(queued[1:], 1, 0)[0] == []
 
 
-
 async def test_live_transcript_projects_real_dispatch_before_and_after_acceptance(path: Path):
     """Inspect both real projections during actual mocked transport and resume."""
     from sigma import session_log
