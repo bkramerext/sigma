@@ -19,6 +19,19 @@ from sigma.projects import ProjectError
 
 _FILENAME = ".sigma-global-research-settings.json"
 DEFAULT_TURN_LIMIT = 20
+_OBSOLETE_PROTOCOL_FIELDS = {"scheduler_version", "research_rounds", "turns_per_round", "model_calls"}
+
+
+def user_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Only flat turns and actual user-wide safety limits belong in User Settings."""
+    return {
+        **config,
+        "limits": {
+            key: value
+            for key, value in config["limits"].items()
+            if key not in _OBSOLETE_PROTOCOL_FIELDS
+        },
+    }
 
 
 def _validate_turn_limit(value: Any) -> int:
@@ -74,7 +87,12 @@ def load_config() -> dict[str, Any]:
         raise ProjectError("Global research settings contain unknown limits")
     settings = _defaults()
     stored_limits = raw["limits"]
-    defaults = NEW_DEFAULT_LIMITS if stored_limits.get("scheduler_version") == 2 else DEFAULT_LIMITS
+    defaults = (
+        NEW_DEFAULT_LIMITS
+        if stored_limits.get("scheduler_version") == 2
+        or (raw["version"] == 2 and not (_OBSOLETE_PROTOCOL_FIELDS & stored_limits.keys()))
+        else DEFAULT_LIMITS
+    )
     settings["limits"] = _validate_limits({**defaults, **stored_limits})
     # Version 1 stored a paired round budget. Convert it once on read and
     # persist the flat default on the next settings save; never touch sessions.
@@ -107,7 +125,7 @@ def load() -> dict[str, Any]:
     return load_config()["limits"]
 
 
-def save_config(raw: dict[str, Any]) -> dict[str, Any]:
+def save_config(raw: dict[str, Any], *, flat_limits: bool = False) -> dict[str, Any]:
     from sigma.model_catalog import validate_pair
     from sigma.research_sessions import DEFAULT_LIMITS, NEW_DEFAULT_LIMITS, _validate_limits
 
@@ -120,8 +138,19 @@ def save_config(raw: dict[str, Any]) -> dict[str, Any]:
         supplied = raw["limits"]
         # Legacy callers without an explicit scheduler retain the original
         # paired-call ceiling; new Settings use scheduler v2 explicitly.
-        defaults = NEW_DEFAULT_LIMITS if supplied.get("scheduler_version") == 2 else DEFAULT_LIMITS
-        candidate = {**defaults, **supplied}
+        if flat_limits:
+            # The modern API accepts safety limits only; discard old protocol
+            # keys on migration, including model_calls derived from them.
+            candidate = {
+                **NEW_DEFAULT_LIMITS,
+                **user_config(current)["limits"],
+                **user_config({"limits": supplied})["limits"],
+            }
+        else:
+            defaults = (
+                NEW_DEFAULT_LIMITS if supplied.get("scheduler_version") == 2 else DEFAULT_LIMITS
+            )
+            candidate = {**defaults, **supplied}
         if candidate.get("scheduler_version") == 2:
             candidate["model_calls"] = (
                 2 * candidate["research_rounds"] * candidate["turns_per_round"]
@@ -142,7 +171,10 @@ def save_config(raw: dict[str, Any]) -> dict[str, Any]:
             raise ProjectError("Outcome preference must be a boolean")
         current["show_advanced_outcome_details"] = raw["show_advanced_outcome_details"]
     target = _path()
-    encoded = json.dumps({"version": 2, **current}, separators=(",", ":")).encode()
+    # The user-facing settings file has one canonical protocol setting. The
+    # old internal limits shape is reconstructed only for historical callers.
+    persisted = user_config(current) if flat_limits else current
+    encoded = json.dumps({"version": 2, **persisted}, separators=(",", ":")).encode()
     fd, tmp = tempfile.mkstemp(prefix=".sigma-global-research-", dir=target.parent)
     try:
         with os.fdopen(fd, "wb") as handle:
@@ -158,7 +190,7 @@ def save_config(raw: dict[str, Any]) -> dict[str, Any]:
             os.close(parent_fd)
     finally:
         Path(tmp).unlink(missing_ok=True)
-    return current
+    return persisted
 
 
 def save(raw: dict[str, Any]) -> dict[str, Any]:
