@@ -101,7 +101,7 @@ def main() -> None:
                 expect(overview.locator("svg.about-provenance-diagram")).to_be_visible()
                 expect(overview).to_contain_text("Source Material")
                 expect(overview).to_contain_text("Supervisor")
-                expect(overview).to_contain_text("proposed Supervisor enhancements")
+                expect(overview).to_contain_text("Conceptual research flow")
                 overview.locator("summary").click()
                 expect(overview).not_to_have_attribute("open", "")
                 provenance = dialog.locator(".about-provenance-disclosure")

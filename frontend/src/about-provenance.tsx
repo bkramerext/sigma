@@ -114,64 +114,49 @@ export default function AboutProvenanceVision() {
   </section>;
 }
 
-/** Architecture overview: shared visual vocabulary with the provenance vision. */
+/** Conceptual overview; detailed agent mechanics belong in Multi-Agent Research. */
 export function AboutResearchArchitecture() {
   const colors = { blue: '#78bbee', green: '#85cfa7', gold: 'var(--sigma-copper-foreground)', violet: '#b59ff5', coral: '#f0a098' };
   const Arrow = (props: Parameters<typeof FlowArrow>[0]) => <FlowArrow {...props} prefix="about-research-architecture"/>;
   return <section className="about-provenance" aria-label="Research Architecture">
-    <p><strong>Research philosophy and evidence are distinct inputs.</strong> The Research Ethos guides how agents investigate; Source Material provides the supplied evidence they can reason from. SIGMA coordinates research, preserves findings, and synthesizes the record into a draft for human review.</p>
-    <figure className="about-provenance-figure">
+    <p>The <strong>Research Ethos</strong> guides how agents investigate. <strong>Source Material</strong> provides evidence for their research.</p>
+    <figure className="about-provenance-figure about-research-architecture-figure">
       <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Research architecture diagram; scroll horizontally on narrow screens">
-        <svg className="about-provenance-diagram" viewBox="0 0 910 620" role="img" aria-label="Research architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
-          <desc id="about-research-architecture-description">Research Ethos is frozen as behavioral instructions and Source Material is retrieved and compiled into bounded evidence. Both guide the research and paper generation. Investigator and Skeptic exchange findings, the Supervisor observes completed pairs and can nudge the next turn. Saved findings inform further research and paper generation. Dashed arrows show proposed Ethos-aware and historical supervision, not implemented capabilities.</desc>
+        <svg className="about-provenance-diagram about-research-architecture-diagram" viewBox="0 0 500 540" role="img" aria-label="Research architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
+          <desc id="about-research-architecture-description">Research Ethos and Source Material inform the research session and paper generation. The Investigator and Skeptic develop and challenge ideas. The Supervisor observes and may offer process guidance. Research findings accumulate and inform a paper draft.</desc>
           <defs>
-            {(Object.keys(colors) as (keyof typeof colors)[]).map(tone => <marker key={tone} id={`about-research-architecture-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill={colors[tone]}/></marker>)}
+            {(Object.keys(colors) as (keyof typeof colors)[]).map(tone => <marker key={tone} id={`about-research-architecture-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill={colors[tone]}/></marker>)}
           </defs>
-          <rect x="280" y="38" width="390" height="330" rx="18" fill="#0a1b2a" stroke="#5483a1" strokeWidth="1.5"/>
-          <text x="300" y="66" fontSize="19" fontWeight="700" fill="#f0f9ff">Research Session</text>
-          <text x="300" y="85" fontSize="11.5" fill="#c2d9e9">Selected strategies · bounded agent turns</text>
-          <Arrow d="M125 124 V145" tone="blue"/>
-          <Arrow d="M125 324 V345" tone="green"/>
-          <Arrow d="M232 181 H252 V110 H280" tone="blue"/>
-          <Arrow d="M232 381 H266 V324 H280" tone="green"/>
-          <Arrow d="M379 183 V239" tone="violet"/>
-          <Arrow d="M300 279 H288 V145 H300" tone="violet"/>
-          <Arrow d="M458 279 H572 V248" tone="gold"/>
-          <Arrow d="M494 180 H477 V145 H458" tone="gold"/>
-          <Arrow d="M232 160 H242 V17 H574 V155" tone="blue" dashed/>
-          <Arrow d="M475 368 V414" tone="gold"/>
-          <Arrow d="M655 438 H682 V203 H654" tone="gold" dashed/>
-          <Arrow d="M295 454 H275 V350 H280" tone="gold"/>
-          <Arrow d="M655 474 H699 V458 H715" tone="gold"/>
-          <Arrow d="M655 452 H697 V304 H715" tone="blue"/>
-          <Arrow d="M232 201 H247 V536 H760 V500" tone="blue"/>
-          <Arrow d="M232 401 H260 V558 H825 V500" tone="green"/>
-          <Arrow d="M803 500 V574" tone="violet"/>
-          <DiagramCard x={18} y={50} width={214} height={74} title="Research Ethos" lines={['Research philosophy', 'Default or customized']} fill="#17324a" stroke="#65a5cf" titleColor="#bde5ff"/>
-          <DiagramCard x={18} y={146} width={214} height={74} title="Frozen Ethos" lines={['Behavioral instructions', 'Versioned for the run']} fill="#17324a" stroke="#65a5cf" titleColor="#bde5ff"/>
-          <DiagramCard x={18} y={250} width={214} height={74} title="Source Material" lines={['Supplied links and documents', 'With source provenance']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
-          <DiagramCard x={18} y={346} width={214} height={74} title="Evidence Compilation" lines={['Retrieve · Extract · Freeze', 'Bounded source excerpts']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
-          <DiagramCard x={300} y={105} width={158} height={78} title="Investigator" lines={['Develops ideas,', 'arguments and tests']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
-          <DiagramCard x={300} y={240} width={158} height={78} title="Skeptic" lines={['Challenges claims,', 'tests assumptions']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
-          <DiagramCard x={494} y={156} width={160} height={92} title="Supervisor" lines={['Process review', 'Optional nudges', 'Not a research agent']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
-          <text x="391" y="210" fontSize="11" fill="#c5b5fd">review</text>
-          <text x="481" y="270" fontSize="11" fill="var(--sigma-copper-foreground)">observes</text>
-          <text x="485" y="132" fontSize="11" fill="var(--sigma-copper-foreground)">next-turn nudge</text>
-          <text x="391" y="340" fontSize="11" fill="#b7cbd8" textAnchor="middle">Repeat within configured limits</text>
-          <text x="584" y="30" fontSize="11" fill="#9bcfed">Ethos alignment*</text>
-          <DiagramCard x={295} y={414} width={360} height={86} title="Cumulative Research Findings" lines={['Arguments, evidence, objections and test results', 'Open questions and preserved research history']} fill="#153b55" stroke="#7dbde9" titleColor="#bde5ff"/>
-          <text x="486" y="399" fontSize="11" fill="var(--sigma-copper-foreground)">save</text>
-          <text x="290" y="390" fontSize="11" fill="var(--sigma-copper-foreground)">reuse</text>
-          <text x="686" y="395" fontSize="11" fill="var(--sigma-copper-foreground)" transform="rotate(-90 686 395)">historical context*</text>
-          <DiagramCard x={715} y={265} width={177} height={78} title="Current Understanding" lines={['Synthesis of findings', 'and unresolved questions']} fill="#133741" stroke="#7ac4c7" titleColor="#b7f1ed"/>
-          <DiagramCard x={715} y={414} width={177} height={86} title="Paper Generation" lines={['Review · Extract · Write', 'Validate · Proofread']} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
-          <text x="460" y="529" fontSize="11" fill="#9bcfed" textAnchor="middle">research philosophy</text>
-          <text x="460" y="551" fontSize="11" fill="#a0dec0" textAnchor="middle">source evidence</text>
-          <DiagramCard x={715} y={574} width={177} height={38} title="PDF / TeX Draft" lines={[]} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
-          <text x="18" y="597" fontSize="11.5" fill="#b7cbd8">* Dashed paths: proposed Supervisor enhancements.</text>
+
+          <rect x="40" y="126" width="220" height="184" rx="14" fill="#0a1b2a" stroke="#5483a1" strokeWidth="1.5"/>
+          <text x="150" y="151" textAnchor="middle" fontSize="15" fontWeight="650" fill="#c2d9e9">Research Session</text>
+
+          <Arrow d="M135 84 V105 H110 V126" tone="blue"/>
+          <Arrow d="M365 84 V112 H195 V126" tone="green"/>
+          <Arrow d="M30 53 H15 V424 H75" tone="blue"/>
+          <Arrow d="M470 53 H485 V424 H425" tone="green"/>
+
+          <Arrow d="M150 211 V245" tone="violet"/>
+          <Arrow d="M230 271 H244 V187 H230" tone="violet"/>
+          <Arrow d="M260 255 H325" tone="gold"/>
+          <Arrow d="M325 211 H260" tone="gold"/>
+          <text x="292.5" y="247" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)">Observe</text>
+          <text x="292.5" y="203" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)">Nudge</text>
+          <Arrow d="M150 310 V333" tone="gold"/>
+          <Arrow d="M250 386 V399" tone="gold"/>
+          <Arrow d="M250 449 V474" tone="violet"/>
+
+          <DiagramCard x={30} y={22} width={210} height={62} title="Research Ethos" lines={['Research philosophy']} fill="#17324a" stroke="#65a5cf" titleColor="#bde5ff"/>
+          <DiagramCard x={260} y={22} width={210} height={62} title="Source Material" lines={['External evidence']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
+          <DiagramCard x={70} y={163} width={160} height={48} title="Investigator" lines={['Explores ideas']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
+          <DiagramCard x={70} y={245} width={160} height={48} title="Skeptic" lines={['Challenges ideas']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
+          <DiagramCard x={325} y={190} width={145} height={78} title="Supervisor" lines={['Guides the process,', 'not the conclusions']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+          <DiagramCard x={75} y={333} width={350} height={53} title="Cumulative Research Findings" lines={['Evidence, discoveries and open questions']} fill="#153b55" stroke="#7dbde9" titleColor="#bde5ff"/>
+          <DiagramCard x={75} y={399} width={350} height={50} title="Paper Generation" lines={['Synthesis of the research']} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
+          <DiagramCard x={150} y={474} width={200} height={43} title="Research Paper" lines={[]} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
         </svg>
       </div>
-      <figcaption>Solid arrows describe the implemented research flow. Dashed arrows show planned Ethos-aware supervision and longitudinal context. The paper stage uses its own frozen Ethos snapshot and bounded source evidence; drafts require human review.</figcaption>
+      <figcaption>Conceptual research flow. The Supervisor monitors the process; research conclusions and generated papers remain subject to human review.</figcaption>
     </figure>
   </section>;
 }
