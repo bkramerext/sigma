@@ -352,6 +352,23 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_label("Research rounds", exact=True)).to_have_count(0)
     expect(dialog.get_by_label("Turns per round", exact=True)).to_have_count(0)
     expect(dialog.locator(".sigma-limit-calculation")).to_have_count(0)
+    turns = dialog.get_by_label("Turns", exact=True)
+    expect(turns).to_be_visible()
+    initial_turns = turns.input_value()
+    updated_turns = "9" if initial_turns != "9" else "8"
+    settings_url = f"{FIXTURE_URL}/api/user-preferences/research-settings"
+
+    def settings_put(response):
+        return response.url.endswith("/api/user-preferences/research-settings") and (
+            response.request.method == "PUT"
+        )
+
+    with page.expect_response(settings_put, timeout=15000):
+        turns.fill(updated_turns)
+    assert page.request.get(settings_url).json()["default_turn_limit"] == int(updated_turns)
+    with page.expect_response(settings_put, timeout=15000):
+        turns.fill(initial_turns)
+    assert page.request.get(settings_url).json()["default_turn_limit"] == int(initial_turns)
     for tab in ("Preferences", "Research Ethos", "Project Types"):
         dialog.get_by_role("tab", name=tab, exact=True).click()
         expect(dialog).to_be_visible()
@@ -544,6 +561,9 @@ with sync_playwright() as playwright:
     }
     saved_limits = page.request.put(limits_url, data=bounded_limits)
     assert saved_limits.ok, saved_limits.text()
+    # Use the actual global default rather than rewriting the outgoing request.
+    turn_config = page.request.put(settings_url, data={"default_turn_limit": 9})
+    assert turn_config.ok, turn_config.text()
 
     open_project(page, affected["path"])
     expect(page.get_by_role("heading", name="Deleted custom parent")).to_be_visible()
@@ -714,21 +734,6 @@ with sync_playwright() as playwright:
     assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390, bounds
     page.set_viewport_size({"width": 1440, "height": 1000})
 
-    # Start no longer has a separate top-level Settings action. Keep this
-    # deterministic fixture's historical nine-turn limit at the API boundary,
-    # while exercising the unchanged real Start button and admission flow.
-    def nine_turn_start(route):
-        payload = route.request.post_data_json
-        payload["session_settings"]["turn_limit"] = 9
-        headers = {**route.request.headers, "origin": BASE_URL}
-        response = route.fetch(
-            url=route.request.url.replace(BASE_URL, FIXTURE_URL),
-            headers=headers,
-            post_data=json.dumps(payload),
-        )
-        route.fulfill(response=response)
-
-    page.route("**/api/projects/research-sessions/start", nine_turn_start)
     start_button.click()
     row = page.locator(".session-row").filter(has_text="Session 1")
     expect(row).to_be_visible(timeout=15000)
@@ -738,6 +743,11 @@ with sync_playwright() as playwright:
     ]
     assert len(start_payloads) == starts_before + 1, start_payloads
     assert start_payloads[-1]["continue_using_saved_type_settings"] is True, start_payloads[-1]
+    assert start_payloads[-1]["session_settings"]["turn_limit"] == 9
+    restored_turns = page.request.put(
+        settings_url, data={"default_turn_limit": int(initial_turns)}
+    )
+    assert restored_turns.ok, restored_turns.text()
 
     # A legacy default project is still importable/exportable, but the UI says
     # clearly that its incomplete snapshot requires an explicit replacement.
