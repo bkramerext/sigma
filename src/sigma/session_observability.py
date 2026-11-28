@@ -125,7 +125,9 @@ def session_times(record: dict[str, Any], now: datetime) -> dict[str, float | No
     if status in _TERMINAL:
         recorded_end = clock.get("terminal_at") if isinstance(clock, dict) else None
         end = recorded_end or (
-            record.get("stopped_at") if status == "stopped" else record.get("updated_at")
+            record.get("stopped_at") or record.get("updated_at")
+            if status == "stopped"
+            else record.get("updated_at")
         )
     start = record.get("created_at") or record.get("started_at")
     wall = _seconds(start, end)
@@ -144,28 +146,8 @@ def session_times(record: dict[str, Any], now: datetime) -> dict[str, float | No
             active = None
         if lower_bound is not None and wall is not None and lower_bound > wall:
             lower_bound = None
-    else:
-        # Old records do not necessarily record every pause. Only recover
-        # active time when the durable event sequence establishes no suspension.
-        events = record.get("events")
-        if (
-            isinstance(events, list)
-            and events
-            and isinstance(events[0], dict)
-            and events[0].get("kind") in ("queued", "simulation.queued")
-            and all(isinstance(event, dict) for event in events)
-            and not any(
-                any(
-                    word in str(event.get("kind", "")).lower()
-                    for word in ("pause", "stop", "resume", "interrupt", "recover")
-                )
-                for event in events
-            )
-            and status in ("queued", "running", "completed", "ended", "failed")
-            and not record.get("stopped_duration_seconds")
-        ):
-            active = wall
-            lower_bound = wall
+    # Legacy event history does not prove continuous activity. Without a
+    # diagnostic clock, only wall time is established by saved timestamps.
     return {
         "wall_seconds": wall,
         "active_seconds": active,
@@ -205,17 +187,23 @@ def _conflicts(first: dict[str, Any], second: dict[str, Any]) -> bool:
         "execution_settings",
         "observed_cached_input_tokens",
         "observed_cache_metadata_status",
+        "provider_response_observed",
+        "simulated",
+        "provider_response_channel",
+        "diagnostic_provider_http_status",
     )
     return any(
-        first.get(key) is not None
-        and second.get(key) is not None
-        and first[key] != second[key]
+        first.get(key) is not None and second.get(key) is not None and first[key] != second[key]
         for key in fields
     )
 
 
 def _combine(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
-    if first.get("observability_conflict") or _conflicts(first, second):
+    if (
+        first.get("observability_conflict")
+        or second.get("observability_conflict")
+        or _conflicts(first, second)
+    ):
         # Preserve identity for the inventory, not a disputed usage/result.
         return {
             "id": _identity(first),
@@ -259,8 +247,7 @@ def inventory_complete(record: dict[str, Any], rows: list[dict[str, Any]], gap: 
         if not isinstance(source, list) or any(not isinstance(row, dict) for row in source):
             return False
     counted = sum(
-        row.get("role") != "reference_compiler"
-        and row.get("attempt_status") != "not_dispatched"
+        row.get("role") != "reference_compiler" and row.get("attempt_status") != "not_dispatched"
         for row in rows
     )
     return counted == record["calls_used"] and all(
@@ -448,17 +435,53 @@ def reported_usage(row: dict[str, Any]) -> dict[str, int | None] | None:
     }
 
 
-def dispatch_uncertain(row: dict[str, Any]) -> bool:
-    if row.get("attempt_status") == "not_dispatched":
-        return False
-    # An attempted invocation or pre-dispatch reservation alone is not remote receipt.
-    return bool(row.get("observability_conflict")) or not (
-        row.get("status") in ("completed", "incomplete")
-        or reported_usage(row) is not None
-        or row.get("attempt_status") in ("provider_rejected", "settled")
-        or type(row.get("provider_http_status")) is int
-        or type(row.get("diagnostic_provider_http_status")) is int
+def receipt_state(row: dict[str, Any], *, simulated: bool = False) -> str:
+    """Remote receipt requires transport/usage evidence, never lifecycle status alone."""
+    attempt_status = row.get("attempt_status")
+    if attempt_status == "not_dispatched":
+        return "not_dispatched"
+    if simulated or row.get("simulated") is True or row.get("mode") == "mock":
+        return "simulated"
+    role = row.get("role")
+    compiler = role == "reference_compiler"
+    identified = _identity(row) is not None or (
+        compiler and type(row.get("number")) is int and row["number"] > 0
     )
+    if (
+        row.get("observability_conflict")
+        or not identified
+        or role not in ("investigator", "skeptic", "supervisor", "reference_compiler")
+        or attempt_status in ("preparing", "reserved")
+        or row.get("status") not in ("completed", "incomplete", "failed", "interrupted", "running")
+    ):
+        return "uncertain"
+    audit = row.get("provider_input_audit")
+    if (
+        isinstance(audit, dict)
+        and audit.get("kind") == "exact_provider_request_body"
+        and audit.get("status")
+        in ("provider_response_received", "provider_response_incomplete", "provider_response_invalid")
+    ):
+        return "confirmed"
+    if row.get("token_usage_status") == "reported" and reported_usage(row) is not None:
+        return "confirmed"
+    if role == "supervisor" and row.get("provider_response_observed") is True:
+        return "confirmed"
+    status = row.get("provider_http_status")
+    diagnostic_status = row.get("diagnostic_provider_http_status")
+    if (
+        type(status) is int
+        and 100 <= status <= 599
+        and (compiler or row.get("provider_response_channel") in ("http", "stream"))
+    ) or (
+        compiler and type(diagnostic_status) is int and 100 <= diagnostic_status <= 599
+    ):
+        return "confirmed"
+    return "uncertain"
+
+
+def dispatch_uncertain(row: dict[str, Any]) -> bool:
+    return receipt_state(row) == "uncertain"
 
 
 def cache_metadata_status(row: dict[str, Any]) -> str:
@@ -479,7 +502,9 @@ def cache_metadata_status(row: dict[str, Any]) -> str:
 def observed_cache(raw: Any) -> dict[str, Any]:
     """Optional Supervisor cache provenance, independent of settlement input."""
     usage = raw.get("usage") if isinstance(raw, dict) else None
-    details = usage.get("input_tokens_details") if isinstance(usage, dict) else None
+    if not isinstance(usage, dict):
+        return {"observed_cache_metadata_status": "missing"}
+    details = usage.get("input_tokens_details")
     if details is None:
         return {"observed_cache_metadata_status": "missing"}
     if not isinstance(details, dict):
@@ -500,27 +525,39 @@ def budget_observation(record: dict[str, Any]) -> dict[str, Any]:
     ledger = record.get("hard_budget_ledger")
     entries = ledger.get("calls") if isinstance(ledger, dict) else None
     if not isinstance(entries, list):
-        return {}
+        return {"ledger_inventory_complete": False} if ledger is not None else {}
     counts: dict[str, int] = {}
     cost: dict[str, float | None] = {}
     seen: set[str] = set()
+    complete = True
     for item in entries:
         if not isinstance(item, dict):
             return {"ledger_inventory_complete": False}
         identifier, status = item.get("call_id"), item.get("status")
         if (
             not isinstance(identifier, str)
+            or not identifier
             or identifier in seen
-            or status not in ("settled", "reserved", "unknown", "rejected")
+            or status
+            not in (
+                "settled",
+                "reserved",
+                "unknown",
+                "rejected",
+                "unknown_supervisor_abandoned",
+                "unknown_compiler_abandoned",
+            )
         ):
             return {"ledger_inventory_complete": False}
         seen.add(identifier)
         counts[status] = counts.get(status, 0) + 1
         amount = _number(item.get("cost_bound_usd"))
+        if amount is None:
+            complete = False
         previous = cost.get(status, 0.0)
         cost[status] = previous + amount if previous is not None and amount is not None else None
     return {
-        "ledger_inventory_complete": True,
+        "ledger_inventory_complete": complete,
         "ledger_call_counts": counts,
         "ledger_cost_bound_usd_by_status": cost,
     }

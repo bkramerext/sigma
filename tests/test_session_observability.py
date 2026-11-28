@@ -75,7 +75,7 @@ def run() -> dict[str, Any]:
         "active_seconds_lower_bound": None,
     }
     historical["events"] = [{"kind": "queued"}, {"kind": "completed"}]
-    assert obs.session_times(historical, _at(50))["active_seconds"] == 40
+    assert obs.session_times(historical, _at(50))["active_seconds"] is None
     historical["events"].insert(1, {"kind": "paused"})
     assert obs.session_times(historical, _at(50))["active_seconds"] is None
     rollback = deepcopy(record)
@@ -251,9 +251,12 @@ def run() -> dict[str, Any]:
             }
         }
     ) == {"observed_cache_metadata_status": "malformed"}
-    assert obs.reported_usage(
-        {"status": "failed", "attempt_status": "usage_estimated", "token_usage": _usage(4, 5)}
-    ) is None
+    assert (
+        obs.reported_usage(
+            {"status": "failed", "attempt_status": "usage_estimated", "token_usage": _usage(4, 5)}
+        )
+        is None
+    )
     conflicting = obs.unique_rows(
         [
             {"id": "same", "status": "completed", "token_usage": _usage(1, 2)},
@@ -263,6 +266,21 @@ def run() -> dict[str, Any]:
     assert len(conflicting) == 1 and conflicting[0]["observability_conflict"]
     assert obs.reported_usage(conflicting[0]) is None
     assert obs.dispatch_uncertain(conflicting[0])
+    local = {"id": "local", "role": "investigator", "status": "completed"}
+    metered = {**local, "token_usage_status": "reported", "token_usage": _usage(3, 2)}
+    assert obs.receipt_state(local) == "uncertain"
+    assert obs.receipt_state(metered) == "confirmed"
+    assert obs.receipt_state(metered, simulated=True) == "simulated"
+    assert obs.receipt_state({**metered, "attempt_status": "not_dispatched"}) == "not_dispatched"
+    assert obs.receipt_state({**metered, "attempt_status": "preparing"}) == "uncertain"
+    assert obs.receipt_state({**metered, "id": None}) == "uncertain"
+    assert obs.receipt_state({**metered, "token_usage": _usage(-1, 2)}) == "uncertain"
+    assert obs.receipt_state({**local, "provider_http_status": 429}) == "uncertain"
+    assert obs.receipt_state({**local, "provider_http_status": 999}) == "uncertain"
+    assert (
+        obs.receipt_state({**local, "provider_http_status": 429, "provider_response_channel": "http"})
+        == "confirmed"
+    )
     assert obs.retry_origins(
         [
             {"id": "a", "cycle": 1, "role": "investigator", "resume_sequence": 0},

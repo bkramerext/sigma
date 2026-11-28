@@ -1417,6 +1417,105 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     saved = json.loads((path / "research-sessions" / f"{session_id}.json").read_text())
     assert "metrics" not in saved.get("outcome", {})
 
+    # Exercise actual persistence/public projection, including incomplete or
+    # contradictory evidence that must not be counted as provider receipt.
+    historical = deepcopy(record)
+    historical["events"] = [
+        {"kind": "queued", "sequence": 1, "timestamp": started},
+        {"kind": "completed", "sequence": 2, "timestamp": record["updated_at"]},
+    ]
+    confirmed = {
+        "id": "metered",
+        "role": "investigator",
+        "status": "completed",
+        "token_usage_status": "reported",
+        "token_usage": {"input_tokens": 2, "output_tokens": 3},
+    }
+    historical["steps"] = [
+        confirmed,
+        {"id": "local", "role": "investigator", "status": "completed"},
+        {**confirmed, "id": "not-sent", "attempt_status": "not_dispatched"},
+        {**confirmed, "id": "preparing", "attempt_status": "preparing"},
+        {**confirmed, "id": "local-mock", "simulated": True},
+        {**confirmed, "id": "invalid", "token_usage": {"input_tokens": -1, "output_tokens": 3}},
+        {**confirmed, "id": "contradiction"},
+        {**confirmed, "id": "contradiction", "status": "failed"},
+    ]
+    historical["calls_used"] = 6
+    research_sessions._save(str(path), historical)
+    observed = research_sessions.get_session(str(path), session_id)["outcome"]["metrics"][
+        "observability"
+    ]
+    assert observed["confirmed_provider_receipts"] == 1
+    assert observed["provider_receipt_states"] == {
+        "confirmed": 1,
+        "uncertain": 4,
+        "not_dispatched": 1,
+        "simulated": 1,
+    }
+    assert observed["active_seconds"] is None
+    assert observed["active_seconds_lower_bound"] is None
+    assert observed["wall_seconds"] == 120
+    assert observed["attempt_inventory_complete"] is False
+    assert observed["usage_complete"] is False
+
+    # Build real ledger transitions, including explicit abandonment of unknown
+    # optional work. The diagnostic projection must retain the original bounds.
+    from sigma.research_budget import (
+        authorize_reference_compiler_recovery_after_unknown,
+        authorize_supervisor_recovery_after_unknown,
+    )
+
+    ledger = new_ledger(
+        call_limit=5,
+        input_token_limit=200_000,
+        output_tokens_per_call=100,
+        cost_limit_usd=100,
+        input_price_per_million=2,
+        output_price_per_million=8,
+    )
+    reserve_before_dispatch(ledger, call_id="settled", request_body=b"fixture")
+    settle_after_response(ledger, call_id="settled", input_tokens=3, output_tokens=2)
+    supervisor = reserve_before_dispatch(ledger, call_id="supervisor", request_body=b"fixture")
+    supervisor["purpose"] = "supervisor"
+    mark_unknown(ledger, call_id="supervisor")
+    authorize_supervisor_recovery_after_unknown(ledger, call_id="supervisor")
+    reserve_before_dispatch(ledger, call_id="compiler", request_body=b"fixture")
+    mark_unknown(ledger, call_id="compiler")
+    authorize_reference_compiler_recovery_after_unknown(ledger, call_id="compiler")
+    reserve_before_dispatch(ledger, call_id="rejected", request_body=b"fixture")
+    settle_rejected(ledger, call_id="rejected")
+    reserve_before_dispatch(ledger, call_id="reserved", request_body=b"fixture")
+    before = deepcopy(ledger)
+    historical["hard_budget_ledger"] = ledger
+    research_sessions._save(str(path), historical)
+    ledger_metrics = research_sessions.get_session(str(path), session_id)["outcome"]["metrics"][
+        "observability"
+    ]
+    assert ledger_metrics["ledger_inventory_complete"] is True
+    assert ledger_metrics["ledger_call_counts"] == {
+        "settled": 1,
+        "unknown_supervisor_abandoned": 1,
+        "unknown_compiler_abandoned": 1,
+        "rejected": 1,
+        "reserved": 1,
+    }
+    for entry in before["calls"]:
+        assert ledger_metrics["ledger_cost_bound_usd_by_status"][entry["status"]] == (
+            entry["cost_bound_usd"]
+        )
+    assert research_sessions._read(str(path), session_id)["hard_budget_ledger"] == before
+    assert ledger == before
+
+    historical["simulated"] = True
+    research_sessions._save(str(path), historical)
+    simulated = research_sessions.get_session(str(path), session_id)["outcome"]["metrics"][
+        "observability"
+    ]
+    assert simulated["confirmed_provider_receipts"] == 0
+    assert simulated["provider_receipt_states"]["simulated"] == 6
+    research_sessions._save(str(path), record)
+
     calls = operational["Agent turns by status"]
     assert calls.startswith("5 budget-counted calls (1 step status unavailable")
     assert "1 completed" in calls and "1 rejected" in calls

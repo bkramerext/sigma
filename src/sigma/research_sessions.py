@@ -2408,12 +2408,18 @@ def _outcome_metrics(
     step_ids = {step["id"] for step in unique_steps if isinstance(step.get("id"), str)}
     attempts, unrecorded_calls = session_observability.attempts(record)
     provider_steps = [step for step in attempts if step.get("attempt_status") != "not_dispatched"]
+    simulated = record.get("simulated") is True or record.get("mode") == "mock"
+    receipt_counts = dict.fromkeys(("confirmed", "uncertain", "not_dispatched", "simulated"), 0)
+    for step in attempts:
+        receipt_counts[session_observability.receipt_state(step, simulated=simulated)] += 1
     dispatched = len(provider_steps) + unrecorded_calls
     saved_call_count = record.get("calls_used")
     inventory_known = (
         type(saved_call_count) is int and saved_call_count >= 0 and isinstance(raw_steps, list)
     )
-    inventory_complete = session_observability.inventory_complete(record, attempts, unrecorded_calls)
+    inventory_complete = session_observability.inventory_complete(
+        record, attempts, unrecorded_calls
+    )
     budget_steps = sum(step.get("role") != "reference_compiler" for step in provider_steps)
     call_counter_disagrees = inventory_known and saved_call_count != budget_steps
     call_counts = {
@@ -3014,16 +3020,13 @@ def _outcome_metrics(
             "conflicting_attempt_identities": sum(
                 bool(step.get("observability_conflict")) for step in attempts
             ),
-            "confirmed_provider_receipts": sum(
-                not session_observability.dispatch_uncertain(step) for step in provider_steps
-            ),
+            "confirmed_provider_receipts": receipt_counts["confirmed"],
+            "provider_receipt_states": receipt_counts,
             "recorded_invocation_intervals": sum(
                 session_observability.attempt_seconds(step) is not None for step in provider_steps
             ),
             "unknown_budget_counted_attempts": unrecorded_calls,
-            "dispatch_uncertain_attempts": sum(
-                session_observability.dispatch_uncertain(step) for step in provider_steps
-            ),
+            "dispatch_uncertain_attempts": receipt_counts["uncertain"],
             "retry_attempts": retry_count,
             "later_attempt_origins": retry_origins,
             "usage_reported_attempts": complete_token_usage_calls,
@@ -15267,6 +15270,7 @@ async def _portfolio_supervisor_call(
         failure_reason = ""
         failure_fields: dict[str, Any] = {}
         cache_observation: dict[str, Any] = {}
+        response_observed = False
         provider_started: float | None = None
         try:
             # Fence the request BEFORE provider I/O. A restart after this point
@@ -15299,6 +15303,7 @@ async def _portfolio_supervisor_call(
                 expected_identity_hash=expected_identity,
                 return_raw_response=True,
             )
+            response_observed = isinstance(raw, dict)
             raw_usage = raw.get("usage")
             if isinstance(raw_usage, dict):
                 usage = {
@@ -15330,7 +15335,9 @@ async def _portfolio_supervisor_call(
                 failure_fields["failure_kind"] = "timeout"
         finally:
             provider_duration = (
-                round(time.monotonic() - provider_started, 3) if provider_started is not None else None
+                round(time.monotonic() - provider_started, 3)
+                if provider_started is not None
+                else None
             )
             async with state_lock:
                 record = _read(path, session_id)
@@ -15358,6 +15365,7 @@ async def _portfolio_supervisor_call(
                 review["provider_attempt_duration_seconds"] = provider_duration
                 review.update(failure_fields)
                 review.update(cache_observation)
+                review["provider_response_observed"] = response_observed
                 if assessment is not None:
                     review["assessment"] = assessment
                 if failure_reason:
