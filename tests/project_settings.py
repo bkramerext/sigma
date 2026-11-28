@@ -541,9 +541,11 @@ def main():
             )
             limits_url = "/api/projects/research-limits"
             defaults = client.get(limits_url, params={"path": str(path)}).json()
+            default_turn_limit = preference_response.json()["default_turn_limit"]
             assert defaults == {
                 **research_sessions.NEW_DEFAULT_LIMITS,
                 "max_concurrent_sessions": "1",
+                "default_turn_limit": default_turn_limit,
             }
             assert defaults["research_rounds"] == 3
             assert defaults["model_calls"] == 18
@@ -560,6 +562,7 @@ def main():
             assert client.get(limits_url, params={"path": str(path)}).json() == {
                 **research_sessions.NEW_DEFAULT_LIMITS,
                 "max_concurrent_sessions": "1",
+                "default_turn_limit": default_turn_limit,
             }
             # The compatibility preview uses v2 defaults for legacy v1 settings.
             assert research_sessions.get_limits(str(path)) == {
