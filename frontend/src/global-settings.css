@@ -253,8 +253,6 @@
 .sigma-global-settings .sigma-global-limits .sigma-duration-unit-select { flex: 1 1 0; width: auto; min-width: 0; }
 .sigma-global-settings .sigma-global-limits .sigma-duration-unit-select .sigma-select-trigger { height: 42px; min-height: 42px; }
 .sigma-global-settings .sigma-global-limits .sigma-global-limit-field .settings-hint { max-width: 245px; margin: 7px 0 0; }
-.sigma-global-settings .sigma-global-limits .sigma-limit-calculation { margin: 11px 0 0; line-height: 1.55; }
-.sigma-global-settings .sigma-global-limits .sigma-limit-calculation strong { color: var(--sigma-copper-foreground); font-weight: 600; }
 .sigma-global-settings .sigma-global-limits .sigma-global-limit-footer { margin-top: 18px; }
 /* Hide spinner UI but retain type=number, min/max/step, keyboard and form validation. */
 .sigma-global-settings input[type="number"] { appearance: textfield; -moz-appearance: textfield; }

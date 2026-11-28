@@ -791,6 +791,49 @@ def test_flat_turn_settings_convert_legacy_rounds_without_relabeling() -> None:
     assert research_sessions._paired_round_position(saved, 9) == (3, 3)
 
 
+def test_user_turn_default_migration_and_validation(root: Path) -> None:
+    from sigma import global_research_settings, research_sessions
+    from sigma.projects import ProjectError
+
+    target = root / "global-turn-settings.json"
+    with patch.object(global_research_settings, "_path", return_value=target):
+        assert global_research_settings.load_config()["default_turn_limit"] == 20
+        legacy = global_research_settings._defaults()
+        legacy.pop("default_turn_limit")
+        legacy["limits"].update(research_rounds=3, turns_per_round=4, model_calls=24)
+        target.write_text(json.dumps({"version": 1, **legacy}), encoding="utf-8")
+        target.chmod(0o600)
+        assert global_research_settings.load_config()["default_turn_limit"] == 12
+        saved = global_research_settings.save_config({"default_turn_limit": 3}, flat_limits=True)
+        assert saved["default_turn_limit"] == 3
+        persisted = json.loads(target.read_text(encoding="utf-8"))
+        assert persisted["version"] == 2
+        assert not {"research_rounds", "turns_per_round", "scheduler_version", "model_calls"} & set(
+            persisted["limits"]
+        )
+        assert global_research_settings.load_config()["default_turn_limit"] == 3
+        for invalid in (0, 1201, True, "3"):
+            try:
+                global_research_settings.save_config(
+                    {"default_turn_limit": invalid}, flat_limits=True
+                )
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Invalid turn default was accepted")
+        assert global_research_settings.load_config()["default_turn_limit"] == 3
+
+    # Flat session admission is independent of the old global protocol.
+    stored = {**research_sessions.NEW_DEFAULT_LIMITS, "research_rounds": 5, "model_calls": 30}
+    result = research_sessions._session_start_limits(
+        stored, research_sessions.NEW_DEFAULT_LIMITS, flat=True
+    )
+    assert result["scheduler_version"] == 2
+    assert result["research_rounds"] == result["turns_per_round"] == 1
+    assert result["model_calls"] == 2
+    assert result["session_duration_minutes"] == stored["session_duration_minutes"]
+
+
 def test_complete_transcript_export_groups_turns_newest_first() -> None:
     events = [
         {
@@ -1322,6 +1365,7 @@ def main() -> None:
         test_project_session_log_exports_latest_and_all()
         test_session_status_and_correlated_errors_match_export()
         test_flat_turn_settings_convert_legacy_rounds_without_relabeling()
+        test_user_turn_default_migration_and_validation(root)
         test_complete_transcript_export_groups_turns_newest_first()
         test_extended_completed_session_plans_new_slots_without_replaying_history()
         test_extension_preserves_partial_pair_and_refuses_duplicate_accepted_steps()

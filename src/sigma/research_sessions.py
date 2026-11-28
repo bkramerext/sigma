@@ -880,13 +880,25 @@ def _new_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
 
 
 def _session_start_limits(
-    stored: dict[str, Any], expected: dict[str, Any] | None
+    stored: dict[str, Any], expected: dict[str, Any] | None, *, flat: bool = False
 ) -> dict[str, Any]:
     """Bind a new v2 browser start to its saved, versioned research limits.
 
     Historical v1 callers remain explicit legacy callers; saved session records
     are never rewritten. The UI uses the same projection for its confirmation.
     """
+    if flat:
+        # The session owns its protocol budget. Only global safety limits
+        # participate in admission; obsolete round defaults cannot block it.
+        return _validate_limits(
+            {
+                **stored,
+                "scheduler_version": 2,
+                "research_rounds": 1,
+                "turns_per_round": 1,
+                "model_calls": 2,
+            }
+        )
     paired = stored.get("scheduler_version") == 2 or (
         isinstance(expected, dict) and expected.get("scheduler_version") == 2
     )
@@ -4843,6 +4855,14 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         }
     }
     if record.get("scheduler_version") == 2:
+        # Migrate historical paired session settings at the read boundary.
+        # cycle_limit is the durable flat slot count, independent of labels
+        # and immutable provider/audit history. The next edit persists it.
+        cycles = int(record.get("cycle_limit", 0))
+        if cycles > 0:
+            result["session_settings"] = _session_configuration(
+                record.get("session_settings"), default_turn_limit=cycles
+            )
         round_number, pair_number = _paired_round_position(record, int(record.get("cycle", 0)))
         result["research_round"] = round_number if record.get("cycle", 0) else 0
         result["paired_turn_in_round"] = pair_number if record.get("cycle", 0) else 0
@@ -7176,7 +7196,7 @@ async def start_session(
             raise ProjectError(str(exc)) from exc
     # Provider preflight may suspend on remote I/O. Never hold an exclusive
     # project flock across awaits: concurrent endpoints can block the event loop.
-    _session_start_limits(get_limits(view.path), expected_limits)
+    _session_start_limits(get_limits(view.path), expected_limits, flat=session_settings is not None)
     credential = await auth_context()
     if credential["identity"] != expected_binding:
         raise ProjectError(
@@ -7215,11 +7235,11 @@ async def start_session(
                 raise ProjectError(
                     "Browser disconnected before research admission; no call was dispatched"
                 )
-            limits = _session_start_limits(get_limits(view.path), expected_limits)
-            if session_settings is not None and limits.get("scheduler_version") == 2:
-                # The new UI always supplies its flat turn count, defaulting to
-                # 20. Historical callers that omit Session Settings retain
-                # their explicit project limits and scheduler semantics.
+            limits = _session_start_limits(
+                get_limits(view.path), expected_limits, flat=session_settings is not None
+            )
+            if session_settings is not None:
+                # Session Settings freezes the flat turn count at creation.
                 turn_limit = frozen_session_settings["turn_limit"]
                 limits = {
                     **limits,

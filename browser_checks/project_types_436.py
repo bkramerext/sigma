@@ -344,7 +344,32 @@ with sync_playwright() as playwright:
     expect(dialog).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
     expect(dialog.get_by_role("heading", name="User Settings", exact=True)).to_be_visible()
-    for tab in ("Limits", "Preferences", "Research Ethos", "Project Types"):
+    dialog.get_by_role("tab", name="Limits", exact=True).click()
+    expect(dialog.locator("#sigma-global-concurrent")).to_be_visible()
+    expect(dialog.locator("#sigma-global-duration")).to_be_visible()
+    expect(dialog.locator("#sigma-global-input")).to_be_visible()
+    expect(dialog.locator("#sigma-global-cost")).to_be_visible()
+    expect(dialog.get_by_label("Research rounds", exact=True)).to_have_count(0)
+    expect(dialog.get_by_label("Turns per round", exact=True)).to_have_count(0)
+    expect(dialog.locator(".sigma-limit-calculation")).to_have_count(0)
+    turns = dialog.get_by_label("Turns", exact=True)
+    expect(turns).to_be_visible()
+    initial_turns = turns.input_value()
+    updated_turns = "9" if initial_turns != "9" else "8"
+    settings_url = f"{FIXTURE_URL}/api/user-preferences/research-settings"
+
+    def settings_put(response):
+        return response.url.endswith("/api/user-preferences/research-settings") and (
+            response.request.method == "PUT"
+        )
+
+    with page.expect_response(settings_put, timeout=15000):
+        turns.fill(updated_turns)
+    assert page.request.get(settings_url).json()["default_turn_limit"] == int(updated_turns)
+    with page.expect_response(settings_put, timeout=15000):
+        turns.fill(initial_turns)
+    assert page.request.get(settings_url).json()["default_turn_limit"] == int(initial_turns)
+    for tab in ("Preferences", "Research Ethos", "Project Types"):
         dialog.get_by_role("tab", name=tab, exact=True).click()
         expect(dialog).to_be_visible()
     common = dialog.locator(".pt-common-references")
@@ -536,6 +561,9 @@ with sync_playwright() as playwright:
     }
     saved_limits = page.request.put(limits_url, data=bounded_limits)
     assert saved_limits.ok, saved_limits.text()
+    # Use the actual global default rather than rewriting the outgoing request.
+    turn_config = page.request.put(settings_url, data={"default_turn_limit": 2})
+    assert turn_config.ok, turn_config.text()
 
     open_project(page, affected["path"])
     expect(page.get_by_role("heading", name="Deleted custom parent")).to_be_visible()
@@ -713,11 +741,12 @@ with sync_playwright() as playwright:
     session_settings.click()
     draft = page.get_by_role("dialog", name="Session Settings")
     expect(draft).to_be_visible()
-    draft.get_by_label("Turns", exact=True).fill("9")
+    expect(draft.get_by_label("Turns", exact=True)).to_have_value("2")
+    draft.get_by_label("Turns", exact=True).fill("1")
     draft.get_by_role("button", name="Close Session Settings").click()
     expect(draft).not_to_be_visible()
     session_settings.click()
-    expect(draft.get_by_label("Turns", exact=True)).to_have_value("9")
+    expect(draft.get_by_label("Turns", exact=True)).to_have_value("1")
     draft.get_by_role("button", name="Close Session Settings").click()
     assert (
         len([url for url, _ in api_requests if url.endswith("/research-sessions/start")])
@@ -732,7 +761,10 @@ with sync_playwright() as playwright:
     ]
     assert len(start_payloads) == starts_before + 1, start_payloads
     assert start_payloads[-1]["continue_using_saved_type_settings"] is True, start_payloads[-1]
-    assert start_payloads[-1]["session_settings"]["turn_limit"] == 9
+    assert start_payloads[-1]["session_settings"]["turn_limit"] == 1
+    assert page.request.get(settings_url).json()["default_turn_limit"] == 2
+    restored_turns = page.request.put(settings_url, data={"default_turn_limit": int(initial_turns)})
+    assert restored_turns.ok, restored_turns.text()
 
     # A legacy default project is still importable/exportable, but the UI says
     # clearly that its incomplete snapshot requires an explicit replacement.

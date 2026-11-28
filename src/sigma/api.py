@@ -717,6 +717,7 @@ class ResearchExecutionRequest(OpenRequest):
 
 class ResearchLimitsRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
+    default_turn_limit: int | None = Field(default=None, ge=1, le=1200)
     research_rounds: int = Field(ge=1, le=60)
     turns_per_round: int | None = Field(default=None, ge=1, le=20)
     scheduler_version: Literal[2] | None = None
@@ -1694,6 +1695,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
 class GlobalResearchSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     limits: dict[str, Any] | None = None
+    default_turn_limit: int | None = Field(default=None, ge=1, le=1200)
     ai_model: str | None = Field(default=None, min_length=1, max_length=128)
     reasoning_effort: str | None = Field(default=None, min_length=1, max_length=40)
     show_advanced_outcome_details: bool | None = None
@@ -1706,7 +1708,7 @@ def global_research_settings_view():
     principal = cloud_auth.current_principal()
     if principal is not None and principal.role == "guest":
         raise HTTPException(403, "Sign in to view research settings.")
-    return global_research_settings.load_config()
+    return global_research_settings.user_config(global_research_settings.load_config())
 
 
 @app.put("/api/user-preferences/research-settings")
@@ -1718,7 +1720,7 @@ def global_research_settings_update(body: GlobalResearchSettingsRequest):
         raise HTTPException(403, "Sign in to change research settings.")
     changes = body.model_dump(exclude_none=True)
     # Explicit null limits are not meaningful; omit unchanged fields.
-    return global_research_settings.save_config(changes)
+    return global_research_settings.save_config(changes, flat_limits=True)
 
 
 class ResearchEthosPreference(BaseModel):
@@ -1786,8 +1788,15 @@ def recover_invalid_research_ethos():
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
     inspect_project(path)
-    limits = research_sessions._new_session_limits(research_sessions.get_limits(path))
-    return {**limits, "max_concurrent_sessions": str(limits["max_concurrent_sessions"])}
+    from sigma import global_research_settings
+
+    config = global_research_settings.load_config()
+    limits = research_sessions._new_session_limits(config["limits"])
+    return {
+        **limits,
+        "max_concurrent_sessions": str(limits["max_concurrent_sessions"]),
+        "default_turn_limit": config["default_turn_limit"],
+    }
 
 
 @app.put("/api/projects/research-limits")
