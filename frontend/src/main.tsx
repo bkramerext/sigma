@@ -492,7 +492,7 @@ type EvidencePointer = { project_id: string; session_id: string; session_number:
 type CurrentFinding = { id: string; text: string; investigated_claim: string; source: EvidencePointer; status: string; verification: string; strategy_title: string; objections: string[]; evidence_kind: string };
 type CurrentQuestion = { id: string; text: string; status: string; actionable: boolean; sources: EvidencePointer[]; narrative_resolution_sources: EvidencePointer[]; note: string; dispositions: { source: EvidencePointer; valid: boolean; rationale: string }[] };
 type CurrentUnderstanding = { version: number; project_id: string; session_count: number; project_status: string; scope_note: string; findings: CurrentFinding[]; current_finding_ids: string[]; obligations: CurrentQuestion[]; changes: { kind: string; text: string; source: EvidencePointer; earlier: EvidencePointer | null; caution: string }[]; next_investigations: { obligation_id: string; question: string; source: EvidencePointer; qualification: string }[]; failures: { session_id: string; session_number: number; status: string; note: string }[]; limitations: string[] };
-type ResearchLimits = { research_rounds: number; turns_per_round: number; scheduler_version: number; model_calls: number; session_duration_minutes: number | null; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null; maximum_input_tokens_per_session?: number | null; max_concurrent_sessions: string };
+type ResearchLimits = { default_turn_limit?: number; research_rounds: number; turns_per_round: number; scheduler_version: number; model_calls: number; session_duration_minutes: number | null; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null; maximum_input_tokens_per_session?: number | null; max_concurrent_sessions: string };
 type DurationUnit = 'minutes' | 'hours' | 'days' | 'unlimited';
 type ProjectSettingsTab = 'main' | 'limits' | 'preferences';
 function savedProjectSettingsTab(): ProjectSettingsTab {
@@ -1887,7 +1887,11 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         if (!chosenIds.length || chosenIds.length > 12) throw new Error('Choose between one and twelve enabled strategies.');
         setPendingStrategyIds(chosenIds);
         setConfig({ available: true, model: 'mock-deterministic', reasoning_effort: 'none', mode: 'mock', binding: 'mock', message: 'Local simulation: no provider calls.' });
-        setPendingStartSettings(null);
+        const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
+        const currentLimits = await response.json();
+        if (!response.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
+        setLimits(currentLimits);
+        setPendingStartSettings({ ...defaultSessionSettings(), turn_limit: currentLimits.default_turn_limit ?? 20 });
         setConfirmStart(true);
         return;
       }
@@ -1912,7 +1916,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       }
       setPendingStrategyIds(chosenIds);
       setConfig(current); setLimits(currentLimits);
-      setPendingStartSettings(null);
+      // Snapshot the user default when opening this new Session, not on Resume.
+      setPendingStartSettings({ ...defaultSessionSettings(), turn_limit: currentLimits.default_turn_limit ?? 20 });
       setConfirmStart(true);
     } catch (cause) {
       const message = errorMessage(cause);
@@ -1923,7 +1928,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }
 
   async function start(selectedSettings?: SessionSettings) {
-    const sessionSettings = selectedSettings ?? pendingStartSettings ?? defaultSessionSettings();
+    const sessionSettings = selectedSettings ?? pendingStartSettings ?? { ...defaultSessionSettings(), turn_limit: limits?.default_turn_limit ?? 20 };
     if (guest) { setConfirmStart(false); setGuestSessionCard(true); return; }
     if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
@@ -2287,14 +2292,14 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   }, [runningSession, busy, readError]);
   const effectiveDurationMinutes = limits?.session_duration_minutes ?? null;
   const startTurns = pendingStartSettings?.turn_limit
-    ?? 20;
+    ?? limits?.default_turn_limit ?? 20;
   const startStrategies = confirmStart ? pendingStrategyIds.length : eligible.length;
   const startSummary = limits ? (pendingStartSettings?.unlimited_turns
     ? `Unlimited paired turns × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'}`
     : `${startTurns} paired ${startTurns === 1 ? 'turn' : 'turns'} × 2 agents × ${startStrategies} enabled ${startStrategies === 1 ? 'strategy' : 'strategies'} = ${startTurns * 2 * startStrategies} maximum agent calls`) : undefined;
   useEffect(() => {
     onControlsChange({
-      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), configure: () => setSettingsDialog({ mode: 'start', initial: pendingStartSettings ?? defaultSessionSettings() }), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      play, stop, confirming: confirmStart, starting: admittingSession, start: () => void start(), cancel: () => setConfirmStart(false), configure: () => setSettingsDialog({ mode: 'start', initial: pendingStartSettings ?? { ...defaultSessionSettings(), turn_limit: limits?.default_turn_limit ?? 20 } }), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
       confirmationSummary: startSummary,
       // Match the backend's queued/running slot count. The server remains
       // authoritative when another browser starts a session concurrently.
