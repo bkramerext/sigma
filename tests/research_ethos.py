@@ -49,9 +49,7 @@ def main() -> None:
             assert defaults["is_override"] is False
             assert isinstance(defaults["markdown"], str)
             assert isinstance(defaults["sha256"], str)
-            principles = [
-                line for line in defaults["markdown"].splitlines() if line[:1].isdigit()
-            ]
+            principles = [line for line in defaults["markdown"].splitlines() if line[:1].isdigit()]
             assert len(principles) == 5
             for index, heading in enumerate(
                 (
