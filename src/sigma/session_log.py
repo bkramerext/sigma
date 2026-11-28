@@ -1278,6 +1278,11 @@ def _transcript_correlated_step(
     if step is None:
         return None
     known_request = step.get("request_id")
+    if isinstance(request_id, str) and (
+        request_id in ambiguous_saved_requests
+        or (request_id in by_request and by_request[request_id] is not step)
+    ):
+        return None
     if known_request and (
         known_request in ambiguous_saved_requests or (request_id and request_id != known_request)
     ):
@@ -1425,6 +1430,32 @@ def transcript_markdown_export(
             event, requests.get(request_id, {}), by_id, by_request, ambiguous_saved_requests
         )
 
+    # A persisted running step is the admission identity, not proof of the
+    # request ID generated later inside the provider call. Count compatible
+    # unresolved requests without inventing a durable request binding.
+    active = session.get("status") in {"running", "queued"}
+    possible_attempts: dict[str, int] = {}
+    if active:
+        for event in events:
+            request_id = str(event.get("request_id") or "")
+            if (
+                event.get("type") != "provider_request"
+                or not request_id
+                or request_id in responded
+                or request_id in failed_requests
+                or request_id in raw_response_counts
+            ):
+                continue
+            step = correlate(event)
+            if (
+                step is not None
+                and step["status"] == "running"
+                and not step.get("request_id")
+                and event.get("step_id") == step["step_id"]
+            ):
+                identifier = step["step_id"]
+                possible_attempts[identifier] = possible_attempts.get(identifier, 0) + 1
+
     reviews_by_event: dict[int, dict[str, Any]] = {}
     review_counts: dict[str, int] = {}
     for index, event in enumerate(events):
@@ -1434,7 +1465,7 @@ def transcript_markdown_export(
             continue
         message = str(event.get("message") or "")
         review = correlate(event)
-        if review is None and not event.get("step_id"):
+        if review is None and not event.get("step_id") and not event.get("request_id"):
             key = _transcript_review_key(event.get("strategy_id"), event.get("round"), message)
             matches = saved_reviews.get(key, [])
             if len(matches) == 1 and matches[0].get("step_id") in by_id:
@@ -1443,6 +1474,7 @@ def transcript_markdown_export(
             review is not None
             and review.get("role") == "supervisor"
             and review.get("status") == "completed"
+            and (not event.get("request_id") or review.get("request_id") == event["request_id"])
             and message
             and review.get("text") == message
         ):
@@ -1536,10 +1568,33 @@ def transcript_markdown_export(
             )
             if step is not None and pending:
                 represented.add(step["step_id"])
-            title_suffix = "Request pending" if pending else "Response not retained"
-            body = (
-                "Awaiting response." if pending else "Raw response unavailable; outcome unverified."
+            possible = (
+                possible_attempts.get(step["step_id"], 0)
+                if step is not None
+                and request_id
+                and request_id not in failed_requests
+                and request_id not in raw_response_counts
+                and event.get("step_id") == step["step_id"]
+                else 0
             )
+            if pending:
+                title_suffix, body = "Request pending", "Awaiting response."
+            elif possible:
+                title_suffix = (
+                    "Provider request (possibly active; attempt unconfirmed)"
+                    if possible == 1
+                    else "Provider request (active step; attempt ambiguous)"
+                )
+                body = (
+                    "Saved step is running; this raw request may be in flight. "
+                    "Its attempt identity and outcome are unconfirmed."
+                    if possible == 1
+                    else "Saved step is running; multiple unresolved raw requests match. "
+                    "Which attempt is active and their outcomes are unconfirmed."
+                )
+            else:
+                title_suffix = "Response not retained"
+                body = "Raw response unavailable; outcome unverified."
             turn = event.get("round") or (step or {}).get("round", "—")
             strategy = event.get("strategy_id") or (step or {}).get("strategy_id")
             group_key, group_label = _transcript_raw_group(

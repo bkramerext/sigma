@@ -454,3 +454,41 @@ test('mixed structured response content remains complete, including historical r
   assert.equal(rows.length, 1);
   assert.equal(rows[0].title, 'Accepted response');
 });
+
+test('live admission without request binding is qualified, never definitely pending or missing', () => {
+  const event = { seq: 1, timestamp: '2026-01-01T00:00:01Z', type: 'provider_request',
+    step_id: 's', request_id: 'new', role: 'investigator', strategy_id: 'x', round: 1 };
+  const saved = { step_id: 's', role: 'investigator', strategy_id: 'x', round: 1, status: 'running' };
+  const rows = projectTranscript([event], [], [saved], 'running');
+  assert.equal(rows.find(r => r.id === 'pending-new').title, 'Provider request (possibly active; attempt unconfirmed)');
+  assert.ok(rows.every(r => !r.pending && !convertibleTranscriptEntry(r)));
+  assert.equal(rows.filter(r => r.reconstructed).length, 1);
+  const multiple = projectTranscript([event, { ...event, seq: 2, request_id: 'older' }], [], [saved], 'running');
+  assert.equal(multiple.filter(r => r.title.includes('attempt ambiguous')).length, 2);
+  assert.ok(multiple.every(r => !r.pending));
+  for (const status of ['paused', 'completed']) {
+    const terminal = projectTranscript([event], [], [{ ...saved, status: 'interrupted' }], status);
+    assert.equal(terminal.find(r => r.id === 'pending-new').title, 'Response not retained');
+  }
+  const contradictory = projectTranscript([event], [], [saved,
+    { ...saved, step_id: 'other', request_id: 'new' }], 'running');
+  assert.equal(contradictory.find(r => r.id === 'pending-new').title, 'Response not retained');
+  const completed = projectTranscript([event, { ...event, seq: 2, type: 'provider_response',
+    response: { output_text: 'saved result' } }], [], [{ ...saved, status: 'completed',
+    request_id: 'new', text: 'saved result' }], 'completed');
+  assert.deepEqual(completed.map(r => r.title), ['Accepted response']);
+});
+
+test('Supervisor historical fallback cannot override explicit request identity', () => {
+  const saved = { step_id: 's', role: 'supervisor', strategy_id: 'x', round: 1,
+    status: 'completed', text: 'Saved review with enough text for formatting.' };
+  const event = { seq: 1, timestamp: '', type: 'session_event', event_kind: 'supervisor.review',
+    role: 'supervisor', strategy_id: 'x', round: 1, message: saved.text };
+  assert.equal(projectTranscript([event], [], [saved], 'completed').length, 1);
+  for (const raw of [{ ...event, request_id: 'wrong' },
+    { ...event, request_id: 'wrong', step_id: 's' }]) {
+    const rows = projectTranscript([raw], [], [saved], 'completed');
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every(r => !convertibleTranscriptEntry(r)));
+  }
+});

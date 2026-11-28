@@ -260,6 +260,8 @@ export function projectTranscript(
     const step = ids.size === 1 ? savedById.get([...ids][0])
       : event.request_id ? savedByRequest.get(event.request_id) : undefined;
     if (!step || ambiguousSteps.has(step.step_id)) return undefined;
+    if (event.request_id && (ambiguousSavedRequests.has(event.request_id)
+      || (savedByRequest.has(event.request_id) && savedByRequest.get(event.request_id) !== step))) return undefined;
     if (step.request_id && (ambiguousSavedRequests.has(step.request_id)
       || (event.request_id && step.request_id !== event.request_id))) return undefined;
     for (const field of ['role', 'strategy_id', 'round'] as const) {
@@ -270,6 +272,17 @@ export function projectTranscript(
   };
   const isBound = (event: TranscriptEvent, step: TranscriptSavedStep | undefined) =>
     !!step?.request_id && event.request_id === step.request_id;
+  // Admission identifies the durable running step, not the raw request ID
+  // allocated later inside the provider call. Never claim a definite binding.
+  const active = sessionStatus === 'running' || sessionStatus === 'queued';
+  const possibleAttempts = new Map<string, number>();
+  if (active) for (const event of events) {
+    if (event.type !== 'provider_request' || !event.request_id || responded.has(event.request_id)
+      || failedRequests.has(event.request_id) || responseCounts.has(event.request_id)) continue;
+    const step = correlate(event);
+    if (step?.status === 'running' && !step.request_id && event.step_id === step.step_id)
+      possibleAttempts.set(step.step_id, (possibleAttempts.get(step.step_id) ?? 0) + 1);
+  }
   const reviewsByEvent = new Map<TranscriptEvent, TranscriptSavedStep>();
   const reviewCounts = new Map<TranscriptSavedStep, number>();
   for (const event of events) {
@@ -277,12 +290,12 @@ export function projectTranscript(
       || roleOf(event.role) !== 'supervisor') continue;
     const message = String(event.message ?? '');
     let review = correlate(event);
-    if (!review && !event.step_id) {
+    if (!review && !event.step_id && !event.request_id) {
       const matches = savedReviews.get(reviewKey(event.strategy_id, event.round, message)) ?? [];
       if (matches.length === 1 && !ambiguousSteps.has(matches[0].step_id)) review = matches[0];
     }
     if (review?.role === 'supervisor' && review.status === 'completed'
-      && !!message && review.text === message) {
+      && (!event.request_id || isBound(event, review)) && !!message && review.text === message) {
       reviewsByEvent.set(event, review);
       reviewCounts.set(review, (reviewCounts.get(review) ?? 0) + 1);
     }
@@ -290,7 +303,6 @@ export function projectTranscript(
 
   const entries: TranscriptEntry[] = [];
   const represented = new Set<TranscriptSavedStep>();
-  const active = sessionStatus === 'running' || sessionStatus === 'queued';
   for (const event of events) {
     const step = correlate(event);
     const bound = isBound(event, step);
@@ -341,14 +353,24 @@ export function projectTranscript(
     if (event.type === 'provider_request') {
       // Every unmatched raw request survives, even if its logical step ended.
       // Only a uniquely bound running attempt can be called pending.
+      // A compatible unresolved request may be live, without that certainty.
       const pending = savedSteps === undefined || (!!step && bound && active && step.status === 'running');
       if (step && pending) represented.add(step);
+      const possible = step && event.request_id && !failedRequests.has(event.request_id)
+        && !responseCounts.has(event.request_id) && event.step_id === step.step_id
+        ? possibleAttempts.get(step.step_id) ?? 0 : 0;
+      const title = pending ? 'Provider request'
+        : possible === 1 ? 'Provider request (possibly active; attempt unconfirmed)'
+          : possible > 1 ? 'Provider request (active step; attempt ambiguous)' : 'Response not retained';
+      const text = pending ? 'Awaiting response…'
+        : possible === 1 ? 'Saved step is running; this raw request may be in flight. Its attempt identity and outcome are unconfirmed.'
+          : possible > 1 ? 'Saved step is running; multiple unresolved raw requests match. Which attempt is active and their outcomes are unconfirmed.'
+            : 'Raw response unavailable; outcome unverified.';
       const unknown = savedSteps !== undefined && !bound;
       entries.push({
         id: 'pending-' + (event.request_id && !ambiguousRequests.has(event.request_id)
           ? event.request_id : event.seq), timestamp: event.timestamp,
-        role: roleOf(event.role ?? step?.role), title: pending ? 'Provider request' : 'Response not retained',
-        text: pending ? 'Awaiting response…' : 'Raw response unavailable; outcome unverified.',
+        role: roleOf(event.role ?? step?.role), title, text,
         round: event.round ?? step?.round, strategyId: event.strategy_id ?? step?.strategy_id,
         sequence: event.seq, request: event.request, pending,
         brainstormMode: brainstormAtDispatch(event),

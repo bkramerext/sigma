@@ -1536,6 +1536,39 @@ def test_transcript_unanswered_attempts_and_supervisor_mismatch() -> None:
     )
     assert report.count("Raw review (acceptance unverified)") == 2
     assert "Reconstructed from saved state" in report
+    # The historical text fallback applies only in the absence of explicit identity.
+    historical = {key: value for key, value in event.items() if key != "step_id"}
+    report = session_log.transcript_markdown_export(
+        [historical], [], {"status": "completed"}, "Test", [review]
+    )
+    assert "Reconstructed from saved state" not in report
+    for raw in (
+        {**historical, "request_id": "wrong"},
+        {**event, "request_id": "wrong"},
+    ):
+        report = session_log.transcript_markdown_export(
+            [raw], [], {"status": "completed"}, "Test", [review]
+        )
+        assert "Raw review (acceptance unverified)" in report
+        assert "Reconstructed from saved state" in report
+
+    unbound = {key: value for key, value in saved.items() if key != "request_id"}
+    possible = session_log.transcript_markdown_export(
+        [events[1]], [], {"status": "running"}, "Test", [unbound]
+    )
+    assert "possibly active; attempt unconfirmed" in possible
+    assert "Response not retained" not in possible
+    assert "Reconstructed from saved state" in possible
+    ambiguous = session_log.transcript_markdown_export(
+        events, [], {"status": "running"}, "Test", [unbound]
+    )
+    assert ambiguous.count("active step; attempt ambiguous") == 2
+    assert "Awaiting response" not in ambiguous
+    contradictory = session_log.transcript_markdown_export(
+        [events[1]], [], {"status": "running"}, "Test", [unbound, {**saved, "step_id": "other"}]
+    )
+    assert "possibly active" not in contradictory
+    assert "Response not retained" in contradictory
 
 
 def test_transcript_checkpoint_skips_unchanged_large_projection(root: Path) -> None:
