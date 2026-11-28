@@ -1228,7 +1228,9 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
 
     canonical = run()
     research_sessions._refresh_token_accounting(canonical)
-    assert canonical["tokens_used"] == 38
+    # Admission retains its original conservative accounting, independent of
+    # diagnostic identity reconciliation and unknown conflicting usage.
+    assert canonical["tokens_used"] == 49
     assert canonical["token_usage_status"] == "partial"
     canonical_metrics = research_sessions._outcome_metrics(canonical, {})["observability"]
     assert canonical_metrics["research_calls"] == 2
@@ -1236,7 +1238,10 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     assert canonical_metrics["recorded_attempts"] == 9
     assert canonical_metrics["unknown_budget_counted_attempts"] == 1
     assert canonical_metrics["retry_attempts"] == 3
-    assert canonical_metrics["usage_reported_attempts"] == 5
+    assert canonical_metrics["usage_reported_attempts"] == 4
+    assert canonical_metrics["reported_tokens_subtotal"] == 31
+    assert canonical_metrics["conflicting_attempt_identities"] == 1
+    assert canonical_metrics["attempt_inventory_complete"] is False
     assert canonical_metrics["usage_complete"] is False
     assert canonical_metrics["provider_attempt_seconds"] is None
     assert canonical_metrics["provider_limit_categories"] == {"subscription_usage_exhausted": 1}
@@ -1420,7 +1425,7 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     assert "1 provider failure(s)" in provider_failures
     assert "2 interrupted / cancelled" in provider_failures
     assert "1 later attempt(s)" in provider_failures
-    assert "automatic and operator retries are distinct attempts" in provider_failures
+    assert "1 origin unknown" in provider_failures
     assert (
         "— (1/5 calls report token usage" in operational["Tokens · input / output / cached / total"]
     )
@@ -1482,9 +1487,7 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
         "model": MODEL,
         "status": "ended",
         "calls_used": 1,
-        "steps": [
-            {"role": "investigator", "status": "completed", "token_usage": missing_cached}
-        ],
+        "steps": [{"role": "investigator", "status": "completed", "token_usage": missing_cached}],
     }
     historical_metrics = research_sessions._outcome_metrics(historical_without_model, {})
     assert historical_metrics["observability"]["api_rate_equivalent_usd"] is None

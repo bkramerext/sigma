@@ -25,7 +25,11 @@ def run() -> dict[str, Any]:
     obs.checkpoint_clock(record, _at(1))
     record["status"] = "running"
     obs.checkpoint_clock(record, _at(2))
-    assert obs.session_times(record, _at(10)) == {"wall_seconds": 10, "active_seconds": 10}
+    assert obs.session_times(record, _at(10)) == {
+        "wall_seconds": 10,
+        "active_seconds": 10,
+        "active_seconds_lower_bound": 2,
+    }
     # Concurrent provider calls can consume sixteen call-seconds in ten active
     # seconds, and queue/worker transitions must not count overlapping time twice.
     concurrent = [
@@ -36,13 +40,21 @@ def run() -> dict[str, Any]:
     record["status"] = "paused"
     obs.checkpoint_clock(record, _at(10))
     obs.checkpoint_clock(record, _at(20))
-    assert obs.session_times(record, _at(20)) == {"wall_seconds": 20, "active_seconds": 10}
+    assert obs.session_times(record, _at(20)) == {
+        "wall_seconds": 20,
+        "active_seconds": 10,
+        "active_seconds_lower_bound": 10,
+    }
     record["status"] = "queued"
     obs.checkpoint_clock(record, _at(30))
     record["status"] = "ended"
     obs.checkpoint_clock(record, _at(40))
     obs.checkpoint_clock(record, _at(50))
-    assert obs.session_times(record, _at(50)) == {"wall_seconds": 40, "active_seconds": 20}
+    assert obs.session_times(record, _at(50)) == {
+        "wall_seconds": 40,
+        "active_seconds": 20,
+        "active_seconds_lower_bound": 20,
+    }
 
     interrupted = deepcopy(record)
     interrupted["status"] = "running"
@@ -51,6 +63,7 @@ def run() -> dict[str, Any]:
     interrupted["status"] = "paused"
     obs.checkpoint_clock(interrupted, _at(90))
     assert obs.session_times(interrupted, _at(100))["active_seconds"] is None
+    assert obs.session_times(interrupted, _at(100))["active_seconds_lower_bound"] == 20
     interrupted["status"] = "running"
     obs.checkpoint_clock(interrupted, _at(110))
     assert obs.session_times(interrupted, _at(120))["active_seconds"] is None
@@ -59,7 +72,19 @@ def run() -> dict[str, Any]:
     assert obs.session_times(historical, _at(50)) == {
         "wall_seconds": 40,
         "active_seconds": None,
+        "active_seconds_lower_bound": None,
     }
+    historical["events"] = [{"kind": "queued"}, {"kind": "completed"}]
+    assert obs.session_times(historical, _at(50))["active_seconds"] == 40
+    historical["events"].insert(1, {"kind": "paused"})
+    assert obs.session_times(historical, _at(50))["active_seconds"] is None
+    rollback = deepcopy(record)
+    rollback["status"] = "running"
+    obs.checkpoint_clock(rollback, _at(60))
+    obs.checkpoint_clock(rollback, _at(55))
+    obs.checkpoint_clock(rollback, _at(70))
+    assert obs.session_times(rollback, _at(70))["active_seconds"] is None
+    assert obs.session_times(rollback, _at(70))["active_seconds_lower_bound"] == 30
 
     common = {"strategy_id": "s", "cycle": 1, "model": "gpt-6.1-sol"}
     investigator = {
@@ -187,12 +212,13 @@ def run() -> dict[str, Any]:
         "supervisor_reviews": 1,
     }
     reported = [usage for row in attempted if (usage := obs.reported_usage(row)) is not None]
-    assert len(reported) == 5
+    assert len(reported) == 4
     total = sum(
-        int(usage["input_tokens"] or 0) + int(usage["output_tokens"] or 0)
-        for usage in reported
+        int(usage["input_tokens"] or 0) + int(usage["output_tokens"] or 0) for usage in reported
     )
-    assert total == 38
+    assert total == 31
+    assert not obs.inventory_complete(record, rows, gap)
+    assert sum(bool(row.get("observability_conflict")) for row in rows) == 1
     assert obs.aggregate_attempt_seconds(attempted, gap) is None
     assert obs.limit_categories(attempted) == {"subscription_usage_exhausted": 1}
     assert obs.limit_categories(
@@ -216,6 +242,57 @@ def run() -> dict[str, Any]:
     settings["session_settings"]["turn_limit"] = 10
     assert effective == {"turn_limit": 5, "mode": "chatgpt"}
     assert obs.compiler_execution({}) == {"attempt_id": None}
+    assert obs.observed_cache(
+        {
+            "usage": {
+                "input_tokens": 7,
+                "output_tokens": 3,
+                "input_tokens_details": {"cached_tokens": "bad"},
+            }
+        }
+    ) == {"observed_cache_metadata_status": "malformed"}
+    assert obs.reported_usage(
+        {"status": "failed", "attempt_status": "usage_estimated", "token_usage": _usage(4, 5)}
+    ) is None
+    conflicting = obs.unique_rows(
+        [
+            {"id": "same", "status": "completed", "token_usage": _usage(1, 2)},
+            {"id": "same", "status": "failed", "token_usage": _usage(7, 8)},
+        ]
+    )
+    assert len(conflicting) == 1 and conflicting[0]["observability_conflict"]
+    assert obs.reported_usage(conflicting[0]) is None
+    assert obs.dispatch_uncertain(conflicting[0])
+    assert obs.retry_origins(
+        [
+            {"id": "a", "cycle": 1, "role": "investigator", "resume_sequence": 0},
+            {
+                "id": "b",
+                "cycle": 1,
+                "role": "investigator",
+                "resume_sequence": 0,
+                "automatic_retry_of": "a",
+            },
+            {"id": "c", "cycle": 1, "role": "investigator", "resume_sequence": 3},
+        ],
+        "s",
+    ) == {"automatic": 1, "operator": 1, "unknown": 0}
+    ledger = {
+        "hard_budget_ledger": {
+            "calls": [
+                {"call_id": "a", "status": "settled", "cost_bound_usd": 0.01},
+                {"call_id": "b", "status": "unknown", "cost_bound_usd": 0.02},
+                {"call_id": "c", "status": "reserved", "cost_bound_usd": 0.03},
+                {"call_id": "d", "status": "rejected", "cost_bound_usd": 0.0},
+            ]
+        }
+    }
+    assert obs.budget_observation(ledger)["ledger_cost_bound_usd_by_status"] == {
+        "settled": 0.01,
+        "unknown": 0.02,
+        "reserved": 0.03,
+        "rejected": 0.0,
+    }
     return record
 
 

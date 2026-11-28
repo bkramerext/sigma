@@ -1,8 +1,8 @@
 """Provider-free projections of existing session checkpoints.
 
 These helpers never dispatch, reserve, retry, mutate budgets, or probe tools.
-The only persisted addition is the diagnostic clock, initialized for new
-sessions and updated at existing saves. Historical gaps remain unknown.
+The diagnostic clock and attempt metadata are optional persisted observations.
+Historical gaps remain unknown; these helpers never change enforcement.
 """
 
 from __future__ import annotations
@@ -48,79 +48,233 @@ def new_clock(started_at: str) -> dict[str, Any]:
         "active_seconds": 0.0,
         "active_since": started_at,
         "inactive_since": None,
+        "active_uncertain": False,
+        "terminal_at": None,
     }
 
 
 def checkpoint_clock(record: dict[str, Any], now: datetime) -> None:
-    """Track the union of active session intervals, not individual calls."""
+    """Checkpoint the union of active intervals at durable save boundaries."""
     clock = record.get("observability_clock")
     if not isinstance(clock, dict) or clock.get("version") != 1:
         return
     stamp = now.isoformat()
-    if record.get("status") in _ACTIVE:
-        if clock.get("active_since") is None:
-            clock["active_since"] = stamp
-            clock["inactive_since"] = None
-        return
-    if clock.get("active_since") is not None:
+    status = record.get("status")
+    previous_start = clock.get("active_since")
+    if previous_start is not None:
+        # A confirmed Stop/provider-limit timestamp may precede persistence.
+        end = stamp
+        if status not in _ACTIVE:
+            stopped = record.get("stopped_at")
+            if (
+                _seconds(previous_start, stopped) is not None
+                and _seconds(stopped, stamp) is not None
+            ):
+                end = stopped
+            elif _timestamp(stopped) is not None and _seconds(stopped, previous_start) is not None:
+                clock["active_uncertain"] = True
+                clock["active_seconds"] = None
+                end = previous_start
+        interval = _seconds(previous_start, end)
         previous = _number(clock.get("active_seconds"))
-        interval = _seconds(clock["active_since"], stamp)
-        clock["active_seconds"] = (
-            previous + interval if previous is not None and interval is not None else None
-        )
-        clock["active_since"] = None
-        clock["inactive_since"] = stamp
+        if previous is None or interval is None:
+            clock["active_uncertain"] = True
+        else:
+            clock["active_seconds"] = previous + interval
+        if status in _ACTIVE and interval is None:
+            # Do not double-count when the wall clock catches up after rollback.
+            return
+        clock["active_since"] = stamp if status in _ACTIVE else None
+        if status not in _ACTIVE:
+            clock["inactive_since"] = end
+    elif status in _ACTIVE:
+        clock["active_since"] = stamp
+        clock["inactive_since"] = None
     elif clock.get("inactive_since") is None:
         clock["inactive_since"] = stamp
 
+    if status in _ACTIVE:
+        clock["terminal_at"] = None
+    elif status in _TERMINAL and clock.get("terminal_at") is None:
+        stopped = record.get("stopped_at")
+        start = record.get("created_at") or record.get("started_at")
+        clock["terminal_at"] = (
+            stopped
+            if status == "stopped"
+            and _seconds(start, stopped) is not None
+            and _seconds(stopped, stamp) is not None
+            else stamp
+        )
+
 
 def invalidate_open_clock(record: dict[str, Any]) -> None:
-    """A dead worker's actual suspension time cannot be inferred on restart."""
+    """Retain completed intervals, but do not charge an unknown dead-worker gap."""
     clock = record.get("observability_clock")
     if isinstance(clock, dict) and clock.get("active_since") is not None:
-        clock["active_seconds"] = None
+        clock["active_uncertain"] = True
+        clock["active_since"] = None
 
 
 def session_times(record: dict[str, Any], now: datetime) -> dict[str, float | None]:
     clock = record.get("observability_clock")
     active = None
-    end = now.isoformat()
-    if record.get("status") in _TERMINAL:
-        end = (
-            clock.get("inactive_since")
-            if isinstance(clock, dict)
-            else record.get("stopped_at") or record.get("updated_at")
+    lower_bound = None
+    stamp = now.isoformat()
+    status = record.get("status")
+    end = stamp
+    if status in _TERMINAL:
+        recorded_end = clock.get("terminal_at") if isinstance(clock, dict) else None
+        end = recorded_end or (
+            record.get("stopped_at") if status == "stopped" else record.get("updated_at")
         )
-    wall = _seconds(record.get("created_at") or record.get("started_at"), end)
+    start = record.get("created_at") or record.get("started_at")
+    wall = _seconds(start, end)
     if isinstance(clock, dict) and clock.get("version") == 1:
-        active = _number(clock.get("active_seconds"))
-        if record.get("status") in _ACTIVE:
-            current = _seconds(clock.get("active_since"), now.isoformat())
-            active = active + current if active is not None and current is not None else None
-        elif clock.get("active_since") is not None:
-            # A read-only recovered projection or malformed historical clock.
-            active = None
+        lower_bound = _number(clock.get("active_seconds"))
+        current = _seconds(clock.get("active_since"), stamp) if status in _ACTIVE else 0.0
+        consistent = status in _ACTIVE or clock.get("active_since") is None
+        if (
+            lower_bound is not None
+            and current is not None
+            and consistent
+            and not clock.get("active_uncertain")
+        ):
+            active = lower_bound + current
         if active is not None and (wall is None or active > wall):
             active = None
-    return {"wall_seconds": wall, "active_seconds": active}
+        if lower_bound is not None and wall is not None and lower_bound > wall:
+            lower_bound = None
+    else:
+        # Old records do not necessarily record every pause. Only recover
+        # active time when the durable event sequence establishes no suspension.
+        events = record.get("events")
+        if (
+            isinstance(events, list)
+            and events
+            and isinstance(events[0], dict)
+            and events[0].get("kind") in ("queued", "simulation.queued")
+            and all(isinstance(event, dict) for event in events)
+            and not any(
+                any(
+                    word in str(event.get("kind", "")).lower()
+                    for word in ("pause", "stop", "resume", "interrupt", "recover")
+                )
+                for event in events
+            )
+            and status in ("queued", "running", "completed", "ended", "failed")
+            and not record.get("stopped_duration_seconds")
+        ):
+            active = wall
+            lower_bound = wall
+    return {
+        "wall_seconds": wall,
+        "active_seconds": active,
+        "active_seconds_lower_bound": lower_bound,
+    }
+
+
+def _identity(row: dict[str, Any]) -> str | None:
+    key = row.get("id") or row.get("attempt_id")
+    return key if isinstance(key, str) and key else None
+
+
+def _conflicts(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    fields = (
+        "status",
+        "role",
+        "strategy_id",
+        "cycle",
+        "attempt_status",
+        "token_usage",
+        "token_usage_status",
+        "usage_status",
+        "model",
+        "reasoning_effort",
+        "backend_build_commit",
+        "started_at",
+        "finished_at",
+        "attempt_id",
+        "assessment",
+        "output",
+        "provider_attempt_duration_seconds",
+        "provider_error_code",
+        "provider_http_status",
+        "retry_decision",
+        "automatic_retry_of",
+        "resume_sequence",
+        "execution_settings",
+        "observed_cached_input_tokens",
+        "observed_cache_metadata_status",
+    )
+    return any(
+        first.get(key) is not None
+        and second.get(key) is not None
+        and first[key] != second[key]
+        for key in fields
+    )
+
+
+def _combine(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
+    if first.get("observability_conflict") or _conflicts(first, second):
+        # Preserve identity for the inventory, not a disputed usage/result.
+        return {
+            "id": _identity(first),
+            "number": first.get("number"),
+            "role": first.get("role"),
+            "observability_conflict": True,
+        }
+    return {**second, **{key: value for key, value in first.items() if value is not None}}
 
 
 def unique_rows(value: Any) -> list[dict[str, Any]]:
-    """Deduplicate only established identities; retain unidentified evidence."""
+    """Collapse compatible copies; a contradictory identity remains unknown."""
     if not isinstance(value, list):
         return []
     result: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     for row in value:
         if not isinstance(row, dict):
             continue
-        key = row.get("id") or row.get("attempt_id")
-        if isinstance(key, str) and key:
-            if key in seen:
-                continue
-            seen.add(key)
+        key = _identity(row)
+        if key is not None and key in seen:
+            index = seen[key]
+            result[index] = _combine(result[index], row)
+            continue
+        if key is not None:
+            seen[key] = len(result)
         result.append(row)
     return result
+
+
+def inventory_complete(record: dict[str, Any], rows: list[dict[str, Any]], gap: int) -> bool:
+    if gap or type(record.get("calls_used")) is not int or record["calls_used"] < 0:
+        return False
+    for key in ("steps", "supervisor_reviews"):
+        source = record.get(key, [] if key == "supervisor_reviews" else None)
+        if not isinstance(source, list) or any(not isinstance(row, dict) for row in source):
+            return False
+    compiler = record.get("reference_compilation")
+    if isinstance(compiler, dict) and "attempts" in compiler:
+        source = compiler["attempts"]
+        if not isinstance(source, list) or any(not isinstance(row, dict) for row in source):
+            return False
+    counted = sum(
+        row.get("role") != "reference_compiler"
+        and row.get("attempt_status") != "not_dispatched"
+        for row in rows
+    )
+    return counted == record["calls_used"] and all(
+        not row.get("observability_conflict")
+        and (
+            _identity(row) is not None
+            or (row.get("role") == "reference_compiler" and type(row.get("number")) is int)
+        )
+        and (
+            row.get("attempt_status") == "not_dispatched"
+            or row.get("status") in ("running", "completed", "failed", "incomplete", "interrupted")
+        )
+        for row in rows
+    )
 
 
 def compiler_execution(stage: dict[str, Any]) -> dict[str, Any]:
@@ -129,7 +283,13 @@ def compiler_execution(stage: dict[str, Any]) -> dict[str, Any]:
     return {
         **{
             key: metadata[key]
-            for key in ("model", "reasoning_effort", "backend_build_commit", "execution_settings")
+            for key in (
+                "model",
+                "reasoning_effort",
+                "backend_build_commit",
+                "execution_settings",
+                "resume_sequence",
+            )
             if key in metadata
         },
         "attempt_id": stage.get("attempt_id"),
@@ -159,9 +319,7 @@ def _compiler_row(item: dict[str, Any]) -> dict[str, Any]:
             if status == "rejected"
             else None
         ),
-        "failure_kind": (
-            "provider_rejected" if status == "rejected" else item.get("failure_type")
-        ),
+        "failure_kind": ("provider_rejected" if status == "rejected" else item.get("failure_type")),
         "token_usage_status": "reported" if usage_status == "known" else "unavailable",
     }
 
@@ -187,17 +345,21 @@ def attempts(record: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
     compiler = record.get("reference_compilation")
     if isinstance(compiler, dict):
         history = unique_rows(compiler.get("attempts"))
-        numbers: set[int] = set()
+        by_number: dict[int, dict[str, Any]] = {}
+        unidentified = []
         for item in history:
             number = item.get("number")
             if type(number) is int:
-                if number in numbers:
-                    continue
-                numbers.add(number)
-            rows.append(_compiler_row(item))
+                by_number[number] = (
+                    _combine(by_number[number], item) if number in by_number else item
+                )
+            else:
+                unidentified.append(item)
+        rows.extend(_compiler_row(item) for item in by_number.values())
+        rows.extend(_compiler_row(item) for item in unidentified)
         current = compiler.get("attempt_number")
         if compiler.get("status") in ("running", "interrupted") and (
-            type(current) is not int or current not in numbers
+            type(current) is not int or current not in by_number
         ):
             rows.append(
                 _compiler_row(
@@ -234,6 +396,7 @@ def accepted_counts(steps: list[dict[str, Any]], rows: list[dict[str, Any]]) -> 
         role: sum(
             step.get("role") == role
             and step.get("status") == "completed"
+            and not step.get("observability_conflict")
             and step.get("attempt_status") != "not_dispatched"
             for step in steps
         )
@@ -252,16 +415,17 @@ def accepted_counts(steps: list[dict[str, Any]], rows: list[dict[str, Any]]) -> 
         ),
     }
 
+
 def reported_usage(row: dict[str, Any]) -> dict[str, int | None] | None:
-    if row.get("attempt_status") == "not_dispatched":
+    if row.get("attempt_status") == "not_dispatched" or row.get("observability_conflict"):
         return None
     if not (
         row.get("status") in ("completed", "incomplete")
-        or row.get("attempt_status") in ("usage_estimated", "settled")
+        or row.get("attempt_status") == "settled"
         or row.get("token_usage_status") == "reported"
     ):
         return None
-    if row.get("token_usage_status") == "unavailable":
+    if row.get("token_usage_status") in ("unavailable", "estimated", "unknown"):
         return None
     usage = row.get("token_usage")
     if not isinstance(usage, dict):
@@ -273,6 +437,8 @@ def reported_usage(row: dict[str, Any]) -> dict[str, int | None] | None:
     )
     if type(inp) is not int or type(out) is not int or inp < 0 or out < 0:
         return None
+    if cached is None and row.get("role") == "supervisor":
+        cached = row.get("observed_cached_input_tokens")
     if type(cached) is not int or not 0 <= cached <= inp:
         cached = None
     return {
@@ -285,27 +451,90 @@ def reported_usage(row: dict[str, Any]) -> dict[str, int | None] | None:
 def dispatch_uncertain(row: dict[str, Any]) -> bool:
     if row.get("attempt_status") == "not_dispatched":
         return False
-    if (
+    # An attempted invocation or pre-dispatch reservation alone is not remote receipt.
+    return bool(row.get("observability_conflict")) or not (
         row.get("status") in ("completed", "incomplete")
         or reported_usage(row) is not None
-        or row.get("attempt_status") in ("provider_rejected", "settled", "usage_estimated")
+        or row.get("attempt_status") in ("provider_rejected", "settled")
         or type(row.get("provider_http_status")) is int
-    ):
-        return False
-    # A local checkpoint, timeout or interrupted transport is not proof that
-    # the remote provider received the invocation.
-    return True
+        or type(row.get("diagnostic_provider_http_status")) is int
+    )
+
+
+def cache_metadata_status(row: dict[str, Any]) -> str:
+    if row.get("observed_cache_metadata_status") in ("reported", "missing", "malformed"):
+        return row["observed_cache_metadata_status"]
+    usage = row.get("token_usage")
+    if not isinstance(usage, dict) or usage.get("cached_input_tokens") is None:
+        return "missing"
+    cached = usage["cached_input_tokens"]
+    inp = usage.get("input_tokens")
+    return (
+        "reported"
+        if type(cached) is int and type(inp) is int and 0 <= cached <= inp
+        else "malformed"
+    )
+
+
+def observed_cache(raw: Any) -> dict[str, Any]:
+    """Optional Supervisor cache provenance, independent of settlement input."""
+    usage = raw.get("usage") if isinstance(raw, dict) else None
+    details = usage.get("input_tokens_details") if isinstance(usage, dict) else None
+    if details is None:
+        return {"observed_cache_metadata_status": "missing"}
+    if not isinstance(details, dict):
+        return {"observed_cache_metadata_status": "malformed"}
+    cached = details.get("cached_tokens")
+    inp = usage.get("input_tokens")
+    if cached is None:
+        return {"observed_cache_metadata_status": "missing"}
+    if type(cached) is int and type(inp) is int and 0 <= cached <= inp:
+        return {
+            "observed_cache_metadata_status": "reported",
+            "observed_cached_input_tokens": cached,
+        }
+    return {"observed_cache_metadata_status": "malformed"}
+
+
+def budget_observation(record: dict[str, Any]) -> dict[str, Any]:
+    ledger = record.get("hard_budget_ledger")
+    entries = ledger.get("calls") if isinstance(ledger, dict) else None
+    if not isinstance(entries, list):
+        return {}
+    counts: dict[str, int] = {}
+    cost: dict[str, float | None] = {}
+    seen: set[str] = set()
+    for item in entries:
+        if not isinstance(item, dict):
+            return {"ledger_inventory_complete": False}
+        identifier, status = item.get("call_id"), item.get("status")
+        if (
+            not isinstance(identifier, str)
+            or identifier in seen
+            or status not in ("settled", "reserved", "unknown", "rejected")
+        ):
+            return {"ledger_inventory_complete": False}
+        seen.add(identifier)
+        counts[status] = counts.get(status, 0) + 1
+        amount = _number(item.get("cost_bound_usd"))
+        previous = cost.get(status, 0.0)
+        cost[status] = previous + amount if previous is not None and amount is not None else None
+    return {
+        "ledger_inventory_complete": True,
+        "ledger_call_counts": counts,
+        "ledger_cost_bound_usd_by_status": cost,
+    }
 
 
 def attempt_seconds(row: dict[str, Any]) -> float | None:
+    if row.get("observability_conflict"):
+        return None
     observed = _number(row.get("provider_attempt_duration_seconds"))
     if observed is not None:
         return observed
-    if row.get("status") in ("running", "interrupted", "cancelled", "canceled"):
-        return None
-    if dispatch_uncertain(row):
-        return None
-    return _seconds(row.get("started_at"), row.get("finished_at"))
+    # Historical step intervals include non-provider work; do not present them
+    # as observed provider durations.
+    return None
 
 
 def aggregate_attempt_seconds(rows: list[dict[str, Any]], gap: int) -> float | None:
@@ -391,4 +620,58 @@ def tool_observations(steps: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 "image_id": image if isinstance(image, str) else None,
                 "step_id": step.get("id"),
             }
+    return result
+
+
+def resume_sequence(record: dict[str, Any]) -> int | None:
+    """Identify an actual saved resume event; missing history is unknown."""
+    events = record.get("events")
+    if not isinstance(events, list) or not events or not isinstance(events[0], dict):
+        return None
+    if events[0].get("kind") not in ("queued", "simulation.queued"):
+        return None
+    latest = 0
+    for event in events:
+        if not isinstance(event, dict):
+            return None
+        if event.get("kind") == "resumed":
+            sequence = event.get("sequence")
+            if type(sequence) is not int or sequence <= latest:
+                return None
+            latest = sequence
+    return latest
+
+
+def retry_origins(rows: list[dict[str, Any]], legacy_strategy: Any) -> dict[str, int]:
+    """Classify only distinct later attempts with explicit causal evidence."""
+    result = {"automatic": 0, "operator": 0, "unknown": 0}
+    prior: dict[tuple[str, int, str], dict[str, Any]] = {}
+    for row in rows:
+        role = row.get("role")
+        cycle = row.get("cycle")
+        strategy = row.get("strategy_id")
+        if not isinstance(strategy, str):
+            strategy = str(legacy_strategy)
+        if not isinstance(role, str) or type(cycle) is not int:
+            continue
+        key = (strategy, cycle, role)
+        previous = prior.get(key)
+        if previous is not None:
+            before = previous.get("resume_sequence")
+            after = row.get("resume_sequence")
+            if type(before) is int and type(after) is int and after > before:
+                result["operator"] += 1
+            elif (
+                isinstance(row.get("automatic_retry_of"), str)
+                and row["automatic_retry_of"] == _identity(previous)
+            ) or (
+                role == "reference_compiler"
+                and previous.get("retry_decision") == "retry"
+                and type(before) is int
+                and before == after
+            ):
+                result["automatic"] += 1
+            else:
+                result["unknown"] += 1
+        prior[key] = row
     return result

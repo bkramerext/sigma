@@ -19,6 +19,7 @@ import zlib
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager, nullcontext
+from contextvars import ContextVar
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -86,6 +87,7 @@ CALL_LIMIT = 6
 # Only known, settled clipped responses may be retried automatically.
 MAX_CLIPPED_AUTO_RETRIES = 1
 MAX_TRANSIENT_AUTO_RETRIES = 2
+_observed_retry_of: ContextVar[str | None] = ContextVar("observed_retry_of", default=None)
 MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
 # A 54-turn portfolio stores full audited prompts, provider attempts and
 # source-linked evidence. The old 2 MB per-session limit was nearly exhausted
@@ -2392,7 +2394,9 @@ def _timestamp_seconds(step: dict[str, Any]) -> float | None:
     return seconds if seconds >= 0 and math.isfinite(seconds) else None
 
 
-def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[str, Any]:
+def _outcome_metrics(
+    record: dict[str, Any], outcome: dict[str, Any], *, observed_at: datetime | None = None
+) -> dict[str, Any]:
     """Project compact operational and research metrics from saved evidence only."""
     raw_steps = record.get("steps")
     steps = (
@@ -2409,6 +2413,7 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     inventory_known = (
         type(saved_call_count) is int and saved_call_count >= 0 and isinstance(raw_steps, list)
     )
+    inventory_complete = session_observability.inventory_complete(record, attempts, unrecorded_calls)
     budget_steps = sum(step.get("role") != "reference_compiler" for step in provider_steps)
     call_counter_disagrees = inventory_known and saved_call_count != budget_steps
     call_counts = {
@@ -2429,12 +2434,11 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     }
     roles: set[str] = set()
     strategies: dict[str, str] = {}
-    retry_keys: dict[tuple[str, int | str, str], int] = {}
     durations: dict[str, list[float | None]] = {}
     for step in attempts:
         role = step.get("role")
         if isinstance(role, str):
-            if role != "reference_compiler":
+            if role != "reference_compiler" and step.get("attempt_status") != "not_dispatched":
                 roles.add(role_names.get(role, role.replace("_", " ").title()))
             if step.get("attempt_status") != "not_dispatched":
                 durations.setdefault(role, []).append(session_observability.attempt_seconds(step))
@@ -2448,21 +2452,10 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
                 if isinstance(strategy_title, str) and strategy_title
                 else strategy_id
             )
-        scope = (
-            strategy_id
-            if isinstance(strategy_id, str)
-            else str(record.get("strategy_id", "legacy"))
-        )
-        cycle = step.get("cycle") if type(step.get("cycle")) is int else "unknown"
-        role_key = role if isinstance(role, str) else "unknown"
         status = step.get("status")
         if step.get("attempt_status") == "not_dispatched":
             call_counts["not dispatched"] += 1
             continue
-        if role == "reference_compiler" or (cycle != "unknown" and role_key != "unknown"):
-            retry_key = (scope, cast(int | str, cycle), role_key)
-            retry_keys[retry_key] = retry_keys.get(retry_key, 0) + 1
-
         failure_kind = step.get("failure_kind")
         http_status = step.get("provider_http_status")
         if status == "completed":
@@ -2515,7 +2508,8 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         + " · ".join(f"{value} {label}" for label, value in call_counts.items())
         + f" · {accepted['research_calls']} accepted I/S · {accepted['supervisor_reviews']} committed reviews"
     )
-    retry_count = sum(max(0, count - 1) for count in retry_keys.values())
+    retry_origins = session_observability.retry_origins(provider_steps, record.get("strategy_id"))
+    retry_count = sum(retry_origins.values())
     provider_failure_count = (
         call_counts["rejected"] + call_counts["timed out"] + call_counts["failed"]
     )
@@ -2523,7 +2517,9 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         f"{provider_failure_count} provider failure(s) ({call_counts['rejected']} rejected, "
         f"{call_counts['timed out']} timed out, {call_counts['failed']} other) · "
         f"{call_counts['interrupted / cancelled']} interrupted / cancelled · "
-        f"{retry_count} later attempt(s); automatic and operator retries are distinct attempts"
+        f"{retry_count} later attempt(s); "
+        f"{retry_origins['automatic']} automatic, {retry_origins['operator']} after resume, "
+        f"{retry_origins['unknown']} origin unknown"
     )
 
     metered = [
@@ -2534,13 +2530,15 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     usage_steps = [usage for _, usage in metered]
     usage_models = [step.get("model") for step, _ in metered]
     complete_token_usage_calls = len(metered)
-    totals_known = inventory_known and complete_token_usage_calls == dispatched
+    totals_known = inventory_complete and complete_token_usage_calls == dispatched
 
     def token_sum(key: str) -> str:
         values = [usage.get(key) for usage in usage_steps]
         known = sum(type(value) is int for value in values)
         if not inventory_known:
             return "— (attempt inventory unavailable)"
+        if not inventory_complete and not unrecorded_calls:
+            return "— (attempt inventory incomplete or conflicting)"
         if dispatched == 0:
             return "0"
         if not totals_known or known != dispatched:
@@ -2555,11 +2553,11 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
     total_tokens = (
         f"{sum(cast(int, usage['input_tokens']) + cast(int, usage['output_tokens']) for usage in usage_steps):,}"
         if totals_known
-        else "— (attempt inventory unavailable)"
-        if not inventory_known
+        else "— (attempt inventory incomplete or conflicting)"
+        if not inventory_complete and not unrecorded_calls
         else f"— (token usage incomplete for {dispatched - complete_token_usage_calls} call(s))"
     )
-    times = session_observability.session_times(record, datetime.now(UTC))
+    times = session_observability.session_times(record, observed_at or datetime.now(UTC))
     wall_seconds = times["wall_seconds"]
     active_seconds = times["active_seconds"]
     wall_time = _duration_label(wall_seconds) if wall_seconds is not None else "—"
@@ -2579,7 +2577,7 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         agent_durations.append(f"{label} {shown}")
     provider_seconds = (
         session_observability.aggregate_attempt_seconds(provider_steps, unrecorded_calls)
-        if inventory_known
+        if inventory_complete
         else None
     )
     provider_time = _duration_label(provider_seconds) if provider_seconds is not None else "—"
@@ -2924,7 +2922,7 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
             "label": "Wall-clock / agent call time",
             "value": f"{wall_time} wall · {active_time} active · {provider_time} provider · "
             + " · ".join(agent_durations),
-            "detail": "Active time excludes suspension; recorded provider-attempt intervals can overlap and may include local request processing.",
+            "detail": "Active time excludes suspension; recorded provider-attempt intervals can overlap and include local processing.",
         },
         {
             "label": "Python runs by status",
@@ -3012,13 +3010,40 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
             **accepted,
             **times,
             "recorded_attempts": len(provider_steps),
+            "attempt_inventory_complete": inventory_complete,
+            "conflicting_attempt_identities": sum(
+                bool(step.get("observability_conflict")) for step in attempts
+            ),
+            "confirmed_provider_receipts": sum(
+                not session_observability.dispatch_uncertain(step) for step in provider_steps
+            ),
+            "recorded_invocation_intervals": sum(
+                session_observability.attempt_seconds(step) is not None for step in provider_steps
+            ),
             "unknown_budget_counted_attempts": unrecorded_calls,
             "dispatch_uncertain_attempts": sum(
                 session_observability.dispatch_uncertain(step) for step in provider_steps
             ),
             "retry_attempts": retry_count,
+            "later_attempt_origins": retry_origins,
             "usage_reported_attempts": complete_token_usage_calls,
             "usage_complete": totals_known,
+            "reported_tokens_subtotal": (
+                sum(
+                    cast(int, usage["input_tokens"]) + cast(int, usage["output_tokens"])
+                    for usage in usage_steps
+                )
+                if metered
+                else None
+            ),
+            "cache_metadata_status_counts": {
+                status: sum(
+                    session_observability.cache_metadata_status(step) == status
+                    for step in provider_steps
+                )
+                for status in ("reported", "missing", "malformed")
+            },
+            **session_observability.budget_observation(record),
             "provider_attempt_seconds": provider_seconds,
             "api_rate_equivalent_usd": estimate,
             "reserved_cost_usd": record.get("estimated_cost_reserved_usd"),
@@ -4295,22 +4320,84 @@ def _potential_truncation_fields(role: str, output: dict[str, Any]) -> list[str]
 
 def _refresh_token_accounting(record: dict[str, Any]) -> None:
     """Aggregate call usage without presenting missing usage as a zero total."""
-    attempts, missing = session_observability.attempts(record)
-    dispatched = [step for step in attempts if step.get("attempt_status") != "not_dispatched"]
-    known = [
-        usage
-        for step in dispatched
-        if (usage := session_observability.reported_usage(step)) is not None
+    steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
+    compiler = record.get("reference_compilation")
+    if isinstance(compiler, dict):
+        history = compiler.get("attempts")
+        if isinstance(history, list) and history:
+            # Count every metered compiler attempt, including invalid outputs
+            # that were billed before a successful retry. Unknown attempts
+            # never become zero-cost by virtue of a later successful call.
+            for attempt in history:
+                if not isinstance(attempt, dict):
+                    steps.append({"status": "interrupted"})
+                elif attempt.get("usage_status") == "known" and isinstance(
+                    attempt.get("token_usage"), dict
+                ):
+                    steps.append({"status": "incomplete", "token_usage": attempt["token_usage"]})
+                elif attempt.get("usage_status") == "unknown":
+                    steps.append({"status": "interrupted"})
+            if compiler.get("status") in {"running", "interrupted"} and not any(
+                isinstance(item, dict) and item.get("usage_status") == "unknown" for item in history
+            ):
+                steps.append({"status": "interrupted"})
+        elif isinstance(compiler.get("token_usage"), dict):
+            # Legacy single-attempt snapshots remain readable.
+            steps.append(
+                {
+                    "status": "completed"
+                    if compiler.get("status") == "completed"
+                    else "incomplete",
+                    "token_usage": compiler["token_usage"],
+                }
+            )
+        elif compiler.get("status") in {"running", "interrupted"} or (
+            compiler.get("usage_status") == "unknown"
+        ):
+            steps.append({"status": "interrupted"})
+    # The independent supervisor is a separately paid Session call, not a
+    # research role step. Its completed (even invalid) response must count
+    # against the same authoritative token total. Unknown usage stays unknown.
+    for review in record.get("supervisor_reviews", []):
+        if not isinstance(review, dict) or review.get("status") not in {
+            "completed",
+            "failed",
+            "interrupted",
+        }:
+            continue
+        usage = review.get("token_usage")
+        if (
+            isinstance(usage, dict)
+            and type(usage.get("input_tokens")) is int
+            and type(usage.get("output_tokens")) is int
+        ):
+            steps.append({"status": "completed", "token_usage": usage})
+        elif review.get("attempt_status") != "not_dispatched":
+            steps.append({"status": "interrupted"})
+    # A provider can complete and report billable tokens even when the
+    # returned answer fails a local content/acknowledgment check. Include
+    # these securely metered failed attempts, but never infer token usage
+    # for rejected, timed-out, or unknown-dispatch calls.
+    metered = [
+        step
+        for step in steps
+        if step.get("status") in {"completed", "incomplete"}
+        or step.get("attempt_status") == "usage_estimated"
     ]
-    incomplete_steps = len(known) != len(dispatched) + missing
+    known = [
+        step["token_usage"]
+        for step in metered
+        if isinstance(step.get("token_usage"), dict)
+        and type(step["token_usage"].get("input_tokens")) is int
+        and type(step["token_usage"].get("output_tokens")) is int
+    ]
+    incomplete_steps = len(known) != len(steps)
     record["tokens_used"] = (
-        sum(cast(int, item["input_tokens"]) + cast(int, item["output_tokens"]) for item in known)
-        if known
-        else None
+        sum(item["input_tokens"] + item["output_tokens"] for item in known) if known else None
     )
     record["token_usage_status"] = (
         "unavailable"
-        if not known and (dispatched or missing or record.get("status") in {"ended", "failed"})
+        if not known and (steps or record.get("status") in {"ended", "failed"})
         else "partial"
         if incomplete_steps
         else "complete"
@@ -4521,8 +4608,6 @@ def _save(path: str, record: dict[str, Any]) -> None:
     # lock, so evidence cannot change between its final check and strategy save.
     from sigma.projects import project_write_lock
 
-    session_observability.checkpoint_clock(record, datetime.now(UTC))
-
     # Preserve injected persistence seams that use symbolic test labels rather
     # than filesystem project paths. Production project paths use the lock.
     if Path(path).suffix not in {".sigma", ".json"}:
@@ -4539,6 +4624,7 @@ def _assert_session_build_immutable(previous: dict[str, Any], updated: dict[str,
 
 
 def _save_unlocked(path: str, record: dict[str, Any]) -> None:
+    session_observability.checkpoint_clock(record, datetime.now(UTC))
     if Path(path).suffix == ".json":
         from sigma.project_bundle import transform_members
 
@@ -5013,8 +5099,9 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 _expand_role_input_audit(audit)
                 audit.pop("request_body_compressed", None)
     _refresh_token_accounting(result)
-    active_seconds = session_observability.session_times(record, datetime.now(UTC))["active_seconds"]
-    result["elapsed_seconds"] = int(active_seconds) if active_seconds is not None else None
+    observed_at = datetime.now(UTC)
+    wall_seconds = session_observability.session_times(record, observed_at)["wall_seconds"]
+    result["elapsed_seconds"] = int(wall_seconds) if wall_seconds is not None else None
     outcome = _outcome(record)
     saved_outcome = record.get("outcome")
     saved_conclusion = saved_outcome.get("conclusion") if isinstance(saved_outcome, dict) else None
@@ -5027,7 +5114,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         saved_summary = saved_outcome.get("summary") if isinstance(saved_outcome, dict) else None
         if isinstance(saved_summary, str) and saved_summary.strip():
             outcome["summary"] = saved_summary
-    outcome["metrics"] = _outcome_metrics(record, outcome)
+    outcome["metrics"] = _outcome_metrics(record, outcome, observed_at=observed_at)
     result["outcome"] = outcome
     assessments = record.get("strategy_assessments")
     if not isinstance(assessments, list) or (
@@ -7361,7 +7448,6 @@ async def start_session(
                 "created_at": _now(),
                 "updated_at": _now(),
                 "started_at": _now(),
-                "observability_clock": session_observability.new_clock(_now()),
                 "deadline_at": (
                     (
                         datetime.now(UTC)
@@ -7575,6 +7661,7 @@ async def start_session(
                 record["prior_session_failures_omitted"],
                 record["prior_session_failure_omitted_attempt_ids"],
             ) = _prior_session_failures_index(view.path, record["id"])
+            record["observability_clock"] = session_observability.new_clock(record["started_at"])
             _event(record, "queued", record["message"])
             if cloud_research.billing_enabled():
                 try:
@@ -12574,6 +12661,8 @@ async def _portfolio_role_call(
                 "id": step_id,
                 "backend_build_commit": build_commit(),
                 "execution_settings": session_observability.execution_settings(record),
+                "resume_sequence": session_observability.resume_sequence(record),
+                "automatic_retry_of": _observed_retry_of.get(),
                 "attempt_id": step_id,
                 "attempt_status": "preparing" if cloud_research.billing_enabled() else None,
                 "cycle": cycle,
@@ -13649,6 +13738,7 @@ async def _portfolio_role_call_with_recovery(
 ) -> bool:
     """Retry only explicitly bounded clipped or transient attempts."""
     max_attempts = MAX_CLIPPED_AUTO_RETRIES + MAX_TRANSIENT_AUTO_RETRIES + 1
+    retry_of: str | None = None
     for attempt in range(max_attempts):
         # Funding deferrals are not paid attempts or recovery retries. Wait
         # outside all locks and provider slots until an earlier call settles.
@@ -13656,9 +13746,13 @@ async def _portfolio_role_call_with_recovery(
             # Admission order is determined before asynchronous account/model
             # preflight. Do not hold the global provider gate during preflight.
             async with semaphore:
-                result = await _portfolio_role_call(
-                    session_id, path, strategy_id, role, cycle, semaphore, state_lock
-                )
+                retry_token = _observed_retry_of.set(retry_of)
+                try:
+                    result = await _portfolio_role_call(
+                        session_id, path, strategy_id, role, cycle, semaphore, state_lock
+                    )
+                finally:
+                    _observed_retry_of.reset(retry_token)
             if result != "funding_wait":
                 break
             await asyncio.sleep(0.2)
@@ -13675,6 +13769,18 @@ async def _portfolio_role_call_with_recovery(
                 and step.get("status") == "failed"
             ),
             {},
+        )
+        retry_of = next(
+            (
+                step["id"]
+                for step in reversed(record.get("steps", []))
+                if step.get("strategy_id") == strategy_id
+                and step.get("role") == role
+                and step.get("cycle") == cycle
+                and step.get("status") in {"failed", "incomplete"}
+                and isinstance(step.get("id"), str)
+            ),
+            None,
         )
         retry_kind = prior_attempt.get("failure_kind")
         # Respect provider guidance when available; without it, give a
@@ -15160,6 +15266,7 @@ async def _portfolio_supervisor_call(
         usage: dict[str, int | None] | None = None
         failure_reason = ""
         failure_fields: dict[str, Any] = {}
+        cache_observation: dict[str, Any] = {}
         provider_started: float | None = None
         try:
             # Fence the request BEFORE provider I/O. A restart after this point
@@ -15192,7 +15299,13 @@ async def _portfolio_supervisor_call(
                 expected_identity_hash=expected_identity,
                 return_raw_response=True,
             )
-            usage = _usage(raw)
+            raw_usage = raw.get("usage")
+            if isinstance(raw_usage, dict):
+                usage = {
+                    "input_tokens": raw_usage.get("input_tokens"),
+                    "output_tokens": raw_usage.get("output_tokens"),
+                }
+            cache_observation = session_observability.observed_cache(raw)
             # Content validation is strictly AFTER usage capture. A bad JSON
             # assessment does not make a completed, metered response uncertain.
             text = chat._response_text(raw, model)
@@ -15217,9 +15330,7 @@ async def _portfolio_supervisor_call(
                 failure_fields["failure_kind"] = "timeout"
         finally:
             provider_duration = (
-                round(time.monotonic() - provider_started, 3)
-                if provider_started is not None
-                else None
+                round(time.monotonic() - provider_started, 3) if provider_started is not None else None
             )
             async with state_lock:
                 record = _read(path, session_id)
@@ -15246,6 +15357,7 @@ async def _portfolio_supervisor_call(
                 review["finished_at"] = _now()
                 review["provider_attempt_duration_seconds"] = provider_duration
                 review.update(failure_fields)
+                review.update(cache_observation)
                 if assessment is not None:
                     review["assessment"] = assessment
                 if failure_reason:
@@ -16720,6 +16832,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
                 "attempt_number": attempt_number,
                 "attempt_id": attempt_id,
                 "attempt_execution": {
+                    "resume_sequence": session_observability.resume_sequence(record),
                     "model": payload.get("model"),
                     "reasoning_effort": payload.get("reasoning", {}).get("effort"),
                     "backend_build_commit": build_commit(),
@@ -16821,6 +16934,14 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
     rejected = False
     provider_started: float | None = None
     compiler_failure_fields: dict[str, Any] = {}
+
+    def observed_timeout(seconds: float) -> asyncio.Timeout:
+        # The timeout expression is evaluated after the existing global gate
+        # is acquired. Its context manager and timeout remain unchanged.
+        nonlocal provider_started
+        provider_started = time.monotonic()
+        return asyncio.timeout(seconds)
+
     try:
         timeout_seconds = min(120.0, _call_timeout_seconds(record))
         if timeout_seconds <= 0:
@@ -16846,76 +16967,75 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             }
             if credential["mode"] == "chatgpt":
                 headers["Accept"] = "text/event-stream"
-            async with _portfolio_global_gate(session_id):
-                provider_started = time.monotonic()
-                async with (
-                    asyncio.timeout(timeout_seconds),
-                    httpx.AsyncClient(
-                        timeout=timeout_seconds, follow_redirects=False, trust_env=False
-                    ) as client,
-                    client.stream(
-                        "POST",
-                        "https://api.openai.com/v1/responses",
-                        headers=headers,
-                        content=encoded,
-                    ) as response,
-                ):
-                    wire = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        wire.extend(chunk)
-                        if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
-                            raise ProjectError(
-                                "Reference compiler response exceeded the 8 MB safety bound"
-                            )
-                    provider_http_status = response.status_code
-                    if response.status_code == 429:
-                        # Respect numeric or HTTP-date Retry-After. An unparseable
-                        # header is a hard no-retry rather than a rate-limit bypass.
-                        retry_after = response.headers.get("Retry-After")
-                        if retry_after:
-                            try:
-                                retry_after_seconds = max(0.0, float(retry_after))
-                                if not math.isfinite(retry_after_seconds):
-                                    raise ValueError("nonfinite_retry_after")
-                            except ValueError:
-                                try:
-                                    retry_after_seconds = max(
-                                        0.0,
-                                        (
-                                            parsedate_to_datetime(retry_after) - datetime.now(UTC)
-                                        ).total_seconds(),
-                                    )
-                                except (ValueError, TypeError, OverflowError):
-                                    retry_after_seconds = (
-                                        research_reference_compiler.MAX_RETRY_AFTER_SECONDS + 1
-                                    )
-                    if response.status_code != 200:
-                        # Persist safe error metadata, never raw provider bodies or
-                        # user/source content. This makes known fallback diagnosable.
-                        try:
-                            error_body = json.loads(wire)
-                            error = error_body.get("error") if isinstance(error_body, dict) else None
-                            code = error.get("code") if isinstance(error, dict) else None
-                            if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code):
-                                provider_error_code = code
-                        except (ValueError, TypeError):
-                            pass
-                        # 5xx/timeout-like responses do not prove zero billable usage.
-                        # Only known pre-inference 4xx rejections release the reservation.
-                        rejected = response.status_code in {400, 401, 403, 404, 422, 429}
+            async with (
+                _portfolio_global_gate(session_id),
+                observed_timeout(timeout_seconds),
+                httpx.AsyncClient(
+                    timeout=timeout_seconds, follow_redirects=False, trust_env=False
+                ) as client,
+                client.stream(
+                    "POST",
+                    "https://api.openai.com/v1/responses",
+                    headers=headers,
+                    content=encoded,
+                ) as response,
+            ):
+                wire = bytearray()
+                async for chunk in response.aiter_bytes():
+                    wire.extend(chunk)
+                    if len(wire) > MAX_RESEARCH_RESPONSE_BYTES:
                         raise ProjectError(
-                            f"Reference compilation provider rejected the request (HTTP {response.status_code})."
+                            "Reference compiler response exceeded the 8 MB safety bound"
                         )
-                    if credential["mode"] == "chatgpt":
-                        raw = await completed(
-                            httpx.Response(
-                                response.status_code, headers=response.headers, content=bytes(wire)
-                            ),
-                            "research",
-                            max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
-                        )
-                    else:
-                        raw = json.loads(wire)
+                provider_http_status = response.status_code
+                if response.status_code == 429:
+                    # Respect numeric or HTTP-date Retry-After. An unparseable
+                    # header is a hard no-retry rather than a rate-limit bypass.
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            retry_after_seconds = max(0.0, float(retry_after))
+                            if not math.isfinite(retry_after_seconds):
+                                raise ValueError("nonfinite_retry_after")
+                        except ValueError:
+                            try:
+                                retry_after_seconds = max(
+                                    0.0,
+                                    (
+                                        parsedate_to_datetime(retry_after) - datetime.now(UTC)
+                                    ).total_seconds(),
+                                )
+                            except (ValueError, TypeError, OverflowError):
+                                retry_after_seconds = (
+                                    research_reference_compiler.MAX_RETRY_AFTER_SECONDS + 1
+                                )
+                if response.status_code != 200:
+                    # Persist safe error metadata, never raw provider bodies or
+                    # user/source content. This makes known fallback diagnosable.
+                    try:
+                        error_body = json.loads(wire)
+                        error = error_body.get("error") if isinstance(error_body, dict) else None
+                        code = error.get("code") if isinstance(error, dict) else None
+                        if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code):
+                            provider_error_code = code
+                    except (ValueError, TypeError):
+                        pass
+                    # 5xx/timeout-like responses do not prove zero billable usage.
+                    # Only known pre-inference 4xx rejections release the reservation.
+                    rejected = response.status_code in {400, 401, 403, 404, 422, 429}
+                    raise ProjectError(
+                        f"Reference compilation provider rejected the request (HTTP {response.status_code})."
+                    )
+                if credential["mode"] == "chatgpt":
+                    raw = await completed(
+                        httpx.Response(
+                            response.status_code, headers=response.headers, content=bytes(wire)
+                        ),
+                        "research",
+                        max_stream_bytes=MAX_RESEARCH_RESPONSE_BYTES,
+                    )
+                else:
+                    raw = json.loads(wire)
         provider_response_status = (
             str(raw.get("status", ""))[:40] if isinstance(raw, dict) else None
         )
@@ -16973,9 +17093,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
             raise
     finally:
         provider_duration = (
-            round(time.monotonic() - provider_started, 3)
-            if provider_started is not None
-            else None
+            round(time.monotonic() - provider_started, 3) if provider_started is not None else None
         )
         async with state_lock:
             latest = _read(path, session_id)
@@ -17946,6 +18064,7 @@ async def _worker(session_id: str, path: str) -> None:
                         "id": record["current_step"],
                         "backend_build_commit": build_commit(),
                         "execution_settings": session_observability.execution_settings(record),
+                        "resume_sequence": session_observability.resume_sequence(record),
                         "execution_tools": context.get("execution_tools", []),
                         "cycle": cycle_num,
                         "role": role,
@@ -17973,9 +18092,6 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     output, usage = await _call(record, role, context, step_id=step["id"])
-                    step["provider_attempt_duration_seconds"] = context.get(
-                        "_provider_attempt_duration_seconds"
-                    )
             finally:
                 for gate in reversed(gates):
                     gate.release()
@@ -17985,6 +18101,9 @@ async def _worker(session_id: str, path: str) -> None:
             record = current
             step = record["steps"][-1]
             step.update({"status": "completed", "finished_at": _now(), "output": output})
+            step["provider_attempt_duration_seconds"] = context.get(
+                "_provider_attempt_duration_seconds"
+            )
             if usage is not None:
                 step["token_usage"] = usage
                 step["token_usage_status"] = (

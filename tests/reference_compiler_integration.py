@@ -136,6 +136,7 @@ async def verify_compilation(
         )
     calls: list[str] = []
     role_requests: list[str] = []
+    compiler_models: list[str] = []
     selection: list[str] = []
     omitted_urls: list[str] = []
     compilation_started = asyncio.Event()
@@ -152,6 +153,7 @@ async def verify_compilation(
         name = payload["text"]["format"]["name"]
         calls.append(name)
         if name == "research_reference_compilation":
+            compiler_models.append(payload["model"])
             compilation_started.set()
             await compilation_release.wait()
             compiler_number = calls.count("research_reference_compilation")
@@ -347,6 +349,15 @@ async def verify_compilation(
         )
         assert len(attempts) == expected_records, attempts
         assert len({a["number"] for a in attempts}) == expected_records
+        invoked = [attempt for attempt in attempts if attempt["status"] != "not_dispatched"]
+        assert [attempt["model"] for attempt in invoked] == compiler_models
+        for attempt in invoked:
+            assert attempt["reasoning_effort"] == "low"
+            assert "backend_build_commit" in attempt
+            assert attempt["execution_settings"]["mode"] == credential["mode"]
+            assert attempt["provider_attempt_duration_seconds"] >= 0
+        observation = finished["outcome"]["metrics"]["observability"]
+        assert observation["recorded_attempts"] == len(finished["steps"]) + expected_compiler_count
         if compiler_retry_scenario in {"rate_limit_then_success", "invalid_then_success"}:
             assert attempts[0]["retry_decision"] == "retry"
             assert attempts[-1]["status"] == "completed"
