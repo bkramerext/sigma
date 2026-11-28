@@ -34,6 +34,7 @@ from sigma import (
     cloud_workspaces,
     project_evidence,
     reference_efficiency,
+    research_context_budget,
     research_ethos,
     research_preferences,
     research_presence,
@@ -64,7 +65,6 @@ from sigma.research_budget import (
 from sigma.research_context_budget import (
     compact_dispatch_context,
     finalize_dispatch_evidence,
-    restrict_obligation_citations_to_supplied_context as restrict_obligation_citations_to_supplied_context,
 )
 from sigma.research_epistemics import (
     OUTCOME_POLICY_VERSION,
@@ -74,6 +74,7 @@ from sigma.research_epistemics import (
     verification_label,
 )
 from sigma.research_evidence_catalog import (
+    Catalog,
     EvidenceContext,
     artifact_permissions,
     audit_inventory,
@@ -88,6 +89,10 @@ from sigma.research_method_sources import (
     select_method_sources,
 )
 from sigma.research_tools import capability_guidance, execution_capabilities
+
+restrict_obligation_citations_to_supplied_context = (
+    research_context_budget.restrict_obligation_citations_to_supplied_context
+)
 
 CALL_LIMIT = 6
 # Only known, settled clipped responses may be retried automatically.
@@ -3920,9 +3925,9 @@ def _validate_obligation_review_basis(context: dict[str, Any], review: dict[str,
     catalog = context.get("evidence_catalog")
     if isinstance(catalog, dict):
         supplied_artifacts = artifact_permissions(
-            catalog, include_peer=context.get("scheduler_version") == 2
+            cast(Catalog, catalog), include_peer=context.get("scheduler_version") == 2
         )
-        supplied_steps = step_permissions(catalog)
+        supplied_steps = step_permissions(cast(Catalog, catalog))
     missing_artifacts = sorted(set(review["basis_artifact_ids"]) - supplied_artifacts)
     missing_steps = sorted(set(review["basis_step_ids"]) - supplied_steps)
     if missing_artifacts or missing_steps:
@@ -9061,7 +9066,7 @@ async def _call_provider(
     )
     catalog = context.get("evidence_catalog")
     if isinstance(catalog, dict):
-        supplied_reasoning_sources = artifact_permissions(catalog, include_peer=True)
+        supplied_reasoning_sources = artifact_permissions(cast(Catalog, catalog), include_peer=True)
     reasoning_items = (
         validated.get("reasoning_steps", [])
         if role == "investigator"
@@ -10953,9 +10958,7 @@ def _computation_citation_targets(context: dict[str, Any]) -> list[dict[str, Any
     catalog = context.get("evidence_catalog")
     if not isinstance(catalog, dict):
         return targets
-    allowed = {
-        (item["artifact_id"], item["execution_id"]) for item in catalog["computations"]
-    }
+    allowed = {(item["artifact_id"], item["execution_id"]) for item in catalog["computations"]}
     return [
         item
         for item in targets

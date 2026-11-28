@@ -362,6 +362,40 @@ async def snapshot():
             {"title": title, "cycle": cycle, "role": role, "payload": payload}
             for title, cycle, role, payload in ordered_requests
         ]
+        verified_evidence_requests = 0
+        # Only the candidate revision is expected to implement the new policy.
+        # Validate raw packets before canonicalization changes byte widths or IDs.
+        if code_root == Path(__file__).resolve().parents[1]:
+            from strategy_scheduler_parity_compare import (
+                verified_evidence_overlay,
+                verify_overlay_negative_controls,
+            )
+
+            saved_artifacts = {item["id"]: item for item in stored["artifacts"]}
+            step_audits = {
+                (titles[item["strategy_id"]], item["cycle"], item["role"]): item[
+                    "provider_input_audit"
+                ]
+                for item in stored["steps"]
+            }
+            for request in request_data:
+                role = request["role"].removeprefix("research_")
+                audit = dict(step_audits[(request["title"], request["cycle"], role)])
+                research_sessions._expand_role_input_audit(audit)
+                raw_payload = request["payload"]
+                expected_body = {
+                    **raw_payload,
+                    "input": json.dumps(raw_payload["input"], ensure_ascii=False),
+                }
+                assert audit["request_body"] == expected_body
+                provenance = audit["evidence_provenance"]
+                context = raw_payload["input"]
+                normalized = verified_evidence_overlay(context, saved_artifacts, provenance)
+                verify_overlay_negative_controls(context, saved_artifacts, provenance)
+                if not paired:
+                    request["payload"] = {**raw_payload, "input": normalized}
+                verified_evidence_requests += 1
+
         artifacts = [
             {
                 "strategy": titles[item["strategy_id"]],
@@ -401,6 +435,7 @@ async def snapshot():
                 names,
             ),
             "diagnostic_overlap": fast_skeptic_overlap,
+            "verified_evidence_requests": verified_evidence_requests,
             "scheduler_mode": MODE,
             "counts": {
                 "calls": stored["calls_used"],

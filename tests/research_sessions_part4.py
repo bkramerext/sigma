@@ -4580,7 +4580,6 @@ def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None
     assert research_sessions._affordable_portfolio_branches(queued[1:], 1, 0)[0] == []
 
 
-
 def test_final_evidence_catalog_after_guidance_compaction() -> None:
     """The final packet is the only evidence authority, including peer duplicates."""
     from sigma.research_evidence_catalog import (
@@ -4599,8 +4598,7 @@ def test_final_evidence_catalog_after_guidance_compaction() -> None:
         "basis_artifact_ids": ["old", "peer", "approved", "omitted"],
         "source_step_ids": ["historical-step", "current-step"],
         "source_refs": [
-            {"artifact_id": identifier}
-            for identifier in ("old", "peer", "approved", "omitted")
+            {"artifact_id": identifier} for identifier in ("old", "peer", "approved", "omitted")
         ],
     }
     current = {"claim": "Current candidate", "method": "Current argument"}
@@ -4722,7 +4720,10 @@ def test_final_evidence_catalog_after_guidance_compaction() -> None:
     research_sessions._assert_saved_role_input_matches(saved, "skeptic", payload, "step")
     # Distinct project/attempt inventories must never leak through shared state.
     another = EvidenceContext(
-        {"context_manifest": {"sources": []}, "prior_artifacts": [{"id": "other", "claim": "Other"}]}
+        {
+            "context_manifest": {"sources": []},
+            "prior_artifacts": [{"id": "other", "claim": "Other"}],
+        }
     )
     research_sessions.finalize_dispatch_evidence(another, limit=6000)
     assert artifact_permissions(another["evidence_catalog"], include_peer=True) == {"other"}
@@ -4758,9 +4759,16 @@ def test_peer_argument_extract_is_bounded_and_attributed() -> None:
     assert catalog["peer"]["peer"]["argument"] == "structured"
     assert catalog["peer"]["peer"]["availability"] == "extract"
     assert catalog["current_investigator"]["availability"] == "omitted"
-    assert build_catalog({"investigator_step_id": "historical"})["current_investigator"][
-        "step_id"
-    ] is None
+    assert (
+        build_catalog({"investigator_step_id": "historical"})["current_investigator"]["step_id"]
+        is None
+    )
+
+
+def test_frozen_evidence_archive_reference_replay() -> None:
+    from research_evidence_archive import verify_frozen_evidence_archive
+
+    verify_frozen_evidence_archive()
 
 
 if __name__ == "__main__":

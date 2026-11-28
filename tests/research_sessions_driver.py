@@ -87,6 +87,7 @@ def main(part: int = 1):
     test_obligation_dispatch_request_contains_only_supplied_citations()
     test_final_evidence_catalog_after_guidance_compaction()
     test_peer_argument_extract_is_bounded_and_attributed()
+    test_frozen_evidence_archive_reference_replay()
     test_terminal_protocol_completion_plan_preserves_attempt_history()
     test_e004_e005_e006_e009_e010_e011_saved_protocol_recovery_plans()
     test_protocol_completion_rejects_invalid_or_duplicate_accepted_slots()

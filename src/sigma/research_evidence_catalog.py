@@ -44,9 +44,7 @@ class EvidenceContext(dict[str, Any]):
     def remember(self, category: Category, rows: list[Any], key: str = "id") -> None:
         self.candidates[category] = list(
             dict.fromkeys(
-                row[key]
-                for row in rows
-                if isinstance(row, dict) and isinstance(row.get(key), str)
+                row[key] for row in rows if isinstance(row, dict) and isinstance(row.get(key), str)
             )
         )
 
@@ -64,8 +62,10 @@ def _argument(row: dict[str, Any]) -> Literal["structured", "narrative", "not_su
     for value in candidates:
         for field in ("reasoning_steps", "argument_steps"):
             if any(
-                isinstance(step.get("argument"), str) and step["argument"].strip()
-                or isinstance(step.get("statement"), str) and step["statement"].strip()
+                isinstance(step.get("argument"), str)
+                and step["argument"].strip()
+                or isinstance(step.get("statement"), str)
+                and step["statement"].strip()
                 for step in _rows(value.get(field))
             ):
                 return "structured"

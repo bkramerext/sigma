@@ -107,6 +107,245 @@ def equal(label: str, old: object, new: object) -> None:
     raise AssertionError("Cross-revision semantic mismatch: " + label)
 
 
+def _bytes(value: dict) -> int:
+    return len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+
+
+def _argument_kind(row: dict) -> str:
+    sections = [row]
+    sections.extend(
+        row[key]
+        for key in ("investigator_output", "objective_review", "argument_extract")
+        if isinstance(row.get(key), dict)
+    )
+    for section in sections:
+        for key in ("reasoning_steps", "argument_steps"):
+            for step in section.get(key) or []:
+                if any(str(step.get(field) or "").strip() for field in ("argument", "statement")):
+                    return "structured"
+    for section in sections:
+        if any(str(section.get(key) or "").strip() for key in ("method", "argument_summary")):
+            return "narrative"
+    return "not_supplied"
+
+
+def _expected_source(row: dict, availability: str) -> dict:
+    # This synthetic parity scenario has no compacted sources. Large/omitted,
+    # pointer and continuation/computation cases are separately regression-tested.
+    assert row.get("evidence_availability") != "pointer_only_original_not_supplied"
+    assert any(row.get(key) for key in ("claim", "claim_or_question", "method", "reasoning_steps"))
+    return {
+        "availability": availability,
+        "argument": _argument_kind(row),
+        "strategy_id": row.get("strategy_id"),
+    }
+
+
+def _bounded(value: str | None, limit: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    if len(value) <= limit:
+        return value
+    return value[:limit].rstrip() + " [truncated; inspect the original saved artifact]"
+
+
+def _expected_peer_argument(artifact: dict) -> dict:
+    investigation = artifact.get("investigator_output") or {}
+    steps = artifact.get("reasoning_steps") or investigation.get("reasoning_steps") or []
+    positions = sorted({0, len(steps) // 2, len(steps) - 1}) if steps else []
+    selected = [
+        {
+            "original_position": i + 1,
+            "title": _bounded(steps[i].get("title"), 150),
+            "argument": _bounded(steps[i].get("argument"), 700),
+        }
+        for i in positions
+        if isinstance(steps[i].get("argument"), str) and steps[i]["argument"].strip()
+    ]
+    return {
+        "method": _bounded(artifact.get("method") or investigation.get("method"), 800),
+        "reasoning_steps": selected,
+        "reasoning_steps_total": len(steps),
+        "reasoning_steps_omitted": len(steps) - len(selected),
+        "qualification": "Bounded saved peer argument, unverified; omitted details not supplied.",
+    }
+
+
+def _critical(artifact: dict) -> bool:
+    skeptic = artifact.get("skeptic_output") or {}
+    return bool(
+        artifact.get("coordinator_decision")
+        in {"stop_decisive_counterexample", "stop_retracted_claim"}
+        or skeptic.get("stop_reason") in {"decisive_counterexample", "claim_retracted"}
+        or skeptic.get("retracted_cross_strategy_source_artifact_ids")
+        or any(row.get("status") == "retracted" for row in skeptic.get("obligation_reviews", []))
+        or artifact.get("retracted_by_artifact_ids")
+    )
+
+
+def verified_evidence_overlay(context: dict, artifacts: dict, provenance: dict) -> dict:
+    """Independently check the raw wire packet before UUID/byte normalization.
+
+    Only the v1 evidence-policy additions and exact filtered historical source
+    references are reversed. Everything else still reaches the existing strict
+    frozen-baseline comparator, including obligations and peer evidence.
+    """
+    assert provenance["version"] == 1
+    assert not provenance["omitted"], "Synthetic parity must not omit selected evidence"
+    assert not provenance["omitted_obligation_ids"]
+    assert not context.get("approved_continuation"), "Unexpected continuation in parity fixture"
+    assert not context.get("obligation_ledger_dictionary"), "Unexpected compacted ledger in parity"
+    assert context["context_manifest"]["assembled_context_bytes"] == _bytes(context)
+    assert _bytes(context) <= 256_000
+    normalized = copy.deepcopy(context)
+    catalog = normalized.pop("evidence_catalog")
+    own = {row["id"]: _expected_source(row, "extract") for row in context["prior_artifacts"]}
+    prior = {
+        row["id"]: _expected_source(row, "extract") for row in context["prior_session_findings"]
+    }
+    peers = context["other_strategy_evidence"]
+    peer = {row["artifact_id"]: _expected_source(row, "extract") for row in peers}
+    current = context.get("investigator_output")
+    if current is None:
+        investigator = {"step_id": None, "availability": "omitted", "argument": "not_supplied"}
+    else:
+        assert isinstance(current, dict)
+        assert not current.get("extract_truncated_fields")
+        investigator = {
+            "step_id": context["investigator_step_id"],
+            "availability": "complete",
+            "argument": _argument_kind(current),
+        }
+    expected_catalog = {
+        "version": 1,
+        "note": (
+            "Complete means the original representation is supplied, not verified. "
+            "Extracts support only their visible material; pointers are not citable."
+        ),
+        "obligation_peer_citations": context.get("scheduler_version") == 2,
+        "own": own,
+        "prior": prior,
+        "continuation": {},
+        "peer": peer,
+        "current_investigator": investigator,
+        "obligations": [row["obligation_id"] for row in context["obligation_ledger"]],
+        "computations": [],
+    }
+    # The synthetic provider never executes computation tools; do not normalize
+    # a computation target into an untested permission.
+    equal("exact evidence catalog in parity request", expected_catalog, catalog)
+    equal("own citation permissions", list(own), context["context_artifact_ids"])
+    equal("prior citation permissions", list(prior), context["prior_session_artifact_ids"])
+
+    latest: dict[str, dict] = {}
+    for row in peers:
+        strategy_id = row["strategy_id"]
+        if strategy_id not in latest or row["sequence"] > latest[strategy_id]["sequence"]:
+            latest[strategy_id] = row
+    for row in normalized["other_strategy_evidence"]:
+        identifier = row["artifact_id"]
+        artifact = artifacts[identifier]
+        equal("peer argument source strategy", artifact["strategy_id"], row["strategy_id"])
+        is_current = identifier == latest[row["strategy_id"]]["artifact_id"]
+        assert row.pop("current_peer_argument") is is_current
+        if is_current or _critical(artifact):
+            equal(
+                "bounded saved peer argument",
+                _expected_peer_argument(artifact),
+                row.pop("argument_extract"),
+            )
+        else:
+            assert "argument_extract" not in row
+
+    original = {
+        item["obligation_id"]: item for item in provenance["original_obligation_references"]
+    }
+    allowed = set(own) | set(prior)
+    if expected_catalog["obligation_peer_citations"]:
+        allowed.update(peer)
+    steps = {investigator["step_id"]} - {None}
+    for row in normalized["obligation_ledger"]:
+        saved = original[row["obligation_id"]]
+        for field in ("source_artifact_ids", "basis_artifact_ids"):
+            equal(field, [item for item in saved.get(field, []) if item in allowed], row[field])
+        for field in ("source_step_ids", "basis_step_ids"):
+            equal(field, [item for item in saved.get(field, []) if item in steps], row[field])
+        equal(
+            "supplied obligation sources",
+            row["source_artifact_ids"],
+            row["supplied_source_artifact_ids"],
+        )
+        if "source_refs" in saved:
+            refs = saved["source_refs"]
+            equal(
+                "visible source refs",
+                [ref for ref in refs if ref.get("artifact_id") in allowed],
+                row["source_refs"],
+            )
+            row["source_refs"] = refs
+        no_basis = not any(
+            row.get(field)
+            for field in (
+                "supplied_source_artifact_ids",
+                "source_step_ids",
+                "basis_artifact_ids",
+                "basis_step_ids",
+            )
+        )
+        if row["status"] == "unresolved" and no_basis:
+            assert row.pop("evidence_review_status") == "no_supplied_basis; investigate or defer"
+            assert row["source_artifact_availability"] == "pointer_only_original_not_supplied"
+            if row.get("unsupplied_source_artifact_count") or row.get(
+                "withheld_pointer_source_count"
+            ):
+                row["source_artifact_availability"] = "incomplete_extract_original_not_supplied"
+        else:
+            assert "evidence_review_status" not in row
+    # Adjust only for the exact verified transformations above. The count in
+    # the small uncompacted synthetic context includes itself, so reach the
+    # deterministic fixed point (at most one decimal-width change).
+    for _ in range(3):
+        size = _bytes(normalized)
+        if normalized["context_manifest"]["assembled_context_bytes"] == size:
+            break
+        normalized["context_manifest"]["assembled_context_bytes"] = size
+    assert normalized["context_manifest"]["assembled_context_bytes"] == _bytes(normalized)
+    return normalized
+
+
+def verify_overlay_negative_controls(context: dict, artifacts: dict, provenance: dict) -> None:
+    """A forged catalog or peer argument fails; unrelated changes remain visible."""
+    expected = verified_evidence_overlay(context, artifacts, provenance)
+    for change in ("catalog", "peer", "byte_count"):
+        altered = copy.deepcopy(context)
+        if change == "catalog":
+            altered["evidence_catalog"]["version"] = 999
+        elif change == "peer":
+            target = next(
+                (row for row in altered["other_strategy_evidence"] if "argument_extract" in row),
+                None,
+            )
+            if target is None:
+                continue
+            target["argument_extract"]["method"] = "Forged peer argument"
+        if change != "byte_count":
+            for _ in range(3):
+                altered["context_manifest"]["assembled_context_bytes"] = _bytes(altered)
+        else:
+            altered["context_manifest"]["assembled_context_bytes"] += 1
+        try:
+            verified_evidence_overlay(altered, artifacts, provenance)
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("Forged evidence-policy overlay passed: " + change)
+    changed = copy.deepcopy(context)
+    changed["problem"] += " Unapproved change."
+    for _ in range(3):
+        changed["context_manifest"]["assembled_context_bytes"] = _bytes(changed)
+    assert verified_evidence_overlay(changed, artifacts, provenance) != expected
+
+
 def assert_historical_schema(old: dict, new: dict) -> None:
     for key in ("type", "name", "strict"):
         equal("provider schema header/" + key, old[key], new[key])
@@ -318,6 +557,8 @@ def main() -> None:
         json.loads(Path(name).read_text()) for name in sys.argv[1:6]
     ]
     assert modern["diagnostic_overlap"] is True
+    for item in (candidate, v2, resumed):
+        assert item["verified_evidence_requests"] == item["counts"]["calls"]
     normalized_semantic = without_intentional_ethos_overlay(candidate["semantic"])
     equal(
         "pre-v2 full serialized provider inputs and research outcomes",
