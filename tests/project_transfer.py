@@ -644,13 +644,17 @@ def test_bounded_log_observation() -> None:
             "Synthetic failure",
         )
         original = target.read_bytes()
-        raw, changed = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        observation = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        assert observation is not None
+        raw, changed = observation
         assert raw == original and not changed
         assert session_log._parse_frames(raw) == session_log._frames(target)[0]
         assert [event["seq"] for event in session_log._parse_frames(raw)] == [1, 2]
         with target.open("ab") as stream:
             stream.write(b"\n<!-- SIGMA_EVENT 999 -->\n{")
-        torn, changed = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        observation = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        assert observation is not None
+        torn, changed = observation
         assert not changed
         assert len(session_log._parse_frames(torn)) == 2
         assert torn.count(b"\n<!-- SIGMA_EVENT ") == 3
@@ -670,7 +674,9 @@ def test_bounded_log_observation() -> None:
             return info
 
         with patch.object(project_diagnostic_bundle.os, "fstat", side_effect=grow_after_open):
-            observed, partial = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+            observation = project_diagnostic_bundle._observe_log(target, len(original) + 100)
+        assert observation is not None
+        observed, partial = observation
         assert observed == original and partial
         target.write_bytes(original)
         calls = 0
