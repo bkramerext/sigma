@@ -4900,7 +4900,15 @@ def test_computation_catalog_permissions_and_closure() -> None:
         "stdout": "1",
         "artifacts": [{"filename": "result.txt"}, {"filename": ""}],
         "artifact_inspections": [
-            {"filename": "result.txt", "inspection": {"status": "available", "truncated": True}}
+            {
+                "filename": "result.txt",
+                "inspection": {
+                    "status": "available",
+                    "format": "text",
+                    "representation": "Bounded result",
+                    "truncated": True,
+                },
+            }
         ],
     }
     peer = {
@@ -4980,6 +4988,232 @@ def test_computation_catalog_permissions_and_closure() -> None:
     )
     research_sessions.finalize_dispatch_evidence(duplicate, limit=16_000)
     assert duplicate["evidence_catalog"]["computations"] == []
+    _check_execution_conflict_permutations(execution, peer, citation)
+
+
+def _check_execution_conflict_permutations(
+    execution: dict[str, Any], peer: dict[str, Any], citation: dict[str, Any]
+) -> None:
+    from itertools import permutations
+
+    from sigma.research_evidence_catalog import EvidenceContext, computation_targets
+
+    sparse = {"id": "run", "status": "completed"}
+    full = {**execution, "stdout": "ABC"}
+    prefix = {**full, "stdout": "AB", "stdout_truncated": True}
+    file_record = {
+        "filename": "result.txt",
+        "inspection": {
+            "status": "available",
+            "format": "text",
+            "representation": "ABC",
+            "truncated": False,
+        },
+    }
+    file_full = {**full, "artifact_inspections": [file_record]}
+    file_prefix = {
+        **full,
+        "artifact_inspections": [
+            {
+                **file_record,
+                "inspection": {
+                    **file_record["inspection"],
+                    "representation": "AB",
+                    "truncated": True,
+                },
+            }
+        ],
+    }
+
+    def packet(rows: tuple[dict[str, Any], ...], *, same_key: bool = False) -> EvidenceContext:
+        peers = [
+            {
+                **peer,
+                "artifact_id": f"peer-{index}",
+                "python_execution": value,
+            }
+            for index, value in enumerate(rows)
+        ]
+        if same_key:
+            # Two real supplied fields for a key; the third remains a
+            # different artifact alias. No synthetic union is permitted.
+            peers[0]["sage_execution"] = peers[1]["python_execution"]
+            peers.pop(1)
+        context = EvidenceContext(
+            {
+                "scheduler_version": 2,
+                "context_manifest": {"sources": []},
+                "other_strategy_evidence": peers,
+                "obligation_ledger": [{"obligation_id": "open", "status": "unresolved"}],
+            }
+        )
+        research_sessions.finalize_dispatch_evidence(context, limit=32_000)
+        return context
+
+    incompatible_pairs = (
+        (full, {**full, "stdout": "XYZ"}),
+        (prefix, {**prefix, "stdout": "AX"}),
+        (full, {**full, "stdout_truncated": True}),
+        (full, {**full, "exit_code": 1}),
+        (full, {**full, "source_sha256": "b" * 64}),
+        (full, {**full, "stderr": "different", "source": "print(2)"}),
+        (
+            file_full,
+            {
+                **file_full,
+                "artifact_inspections": [
+                    {
+                        **file_record,
+                        "inspection": {**file_record["inspection"], "representation": "XYZ"},
+                    }
+                ],
+            },
+        ),
+        (
+            file_full,
+            {
+                **file_full,
+                "artifact_inspections": [
+                    {"filename": "result.txt", "inspection": {"status": "unavailable"}}
+                ],
+            },
+        ),
+    )
+    for left, right in incompatible_pairs:
+        for rows in permutations((sparse, left, right)):
+            for same_key in (False, True):
+                context = packet(rows, same_key=same_key)
+                assert not context["evidence_catalog"]["computations"]
+                assert not computation_targets(context)
+                sources = {row["artifact_id"]: row for row in context["other_strategy_evidence"]}
+                for identifier in sources:
+                    invalid = {**citation, "research_artifact_id": identifier}
+                    for item in (
+                        invalid,
+                        {**invalid, "evidence": "artifact", "filename": "result.txt"},
+                    ):
+                        try:
+                            research_sessions._validate_computation_citations(context, [item])
+                        except ProjectError:
+                            pass
+                        else:
+                            raise AssertionError("Conflicting execution was citable")
+                        review = {"basis_artifact_ids": [identifier], "basis_step_ids": []}
+                        assert not research_sessions._catalog_addressed_basis(
+                            context, review, [item], sources
+                        )
+
+    for rows in permutations((sparse, full, prefix)):
+        context = packet(rows, same_key=True)
+        targets = computation_targets(context)
+        assert len(targets) == 2
+        for target in targets:
+            identifier = target["research_artifact_id"]
+            row = next(
+                item
+                for item in context["other_strategy_evidence"]
+                if item["artifact_id"] == identifier
+            )
+            selected = target["execution"]
+            supplied = (row["python_execution"], row.get("sage_execution"))
+            assert selected in supplied
+            if full in supplied:
+                assert selected == full
+            if selected == sparse:
+                assert not any(
+                    item["artifact_id"] == identifier
+                    for item in context["evidence_catalog"]["computations"]
+                )
+                continue
+            item = {**citation, "research_artifact_id": identifier}
+            research_sessions._validate_computation_citations(context, [item])
+            review = {"basis_artifact_ids": [identifier], "basis_step_ids": []}
+            assert research_sessions._catalog_addressed_basis(
+                context, review, [item], {identifier: row}
+            ) == (selected == full)
+
+    for rows in permutations((sparse, file_full, file_prefix)):
+        context = packet(rows, same_key=True)
+        targets = computation_targets(context)
+        assert len(targets) == 2
+        assert all(target["execution"] in rows for target in targets)
+        # Full and truncated file previews agree; the complete original is
+        # selected if present at the same key, never copied to another key.
+        for target in targets:
+            identifier = target["research_artifact_id"]
+            row = next(
+                item
+                for item in context["other_strategy_evidence"]
+                if item["artifact_id"] == identifier
+            )
+            selected = target["execution"]
+            supplied = (row["python_execution"], row.get("sage_execution"))
+            assert selected in supplied
+            if file_full in supplied:
+                assert selected == file_full
+            if selected == sparse:
+                assert not any(
+                    item["artifact_id"] == identifier
+                    for item in context["evidence_catalog"]["computations"]
+                )
+                continue
+            item = {
+                **citation,
+                "research_artifact_id": identifier,
+                "evidence": "artifact",
+                "filename": "result.txt",
+            }
+            research_sessions._validate_computation_citations(context, [item])
+            review = {"basis_artifact_ids": [identifier], "basis_step_ids": []}
+            assert research_sessions._catalog_addressed_basis(
+                context, review, [item], {identifier: row}
+            ) == (selected == file_full)
+
+    # Complementary fields from different records cannot synthesize closure.
+    source_only = {**sparse, "source_sha256": "a" * 64, "exit_code": 0}
+    output_only = {**sparse, "stdout": "ABC"}
+    for rows in permutations((source_only, output_only, sparse)):
+        context = packet(rows, same_key=True)
+        assert all(target["execution"] in rows for target in computation_targets(context))
+        assert not any(
+            item["closure_output"] for item in context["evidence_catalog"]["computations"]
+        )
+    # Contradictory duplicate inspections in even a single record fail closed.
+    corrupt = {
+        **file_full,
+        "artifact_inspections": [
+            file_record,
+            {"filename": "result.txt", "inspection": {"status": "unavailable"}},
+        ],
+    }
+    assert not computation_targets(packet((corrupt, sparse, sparse)))
+
+    # A sparse inspection labeled available is not visible file content.
+    metadata_only = {
+        **full,
+        "artifact_inspections": [
+            {"filename": "result.txt", "inspection": {"status": "available"}}
+        ],
+    }
+    context = packet((metadata_only, sparse, sparse))
+    item = {
+        **citation,
+        "research_artifact_id": "peer-0",
+        "evidence": "artifact",
+        "filename": "result.txt",
+    }
+    try:
+        research_sessions._validate_computation_citations(context, [item])
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("Metadata-only inspection was citable as a result")
+    assert not research_sessions._catalog_addressed_basis(
+        context,
+        {"basis_artifact_ids": ["peer-0"], "basis_step_ids": []},
+        [item],
+        {"peer-0": context["other_strategy_evidence"][0]},
+    )
 
 
 def test_long_history_evidence_audit_overhead() -> None:

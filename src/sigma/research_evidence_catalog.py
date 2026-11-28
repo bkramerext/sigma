@@ -6,6 +6,7 @@ catalog is derived from supplied rows, not historical ID allowlists.
 
 from __future__ import annotations
 
+import json
 import re
 from copy import deepcopy
 from typing import Any, Literal, TypedDict
@@ -314,9 +315,8 @@ def _groups(context: dict[str, Any]) -> dict[Category, dict[str, Source]]:
 
 def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
     """Return only actual non-pointer execution records in the supplied packet."""
-    targets: dict[tuple[str | None, str], dict[str, Any]] = {}
-    conflicts: set[tuple[str | None, str]] = set()
-    execution_examples: dict[str, dict[str, Any]] = {}
+    targets: dict[tuple[str | None, str], list[dict[str, Any]]] = {}
+    execution_examples: dict[str, list[dict[str, Any]]] = {}
     conflicting_executions: set[str] = set()
     blocked = {
         identifier
@@ -326,11 +326,7 @@ def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
     }
 
     def add(artifact_id: str | None, output: Any) -> None:
-        if (
-            artifact_id in blocked
-            or not isinstance(output, dict)
-            or output.get("evidence_availability") == POINTER
-        ):
+        if not isinstance(output, dict) or output.get("evidence_availability") == POINTER:
             return
         for field in ("python_execution", "sage_execution"):
             execution = output.get(field)
@@ -356,19 +352,19 @@ def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
                 }
                 and execution.get("evidence_availability") != POINTER
             ):
-                key = (artifact_id, execution["id"])
-                example = execution_examples.setdefault(execution["id"], execution)
-                if not _compatible_executions(example, execution):
-                    conflicting_executions.add(execution["id"])
-                previous = targets.get(key)
-                if previous is not None and previous["execution"] != execution:
-                    # Different representations are safe only when the fields
-                    # that both actually supply agree (including bounded prefixes).
-                    if not _compatible_executions(previous["execution"], execution):
-                        conflicts.add(key)
-                    elif len(str(previous["execution"])) > len(str(execution)):
-                        continue
-                targets[key] = {"research_artifact_id": artifact_id, "execution": execution}
+                identifier = execution["id"]
+                examples = execution_examples.setdefault(identifier, [])
+                # A sparse first record does not establish agreement between
+                # later records. Compare all distinct supplied pairs.
+                if execution not in examples:
+                    if identifier not in conflicting_executions and (
+                        not _compatible_executions(execution, execution)
+                        or any(not _compatible_executions(other, execution) for other in examples)
+                    ):
+                        conflicting_executions.add(identifier)
+                    examples.append(execution)
+                if artifact_id not in blocked:
+                    targets.setdefault((artifact_id, identifier), []).append(execution)
 
     for field, key in (
         ("prior_session_findings", "id"),
@@ -388,30 +384,103 @@ def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
             add(row["id"], row.get("investigator_output"))
     add(None, context.get("investigator_output"))
     return [
-        target
-        for key, target in targets.items()
-        if key not in conflicts and key[1] not in conflicting_executions
+        {
+            "research_artifact_id": key[0],
+            "execution": (
+                examples[0] if len(examples) == 1 else max(examples, key=_execution_preference)
+            ),
+        }
+        for key, examples in targets.items()
+        if key[1] not in conflicting_executions
     ]
 
 
+def _execution_preference(execution: dict[str, Any]) -> tuple[Any, ...]:
+    """Prefer a usable actual record, not arbitrary serialized length or a union."""
+    permission = execution_permissions(execution)
+    return (
+        int(permission["closure_output"]) + len(permission["closure_filenames"]),
+        int(permission["closure_output"]),
+        len(permission["result_filenames"]),
+        len(permission["evidence"]) + len(permission["filenames"]),
+        sum(
+            len(execution[field])
+            for field in ("stdout", "stderr")
+            if isinstance(execution.get(field), str)
+        ),
+        json.dumps(execution, sort_keys=True, ensure_ascii=False),
+    )
+
+
+def _compatible_text(
+    first: dict[str, Any], second: dict[str, Any], field: str, truncation_field: str
+) -> bool:
+    a, b = first.get(field), second.get(field)
+    if not isinstance(a, str) or not isinstance(b, str):
+        return True
+    if a == b:
+        return bool(first.get(truncation_field)) == bool(second.get(truncation_field))
+    if field == "representation":
+        marker = "\n[truncated; inspect the original saved artifact]"
+        if first.get(truncation_field):
+            a = a.removesuffix(marker)
+        if second.get(truncation_field):
+            b = b.removesuffix(marker)
+    return bool(
+        (first.get(truncation_field) and len(a) < len(b) and b.startswith(a))
+        or (second.get(truncation_field) and len(b) < len(a) and a.startswith(b))
+    )
+
+
+def _compatible_inspections(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    for field in ("sha256", "size_bytes", "media_type", "execution_id"):
+        if field in first and field in second and first[field] != second[field]:
+            return False
+    a, b = first.get("inspection"), second.get("inspection")
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return True
+    for field in ("status", "format"):
+        if field in a and field in b and a[field] != b[field]:
+            return False
+    return _compatible_text(a, b, "representation", "truncated")
+
+
 def _compatible_executions(first: dict[str, Any], second: dict[str, Any]) -> bool:
-    for field in ("status", "exit_code", "source_sha256", "source", "runtime", "strategy_id"):
+    for field in (
+        "status",
+        "exit_code",
+        "source_sha256",
+        "source",
+        "runtime",
+        "runtime_version",
+        "strategy_id",
+        "session_id",
+        "cycle",
+        "agent",
+        "artifact_error",
+        "stdout_base64",
+        "stderr_base64",
+    ):
         if field in first and field in second and first[field] != second[field]:
             return False
     for field in ("stdout", "stderr"):
-        a, b = first.get(field), second.get(field)
-        if (
-            isinstance(a, str)
-            and isinstance(b, str)
-            and a != b
-            and not (
-                (first.get(f"{field}_truncated") and b.startswith(a))
-                or (second.get(f"{field}_truncated") and a.startswith(b))
-            )
-        ):
+        if not _compatible_text(first, second, field, f"{field}_truncated"):
             return False
-    return not (
-        "artifacts" in first and "artifacts" in second and first["artifacts"] != second["artifacts"]
+    if "artifacts" in first and "artifacts" in second and first["artifacts"] != second["artifacts"]:
+        return False
+    # Missing inspections are unknown. Explicit contradictory states or
+    # content of the same file cannot authorize a result.
+    inspections = [
+        item
+        for execution in (first, second)
+        for item in _rows(execution.get("artifact_inspections"))
+        if isinstance(item.get("filename"), str) and item["filename"]
+    ]
+    return all(
+        _compatible_inspections(item, other)
+        for index, item in enumerate(inspections)
+        for other in inspections[index + 1 :]
+        if item["filename"] == other["filename"]
     )
 
 
@@ -446,6 +515,8 @@ def execution_permissions(execution: dict[str, Any]) -> dict[str, Any]:
             item.get("filename") == name
             and isinstance(item.get("inspection"), dict)
             and item["inspection"].get("status") == "available"
+            and isinstance(item["inspection"].get("representation"), str)
+            and bool(item["inspection"]["representation"].strip())
             for item in _rows(execution.get("artifact_inspections"))
         )
     ]
@@ -471,6 +542,8 @@ def execution_permissions(execution: dict[str, Any]) -> dict[str, Any]:
                 item.get("filename") == name
                 and isinstance(item.get("inspection"), dict)
                 and item["inspection"].get("status") == "available"
+                and isinstance(item["inspection"].get("representation"), str)
+                and bool(item["inspection"]["representation"].strip())
                 and not item["inspection"].get("truncated")
                 for item in _rows(execution.get("artifact_inspections"))
             )
