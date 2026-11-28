@@ -1501,8 +1501,9 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
         "reserved": 1,
     }
     for entry in before["calls"]:
-        assert ledger_metrics["ledger_cost_bound_usd_by_status"][entry["status"]] == (
-            entry["cost_bound_usd"]
+        assert (
+            ledger_metrics["ledger_cost_bound_usd_by_status"][entry["status"]]
+            == (entry["cost_bound_usd"])
         )
     assert research_sessions._read(str(path), session_id)["hard_budget_ledger"] == before
     assert ledger == before

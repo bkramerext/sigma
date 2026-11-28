@@ -278,7 +278,9 @@ def run() -> dict[str, Any]:
     assert obs.receipt_state({**local, "provider_http_status": 429}) == "uncertain"
     assert obs.receipt_state({**local, "provider_http_status": 999}) == "uncertain"
     assert (
-        obs.receipt_state({**local, "provider_http_status": 429, "provider_response_channel": "http"})
+        obs.receipt_state(
+            {**local, "provider_http_status": 429, "provider_response_channel": "http"}
+        )
         == "confirmed"
     )
     assert obs.retry_origins(

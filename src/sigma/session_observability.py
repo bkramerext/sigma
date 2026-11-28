@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 _ACTIVE = ("queued", "running")
 _TERMINAL = ("completed", "ended", "failed", "stopped")
@@ -435,7 +435,9 @@ def reported_usage(row: dict[str, Any]) -> dict[str, int | None] | None:
     }
 
 
-def receipt_state(row: dict[str, Any], *, simulated: bool = False) -> str:
+def receipt_state(
+    row: dict[str, Any], *, simulated: bool = False
+) -> Literal["confirmed", "uncertain", "not_dispatched", "simulated"]:
     """Remote receipt requires transport/usage evidence, never lifecycle status alone."""
     attempt_status = row.get("attempt_status")
     if attempt_status == "not_dispatched":
@@ -460,7 +462,11 @@ def receipt_state(row: dict[str, Any], *, simulated: bool = False) -> str:
         isinstance(audit, dict)
         and audit.get("kind") == "exact_provider_request_body"
         and audit.get("status")
-        in ("provider_response_received", "provider_response_incomplete", "provider_response_invalid")
+        in (
+            "provider_response_received",
+            "provider_response_incomplete",
+            "provider_response_invalid",
+        )
     ):
         return "confirmed"
     if row.get("token_usage_status") == "reported" and reported_usage(row) is not None:
@@ -473,9 +479,7 @@ def receipt_state(row: dict[str, Any], *, simulated: bool = False) -> str:
         type(status) is int
         and 100 <= status <= 599
         and (compiler or row.get("provider_response_channel") in ("http", "stream"))
-    ) or (
-        compiler and type(diagnostic_status) is int and 100 <= diagnostic_status <= 599
-    ):
+    ) or (compiler and type(diagnostic_status) is int and 100 <= diagnostic_status <= 599):
         return "confirmed"
     return "uncertain"
 
