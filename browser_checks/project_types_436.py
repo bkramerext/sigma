@@ -744,9 +744,7 @@ with sync_playwright() as playwright:
     assert len(start_payloads) == starts_before + 1, start_payloads
     assert start_payloads[-1]["continue_using_saved_type_settings"] is True, start_payloads[-1]
     assert start_payloads[-1]["session_settings"]["turn_limit"] == 9
-    restored_turns = page.request.put(
-        settings_url, data={"default_turn_limit": int(initial_turns)}
-    )
+    restored_turns = page.request.put(settings_url, data={"default_turn_limit": int(initial_turns)})
     assert restored_turns.ok, restored_turns.text()
 
     # A legacy default project is still importable/exportable, but the UI says
