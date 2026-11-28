@@ -69,8 +69,10 @@ with sync_playwright() as playwright:
         # These routes connect the record, context, participants, and both projections.
         for route in (
             "M258 175 H214",
-            "M119 235 V280",
-            "M214 438 H231 V218 H258",
+            "M119 235 V270.5",
+            "M93 498 V462.5",
+            "M148 462.5 V498",
+            "M214 428.5 H231 V218 H258",
             "M367 235 V315",
             "M476 215 H490 V455 H476",
         ):
