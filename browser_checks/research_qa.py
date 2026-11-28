@@ -4,12 +4,196 @@ import json
 import os
 import re
 from pathlib import Path
+from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
 UI = os.environ.get("SIGMA_QA_UI", "http://127.0.0.1:5174").rstrip("/")
 OUT = Path("docs/evaluations/research_qa")
 OUT.mkdir(parents=True, exist_ok=True)
+EVIDENCE_PREFIX = f"fresh-{uuid4().hex}-"
+print(f"Fresh Q/A screenshot evidence prefix: {EVIDENCE_PREFIX}", flush=True)
+
+
+def evidence_path(name):
+    return str(OUT / (EVIDENCE_PREFIX + name))
+
+
+def title_geometry(title_line):
+    """Measure one layout, in one DOM turn, relative to the card title anchor."""
+    return title_line.evaluate("""anchor => {
+        const title = anchor.querySelector('.saved-paper-title-toggle');
+        const heading = anchor.querySelector('.saved-paper-title');
+        const origin = anchor.getBoundingClientRect();
+        const rect = r => ({
+            x: r.x - origin.x, y: r.y - origin.y,
+            right: r.right - origin.x, bottom: r.bottom - origin.y,
+            width: r.width, height: r.height
+        });
+        const textRects = node => {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            return [...range.getClientRects()].map(rect);
+        };
+        const tools = anchor.querySelector('.saved-paper-title-tools');
+        const buttons = [...tools.querySelectorAll('button')].map(button => ({
+            label: button.getAttribute('aria-label'),
+            box: rect(button.getBoundingClientRect()),
+            glyph: rect(button.querySelector('svg').getBoundingClientRect())
+        }));
+        const copy = tools.querySelector('button.text-copy-button svg');
+        const bounds = copy.getBBox();
+        const body = anchor.closest('.settings-body.ai-paper-body');
+        return {
+            anchor: {x: origin.x, y: origin.y, width: origin.width, height: origin.height},
+            scroll: {
+                x: body.scrollLeft, y: body.scrollTop,
+                maxY: body.scrollHeight - body.clientHeight,
+                windowX: window.scrollX, windowY: window.scrollY
+            },
+            title: textRects(title),
+            heading: textRects(heading),
+            buttons,
+            copyBounds: {
+                x: bounds.x, y: bounds.y, right: bounds.x + bounds.width,
+                bottom: bounds.y + bounds.height, overflow: getComputedStyle(copy).overflow
+            },
+            expanded: title.getAttribute('aria-expanded')
+        };
+    }""")
+
+
+def assert_same_title_geometry(before, after):
+    # The clipboard checkmark may change the SVG path, never its viewport,
+    # hit target, or location relative to the title and adjacent actions.
+    assert before["title"] == after["title"], (before, after)
+    assert before["expanded"] == after["expanded"], (before, after)
+    assert len(before["buttons"]) == len(after["buttons"]), (before, after)
+    for normal, current in zip(before["buttons"], after["buttons"], strict=True):
+        assert normal["box"] == current["box"], (before, after)
+        assert normal["glyph"] == current["glyph"], (before, after)
+
+
+def assert_copy_geometry(snapshot, *, mobile=False):
+    title_rects = snapshot["title"]
+    assert len(title_rects) >= 2, snapshot
+    last_title_rect = title_rects[-1]
+    markdown, copy, *others = snapshot["buttons"]
+    assert others, snapshot
+    assert markdown["label"] == "Render answer as Markdown", snapshot
+    markdown_box, copy_box = markdown["box"], copy["box"]
+    assert markdown_box["width"] == markdown_box["height"] == 28, snapshot
+    assert copy_box["width"] == copy_box["height"] == 28, snapshot
+    assert copy_box["x"] > markdown_box["x"], snapshot
+    assert copy_box["x"] - markdown_box["right"] == 12, snapshot
+    assert abs(copy_box["y"] - markdown_box["y"]) <= 2, snapshot
+    bounds = snapshot["copyBounds"]
+    assert bounds["x"] >= 0 and bounds["y"] >= 0, snapshot
+    assert bounds["right"] <= 24 and bounds["bottom"] <= 24, snapshot
+    assert bounds["overflow"] == "visible", snapshot
+    if mobile:
+        assert len(snapshot["heading"]) >= 2, snapshot
+        same_line = abs(markdown_box["y"] - last_title_rect["y"]) < 15
+        if same_line:
+            assert markdown_box["x"] >= last_title_rect["right"] - 1, snapshot
+            assert markdown_box["x"] - last_title_rect["right"] <= 18, snapshot
+        else:
+            assert markdown_box["y"] >= last_title_rect["y"] + 10, snapshot
+    else:
+        same_line = (
+            abs(
+                (markdown_box["y"] + markdown_box["height"] / 2)
+                - (last_title_rect["y"] + last_title_rect["height"] / 2)
+            )
+            < 14
+        )
+        if same_line:
+            assert markdown_box["x"] >= last_title_rect["right"] - 1, snapshot
+            assert abs(markdown_box["x"] - last_title_rect["right"] - 14) <= 2, snapshot
+            left_glyph_gap = markdown["glyph"]["x"] - last_title_rect["right"]
+            right_glyph_gap = copy["glyph"]["x"] - markdown["glyph"]["right"]
+            assert abs(left_glyph_gap - right_glyph_gap) <= 3, snapshot
+            assert (
+                abs(
+                    (copy_box["y"] + copy_box["height"] / 2)
+                    - (last_title_rect["y"] + last_title_rect["height"] / 2)
+                )
+                < 14
+            ), snapshot
+        else:
+            assert markdown_box["y"] >= last_title_rect["bottom"] - 1, snapshot
+            assert abs(markdown_box["x"] - last_title_rect["x"] - 14) <= 2, snapshot
+            assert copy_box["y"] >= last_title_rect["bottom"] - 1, snapshot
+
+    # A title may wrap, but neither control may cover any actual text line.
+    # Retain the original one-pixel edge allowance.
+    for text_rect in title_rects:
+        for box in (markdown_box, copy_box):
+            overlap_x = min(box["right"], text_rect["right"]) - max(box["x"], text_rect["x"])
+            overlap_y = min(box["bottom"], text_rect["bottom"]) - max(box["y"], text_rect["y"])
+            assert overlap_x <= 1 or overlap_y <= 1, snapshot
+
+
+def verify_scroll_invariance(title_line, before):
+    # Scroll the real nested dialog scrollport, not a synthetic coordinate
+    # offset. One endpoint must differ from the measured starting position.
+    title_line.evaluate("""anchor => {
+        const body = anchor.closest('.settings-body.ai-paper-body');
+        const max = body.scrollHeight - body.clientHeight;
+        body.scrollTop = body.scrollTop < max / 2 ? max : 0;
+    }""")
+    shifted = title_geometry(title_line)
+    print(
+        "Q/A deliberate scroll geometry: "
+        + json.dumps(
+            {
+                "before": {"anchor": before["anchor"], "scroll": before["scroll"]},
+                "after": {"anchor": shifted["anchor"], "scroll": shifted["scroll"]},
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    assert shifted["scroll"]["y"] != before["scroll"]["y"], (before, shifted)
+    assert shifted["anchor"]["y"] != before["anchor"]["y"], (before, shifted)
+    assert_same_title_geometry(before, shifted)
+    title_line.scroll_into_view_if_needed()
+    restored = title_geometry(title_line)
+    assert_same_title_geometry(before, restored)
+    return restored
+
+
+def verify_negative_geometry_controls(title_line, before):
+    # Use actual DOM perturbations, then restore the exact prior inline style.
+    # A genuine relative position or size regression must not pass the new
+    # invariant just because the enclosing card or scrollport also moved.
+    button = title_line.locator("button.text-copy-button")
+    original_style = button.get_attribute("style")
+    for property_name, value in (
+        ("transform", "translateX(4px)"),
+        ("height", "32px"),
+    ):
+        try:
+            button.evaluate(
+                "(el, pair) => el.style.setProperty(pair[0], pair[1], 'important')",
+                [property_name, value],
+            )
+            changed = title_geometry(title_line)
+            assert changed["buttons"][1]["box"] != before["buttons"][1]["box"], changed
+            try:
+                assert_same_title_geometry(before, changed)
+            except AssertionError:
+                print(f"Q/A negative control rejected actual {property_name} change", flush=True)
+            else:
+                raise AssertionError(f"Q/A relative geometry missed {property_name} change")
+        finally:
+            button.evaluate(
+                "(el, style) => style === null ? el.removeAttribute('style') "
+                ": el.setAttribute('style', style)",
+                original_style,
+            )
+        assert_same_title_geometry(before, title_geometry(title_line))
+
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -194,7 +378,7 @@ with sync_playwright() as playwright:
     expect(lean_dialog).to_be_hidden()
     expect(lean).to_be_focused()
     expect(page.locator(".papers-pane").get_by_role("heading", name="Papers")).to_be_visible()
-    page.screenshot(path=str(OUT / "research-qa-toolbar.png"), full_page=False)
+    page.screenshot(path=evidence_path("research-qa-toolbar.png"), full_page=False)
 
     # One transient model configuration failure must not permanently disable
     # Ask. Archive reads remain independent; no provider call is retried.
@@ -359,100 +543,35 @@ with sync_playwright() as playwright:
     title_toggle.focus()
     page.keyboard.press("Enter")
     expect(title_toggle).to_have_attribute("aria-expanded", expanded_before_copy)
-    title_rects = title_toggle.evaluate(
-        "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
-    )
-    assert len(title_rects) >= 2, title_rects
     title_toggle.evaluate("el => el.blur()")
     page.mouse.move(1, 1)
-    title_line.screenshot(path=str(OUT / "research-qa-title-normal.png"))
+    title_line.screenshot(path=evidence_path("research-qa-title-normal.png"))
     markdown_icon = title_line.get_by_role("button", name="Render answer as Markdown")
     expect(markdown_icon).to_be_visible()
     expect(markdown_icon).to_have_attribute("data-tooltip", "Convert to markdown")
-    markdown_box = markdown_icon.bounding_box()
-    assert markdown_box and markdown_icon.locator("svg.markdown-logo").count() == 1
-    normal_copy_button = title_line.get_by_role("button", name="Copy Markdown answer")
-    assert (
-        normal_copy_button.bounding_box()["x"] - (markdown_box["x"] + markdown_box["width"]) == 12
-    )
-    normal_copy_box = normal_copy_button.bounding_box()
-    normal_icon_box = normal_copy_button.locator("svg").bounding_box()
-    normal_icon_bounds = normal_copy_button.locator("svg").evaluate(
-        "svg => { const b=svg.getBBox(); return {x:b.x,y:b.y,right:b.x+b.width,bottom:b.y+b.height,overflow:getComputedStyle(svg).overflow}; }"
-    )
-    assert normal_icon_bounds["x"] >= 0 and normal_icon_bounds["y"] >= 0
-    assert normal_icon_bounds["right"] <= 24 and normal_icon_bounds["bottom"] <= 24
-    assert normal_icon_bounds["overflow"] == "visible"
+    expect(markdown_icon.locator("svg.markdown-logo")).to_have_count(1)
+    normal = title_geometry(title_line)
+    assert normal["buttons"][1]["label"] == "Copy Markdown answer", normal
+    assert_copy_geometry(normal)
+    normal = verify_scroll_invariance(title_line, normal)
+    verify_negative_geometry_controls(title_line, normal)
+
     title_line.get_by_role("button", name="Copy Markdown answer").click()
-    expect(card.get_by_role("button", name="Copied Markdown answer to clipboard")).to_be_visible(
-        timeout=3000
+    copied_button = title_line.get_by_role("button", name="Copied Markdown answer to clipboard")
+    expect(copied_button).to_be_visible(timeout=3000)
+    title_line.screenshot(path=evidence_path("research-qa-title-copied.png"))
+    copied_geometry = title_geometry(title_line)
+    assert copied_geometry["buttons"][1]["label"] == "Copied Markdown answer to clipboard"
+    assert_copy_geometry(copied_geometry)
+    assert_same_title_geometry(normal, copied_geometry)
+    print(
+        "Q/A desktop normal/copied geometry: "
+        + json.dumps({"normal": normal, "copied": copied_geometry}, sort_keys=True),
+        flush=True,
     )
-    copied_icon_box = title_line.get_by_role(
-        "button", name="Copied Markdown answer to clipboard"
-    ).bounding_box()
-    last_title_rect = title_rects[-1]
-    assert copied_icon_box and copied_icon_box["x"] > markdown_box["x"]
-    same_title_line = (
-        abs(
-            (markdown_box["y"] + markdown_box["height"] / 2)
-            - (last_title_rect["y"] + last_title_rect["height"] / 2)
-        )
-        < 14
-    )
-    if same_title_line:
-        assert markdown_box["x"] >= last_title_rect["right"] - 1, (
-            markdown_box,
-            last_title_rect,
-        )
-        assert abs(markdown_box["x"] - last_title_rect["right"] - 14) <= 2, (
-            markdown_box,
-            last_title_rect,
-        )
-    else:
-        # Long titles can leave too little room for both actions on their last
-        # text line. In that case the inline action group wraps below the title;
-        # keep its standard title gap and ensure it does not overlap the text.
-        assert markdown_box["y"] >= last_title_rect["y"] + last_title_rect["height"] - 1, (
-            markdown_box,
-            last_title_rect,
-        )
-        assert abs(markdown_box["x"] - last_title_rect["x"] - 14) <= 2, (
-            markdown_box,
-            last_title_rect,
-        )
-    markdown_glyph = markdown_icon.locator("svg.markdown-logo").bounding_box()
-    assert markdown_glyph and normal_icon_box
-    left_glyph_gap = markdown_glyph["x"] - last_title_rect["right"]
-    right_glyph_gap = normal_icon_box["x"] - (markdown_glyph["x"] + markdown_glyph["width"])
-    if same_title_line:
-        assert abs(left_glyph_gap - right_glyph_gap) <= 3, (
-            left_glyph_gap,
-            right_glyph_gap,
-        )
-    else:
-        assert normal_copy_box["x"] - (markdown_box["x"] + markdown_box["width"]) == 12
-    assert normal_copy_box and normal_icon_box
-    assert copied_icon_box == normal_copy_box
-    assert (
-        title_line.get_by_role("button", name="Copied Markdown answer to clipboard")
-        .locator("svg")
-        .bounding_box()
-        == normal_icon_box
-    )
-    if same_title_line:
-        assert (
-            abs(
-                (copied_icon_box["y"] + copied_icon_box["height"] / 2)
-                - (last_title_rect["y"] + last_title_rect["height"] / 2)
-            )
-            < 14
-        )
-    else:
-        assert copied_icon_box["y"] >= last_title_rect["y"] + last_title_rect["height"] - 1
     expect(card.locator(".saved-paper-expand")).to_have_attribute(
         "aria-expanded", expanded_before_copy
     )
-    title_line.screenshot(path=str(OUT / "research-qa-title-copied.png"))
     if expanded_before_copy != "true":
         card.locator(".saved-paper-expand").click()
     expect(card.locator(".saved-paper-expand")).to_have_attribute("aria-expanded", "true")
@@ -501,7 +620,9 @@ with sync_playwright() as playwright:
     page.evaluate(
         "Object.defineProperty(navigator.clipboard, 'writeText', {configurable:true,value:() => Promise.reject(new Error('blocked'))})"
     )
-    title_line.get_by_role("button", name="Copied Markdown answer to clipboard").click()
+    # The feedback label is transient; the same copy control must report an
+    # error even if its earlier successful feedback has already expired.
+    title_line.locator("button.text-copy-button").click()
     expect(dialog.get_by_role("alert")).to_contain_text("Clipboard access failed")
 
     # The Markdown control formats this saved answer with the same AI text
@@ -580,9 +701,9 @@ with sync_playwright() as playwright:
         for link in link_specs
     ), link_specs
     assert any("reveal_session=" in link["href"] for link in link_specs), link_specs
-    browser_page.screenshot(path=str(OUT / "research-qa-browser-desktop.png"), full_page=True)
+    browser_page.screenshot(path=evidence_path("research-qa-browser-desktop.png"), full_page=True)
     browser_page.set_viewport_size({"width": 390, "height": 844})
-    browser_page.screenshot(path=str(OUT / "research-qa-browser-mobile.png"), full_page=True)
+    browser_page.screenshot(path=evidence_path("research-qa-browser-mobile.png"), full_page=True)
     assert browser_page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     # A long standalone Q/A must scroll as an ordinary page, not inherit the
     # fixed 100dvh/overflow:hidden workspace shell. Exercise actual wheel input
@@ -644,52 +765,39 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Research Q/A")
     expect(dialog.locator(".saved-paper-card")).to_have_count(2)
     page.set_viewport_size({"width": 390, "height": 844})
-    page.screenshot(path=str(OUT / "research-qa-mobile.png"), full_page=True)
+    page.screenshot(path=evidence_path("research-qa-mobile.png"), full_page=True)
     mobile_dialog = page.get_by_role("dialog", name="Research Q/A")
     assert mobile_dialog.bounding_box()["width"] <= 390
     mobile_title = mobile_dialog.locator(".saved-paper-card").first.locator(
         ".saved-paper-title-line"
     )
-    mobile_title_rects = mobile_title.locator(".saved-paper-title").evaluate(
-        "el => { const r=document.createRange(); r.selectNodeContents(el); return [...r.getClientRects()].map(x=>({x:x.x,y:x.y,right:x.right,height:x.height})); }"
-    )
-    assert len(mobile_title_rects) >= 2, mobile_title_rects
-    mobile_title.screenshot(path=str(OUT / "research-qa-title-mobile.png"))
-    mobile_title_toggle = mobile_title.locator(".saved-paper-title-toggle")
+    mobile_title.screenshot(path=evidence_path("research-qa-title-mobile.png"))
     mobile_toggle_before_copy = mobile_title.locator(".saved-paper-expand").get_attribute(
         "aria-expanded"
     )
-    mobile_last_line = mobile_title_toggle.evaluate(
-        "el => { const r=document.createRange(); r.selectNodeContents(el); const a=[...r.getClientRects()]; const x=a.at(-1); return {right:x.right,y:x.y,height:x.height}; }"
-    )
-    mobile_copy = mobile_title.get_by_role("button", name="Copy Markdown answer")
-    mobile_copy.click()
+    mobile_normal = title_geometry(mobile_title)
+    assert mobile_normal["buttons"][1]["label"] == "Copy Markdown answer", mobile_normal
+    assert_copy_geometry(mobile_normal, mobile=True)
+    mobile_title.get_by_role("button", name="Copy Markdown answer").click()
     expect(
         mobile_title.get_by_role("button", name="Copied Markdown answer to clipboard")
     ).to_be_visible(timeout=3000)
-    mobile_copy_box = mobile_title.get_by_role(
-        "button", name="Copied Markdown answer to clipboard"
-    ).bounding_box()
-    mobile_markdown = mobile_title.get_by_role("button", name="Render answer as Markdown")
-    mobile_markdown_box = mobile_markdown.bounding_box()
-    assert mobile_markdown_box and mobile_copy_box
-    # A long title may wrap its controls to the next line on mobile.
-    # Check readable separation, then verify the controls keep their standard gap.
-    same_line = abs(mobile_markdown_box["y"] - mobile_last_line["y"]) < 15
-    if same_line:
-        assert mobile_markdown_box["x"] >= mobile_last_line["right"] - 1
-        assert mobile_markdown_box["x"] - mobile_last_line["right"] <= 18
-    else:
-        assert mobile_markdown_box["y"] >= mobile_last_line["y"] + 10
-    assert mobile_copy_box["x"] - (mobile_markdown_box["x"] + mobile_markdown_box["width"]) == 12
-    assert abs(mobile_copy_box["y"] - mobile_markdown_box["y"]) <= 2
+    mobile_title.screenshot(path=evidence_path("research-qa-title-mobile-copied.png"))
+    mobile_copied_geometry = title_geometry(mobile_title)
+    assert mobile_copied_geometry["buttons"][1]["label"] == "Copied Markdown answer to clipboard"
+    assert_copy_geometry(mobile_copied_geometry, mobile=True)
+    assert_same_title_geometry(mobile_normal, mobile_copied_geometry)
+    print(
+        "Q/A mobile normal/copied geometry: "
+        + json.dumps({"normal": mobile_normal, "copied": mobile_copied_geometry}, sort_keys=True),
+        flush=True,
+    )
     assert (
         mobile_title.locator(".saved-paper-expand").get_attribute("aria-expanded")
         == mobile_toggle_before_copy
     )
     mobile_copied = page.evaluate("navigator.clipboard.readText()")
     assert mobile_copied.startswith("# Research Q/A") and question in mobile_copied
-    mobile_title.screenshot(path=str(OUT / "research-qa-title-mobile-copied.png"))
     remove = mobile_dialog.locator(".saved-paper-card").first.get_by_role(
         "button", name="Remove answer", exact=True
     )
