@@ -211,7 +211,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       .catch(cause => { if (!controller.signal.aborted) setEthosError(String(cause)); });
     return () => { controller.abort(); element?.removeEventListener("cancel", preventCancel); };
   }, []);
-  const setLimit = (key: keyof LimitSettings, value: number | string | null) => {
+  const setLimit = (key: Exclude<keyof LimitSettings, 'research_rounds' | 'turns_per_round' | 'scheduler_version' | 'model_calls'>, value: number | string | null) => {
     setError(''); setSaved(false);
     setConfig(current => current ? { ...current, limits: { ...current.limits, [key]: value } } : current);
   };
@@ -228,7 +228,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const hasOtherChanges = hasConfigChanges || hasPrefChanges;
   const hasChanges = typesSaveState.dirty || hasOtherChanges;
   const scratchpadChanged = scratchpadLoaded && JSON.stringify(scratchpad) !== JSON.stringify(savedScratchpad.current);
-  const validLimits = !!config && (['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const)
+  const validLimits = !!config && (['output_tokens_per_call', 'max_concurrent_sessions'] as const)
     .every(field => Number.isInteger(Number(config.limits[field])) && Number(config.limits[field]) >= 1 && String(config.limits[field]).trim() !== '')
     && (['session_duration_minutes', 'maximum_input_tokens_per_session'] as const)
       .every(field => config.limits[field] == null || (Number.isFinite(Number(config.limits[field])) && Number(config.limits[field]) > 0 && String(config.limits[field]).trim() !== ''))
@@ -257,7 +257,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
       if (!config) return false;
       if (hasConfigChanges) {
         const limits = { ...config.limits };
-        const whole = ['research_rounds', 'turns_per_round', 'output_tokens_per_call', 'max_concurrent_sessions'] as const;
+        const whole = ['output_tokens_per_call', 'max_concurrent_sessions'] as const;
         for (const field of whole) {
           const value = Number(limits[field]);
           if (!Number.isInteger(value) || value < 1) {
@@ -267,8 +267,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
           }
           (limits as any)[field] = value;
         }
-        limits.scheduler_version = 2;
-        limits.model_calls = limits.research_rounds * limits.turns_per_round * 2;
+        // Preserve legacy protocol fields from the loaded settings unchanged.
+        // New browser sessions take their turn limit from Session Settings.
         for (const field of ['session_duration_minutes', 'maximum_input_tokens_per_session'] as const) {
           const raw = limits[field] as number | string | null;
           (limits as any)[field] = raw === '' || raw === null ? null : Number(raw);
@@ -447,20 +447,6 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
               <input id="sigma-global-concurrent" type="number" min={1} max={4} value={config.limits.max_concurrent_sessions}
                 onChange={e => setLimit('max_concurrent_sessions', e.target.value)}/>
             </div>
-            <div className="sigma-global-limit-field">
-              <label htmlFor="sigma-global-rounds">Research rounds</label>
-              <input id="sigma-global-rounds" type="number" min={1} max={60} value={config.limits.research_rounds}
-                onChange={e => setLimit('research_rounds', e.target.value)}/>
-            </div>
-            <div className="sigma-global-limit-field">
-              <label htmlFor="sigma-global-turns">Turns per round</label>
-              <input id="sigma-global-turns" type="number" min={1} max={20} value={config.limits.turns_per_round}
-                onChange={e => setLimit('turns_per_round', e.target.value)}/>
-            </div>
-          </div>
-          <div className="sigma-limit-calculation settings-hint" aria-live="polite">
-            <div>{config.limits.research_rounds || 0} rounds × {config.limits.turns_per_round || 0} turns × 2 agents (Investigator + Skeptic) = <strong>{Number(config.limits.research_rounds || 0) * Number(config.limits.turns_per_round || 0) * 2} calls per strategy</strong>.</div>
-            <div>For 3 enabled strategies: 3 × {Number(config.limits.research_rounds || 0) * Number(config.limits.turns_per_round || 0) * 2} = <strong>{3 * Number(config.limits.research_rounds || 0) * Number(config.limits.turns_per_round || 0) * 2} total calls</strong>.</div>
           </div>
           <div className="sigma-global-limit-row sigma-global-limit-row--ceilings">
             <div className="sigma-global-limit-field">
