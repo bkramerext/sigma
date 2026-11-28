@@ -1829,6 +1829,7 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
     give the project a new identity and rebind sessions to it. Record the new
     title as a genuine project edit so existing settings history stays valid.
     """
+    from sigma import project_diagnostic_bundle
     from sigma.project_bundle import BundleError
     from sigma.project_bundle import _decode as decode_bundle_members
     from sigma.project_transfer import export_project, import_project, make_bundle
@@ -1846,6 +1847,10 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
             with project_write_lock(source):
                 original = inspect_project(source).project
                 payload = json.loads(export_project(source))
+                # Save As is an authorized same-workspace copy. Carry existing
+                # passive archives separately; never put them into ordinary
+                # outward transfers or rewrite their original bytes.
+                passive = project_diagnostic_bundle.read_passive(source)
                 new_id = str(uuid4())
                 renamed = replace(
                     original,
@@ -1884,8 +1889,13 @@ def save_project_as(value: str | Path, title: str) -> ProjectView:
                     session_ids_out=session_ids,
                     session_numbers_out=session_numbers,
                 )
+                copied_payload = make_bundle(decode_bundle_members(independent))
+                if passive:
+                    copied_payload["diagnostics"] = project_diagnostic_bundle.encode(
+                        project_diagnostic_bundle.rebind(passive, session_ids)
+                    )
                 imported = import_project(
-                    make_bundle(decode_bundle_members(independent)),
+                    copied_payload,
                     destination,
                     independent=False,
                 )

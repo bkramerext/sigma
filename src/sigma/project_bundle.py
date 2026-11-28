@@ -42,7 +42,15 @@ class BundleError(ValueError):
     """A project cannot be bundled or restored safely."""
 
 
-def _files(directory: Path) -> dict[str, bytes]:
+def private_diagnostic_member(name: str) -> bool:
+    return name == "diagnostics" or name.startswith("diagnostics/")
+
+
+def without_private_diagnostics(members: dict[str, bytes]) -> dict[str, bytes]:
+    return {name: data for name, data in members.items() if not private_diagnostic_member(name)}
+
+
+def _files(directory: Path, *, include_private: bool = True) -> dict[str, bytes]:
     if directory.is_symlink() or not directory.is_dir():
         raise BundleError("Project source must be a real directory")
     entries: dict[str, bytes] = {}
@@ -50,6 +58,9 @@ def _files(directory: Path) -> dict[str, bytes]:
     for root, dirs, files in os.walk(directory, followlinks=False):
         dirs.sort()
         files.sort()
+        if not include_private and Path(root) == directory:
+            dirs[:] = [name for name in dirs if name != "diagnostics"]
+            files = [name for name in files if name != "diagnostics"]
         if any(name in files for name in dirs):
             raise BundleError("Project contains conflicting file and directory names")
         for name in dirs:
@@ -88,7 +99,7 @@ def snapshot(directory: str | Path) -> dict[str, Any]:
 
 
 def encode(directory: str | Path) -> bytes:
-    members = _files(Path(directory))
+    members = _files(Path(directory), include_private=False)
     return (
         json.dumps(portable_bundle(members), ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     ).encode("utf-8")
@@ -299,6 +310,8 @@ def import_independent_bundle(bundle: dict[str, Any], destination: str | Path) -
     from sigma.projects import _decode as validate_project
 
     members = _decode(bundle)
+    if any(private_diagnostic_member(name) for name in members):
+        raise BundleError("Private diagnostic members require validated v4 transfer")
     try:
         project = json.loads(members["project.json"])
         validate_project(project)
@@ -320,6 +333,22 @@ def import_independent_bundle(bundle: dict[str, Any], destination: str | Path) -
     return import_bundle(prepared, destination, rekey_sessions=False)
 
 
+def validate_member_paths(files: dict) -> None:
+    """Linear in member count times path depth, without arbitrary count regression."""
+    names = set(files)
+    for name in names:
+        if not isinstance(name, str) or not name or "\\" in name:
+            raise BundleError("Unsafe bundle path")
+        path = Path(name)
+        if path.is_absolute() or any(part in ("", ".", "..") for part in name.split("/")):
+            raise BundleError("Unsafe bundle path")
+        if len(name) > 4096 or "\x00" in name:
+            raise BundleError("Unsafe bundle path")
+        parts = name.split("/")
+        if any("/".join(parts[:index]) in names for index in range(1, len(parts))):
+            raise BundleError("Bundle member conflicts with a directory")
+
+
 def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     if not isinstance(bundle, dict) or set(bundle) != {"format", "version", "files"}:
         raise BundleError("Invalid project bundle")
@@ -333,22 +362,10 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     files = bundle["files"]
     if not isinstance(files, dict) or "project.json" not in files:
         raise BundleError("Project bundle has no project document")
-    if len(files) > 20000:
-        raise BundleError("Too many project bundle members")
-    names = set(files)
+    validate_member_paths(files)
     result: dict[str, bytes] = {}
     total_size = 0
     for name, value in files.items():
-        if not isinstance(name, str) or not name or "\\" in name:
-            raise BundleError("Unsafe bundle path")
-        path = Path(name)
-        if path.is_absolute() or any(part in ("", ".", "..") for part in name.split("/")):
-            raise BundleError("Unsafe bundle path")
-        if len(name) > 4096 or "\x00" in name:
-            raise BundleError("Unsafe bundle path")
-        parts = name.split("/")
-        if any("/".join(parts[:index]) in names for index in range(1, len(parts))):
-            raise BundleError("Bundle member conflicts with a directory")
         if version == LEGACY_VERSION:
             if not isinstance(value, str):
                 raise BundleError("Invalid encoded file")
@@ -434,8 +451,19 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
 
 def restore(bundle: dict[str, Any], destination: str | Path) -> None:
     """Restore only to a nonexistent directory; never overwrite live project data."""
+    restore_members(_decode(bundle), destination)
+
+
+def restore_members(files: dict[str, bytes], destination: str | Path) -> None:
+    """Publish validated member bytes without another encode/decode cycle."""
+    validate_member_paths(files)
+    if (
+        "project.json" not in files
+        or any(len(data) > MAX_MEMBER_BYTES for data in files.values())
+        or sum(map(len, files.values())) > MAX_BUNDLE_BYTES
+    ):
+        raise BundleError("Invalid or oversized project members")
     destination = Path(destination)
-    files = _decode(bundle)
     if os.path.lexists(destination):
         raise BundleError("Project destination already exists")
     if destination.parent.is_symlink() or not destination.parent.is_dir():
@@ -450,8 +478,15 @@ def restore(bundle: dict[str, Any], destination: str | Path) -> None:
     try:
         for name, data in files.items():
             target = destination / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with target.open("xb") as stream:
+            if private_diagnostic_member(name):
+                (destination / "diagnostics").mkdir(mode=0o700, exist_ok=True)
+                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                stream = os.fdopen(fd, "wb")
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                stream = target.open("xb")
+            with stream:
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -741,7 +776,7 @@ def read_bundle(bundle_path: str | Path) -> dict[str, Any]:
 def download_bytes(bundle_path: str | Path) -> bytes:
     """Serialize every project member, including binary artifacts."""
     members = _decode(read_bundle(bundle_path))
-    payload = portable_bundle(members)
+    payload = portable_bundle(without_private_diagnostics(members))
     return (json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(
         "utf-8"
     )

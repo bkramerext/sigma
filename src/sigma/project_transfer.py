@@ -94,7 +94,7 @@ def _archive(artifacts: dict[str, bytes]) -> dict:
     }
 
 
-def _unarchive(entry: object) -> dict[str, bytes]:
+def _unarchive(entry: object, *, budget: int = MAX_BUNDLE_BYTES) -> dict[str, bytes]:
     if (
         not isinstance(entry, dict)
         or set(entry) != {"encoding", "uncompressed_size", "sha256", "data"}
@@ -108,6 +108,7 @@ def _unarchive(entry: object) -> dict[str, bytes]:
         type(expected) is not int
         or expected < 0
         or expected > MAX_ARCHIVE_BYTES
+        or expected > budget + 64 * 1024 * 1024
         or not isinstance(digest, str)
         or re.fullmatch("[0-9a-f]{64}", digest) is None
         or not isinstance(encoded, str)
@@ -139,6 +140,8 @@ def _unarchive(entry: object) -> dict[str, bytes]:
                     or member.size > MAX_MEMBER_BYTES
                 ):
                     raise BundleError("Unsafe Source Material/paper archive member")
+                if member.size > budget - size:
+                    raise BundleError("Source artifacts exceed remaining project budget")
                 handle = tar.extractfile(member)
                 if handle is None:
                     raise BundleError("Missing source artifact bytes")
@@ -158,7 +161,9 @@ def make_bundle(members: dict[str, bytes]) -> dict:
     standard: dict[str, bytes] = {}
     artifacts: dict[str, bytes] = {}
     for original, data in members.items():
-        if original.startswith(project_diagnostic_bundle.PREFIX):
+        if project_bundle.private_diagnostic_member(original):
+            if not original.startswith(project_diagnostic_bundle.PREFIX):
+                raise BundleError("Invalid reserved diagnostic member")
             continue
         name = _canon(original)
         if not _safe_name(name):
@@ -183,11 +188,13 @@ def make_bundle(members: dict[str, bytes]) -> dict:
 def export_project(path: str | Path, *, diagnostics: bool = False) -> bytes:
     source = Path(path)
     if source.suffix == ".sigma" and source.is_dir():
-        members = project_bundle._files(source)
+        members = project_bundle._files(source, include_private=False)
     elif source.suffix == ".json" and source.is_file():
         # Transitional live projects are decoded for export; this does not
         # authorize importing any old external bundle version.
         members = project_bundle._decode(project_bundle.read_bundle(source))
+        if not diagnostics:
+            members = project_bundle.without_private_diagnostics(members)
     else:
         raise BundleError("Invalid project source")
     payload = make_bundle(members)
@@ -221,11 +228,21 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
             project_bundle.VERSION,
         }
     ):
+        files = payload["files"]
+        if isinstance(files, dict) and any(
+            isinstance(name, str) and project_bundle.private_diagnostic_member(name)
+            for name in files
+        ):
+            raise BundleError("Private diagnostics require validated v4 transfer")
         legacy = project_bundle._decode(payload)
         migrated: dict[str, bytes] = {}
         for original, data in legacy.items():
             name = _canon(original)
-            if not _safe_name(name) or name in migrated:
+            if (
+                not _safe_name(name)
+                or name in migrated
+                or project_bundle.private_diagnostic_member(name)
+            ):
                 raise BundleError("Conflicting legacy project artifact path")
             migrated[name] = data
         return migrated
@@ -236,6 +253,7 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
             {"format", "version", "files", "artifacts", "diagnostics"},
         )
         or payload["format"] != FORMAT
+        or type(payload["version"]) is not int
         or payload["version"] != VERSION
         or not isinstance(payload["files"], dict)
         or any(
@@ -253,12 +271,15 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
             "files": payload["files"],
         }
     )
-    artifacts = _unarchive(payload["artifacts"])
-    if set(standard).intersection(artifacts):
+    artifacts = _unarchive(
+        payload["artifacts"], budget=MAX_BUNDLE_BYTES - sum(map(len, standard.values()))
+    )
+    if set(standard).intersection(artifacts) or "artifacts" in standard:
         raise BundleError("Duplicate project member")
     if sum(map(len, standard.values())) + sum(map(len, artifacts.values())) > MAX_BUNDLE_BYTES:
         raise BundleError("Project members exceed the total bundle size limit")
     members = {**standard, **artifacts}
+    project_bundle.validate_member_paths(members)
     if "diagnostics" in payload:
         members.update(
             project_diagnostic_bundle.decode(
@@ -271,7 +292,10 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
 
 
 def bundle_document(payload: dict) -> dict:
-    members = decode_bundle(payload)
+    return document_from_members(decode_bundle(payload))
+
+
+def document_from_members(members: dict[str, bytes]) -> dict:
     try:
         from sigma.projects import _decode as decode_project
 
@@ -291,13 +315,31 @@ def import_project(
     title_override: str | None = None,
 ) -> Path:
     """Validate, reidentify, and restore an imported bundle as a real directory."""
+    return import_decoded_project(
+        decode_bundle(payload),
+        destination,
+        independent=independent,
+        preserve_identity=preserve_identity,
+        title_override=title_override,
+    )
+
+
+def import_decoded_project(
+    decoded: dict[str, bytes],
+    destination: str | Path,
+    *,
+    independent: bool = True,
+    preserve_identity: bool = False,
+    title_override: str | None = None,
+) -> Path:
+    """Internal continuation of a validated decode; never accept API raw members."""
     from sigma.project_copy import rebase_copy
     from sigma.projects import _decode as validate_project
 
     destination = Path(destination)
     if destination.suffix != ".sigma" or destination.exists():
         raise BundleError("Import destination must be a new .sigma directory")
-    members = decode_bundle(payload)
+    members = dict(decoded)
     passive = {
         name: members.pop(name)
         for name in list(members)
@@ -369,5 +411,5 @@ def import_project(
         )
         historical[legacy] = data
     project_bundle._verify_imported_papers(historical)
-    project_bundle.restore(project_bundle.stored_bundle(members), destination)
+    project_bundle.restore_members(members, destination)
     return destination

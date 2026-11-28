@@ -540,11 +540,21 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str, str]:
                 for path in (Path(b_path) / "research-executions").glob("*.json")
             }
 
+            plain_export = user_b.get("/api/projects/export", params={"path": b_path})
+            assert plain_export.status_code == 200, plain_export.text
+            assert "diagnostics" not in plain_export.json()
+            private_export = user_b.get(
+                "/api/projects/export", params={"path": b_path, "diagnostics": True}
+            )
+            assert private_export.status_code == 200, private_export.text
+            assert private_export.json()["diagnostics"]["private"] is True
+
             cross_reads = [
                 user_a.get("/api/projects/inspect", params={"path": b_path}),
                 user_a.post("/api/projects/open", json={"path": b_path}),
                 user_a.get("/api/projects/strategies", params={"path": b_path}),
                 user_a.get("/api/projects/export", params={"path": b_path}),
+                user_a.get("/api/projects/export", params={"path": b_path, "diagnostics": True}),
                 user_a.get("/api/projects/export/report", params={"path": b_path}),
                 user_a.get("/api/projects/research-sessions", params={"path": b_path}),
                 user_a.get(

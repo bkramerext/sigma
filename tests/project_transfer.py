@@ -11,7 +11,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from sigma import project_diagnostic_bundle, project_evidence, project_transfer, research_supplied_evidence
+from sigma import (
+    project_bundle,
+    project_diagnostic_bundle,
+    project_evidence,
+    project_transfer,
+    research_supplied_evidence,
+)
 from sigma.project_bundle import BundleError
 from sigma.projects import initialize_project, inspect_project
 from sigma.zstd_codec import compress
@@ -162,30 +168,57 @@ def test_private_diagnostic_roundtrip() -> None:
         session_id = str(uuid4())
         sessions = origin / "research-sessions"
         sessions.mkdir(exist_ok=True)
-        (sessions / f"{session_id}.json").write_text(json.dumps({
-            "id": session_id,
-            "project_id": project_id,
-            "project_path": str(origin),
-            "session_number": 1,
-            "status": "stopped",
-        }))
+        (sessions / f"{session_id}.json").write_text(
+            json.dumps(
+                {
+                    "id": session_id,
+                    "project_id": project_id,
+                    "project_path": str(origin),
+                    "session_number": 1,
+                    "status": "stopped",
+                    "steps": [
+                        {
+                            "id": "synthetic-step",
+                            "provider_input_audit": {"status": "prepared_before_dispatch"},
+                            "context_manifest": {"sources": []},
+                        }
+                    ],
+                    "strategy_assessments": [],
+                    "interventions": [],
+                    "cost_status": "unavailable",
+                }
+            )
+        )
         log = session_log.log_path(str(origin), project_id, session_id)
-        log.parent.mkdir(parents=True)
+        log.parent.parent.mkdir(mode=0o700)
+        log.parent.mkdir(mode=0o700)
         session_log._ensure(log, project_id, session_id, 1)
-        session_log._append_frame(log, {
-            "type": "provider_request",
-            "request_id": "synthetic-request",
-            "request": {
-                "input": "Synthetic research premise",
-                "headers": {"Authorization": "unsafe-synthetic-secret"},
+        session_log._append_frame(
+            log,
+            {
+                "type": "provider_request",
+                "seq": 1,
+                "request_id": "synthetic-request",
+                "request": {
+                    "input": json.dumps(
+                        {"premise": "Synthetic research premise", "token": "unsafe-test-token"}
+                    ),
+                    "headers": {"Authorization": "unsafe-synthetic-secret"},
+                },
+                "authorization": "unsafe-synthetic-secret",
             },
-            "authorization": "unsafe-synthetic-secret",
-        })
-        session_log._append_frame(log, {
-            "type": "provider_failure",
-            "request_id": "synthetic-request",
-            "status": "timeout",
-        })
+        )
+        session_log._append_frame(
+            log,
+            {
+                "type": "provider_failure",
+                "seq": 3,
+                "request_id": "synthetic-request",
+                "status": "timeout",
+                "elapsed_seconds": 1.5,
+                "response_wire": "opaque unsafe-wire-secret",
+            },
+        )
         ordinary = json.loads(project_transfer.export_project(origin))
         assert "diagnostics" not in ordinary
         diagnostic = json.loads(project_transfer.export_project(origin, diagnostics=True))
@@ -194,25 +227,65 @@ def test_private_diagnostic_roundtrip() -> None:
         assert len(archive["blobs"]) == 1
         members = project_transfer.decode_bundle(diagnostic)
         passive = {
-            name: data for name, data in members.items()
+            name: data
+            for name, data in members.items()
             if name.startswith(project_diagnostic_bundle.PREFIX)
         }
         assert len(passive) == 1
         raw = next(iter(passive.values()))
         snapshot = json.loads(raw)
         assert snapshot["source_session_id"] == session_id
-        assert snapshot["events"][0]["request"]["input"] == "Synthetic research premise"
+        assert json.loads(snapshot["events"][0]["request"]["input"]) == {
+            "premise": "Synthetic research premise"
+        }
+        assert b"unsafe-test-token" not in raw
+        assert b"unsafe-wire-secret" not in raw
+        assert "opaque_wire_omitted" in snapshot["events"][1]["omissions"]
+        assert snapshot["events"][1]["elapsed_seconds"] == 1.5
         assert b"unsafe-synthetic-secret" not in raw
         assert snapshot["events"][1]["request_id"] == "synthetic-request"
-        assert snapshot["availability"] == "available"
+        assert snapshot["availability"] == "partial"
+        assert snapshot["coverage"] == "best_effort_not_complete"
+        assert snapshot["saved_evidence"]["request_audits"] == 1
+        assert snapshot["saved_evidence"]["context_manifests"] == 1
+        assert snapshot["saved_evidence"]["strategy_assessments"] == 0
         imported = root / "imported.sigma"
         project_transfer.import_project(diagnostic, imported)
         assert "diagnostics" not in json.loads(project_transfer.export_project(imported))
+        legacy_out = json.loads(project_bundle.encode(imported))
+        assert not any(name.startswith("diagnostics/") for name in legacy_out["files"])
+        injected = {
+            **legacy_out,
+            "files": {**legacy_out["files"], next(iter(passive)): raw.decode()},
+        }
+        _expect_failure(lambda: project_transfer.decode_bundle(injected))
+        invalid = {
+            **ordinary,
+            "files": {**ordinary["files"], "diagnostics/invalid.bin": "private"},
+        }
+        _expect_failure(lambda: project_transfer.decode_bundle(invalid))
         again = json.loads(project_transfer.export_project(imported, diagnostics=True))
         assert again["diagnostics"]["blobs"] == archive["blobs"]
         assert session_id not in again["diagnostics"]["sessions"]
         assert len(again["diagnostics"]["sessions"]) == 1
         assert not (root / ".sigma-session-logs" / inspect_project(imported).project.id).exists()
+        imported_session_id = next(iter(again["diagnostics"]["sessions"]))
+        stored_record = json.loads(
+            (imported / "research-sessions" / f"{imported_session_id}.json").read_text()
+        )
+        assert stored_record["steps"][0]["context_manifest"] == {"sources": []}
+        assert (
+            stored_record["steps"][0]["provider_input_audit"]["status"] == "prepared_before_dispatch"
+        )
+        assert stored_record["status"] == "stopped"
+        preserved = root / "preserved.sigma"
+        project_transfer.import_project(
+            diagnostic, preserved, independent=False, preserve_identity=True
+        )
+        assert inspect_project(preserved).project.id == project_id
+        preserved_export = json.loads(project_transfer.export_project(preserved, diagnostics=True))
+        assert project_transfer.decode_bundle(preserved_export)
+        assert preserved_export["diagnostics"]["blobs"] == archive["blobs"]
 
         digest = next(iter(archive["blobs"]))
         entry = archive["blobs"][digest]
@@ -221,17 +294,207 @@ def test_private_diagnostic_roundtrip() -> None:
             lambda: project_transfer.decode_bundle({**diagnostic, "diagnostics": corrupted})
         )
         _expect_failure(
-            lambda: project_transfer.decode_bundle({
-                **diagnostic,
-                "diagnostics": {**archive, "sessions": {str(uuid4()): [digest]}},
-            })
+            lambda: project_transfer.decode_bundle(
+                {
+                    **diagnostic,
+                    "diagnostics": {**archive, "sessions": {str(uuid4()): [digest]}},
+                }
+            )
+        )
+        tampered = {**archive, "blobs": {"0" * 64: entry}, "sessions": {session_id: ["0" * 64]}}
+        _expect_failure(
+            lambda: project_transfer.decode_bundle({**diagnostic, "diagnostics": tampered})
         )
         with patch.object(project_diagnostic_bundle, "MAX_DIAGNOSTIC_BYTES", 10):
             _expect_failure(lambda: project_transfer.decode_bundle(diagnostic))
+        # Torn trailing record is distinguishable from a clean retained log.
+        with log.open("ab") as stream:
+            stream.write(b"\n<!-- SIGMA_EVENT 100 -->\n{")
+        torn = json.loads(project_transfer.export_project(origin, diagnostics=True))
+        torn_members = project_transfer.decode_bundle(torn)
+        torn_snapshot = next(
+            json.loads(data)
+            for name, data in torn_members.items()
+            if name.startswith(project_diagnostic_bundle.PREFIX)
+        )
+        assert torn_snapshot["availability"] == "partial"
         print(
             f"Diagnostic synthetic snapshot: {len(raw)} bytes uncompressed, "
             f"{len(json.dumps(archive))} bytes encoded archive."
         )
+
+
+def test_recorder_coverage_and_cross_mapping() -> None:
+    from uuid import uuid4
+
+    from sigma import session_log
+
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        origin = root / "coverage.sigma"
+        initialize_project(origin, "Coverage", "Synthetic research")
+        project_id = inspect_project(origin).project.id
+        sessions = origin / "research-sessions"
+        sessions.mkdir(exist_ok=True)
+        first, missing = str(uuid4()), str(uuid4())
+        for number, session_id in enumerate((first, missing), 1):
+            record = {
+                "project_id": project_id,
+                "id": session_id,
+                "project_path": str(origin),
+                "session_number": number,
+                "status": "stopped",
+                "steps": [],
+            }
+            (sessions / f"{session_id}.json").write_text(json.dumps(record))
+        log_context = {"project_id": project_id, "id": first, "session_number": 1}
+        for request_id in ("attempt-one", "attempt-two"):
+            session_log.append(
+                str(origin),
+                log_context,
+                {
+                    "type": "provider_request",
+                    "role": "investigator",
+                    "request_id": request_id,
+                    "request": {
+                        "model": "mock-model",
+                        "input": [
+                            {
+                                "role": "user",
+                                "content": json.dumps(
+                                    {
+                                        "context_manifest": {"sources": []},
+                                        "token": "synthetic-private-token",
+                                    }
+                                ),
+                            }
+                        ],
+                    },
+                },
+            )
+            session_log.append(
+                str(origin),
+                log_context,
+                {
+                    "type": "provider_failure",
+                    "role": "investigator",
+                    "request_id": request_id,
+                    "status": "timeout",
+                    "elapsed_seconds": 0.2,
+                },
+            )
+        session_log.flush()
+        payload = json.loads(project_transfer.export_project(origin, diagnostics=True))
+        archive = payload["diagnostics"]
+        members = project_transfer.decode_bundle(payload)
+        snapshots = {
+            json.loads(raw)["source_session_id"]: json.loads(raw)
+            for name, raw in members.items()
+            if name.startswith(project_diagnostic_bundle.PREFIX)
+        }
+        assert snapshots[first]["availability"] == "retained"
+        assert snapshots[missing]["availability"] == "unavailable"
+        assert snapshots[missing]["saved_evidence"]["request_audits"] == 0
+        events = snapshots[first]["events"]
+        assert [event["seq"] for event in events] == [1, 2, 3, 4]
+        assert [event["request_id"] for event in events] == [
+            "attempt-one",
+            "attempt-one",
+            "attempt-two",
+            "attempt-two",
+        ]
+        context = json.loads(events[0]["request"]["input"][0]["content"])
+        assert context == {"context_manifest": {"sources": []}}
+        swapped = {
+            **archive,
+            "sessions": {
+                first: archive["sessions"][missing],
+                missing: archive["sessions"][first],
+            },
+        }
+        _expect_failure(
+            lambda: project_transfer.decode_bundle({**payload, "diagnostics": swapped})
+        )
+        log = session_log.log_path(str(origin), project_id, first)
+        session_log._append_frame(
+            log,
+            {"type": "retention_limit", "seq": 5, "message": "Synthetic retention marker"},
+        )
+        retained = project_transfer.decode_bundle(
+            json.loads(project_transfer.export_project(origin, diagnostics=True))
+        )
+        snapshot = next(
+            json.loads(raw)
+            for name, raw in retained.items()
+            if name.startswith(f"{project_diagnostic_bundle.PREFIX}{first}/")
+        )
+        assert snapshot["availability"] == "partial"
+        assert snapshot["events"][-1]["type"] == "retention_limit"
+
+
+def test_diagnostic_resource_budget() -> None:
+    import tracemalloc
+    from uuid import uuid4
+
+    project_id, session_id = str(uuid4()), str(uuid4())
+    members = {
+        "project.json": json.dumps({"schema_version": 13, "id": project_id}).encode(),
+        f"research-sessions/{session_id}.json": json.dumps(
+            {"project_id": project_id, "id": session_id}
+        ).encode(),
+    }
+    snapshot = project_diagnostic_bundle._json(
+        {
+            "source_project_id": project_id,
+            "source_session_id": session_id,
+            "availability": "retained",
+            "coverage": "best_effort_not_complete",
+            "saved_evidence": {
+                "steps": None,
+                "request_audits": None,
+                "context_manifests": None,
+                "strategy_assessments": None,
+                "interventions": None,
+                "cost_status": None,
+            },
+            "events": [
+                {
+                    "type": "provider_request",
+                    "seq": 1,
+                    "request": {"instructions": "A synthetic research premise. " * 35000},
+                }
+            ],
+        }
+    )
+    digest = hashlib.sha256(snapshot).hexdigest()
+    path = f"{project_diagnostic_bundle.PREFIX}{session_id}/{digest}.bin"
+    tracemalloc.start()
+    try:
+        archive = project_diagnostic_bundle.encode({path: snapshot})
+        assert project_diagnostic_bundle.decode(
+            archive, members, budget=len(snapshot)
+        ) == {path: snapshot}
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert len(json.dumps(archive)) < len(snapshot)
+    _expect_failure(
+        lambda: project_diagnostic_bundle.decode(archive, members, budget=len(snapshot) - 1)
+    )
+    payload = project_transfer.make_bundle(members)
+    payload["diagnostics"] = archive
+    with patch.object(
+        project_transfer,
+        "MAX_BUNDLE_BYTES",
+        sum(map(len, project_transfer.decode_bundle(project_transfer.make_bundle(members)).values()))
+        + len(snapshot)
+        - 1,
+    ):
+        _expect_failure(lambda: project_transfer.decode_bundle(payload))
+    print(
+        f"Diagnostic stress: raw={len(snapshot)}, encoded={len(json.dumps(archive))}, "
+        f"Python allocation peak={peak} bytes (excludes preexisting payload and native allocations)"
+    )
 
 
 if __name__ == "__main__":
@@ -240,4 +503,6 @@ if __name__ == "__main__":
     test_total_size_includes_metadata_and_artifacts()
     test_rejects_traversal_in_archive()
     test_private_diagnostic_roundtrip()
+    test_recorder_coverage_and_cross_mapping()
+    test_diagnostic_resource_budget()
     print("PASS v4 artifact archive, source links, restored files and unsafe path rejection.")
