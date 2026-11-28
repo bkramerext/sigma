@@ -11107,7 +11107,10 @@ def _portfolio_context(
         ),
         None,
     )
-    if latest_review:
+    settings = record.get("session_settings")
+    if latest_review and not (
+        isinstance(settings, dict) and settings.get("supervisor_mode") == "none"
+    ):
         context["supervisor_guidance"] = latest_review["assessment"]["guidance"][:700]
     if record.get("scheduler_version") == 2:
         research_round, paired_turn = _paired_round_position(record, cycle)
@@ -14891,10 +14894,12 @@ def _supervisor_pair_input(
             pair[step["role"]] = step.get("output")
     if len(pair) != 2:
         return None
+    from sigma import session_supervisor
+
     return [
         {
             "speaker": "human",
-            "text": "Observe this completed pair as a process supervisor. Do not contribute research.",
+            "text": session_supervisor.context_message(record, strategy_id, cycle),
         },
         {"speaker": "ai_1", "text": json.dumps(pair["investigator"], ensure_ascii=False)[:12000]},
         {"speaker": "ai_2", "text": json.dumps(pair["skeptic"], ensure_ascii=False)[:12000]},
