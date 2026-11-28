@@ -114,49 +114,66 @@ export default function AboutProvenanceVision() {
   </section>;
 }
 
-/** Conceptual overview; detailed agent mechanics belong in Multi-Agent Research. */
+/** Conceptual overview; detailed agent mechanics belong in Multi-Agent Research Process. */
 export function AboutResearchArchitecture() {
   const colors = { blue: '#78bbee', green: '#85cfa7', gold: 'var(--sigma-copper-foreground)', violet: '#b59ff5', coral: '#f0a098' };
   const Arrow = (props: Parameters<typeof FlowArrow>[0]) => <FlowArrow {...props} prefix="about-research-architecture"/>;
-  return <section className="about-provenance" aria-label="Research Architecture">
-    <p>The <strong>Research Ethos</strong> guides how agents investigate. <strong>Source Material</strong> provides evidence for their research.</p>
+  return <section className="about-provenance" aria-label="Research Information Architecture">
+    <p>The overarching research objective and the selected strategies define the inquiry. The <strong>Research Ethos</strong> guides how agents investigate; <strong>Source Material</strong> supplies evidence to examine, not unquestionable facts. Researchers decide which strategies to pursue and when to start, stop, resume or extend a session within its configured limits.</p>
+    <p><strong>Persistent Research Knowledge</strong> is the saved project record: findings, hypotheses, failed approaches, disputed claims, uncertainties and their supporting evidence. It is a logical view of existing research history, not a new database or a collection of verified truths.</p>
     <figure className="about-provenance-figure about-research-architecture-figure">
-      <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Research architecture diagram; scroll horizontally on narrow screens">
-        <svg className="about-provenance-diagram about-research-architecture-diagram" viewBox="0 0 500 540" role="img" aria-label="Research architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
-          <desc id="about-research-architecture-description">Research Ethos and Source Material inform the research session and paper generation. The Investigator and Skeptic develop and challenge ideas. The Supervisor observes and may offer process guidance. Research findings accumulate and inform a paper draft.</desc>
+      <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Research information architecture diagram; scroll horizontally on narrow screens">
+        <svg className="about-provenance-diagram about-research-architecture-diagram" viewBox="0 0 500 570" role="img" aria-label="Research information architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
+          <desc id="about-research-architecture-description">This view emphasizes information relationships, with limited participant coordination and process guidance; it is not a prescribed execution sequence. Human direction, the overarching objective, selected strategies, Research Ethos and Source Material guide context selection. Persistent Research Knowledge feeds Context Selection and Budgeting, which supplies bounded context to the Investigator and Skeptic in a research session. Their contributions return to the persistent record for possible later inquiry. The optional Supervisor provides process guidance only. Research Perspectives groups Current Understanding, Research Q/A, research papers and ELI5 explanations of papers. These are ways to interpret and communicate the record, subject to human review. Broader context selection and budgeting remain architectural direction.</desc>
           <defs>
             {(Object.keys(colors) as (keyof typeof colors)[]).map(tone => <marker key={tone} id={`about-research-architecture-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill={colors[tone]}/></marker>)}
           </defs>
 
-          <rect x="40" y="126" width="220" height="184" rx="14" fill="#0a1b2a" stroke="#5483a1" strokeWidth="1.5"/>
-          <text x="150" y="151" textAnchor="middle" fontSize="15" fontWeight="650" fill="#c2d9e9">Research Session</text>
+          <rect x="24" y="270.5" width="190" height="192" rx="14" fill="#0a1b2a" stroke="#5483a1" strokeWidth="1.5"/>
+          <text x="119" y="294.5" textAnchor="middle" fontSize="13" fontWeight="650" fill="#c2d9e9">Bounded Research Session</text>
 
-          <Arrow d="M135 84 V105 H110 V126" tone="blue"/>
-          <Arrow d="M365 84 V112 H195 V126" tone="green"/>
-          <Arrow d="M30 53 H15 V424 H75" tone="blue"/>
-          <Arrow d="M470 53 H485 V424 H425" tone="green"/>
+          {/* Inputs and saved knowledge supply a bounded context. */}
+          <Arrow d="M119 100 V135" tone="gold"/>
+          <Arrow d="M258 175 H214" tone="gold"/>
+          <Arrow d="M119 235 V270.5" tone="gold"/>
 
-          <Arrow d="M150 211 V245" tone="violet"/>
-          <Arrow d="M230 271 H244 V187 H230" tone="violet"/>
-          <Arrow d="M260 255 H325" tone="gold"/>
-          <Arrow d="M325 211 H260" tone="gold"/>
-          <text x="292.5" y="247" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)">Observe</text>
-          <text x="292.5" y="203" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)">Nudge</text>
-          <Arrow d="M150 310 V333" tone="gold"/>
-          <Arrow d="M250 386 V399" tone="gold"/>
-          <Arrow d="M250 449 V474" tone="violet"/>
+          {/* Distinct participants exchange ideas and criticism. */}
+          <Arrow d="M83 363.5 V392.5" tone="violet"/>
+          <Arrow d="M155 392.5 V363.5" tone="violet"/>
+          <Arrow d="M93 498 V462.5" tone="gold" dashed/>
+          <Arrow d="M148 462.5 V498" tone="gold" dashed/>
 
-          <DiagramCard x={30} y={22} width={210} height={62} title="Research Ethos" lines={['Research philosophy']} fill="#17324a" stroke="#65a5cf" titleColor="#bde5ff"/>
-          <DiagramCard x={260} y={22} width={210} height={62} title="Source Material" lines={['External evidence']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
-          <DiagramCard x={70} y={163} width={160} height={48} title="Investigator" lines={['Explores ideas']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
-          <DiagramCard x={70} y={245} width={160} height={48} title="Skeptic" lines={['Challenges ideas']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
-          <DiagramCard x={325} y={190} width={145} height={78} title="Supervisor" lines={['Guides the process,', 'not the conclusions']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
-          <DiagramCard x={75} y={333} width={350} height={53} title="Cumulative Research Findings" lines={['Evidence, discoveries and open questions']} fill="#153b55" stroke="#7dbde9" titleColor="#bde5ff"/>
-          <DiagramCard x={75} y={399} width={350} height={50} title="Paper Generation" lines={['Synthesis of the research']} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
-          <DiagramCard x={150} y={474} width={200} height={43} title="Research Paper" lines={[]} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
+          {/* Save research; later selected work may draw on it again. */}
+          <Arrow d="M214 428.5 H231 V218 H258" tone="gold"/>
+          <text x="237" y="323.25" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)" transform="rotate(90 237 323.25)">Save contributions</text>
+
+          {/* Group the available perspectives without implying a pipeline. */}
+          <Arrow d="M367 235 V270.5" tone="blue"/>
+
+          <DiagramCard x={24} y={18} width={452} height={82} title="Human Direction & Research Inputs" lines={['Overarching objective · selected strategies', 'Research Ethos · Source Material (external evidence)']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+          <DiagramCard x={24} y={135} width={190} height={100} title="Context Selection" lines={['and Budgeting', 'Bounded evidence today', 'Broader selection: direction']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+          <DiagramCard x={258} y={135} width={218} height={100} title="Persistent Research" lines={['Knowledge (project record)', 'Findings, hypotheses, disputes,', 'uncertainties and evidence']} fill="#153b55" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+          <DiagramCard x={40} y={307.5} width={158} height={56} title="Investigator" lines={['Develops ideas and tests']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
+          <DiagramCard x={40} y={392.5} width={158} height={56} title="Skeptic" lines={['Critiques & contributes']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
+          <DiagramCard x={24} y={498} width={190} height={58} title="Supervisor (optional)" lines={['Process guidance only']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+          <g data-about-perspectives="true">
+            <rect x="258" y="270.5" width="218" height="285.5" rx="14" fill="#0a1b2a" stroke="#5483a1" strokeWidth="1.5"/>
+            <text x="367" y="294.5" textAnchor="middle" fontSize="13" fontWeight="650" fill="#c2d9e9">Research Perspectives</text>
+            <DiagramCard x={270} y={305} width={194} height={54} title="Current Understanding" lines={['Evolving interpretation']} fill="#133741" stroke="#7ac4c7" titleColor="#b7f1ed"/>
+            <DiagramCard x={270} y={367} width={194} height={54} title="Research Q/A" lines={['Ask about the research']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
+            <DiagramCard x={270} y={429} width={194} height={54} title="Research Paper" lines={['Optional formal synthesis']} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
+            <DiagramCard x={270} y={491} width={194} height={54} title="ELI5" lines={['Explain a paper simply']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+            <g transform="translate(321 498) scale(.65)" aria-hidden="true" fill="var(--sigma-copper-foreground)">
+              <path d="M12 1.6C6.5 1.6 3.4 5.7 3.4 11.7c0 5.5 3.6 10 8.6 10.6 5-.6 8.6-5.1 8.6-10.6C20.6 5.7 17.5 1.6 12 1.6Z M9.5 22.3l2.5 3 2.5-3Z"/>
+              <path d="M12 25c-1.2 1.7 2.8 2.5 0 4.5" fill="none" stroke="var(--sigma-copper-foreground)" strokeWidth="1.35" strokeLinecap="round"/>
+            </g>
+          </g>
         </svg>
       </div>
-      <figcaption>Conceptual research flow. The Supervisor monitors the process; research conclusions and generated papers remain subject to human review.</figcaption>
+      <figcaption>Information architecture: arrows primarily show how knowledge is selected, exchanged, saved and interpreted. The Investigator, Skeptic and Supervisor also illustrate control relationships, not a prescribed execution sequence. Broader context selection and budgeting are architectural direction, not a promise of complete retrieval or autonomous research. The saved record is not proof.</figcaption>
     </figure>
+    <p><strong>Context Selection and Budgeting.</strong> Today, later turns can receive bounded selections of prior local and peer evidence; oversized context can be compacted for dispatch without changing the saved originals. The architectural direction is to improve relevance, coverage of unresolved questions and economy of context across future work. A selection is not the complete record, and omitted evidence is not resolved or verified.</p>
+    <p>The Investigator develops approaches, arguments and tests. The Skeptic reasons independently within its role: it can challenge assumptions, contribute new ideas, redirect the investigation or identify missing information. Distinct roles do not imply independent verification by different models. Optional Python or SageMath computation can supply execution evidence when configured. The optional Supervisor observes and guides the process, not the substantive conclusions.</p>
+    <p>Contributions are saved so a later turn or a deliberately selected session can build on them. The loop represents cumulative inquiry, not unbounded autonomous self-direction. <strong>Research Perspectives</strong> groups Current Understanding, Research Q/A, optional research papers and ELI5 (a plain-language explanation of a generated paper). These are ways to interpret and communicate the research, not additional sources of established truth. All remain subject to human review; a publication is one possible outcome of an investigation, not its purpose or a required endpoint.</p>
   </section>;
 }

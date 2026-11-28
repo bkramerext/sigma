@@ -94,17 +94,23 @@ def main() -> None:
                 architecture.locator("summary").click()
                 expect(architecture).to_have_attribute("open", "")
                 expect(dialog.locator("#about-architecture-details")).to_be_visible()
-                expect(architecture.locator("summary")).to_have_text("Multi-Agent Research")
+                expect(architecture.locator("summary")).to_have_text("Multi-Agent Research Process")
                 overview = dialog.locator('[data-about-section="researchArchitecture"]')
+                expect(overview.locator("summary")).to_have_text(
+                    "Research Information Architecture"
+                )
                 expect(overview).not_to_have_attribute("open", "")
                 overview.locator("summary").click()
                 expect(overview.locator("svg.about-provenance-diagram")).to_be_visible()
                 expect(overview).to_contain_text("Source Material")
                 expect(overview).to_contain_text("Supervisor")
-                expect(overview).to_contain_text("Conceptual research flow")
+                expect(overview).to_contain_text("not a prescribed execution sequence")
                 overview.locator("summary").click()
                 expect(overview).not_to_have_attribute("open", "")
                 provenance = dialog.locator(".about-provenance-disclosure")
+                expect(provenance.locator("summary")).to_have_text(
+                    "Vision for Investigation Provenance"
+                )
                 expect(provenance).not_to_have_attribute("open", "")
                 provenance.locator("summary").click()
                 expect(provenance).to_have_attribute("open", "")
