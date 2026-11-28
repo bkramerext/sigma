@@ -318,7 +318,8 @@ def _reconstruct_context(
     if role == "skeptic":
         current = next(
             (
-                item for item in session["steps"]
+                item
+                for item in session["steps"]
                 if item["id"] == original.get("investigator_step_id")
                 and item["status"] == "completed"
                 and item["role"] == "investigator"
@@ -424,7 +425,8 @@ async def _production_validate(
             "auth_context",
             new=AsyncMock(
                 return_value={
-                    "mode": record["mode"], "token": "offline-fixture-token",
+                    "mode": record["mode"],
+                    "token": "offline-fixture-token",
                 }
             ),
         ),

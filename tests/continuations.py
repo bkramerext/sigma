@@ -92,9 +92,9 @@ async def review_contract(context, desired_outcomes):
 
         dispatched = []
 
-        async def handler(request, response_output=output):
-            dispatched.append(json.loads(request.content))
-            assert dispatched[-1] == expected_body
+        async def handler(request, response_output=output, requests=dispatched):
+            requests.append(json.loads(request.content))
+            assert requests[-1] == expected_body
             return httpx.Response(200, json=helpers.provider_response(response_output))
 
         with (

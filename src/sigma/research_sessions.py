@@ -4181,14 +4181,13 @@ def _role_request_payload(
             raise ProjectError("Desired outcomes changed after research evidence finalization")
         context["desired_outcomes"] = record["desired_outcomes"]
     input_text = json.dumps(context, ensure_ascii=False)
-    if "evidence_catalog" in context:
-        if (
-            not isinstance(context.get("context_manifest"), dict)
-            or context["evidence_catalog"] != build_catalog(context)
-            or context["context_manifest"].get("assembled_context_bytes")
-            != len(input_text.encode("utf-8"))
-        ):
-            raise ProjectError("Final research evidence catalog or wire byte count is inconsistent")
+    if "evidence_catalog" in context and (
+        not isinstance(context.get("context_manifest"), dict)
+        or context["evidence_catalog"] != build_catalog(context)
+        or context["context_manifest"].get("assembled_context_bytes")
+        != len(input_text.encode("utf-8"))
+    ):
+        raise ProjectError("Final research evidence catalog or wire byte count is inconsistent")
     if len(input_text.encode("utf-8")) > _agent_dispatch_guard_bytes(record):
         raise _research_context_guard_error(
             context,
@@ -8763,9 +8762,7 @@ def _catalog_addressed_basis(
         return True
     for group in ("own", "prior", "continuation", "peer"):
         if any(
-            identifier in artifact_ids
-            and source["closure_argument"]
-            and not source["conflicted"]
+            identifier in artifact_ids and source["closure_argument"] and not source["conflicted"]
             for identifier, source in catalog[group].items()
         ):
             return True

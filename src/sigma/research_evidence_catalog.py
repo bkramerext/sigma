@@ -253,9 +253,10 @@ def _sources(rows: list[dict[str, Any]], key: str, *, complete: bool = False) ->
                 source["conflicted"] = True
             result[identifier] = source
             originals[identifier] = row
-        elif source["availability"] != "pointer_only" and row != originals[identifier]:
-            previous["conflicted"] = True
-        elif source["strategy_id"] not in (None, previous["strategy_id"]):
+        elif (
+            source["availability"] != "pointer_only" and row != originals[identifier]
+            or source["strategy_id"] not in (None, previous["strategy_id"])
+        ):
             previous["conflicted"] = True
     return result
 
@@ -398,15 +399,19 @@ def _compatible_executions(first: dict[str, Any], second: dict[str, Any]) -> boo
             return False
     for field in ("stdout", "stderr"):
         a, b = first.get(field), second.get(field)
-        if isinstance(a, str) and isinstance(b, str) and a != b:
-            if not (
+        if (
+            isinstance(a, str)
+            and isinstance(b, str)
+            and a != b
+            and not (
                 (first.get(f"{field}_truncated") and b.startswith(a))
                 or (second.get(f"{field}_truncated") and a.startswith(b))
-            ):
-                return False
-    if "artifacts" in first and "artifacts" in second and first["artifacts"] != second["artifacts"]:
-        return False
-    return True
+            )
+        ):
+            return False
+    return not (
+        "artifacts" in first and "artifacts" in second and first["artifacts"] != second["artifacts"]
+    )
 
 
 def execution_permissions(execution: dict[str, Any]) -> dict[str, Any]:
