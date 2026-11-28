@@ -35,7 +35,7 @@ export class RequestToastStore {
     this.getSnapshot = () => this.failures;
   }
 
-  add(message, severity = 'error') {
+  add(message) {
     const text = String(message ?? 'An unexpected request error occurred.');
     const shortened = text.length > MAX_REQUEST_TOAST_MESSAGE_LENGTH
       ? `${text.slice(0, MAX_REQUEST_TOAST_MESSAGE_LENGTH - 22).trimEnd()}… [message shortened]`
@@ -43,19 +43,13 @@ export class RequestToastStore {
     // One active notification per distinct error. Keep the original expiry
     // rather than extending it on every background poll or repeated callback.
     const key = failureKey(shortened);
-    const existing = this.failures.find(failure => failure.severity === severity && failureKey(failure.message) === key);
+    const existing = this.failures.find(failure => failureKey(failure.message) === key);
     if (existing) return existing;
 
-    const failure = { id: ++this.nextId, message: shortened, severity, phase: 'visible' };
-    // Keep one warning per failed source even when more than five fail together.
-    // Ordinary request errors retain their existing five-item eviction policy.
-    const errors = this.failures.filter(item => item.severity === 'error');
-    const overflow = severity === 'error'
-      ? errors.slice(0, Math.max(0, errors.length + 1 - this.maxVisible))
-      : [];
+    const failure = { id: ++this.nextId, message: shortened, phase: 'visible' };
+    const overflow = this.failures.slice(0, Math.max(0, this.failures.length + 1 - this.maxVisible));
     for (const old of overflow) this.clearTimers(old.id);
-    const evicted = new Set(overflow.map(item => item.id));
-    this.failures = [...this.failures.filter(item => !evicted.has(item.id)), failure];
+    this.failures = [...this.failures.slice(overflow.length), failure];
     this.notify();
     this.timers.set(failure.id, {
       expiry: this.setTimer(() => this.dismiss(failure.id), REQUEST_TOAST_LIFETIME_MS),

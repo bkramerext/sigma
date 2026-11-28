@@ -84,5 +84,3 @@
 .request-toast button.request-toast-dismiss:is(:hover, :focus-visible):not(:disabled) svg {
   color: #fff2e9;
 }
-
-.request-toast[data-severity="warning"] { border-left-color: #edbc77; }

@@ -14,7 +14,7 @@ import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
-import { sourceMaterialOverflowCopy, collectSourceMaterialWarnings } from './source-material-error';
+import { sourceMaterialOverflowCopy, currentSourceMaterialWarnings } from './source-material-error';
 import { publicationAwaitingLibrary, publishedRunActivityLabel, publishedRunReadyForHandoff, publishedRunStillFinishing, savedPaperAwaitingGenerationFinish, unlistedPublicationIds } from './paper-publication-handoff';
 import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper, orderPaperRunsDescending } from './paper-completion-transition';
 import { activatePaperScoreStep } from './paper-score-action';
@@ -33,7 +33,7 @@ import './text-views.css';
 import './papers-pane.css';
 import './action-icons.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
-import { installRequestErrorToasts, reportRequestFailure, reportRequestWarning, RequestErrorToasts } from './request-toast';
+import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
@@ -935,7 +935,7 @@ function SessionNotice({ number, onDismiss, title, kind, ariaLabel, dismissLabel
   };
   return <div className={`session-notice-exit-slot${exiting ? ' is-exiting' : ''}`}>
     <div className="session-notice-exit-inner">
-      <div className={kind} role={kind.includes('paper-contextual-error') ? 'alert' : kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
+      <div className={kind} role={kind.includes('paper-contextual-error') || kind.includes('session-source-warning') ? 'alert' : kind === 'stopped-session-guidance' ? 'note' : 'complementary'} aria-label={ariaLabel}>
         <div className="session-notice-header">
           <strong className="session-notice-title">{title}</strong>
           {kind.includes('paper-contextual-error')
@@ -1607,7 +1607,6 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
   const selectedSessionId = useRef('');
   const sessionsLoaded = useRef(false);
-  const sourceWarningSequences = useRef(new Map<string, number>());
   const initialRevealSessionId = useRef<string | null>(null);
   const [pendingStrategyIds, setPendingStrategyIds] = useState<string[]>([]);
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
@@ -1783,8 +1782,6 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     setReadError('');
     const requestedId = preferredId ?? selectedSessionId.current;
     const firstLoad = !sessionsLoaded.current;
-    collectSourceMaterialWarnings(nextSessions, sourceWarningSequences.current, firstLoad)
-      .forEach(reportRequestWarning);
     const chosen = (requestedId ? nextSessions.find(item => item.id === requestedId) : null)
       ?? (!sessionsLoaded.current && !selectedSessionId.current
         ? nextSessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused') ?? nextSessions[0] ?? null
@@ -1866,8 +1863,6 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         if (!alive) return;
         const current = sessionForDisplay(data);
         if (!current) throw new Error('Research progress response was invalid');
-        collectSourceMaterialWarnings([current], sourceWarningSequences.current)
-          .forEach(reportRequestWarning);
         setSessions(sessions => sessions.map(item => item.id === current.id ? current : item));
         if (current.status !== activeSession.status
           || current.steps.length !== activeSession.steps.length
@@ -1963,11 +1958,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       // without blocking the controls on reloading every session and
       // rebuilding Current Understanding; reconcile the history asynchronously.
       const initialSnapshot = sessionForDisplay(accepted);
-      if (initialSnapshot) {
-        collectSourceMaterialWarnings([initialSnapshot], sourceWarningSequences.current)
-          .forEach(reportRequestWarning);
-        setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
-      }
+      if (initialSnapshot) setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
       void load(next.id).catch(reportReadFailure);
       if (next.research_method_sources?.advisory) {
         setAnnouncement(next.research_method_sources.advisory);
@@ -2029,11 +2020,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
             ? await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: 'stop', request_only: true }, undefined, true)
             : accepted;
           const acknowledged = sessionForDisplay(resolved);
-          if (acknowledged) {
-            collectSourceMaterialWarnings([acknowledged], sourceWarningSequences.current)
-              .forEach(reportRequestWarning);
-            setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
-          }
+          if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
           void load(target.id).catch(reportReadFailure);
           break;
         } catch (cause) {
@@ -2473,6 +2460,22 @@ className="text-view-link text-view-icon workspace-icon-button session-settings-
                     </SessionNotice>)
                   : (['paused', 'stopped', 'failed'].includes(item.status) || (item.provider_usage_limited && item.status === 'ended'))
                     && <SessionRenderBoundary key={`${item.id}:notice:${sessionNoticeKey(item)}`} sessionId={item.id} sessionNumber={item.session_number} revision={item.updated_at} fallback={<div role="alert" className="session-render-error">Session {item.session_number} status notice could not be displayed; its saved record remains in project export.</div>}><StoppedSessionNotice session={item} dismissed={dismissedNoticeKeys.has(sessionNoticeKey(item))} onDismiss={() => dismissSessionNotice(sessionNoticeKey(item))}/></SessionRenderBoundary>}
+                {currentSourceMaterialWarnings(item.events).map(warning => {
+                  const key = `${item.id}:source-warning:${warning.sequence}`;
+                  if (dismissedNoticeKeys.has(key)) return null;
+                  return <SessionNotice key={key} number={item.session_number}
+                    title="Source Material Warning" kind="stopped-session-guidance session-source-warning"
+                    ariaLabel={`Source Material warning for Session ${item.session_number}`}
+                    dismissLabel={`Dismiss source warning for Session ${item.session_number}`}
+                    onDismiss={() => dismissSessionNotice(key)}>
+                    <p>{warning.message}</p>
+                    <p>In Project → <a href="#sigma-supplied-evidence-heading" className="session-notice-source-link"
+                      onClick={event => {
+                        event.preventDefault();
+                        window.dispatchEvent(new Event('sigma-reveal-source-material'));
+                      }}>Source Material</a>, replace the link or upload a readable copy, or disable the source if unnecessary. Then Resume.</p>
+                  </SessionNotice>;
+                })}
                 <small className="session-run-metadata">{dateLabel(item.created_at)}{typeof item.elapsed_seconds === 'number' ? ` · Elapsed ${formatDuration(item.elapsed_seconds)}` : ''} · {formatRunAttribution({ kind: 'session', creator, model: item.model, thinking: item.reasoning_effort })}{pendingAction ? ` · ${statusLabel}` : (['ended', 'completed', 'failed'].includes(item.status)) ? ` · Outcome: ${outcomeDisplayLabel(item)}` : ''}</small>
                 <small className="session-progress-inline">{pendingAction === 'stop' || pendingAction === 'pause'
                   ? 'Stopping · findings remain available'

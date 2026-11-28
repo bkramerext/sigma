@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sourceMaterialOverflowCopy, collectSourceMaterialWarnings } from '../src/source-material-error.ts';
+import { sourceMaterialOverflowCopy, currentSourceMaterialWarnings } from '../src/source-material-error.ts';
 
 const exact = 'Source Material contains 279,835 extracted characters; the session supports at most 60,000. Split or shorten the supplied documents.';
 
@@ -40,26 +40,28 @@ test('missing counts are not invented', () => {
   assert.doesNotMatch(copy.cause, /\d+,\d+/);
 });
 
-test('source warnings are announced individually and only once across polls', () => {
-  const seen = new Map();
-  const event = (sequence, message) => ({ sequence, kind: 'source_material.source_failed', message });
-  const session = events => ({ id: 's1', events });
-  assert.deepEqual(collectSourceMaterialWarnings([session([event(2, 'old (http_403)')])], seen, true), []);
-  const events = [event(2, 'old (http_403)'), event(5, 'first (http_403)'), event(6, 'second (timeout)')];
-  const warnings = collectSourceMaterialWarnings([session(events)], seen);
-  assert.equal(warnings.length, 2);
-  assert.match(warnings[0], /first \(http_403\)/);
-  assert.match(warnings[1], /second \(timeout\)/);
-  assert.match(warnings[1], /Source Material.*Resume/);
-  assert.deepEqual(collectSourceMaterialWarnings([session(events)], seen), []);
-  assert.deepEqual(collectSourceMaterialWarnings([session(events.slice(0, 1))], seen), []);
-  assert.equal(collectSourceMaterialWarnings([session([...events, event(9, 'first (http_403)')])], seen).length, 1);
+test('source warnings are individual, session-local, and deduplicated by event sequence', () => {
+  const failure = (sequence, message) => ({ sequence, kind: 'source_material.source_failed', message });
+  const first = failure(2, 'first (http_403)');
+  const second = failure(3, 'second (timeout)');
+  const events = [second, first, first];
+  assert.deepEqual(currentSourceMaterialWarnings(events), [
+    { sequence: 2, message: first.message }, { sequence: 3, message: second.message },
+  ]);
+  assert.deepEqual(currentSourceMaterialWarnings(events), currentSourceMaterialWarnings(events));
+  assert.deepEqual(currentSourceMaterialWarnings([]), []);
 });
 
-test('a new session may fail before its first poll; historical stopped sessions do not replay', () => {
-  const seen = new Map();
-  collectSourceMaterialWarnings([], seen, true);
-  const events = [{ sequence: 1, kind: 'source_material.source_failed', message: 'failed link' }];
-  assert.equal(collectSourceMaterialWarnings([{ id: 'new', events }], seen).length, 1);
-  assert.deepEqual(collectSourceMaterialWarnings([{ id: 'new', events }], seen), []);
+test('resume clears old notices and a new failure is independently dismissible', () => {
+  const old = { sequence: 2, kind: 'source_material.source_failed', message: 'same link (http_403)' };
+  const resumed = { sequence: 4, kind: 'resumed' };
+  const retry = { ...old, sequence: 5 };
+  assert.deepEqual(currentSourceMaterialWarnings([old, resumed]), []);
+  assert.deepEqual(currentSourceMaterialWarnings([old, resumed, retry]), [
+    { sequence: 5, message: retry.message },
+  ]);
+  assert.deepEqual(currentSourceMaterialWarnings([old, resumed, retry,
+    { sequence: 6, kind: 'source_material.compilation.completed' }]), []);
+  assert.deepEqual(currentSourceMaterialWarnings([old,
+    { sequence: 3, kind: 'source_material.selection_refreshed' }]), []);
 });

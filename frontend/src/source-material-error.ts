@@ -34,29 +34,25 @@ export function sourceMaterialOverflowCopy(
   };
 }
 
-/** A persisted event is emitted once per unsuccessful source retrieval.
- * Ignore historical events on initial load, and never reannounce the same
- * event on repeated or out-of-order polling responses.
+/** Only failures in the current retrieval attempt belong in the session.
+ * Derive from durable events so polling never duplicates notices and a
+ * reopened session still explains its current failures.
  */
-export function collectSourceMaterialWarnings(
-  sessions: readonly { id: string; events: readonly (SourceMaterialEvent & { sequence?: number })[] }[],
-  seen: Map<string, number>,
-  initialHistory = false,
-): string[] {
-  const messages: string[] = [];
-  for (const session of sessions) {
-    const previous = seen.get(session.id) ?? 0;
-    let latest = previous;
-    for (const event of [...session.events].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))) {
-      if (event.kind !== 'source_material.source_failed' || typeof event.sequence !== 'number'
-        || !Number.isSafeInteger(event.sequence) || event.sequence <= latest
-        || typeof event.message !== 'string' || !event.message.trim()) continue;
-      latest = event.sequence;
-      if (!initialHistory || seen.has(session.id)) {
-        messages.push(`Source Material: ${event.message}. In Project → Source Material, replace the link or upload a readable copy, or disable the source if unnecessary. Then Resume.`);
-      }
+export function currentSourceMaterialWarnings(
+  events: readonly (SourceMaterialEvent & { sequence?: number })[],
+): { sequence: number; message: string }[] {
+  const warnings = new Map<number, string>();
+  const ordered = [...events].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+  for (const event of ordered) {
+    if (event.kind === 'resumed' || event.kind === 'source_material.selection_refreshed'
+      || event.kind === 'source_material.compilation.completed') {
+      warnings.clear();
+      continue;
     }
-    seen.set(session.id, latest);
+    if (event.kind === 'source_material.source_failed' && typeof event.sequence === 'number'
+      && Number.isSafeInteger(event.sequence) && typeof event.message === 'string' && event.message.trim()) {
+      warnings.set(event.sequence, event.message);
+    }
   }
-  return messages;
+  return [...warnings].map(([sequence, message]) => ({ sequence, message }));
 }
