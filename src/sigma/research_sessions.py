@@ -7193,9 +7193,7 @@ async def start_session(
             raise ProjectError(str(exc)) from exc
     # Provider preflight may suspend on remote I/O. Never hold an exclusive
     # project flock across awaits: concurrent endpoints can block the event loop.
-    _session_start_limits(
-        get_limits(view.path), expected_limits, flat=session_settings is not None
-    )
+    _session_start_limits(get_limits(view.path), expected_limits, flat=session_settings is not None)
     credential = await auth_context()
     if credential["identity"] != expected_binding:
         raise ProjectError(
