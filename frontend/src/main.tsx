@@ -6834,14 +6834,21 @@ function ResearchQADialog({ path, projectId, guest, viewerEmail, projectOwnerEma
     if (!silent) setLoading(true);
     try {
       const q = new URLSearchParams({ path });
-      const response = await fetch(`/api/projects/research-qa?${q}`, { cache: 'no-store' });
+      const response = await fetch(`/api/projects/research-qa?${q}`, {
+        cache: 'no-store',
+        ...(silent ? { headers: { 'X-Sigma-Error-Handled': 'true' } } : {}),
+      });
       const list = await response.json();
       if (!response.ok) throw new Error(list.error ?? 'Could not load Q/A answers.');
       const saved = (list.answers ?? []) as ResearchQARecord[];
       if (typeof list.archive_available !== 'boolean') throw new Error('Could not verify the Q/A archive.');
       setAnswers(saved);
       return { answers: saved, archiveAvailable: list.archive_available };
-    } catch (cause) { setError(errorMessage(cause)); return null; }
+    } catch (cause) {
+      // Background polling must not impersonate a failed explicit archive read.
+      if (!silent) setError(errorMessage(cause));
+      return null;
+    }
     finally { if (!silent) setLoading(false); }
   }
   useEffect(() => {
