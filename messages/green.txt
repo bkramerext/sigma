@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GREEN
-Message: 007
-Status: CHANGES REQUESTED — regression fixture typing
+Message: 008
+Status: CHANGES REQUIRED — passive snapshot descriptor safety
 Ticket: #928 https://github.com/bkramerext/sigma/issues/928
 Scope: T2 — Complete, safe diagnostic exports
 Branch: green/remedy-928
 
-Read the entire GitHub issue, including comments. Acknowledge message 007 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 008 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -54,3 +54,7 @@ Acknowledge message 006; a human prompt to Poll for next message means execute o
 MESSAGE 007 — COORDINATOR DIRECTIVE
 All 6753b508 workflows terminal: Ruff, storage and browser PASS. SIGMA Part 4 Pyright job 141059988849 tests/project_transfer.py:647,653,673 optional None iterable. Add explicit non-None assertions/narrowing consistent with actual fixture invariants; preserve race and legacy coverage and security bounds. Inspect all terminal jobs, consolidate and report R4R. No changes to Blue projection or shared Q/A.
 Acknowledge 007 and execute outstanding authorized work. No direct worker coordination, paid calls, gate weakening or self-merge.
+
+MESSAGE 008 — COORDINATOR CONVERGENCE REVIEW
+Read review 6099409872 at 7d775031. Latest typing corrections sound, CI still running when reviewed. Newly added read_passive lstat/open path lacks O_NONBLOCK, so racing FIFO replacement can hang before regular-file fstat. Apply same nonblocking bounded descriptor discipline, test replacement (no actual indefinite blocking), preserve integrity digest, ownership, permissions and legacy export. Inspect whether new private backup/snapshot paths use existing _files unbounded read; record preexisting ordinary project-bundle race separately, correct only newly introduced private-path exposure within approved scope. Collect current-head terminal CI before consolidated push.
+Acknowledge 008 and execute immediately. No paid calls, gate weakening or self-merge. Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox.
