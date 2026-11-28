@@ -1195,7 +1195,6 @@ def test_running_session_settings_update_preserves_in_flight_slots() -> None:
     from copy import deepcopy
 
     from sigma import projects, research_sessions
-    from sigma.projects import ProjectError
 
     original = {
         "id": "active-fixture",
@@ -1287,13 +1286,16 @@ def test_running_session_settings_update_preserves_in_flight_slots() -> None:
         assert again["session_settings"]["supervisor_mode"] == "light"
         assert again["call_limit"] == 9
         assert again["steps"] == original["steps"]
-        try:
-            asyncio.run(apply({**updated, "turn_limit": 1}))
-        except ProjectError as exc:
-            assert "already executed" in str(exc)
-        else:
-            raise AssertionError("A live edit reduced the limit below an in-flight turn")
-        assert len(saves) == 2
+        # Lowering below an in-flight turn requests a graceful stop rather
+        # than rejecting the edit. Already accepted/reserved work is retained.
+        lowered = asyncio.run(apply({**updated, "turn_limit": 1}))
+        assert lowered["session_settings"]["turn_limit"] == 1
+        assert lowered["turn_limit_stop_requested"] is True
+        assert lowered["steps"] == original["steps"]
+        assert lowered["strategy_runs"] == original["strategy_runs"]
+        assert lowered["call_limit"] == 9
+        assert lowered["call_ceiling_cycles"] == 3
+        assert len(saves) == 3
 
 
 def test_live_settings_recheck_latest_checkpoint_before_persisting() -> None:
@@ -1302,13 +1304,18 @@ def test_live_settings_recheck_latest_checkpoint_before_persisting() -> None:
     from copy import deepcopy
 
     from sigma import projects, research_sessions
-    from sigma.projects import ProjectError
 
     base = {
         "id": "cross-process-fixture",
         "status": "running",
         "scheduler_version": 2,
         "cycle_limit": 3,
+        "call_limit": 9,
+        "call_ceiling_cycles": 3,
+        "supervisor_ceiling_calls": 3,
+        "turns_per_round": 3,
+        "turns_are_flat": True,
+        "research_round_limit": 1,
         "session_settings": {"turn_limit": 3},
         "strategy_runs": [{"strategy_id": "s", "status": "running", "cycle": 1}],
         "steps": [],
@@ -1321,20 +1328,22 @@ def test_live_settings_recheck_latest_checkpoint_before_persisting() -> None:
         patch.object(research_sessions, "_read", side_effect=lambda *_: deepcopy(next(reads))),
         patch.object(research_sessions, "_project_manager_lock", return_value=nullcontext()),
         patch.object(projects, "project_write_lock", return_value=nullcontext()),
-        patch.object(
-            research_sessions, "_save_unlocked", side_effect=AssertionError("Stale write")
-        ),
+        patch.object(research_sessions, "_save_unlocked") as save,
+        patch.object(research_sessions, "_event"),
+        patch.object(research_sessions, "_public", side_effect=lambda record: deepcopy(record)),
     ):
-        try:
-            asyncio.run(
-                research_sessions.update_session_configuration(
-                    "/live.sigma", "cross-process-fixture", {"turn_limit": 2}
-                )
+        result = asyncio.run(
+            research_sessions.update_session_configuration(
+                "/live.sigma", "cross-process-fixture", {"turn_limit": 2}
             )
-        except ProjectError as exc:
-            assert "already executed" in str(exc)
-        else:
-            raise AssertionError("The stale checkpoint was used for a live configuration edit")
+        )
+        assert result["turn_limit_stop_requested"] is True
+        assert result["strategy_runs"] == advanced["strategy_runs"]
+        assert result["steps"] == advanced["steps"]
+        assert result["call_limit"] == 9
+        assert result["session_settings"]["turn_limit"] == 2
+        save.assert_called_once()
+        assert save.call_args.args[1]["steps"] == advanced["steps"]
 
 
 def main() -> None:

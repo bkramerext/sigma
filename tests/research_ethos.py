@@ -19,6 +19,7 @@ from sigma import (
     publication_audit,
     research_ethos,
     research_sessions,
+    session_supervisor,
 )
 from sigma.api import app
 from sigma.projects import (
@@ -48,7 +49,22 @@ def main() -> None:
             assert defaults["is_override"] is False
             assert isinstance(defaults["markdown"], str)
             assert isinstance(defaults["sha256"], str)
-            assert "Pursue discovery" in defaults["markdown"]
+            principles = [line for line in defaults["markdown"].splitlines() if line[:1].isdigit()]
+            assert len(principles) == 5
+            for index, heading in enumerate(
+                (
+                    "Pursue discovery freely",
+                    "Let evidence govern conclusions",
+                    "Make obstacles productive",
+                    "Build understanding cumulatively",
+                    "Publish faithfully and respect the reader",
+                ),
+                start=1,
+            ):
+                assert principles[index - 1].startswith(f"{index}. **{heading}.**")
+            assert "conditional results" in defaults["markdown"]
+            assert "structural relationships" in defaults["markdown"]
+            assert defaults["version"] == "research-ethos-v2"
             assert len(defaults["sha256"]) == 64
 
             with TestClient(app) as client:
@@ -89,6 +105,74 @@ def main() -> None:
                 assert "research_ethos" not in json.loads(payload["input"])
                 assert payload["instructions"].count(override) == 1
             assert override in papers._paper_ethos_instructions({"research_ethos": state})
+
+            # Longitudinal supervision uses saved accepted pairs only.
+            steps = []
+            for cycle in range(1, 8):
+                for role in ("investigator", "skeptic"):
+                    steps.append(
+                        {
+                            "strategy_id": "a",
+                            "cycle": cycle,
+                            "role": role,
+                            "status": "completed",
+                            "output": {
+                                "claim": f"claim-{cycle}",
+                                "response": f"response-{cycle}",
+                                "remaining_obligations": ["unresolved"],
+                            },
+                        }
+                    )
+            steps.extend(
+                [
+                    {**steps[0], "strategy_id": "b", "output": {"claim": "SIBLING"}},
+                    {**steps[0], "cycle": 0, "status": "failed", "output": {"claim": "FAIL"}},
+                ]
+            )
+            record.update(
+                steps=steps,
+                supervisor_reviews=[
+                    {
+                        "strategy_id": "a",
+                        "cycle": 4,
+                        "status": "completed",
+                        "assessment": {
+                            "assessment": "Earlier observation",
+                            "action": "nudge",
+                            "recipient": "both",
+                            "guidance": "Consider whether the approach is advancing.",
+                        },
+                    }
+                ],
+            )
+            pair = research_sessions._supervisor_pair_input(record, "a", 5)
+            assert pair is not None
+            context = pair[0]["text"]
+            assert override in context
+            assert "Earlier observation" in context
+            assert "Consider whether the approach is advancing." in context
+            assert "claim-4" in context
+            assert "claim-5" not in context and "claim-6" not in context
+            assert "SIBLING" not in context and "FAIL" not in context
+            assert "claim-5" in pair[1]["text"]
+            assert "response-5" in pair[2]["text"]
+            history = json.loads(session_supervisor.historical_context(record, "a", 5))
+            assert history["accepted_earlier_pairs"] == 4
+            assert history["omitted_pairs"] == 4 - len(history["historical_excerpts"])
+            for step in steps:
+                step["output"]["claim"] = "x" * 20000
+                step["output"]["response"] = "y" * 20000
+            record["research_ethos"] = {"markdown": "e" * 16000}
+            pair = research_sessions._supervisor_pair_input(record, "a", 7)
+            assert pair is not None
+            from sigma import chat
+
+            transcript = chat._transcript(pair, "supervisor")
+            assert "Earlier conversation turns omitted" not in transcript
+            assert "e" * 16000 in transcript
+            assert len(session_supervisor.historical_context(record, "a", 7)) <= 6000
+            assert len(pair[1]["text"]) == len(pair[2]["text"]) == 12000
+            record["research_ethos"] = state
 
             # All accepted publication obligations remain visible, even when
             # they cannot be verified without independent editorial judgment.

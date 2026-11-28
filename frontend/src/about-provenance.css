@@ -67,3 +67,7 @@
   /* Keep labels readable on phones; scroll only inside the diagram, not the dialog. */
   .home-page .about-provenance-diagram { min-width: 760px; max-width: none; }
 }
+
+/* The conceptual overview is deliberately narrow and vertical. */
+.home-page .about-research-architecture-figure { max-width: 560px; margin: 14px auto; }
+.home-page .about-research-architecture-diagram { min-width: 380px; max-width: none; }

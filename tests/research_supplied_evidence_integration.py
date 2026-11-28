@@ -46,6 +46,12 @@ async def check_barrier() -> None:
         assert paused["stopped_at"] is not None
         assert "example.org/unavailable.txt" in paused["message"]
         assert "source_unavailable" in paused["message"]
+        warnings = [
+            event for event in paused["events"] if event["kind"] == "source_material.source_failed"
+        ]
+        assert len(warnings) == 1
+        assert "example.org/unavailable.txt" in warnings[0]["message"]
+        assert "source_unavailable" in warnings[0]["message"]
         portfolio.assert_not_called()
         reference_compiler.assert_not_awaited()  # Never spend on a blocked source
 
@@ -82,6 +88,13 @@ async def check_partial_resume() -> None:
             assert paused["supplied_evidence_compilation"]["status"] == "blocked"
             saved = paused["supplied_evidence_compilation"]["sources"]
             assert saved[0]["status"] == "retrieved" and saved[1]["status"] == "unavailable"
+            warnings = [
+                event
+                for event in paused["events"]
+                if event["kind"] == "source_material.source_failed"
+            ]
+            assert len(warnings) == 1
+            assert second["url"] in warnings[0]["message"]
 
         with (
             patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),

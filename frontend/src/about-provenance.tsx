@@ -22,9 +22,9 @@ function DiagramCard({ x, y, width, height, title, lines, fill, stroke, titleCol
   </g>;
 }
 
-function FlowArrow({ d, tone = 'blue', dashed = false }: { d: string; tone?: 'blue' | 'green' | 'gold' | 'violet' | 'coral'; dashed?: boolean }) {
+function FlowArrow({ d, tone = 'blue', dashed = false, prefix = 'about-provenance' }: { d: string; prefix?: string; tone?: 'blue' | 'green' | 'gold' | 'violet' | 'coral'; dashed?: boolean }) {
   const color = { blue: '#78bbee', green: '#85cfa7', gold: 'var(--sigma-copper-foreground)', violet: '#b59ff5', coral: '#f0a098' }[tone];
-  return <path d={d} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dashed ? '5 5' : undefined} markerEnd={`url(#about-provenance-arrow-${tone})`}/>;
+  return <path d={d} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dashed ? '5 5' : undefined} markerEnd={`url(#${prefix}-arrow-${tone})`}/>;
 }
 
 /** Illustrative provenance relationships. This is a product vision, not a live graph viewer. */
@@ -111,5 +111,52 @@ export default function AboutProvenanceVision() {
     </figure>
     <p>Sources, AI responses, and human feedback would be distinguishable by origin but connected within the same research history. Papers are generally treated as evidence, not infallible truth; disputed claims and changing conclusions remain traceable.</p>
     <p>The aim is research that can be <strong>inspected, challenged, and extended</strong>, with a path backward from each published claim to its supporting evidence and reasoning.</p>
+  </section>;
+}
+
+/** Conceptual overview; detailed agent mechanics belong in Multi-Agent Research. */
+export function AboutResearchArchitecture() {
+  const colors = { blue: '#78bbee', green: '#85cfa7', gold: 'var(--sigma-copper-foreground)', violet: '#b59ff5', coral: '#f0a098' };
+  const Arrow = (props: Parameters<typeof FlowArrow>[0]) => <FlowArrow {...props} prefix="about-research-architecture"/>;
+  return <section className="about-provenance" aria-label="Research Architecture">
+    <p>The <strong>Research Ethos</strong> guides how agents investigate. <strong>Source Material</strong> provides evidence for their research.</p>
+    <figure className="about-provenance-figure about-research-architecture-figure">
+      <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Research architecture diagram; scroll horizontally on narrow screens">
+        <svg className="about-provenance-diagram about-research-architecture-diagram" viewBox="0 0 500 540" role="img" aria-label="Research architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
+          <desc id="about-research-architecture-description">Research Ethos and Source Material inform the research session and paper generation. The Investigator and Skeptic develop and challenge ideas. The Supervisor observes and may offer process guidance. Research findings accumulate and inform a paper draft.</desc>
+          <defs>
+            {(Object.keys(colors) as (keyof typeof colors)[]).map(tone => <marker key={tone} id={`about-research-architecture-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill={colors[tone]}/></marker>)}
+          </defs>
+
+          <rect x="40" y="126" width="220" height="184" rx="14" fill="#0a1b2a" stroke="#5483a1" strokeWidth="1.5"/>
+          <text x="150" y="151" textAnchor="middle" fontSize="15" fontWeight="650" fill="#c2d9e9">Research Session</text>
+
+          <Arrow d="M135 84 V105 H110 V126" tone="blue"/>
+          <Arrow d="M365 84 V112 H195 V126" tone="green"/>
+          <Arrow d="M30 53 H15 V424 H75" tone="blue"/>
+          <Arrow d="M470 53 H485 V424 H425" tone="green"/>
+
+          <Arrow d="M150 211 V245" tone="violet"/>
+          <Arrow d="M230 271 H244 V187 H230" tone="violet"/>
+          <Arrow d="M260 255 H325" tone="gold"/>
+          <Arrow d="M325 211 H260" tone="gold"/>
+          <text x="292.5" y="247" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)">Observe</text>
+          <text x="292.5" y="203" textAnchor="middle" fontSize="10.5" fill="var(--sigma-copper-foreground)">Nudge</text>
+          <Arrow d="M150 310 V333" tone="gold"/>
+          <Arrow d="M250 386 V399" tone="gold"/>
+          <Arrow d="M250 449 V474" tone="violet"/>
+
+          <DiagramCard x={30} y={22} width={210} height={62} title="Research Ethos" lines={['Research philosophy']} fill="#17324a" stroke="#65a5cf" titleColor="#bde5ff"/>
+          <DiagramCard x={260} y={22} width={210} height={62} title="Source Material" lines={['External evidence']} fill="#183b32" stroke="#74b99a" titleColor="#b5efce"/>
+          <DiagramCard x={70} y={163} width={160} height={48} title="Investigator" lines={['Explores ideas']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
+          <DiagramCard x={70} y={245} width={160} height={48} title="Skeptic" lines={['Challenges ideas']} fill="#2b2148" stroke="#a793e8" titleColor="#ddceff"/>
+          <DiagramCard x={325} y={190} width={145} height={78} title="Supervisor" lines={['Guides the process,', 'not the conclusions']} fill="#403019" stroke="var(--sigma-copper-foreground)" titleColor="var(--sigma-copper-foreground)"/>
+          <DiagramCard x={75} y={333} width={350} height={53} title="Cumulative Research Findings" lines={['Evidence, discoveries and open questions']} fill="#153b55" stroke="#7dbde9" titleColor="#bde5ff"/>
+          <DiagramCard x={75} y={399} width={350} height={50} title="Paper Generation" lines={['Synthesis of the research']} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
+          <DiagramCard x={150} y={474} width={200} height={43} title="Research Paper" lines={[]} fill="#2a2445" stroke="#aa9cda" titleColor="#ddd1ff"/>
+        </svg>
+      </div>
+      <figcaption>Conceptual research flow. The Supervisor monitors the process; research conclusions and generated papers remain subject to human review.</figcaption>
+    </figure>
   </section>;
 }

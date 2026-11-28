@@ -33,3 +33,26 @@ export function sourceMaterialOverflowCopy(
     next: 'Open this project’s Source Material list and disable or remove unneeded files and links, or replace long documents with shorter excerpts. Then click Resume. Before the first Investigator/Skeptic call, SIGMA will reload the current enabled sources and recheck the limit. Saved findings and any prior provider usage remain preserved.',
   };
 }
+
+/** Only failures in the current retrieval attempt belong in the session.
+ * Derive from durable events so polling never duplicates notices and a
+ * reopened session still explains its current failures.
+ */
+export function currentSourceMaterialWarnings(
+  events: readonly (SourceMaterialEvent & { sequence?: number })[],
+): { sequence: number; message: string }[] {
+  const warnings = new Map<number, string>();
+  const ordered = [...events].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+  for (const event of ordered) {
+    if (event.kind === 'resumed' || event.kind === 'source_material.selection_refreshed'
+      || event.kind === 'source_material.compilation.completed') {
+      warnings.clear();
+      continue;
+    }
+    if (event.kind === 'source_material.source_failed' && typeof event.sequence === 'number'
+      && Number.isSafeInteger(event.sequence) && typeof event.message === 'string' && event.message.trim()) {
+      warnings.set(event.sequence, event.message);
+    }
+  }
+  return [...warnings].map(([sequence, message]) => ({ sequence, message }));
+}

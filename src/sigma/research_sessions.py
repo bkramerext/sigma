@@ -5973,11 +5973,14 @@ async def update_session_configuration(
                         if isinstance(branch, dict) and type(branch.get("cycle")) is int
                     ]
                 )
-                if new_settings["turn_limit"] < executed_turns:
-                    raise ProjectError(
-                        "Turns cannot be lower than the number of turns already executed"
-                    )
                 new_cycles = new_settings["turn_limit"]
+                # A lowered finite limit is a graceful stop request once the
+                # session has reached it. Preserve accepted work and let
+                # already-started pairs settle; never start another pair.
+                if new_settings["unlimited_turns"] or new_cycles > executed_turns:
+                    record.pop("turn_limit_stop_requested", None)
+                elif active and (new_cycles < old_cycles or current["unlimited_turns"]):
+                    record["turn_limit_stop_requested"] = True
                 if (
                     new_settings["unlimited_turns"]
                     and not current["unlimited_turns"]
@@ -11124,7 +11127,10 @@ def _portfolio_context(
         ),
         None,
     )
-    if latest_review:
+    settings = record.get("session_settings")
+    if latest_review and not (
+        isinstance(settings, dict) and settings.get("supervisor_mode") == "none"
+    ):
         context["supervisor_guidance"] = latest_review["assessment"]["guidance"][:700]
     if record.get("scheduler_version") == 2:
         research_round, paired_turn = _paired_round_position(record, cycle)
@@ -12315,6 +12321,8 @@ async def _portfolio_role_call(
             # provider request. A second Investigator cannot start after its
             # result was saved but before the matching Skeptic has dispatched.
             if role == "investigator":
+                if record.get("turn_limit_stop_requested") or cycle > record["cycle_limit"]:
+                    return False
                 prior_cycle = branch.get("cycle", 0)
                 # Transient failures retry the same cycle under a new durable
                 # request ID. Do not block a legitimate retry, and never
@@ -14230,7 +14238,15 @@ def _protocol_completion_recovery_plan(
         for step in steps
         if step.get("status") == "completed"
     }
-    if not completed <= expected_slots:
+    # A reduced limit may leave accepted historical pairs above the target.
+    historical_ceiling = max(cycles, int(record.get("call_ceiling_cycles", cycles)))
+    historical_slots = {
+        (strategy_id, role, cycle)
+        for strategy_id in strategy_ids
+        for role in ("investigator", "skeptic")
+        for cycle in range(cycles + 1, historical_ceiling + 1)
+    }
+    if not completed <= expected_slots | historical_slots:
         return None, (
             "Accepted research turns contain an unknown strategy or an out-of-range "
             "role/round. Correct the saved protocol record before resuming."
@@ -14523,7 +14539,10 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             for branch in runs:
                 if (
                     branch["status"] == "queued"
-                    and branch["cycle"] >= record["cycle_limit"]
+                    and (
+                        branch["cycle"] >= record["cycle_limit"]
+                        or record.get("turn_limit_stop_requested")
+                    )
                     and not branch.get("pending_investigation")
                 ):
                     branch["status"] = "ended"
@@ -14808,7 +14827,10 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     _commit_portfolio_review_safely(record, session_id, branch)
             for branch in record["strategy_runs"]:
                 if branch["status"] == "running":
-                    if branch["cycle"] >= record["cycle_limit"]:
+                    if (
+                        branch["cycle"] >= record["cycle_limit"]
+                        or record.get("turn_limit_stop_requested")
+                    ) and not branch.get("pending_investigation"):
                         branch["status"] = "ended"
                         branch["current_action"] = "Round limit"
                         branch["reason"] = "Configured research-round limit reached."
@@ -14892,10 +14914,12 @@ def _supervisor_pair_input(
             pair[step["role"]] = step.get("output")
     if len(pair) != 2:
         return None
+    from sigma import session_supervisor
+
     return [
         {
             "speaker": "human",
-            "text": "Observe this completed pair as a process supervisor. Do not contribute research.",
+            "text": session_supervisor.context_message(record, strategy_id, cycle),
         },
         {"speaker": "ai_1", "text": json.dumps(pair["investigator"], ensure_ascii=False)[:12000]},
         {"speaker": "ai_2", "text": json.dumps(pair["skeptic"], ensure_ascii=False)[:12000]},
@@ -17589,6 +17613,23 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             if not any(item.get("id") == source["id"] for item in saved):
                 saved.append(compiled)
                 stage["completed_count"] = len(saved)
+                if (
+                    compiled.get("status") != "retrieved"
+                    or compiled.get("incomplete_extract")
+                    or not str(compiled.get("excerpt") or "").strip()
+                ):
+                    name = str(compiled.get("filename") or compiled.get("url") or source["id"])
+                    reason = compiled.get("reason") or (
+                        "incomplete_extract"
+                        if compiled.get("incomplete_extract")
+                        else "unavailable"
+                    )
+                    detail = str(reason).replace(chr(10), " ").replace(chr(13), " ")[:120]
+                    _event(
+                        latest,
+                        "source_material.source_failed",
+                        f"{name} ({detail})",
+                    )
                 _save(path, latest)
             if latest["status"] in {"stopped", "paused", "ended", "failed"}:
                 return False
