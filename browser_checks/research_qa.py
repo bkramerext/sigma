@@ -60,7 +60,7 @@ with sync_playwright() as playwright:
             return
         route.continue_()
 
-    # Intercept only the two intentional archive failure injections. All other
+    # Intercept only intentional archive failure injections. All other
     # requests, especially the browser-presence SSE stream, use Vite's proxy.
     context.route(re.compile(r"/api/projects/research-qa\?"), forward)
     page.goto(UI + "/")
@@ -252,7 +252,6 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("group", name="Recover interrupted Q/A request")).to_have_count(0)
     ask_button = dialog.get_by_role("button", name="Ask", exact=True)
     expect(ask_button).to_be_enabled()
-    fail_background_archive_reads[0] = 1
     with page.expect_response(
         lambda response: (
             "/api/projects/research-qa?" in response.url
@@ -261,7 +260,7 @@ with sync_playwright() as playwright:
         ),
         timeout=15000,
     ):
-        pass
+        fail_background_archive_reads[0] = 1
     expect(dialog.get_by_role("alert")).to_have_count(0)
     expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(question)
     fail_archive_reads[0] = 1
@@ -323,7 +322,9 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("alert")).to_contain_text("fixture archive unavailable")
     expect(ask_button).to_be_enabled()
     assert fail_archive_reads[0] == 0
-    expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(failed_question)
+    expect(dialog.get_by_role("textbox", name="Question", exact=True)).to_have_value(
+        failed_question
+    )
     failed_state_after_archive_error = page.evaluate(
         "async () => (await (await fetch('/api/__fixture/qa-state')).json())"
     )
