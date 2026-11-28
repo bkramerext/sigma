@@ -1237,7 +1237,10 @@ def _transcript_response_evidence(value: Any) -> dict[str, Any]:
         )
     except (ValueError, RecursionError, DecimalException):
         if raw.lstrip().startswith(("{", "[")):
-            return evidence
+            return {
+                "text": "Malformed structured response; original retained content is unverified.",
+                "content_digest": None,
+            }
         decoded = None
     try:
         if isinstance(decoded, (dict, list)):
@@ -1257,6 +1260,37 @@ def _transcript_response_evidence(value: Any) -> dict[str, Any]:
         # Never let unusable historical content establish acceptance.
         return {"text": safe_raw, "content_digest": None}
     return evidence
+
+
+def _transcript_conversion_digest(text: str) -> str | None:
+    if (
+        not 40 <= len(text) <= 20000
+        or not text.strip()
+        or "[REDACTED]" in text
+        or _redact(text) != text
+    ):
+        return None
+    try:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    except UnicodeError:
+        return None
+
+
+def _transcript_event_evidence(event: dict[str, Any]) -> dict[str, Any]:
+    if event.get("type") == "provider_response":
+        evidence = _transcript_response_evidence(event.get("response"))
+        evidence["conversion_digest"] = (
+            _transcript_conversion_digest(evidence["text"])
+            if evidence["content_digest"]
+            else None
+        )
+        return evidence
+    message = str(event.get("message") or "")
+    return {
+        "text": _redact(message),
+        "content_digest": None,
+        "conversion_digest": _transcript_conversion_digest(message),
+    }
 
 
 def transcript_saved_steps(session: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1314,14 +1348,8 @@ def transcript_saved_steps(session: dict[str, Any]) -> list[dict[str, Any]]:
                         )
                     )
                 elif isinstance(output, str):
-                    # Legacy records may store JSON as text. Redact its
-                    # structured keys before formatting when parsing succeeds.
-                    try:
-                        decoded = json.loads(output)
-                    except (ValueError, TypeError):
-                        decoded = None
-                    if isinstance(decoded, (dict, list)):
-                        output = json.dumps(_redact(decoded), ensure_ascii=False)
+                    # Preserve duplicate keys and exact numeric tokens until
+                    # the strict evidence parser has validated/redacted them.
                     row.update(_transcript_response_evidence({"output_text": output}))
             if isinstance(step.get("partial_output"), str):
                 row["partial_text"] = step["partial_output"]
@@ -1456,6 +1484,8 @@ def transcript_markdown_export(
     session: dict[str, Any],
     title: str,
     saved_steps: list[dict[str, Any]] | None = None,
+    *,
+    conversion_sources: dict[int, str] | None = None,
 ) -> str:
     """Project durable provider and human records into a complete readable transcript.
 
@@ -1467,7 +1497,11 @@ def transcript_markdown_export(
     ambiguous_requests: set[str] = set()
     failed_requests: set[str] = set()
     raw_response_counts: dict[str, int] = {}
+    terminal_counts: dict[str, int] = {}
+    sequence_counts: dict[int, int] = {}
     for event in events:
+        if type(sequence := event.get("seq")) is int:
+            sequence_counts[sequence] = sequence_counts.get(sequence, 0) + 1
         request_id = str(event.get("request_id") or "")
         if not request_id:
             continue
@@ -1477,20 +1511,28 @@ def transcript_markdown_export(
             requests[request_id] = event
         elif event.get("type") == "provider_failure":
             failed_requests.add(request_id)
+            terminal_counts[request_id] = terminal_counts.get(request_id, 0) + 1
         elif event.get("type") == "provider_response":
             raw_response_counts[request_id] = raw_response_counts.get(request_id, 0) + 1
+            terminal_counts[request_id] = terminal_counts.get(request_id, 0) + 1
     for request_id in ambiguous_requests:
         requests.pop(request_id)
     responded: set[str] = set()
+    contradictory_requests: set[str] = set()
     for event in events:
         request_id = str(event.get("request_id") or "")
         request = requests.get(request_id)
-        if (
-            event.get("type") in {"provider_response", "provider_failure"}
-            and request is not None
-            and _transcript_consistent_attribution(event, request)
-        ):
-            responded.add(request_id)
+        if event.get("type") in {"provider_response", "provider_failure"} and request is not None:
+            if (
+                _transcript_consistent_attribution(event, request)
+                and type(request.get("seq")) is int
+                and type(event.get("seq")) is int
+                and request["seq"] < event["seq"]
+            ):
+                responded.add(request_id)
+            else:
+                contradictory_requests.add(request_id)
+    responded.difference_update(contradictory_requests)
 
     by_id = _transcript_saved_by_id(saved_steps or [])
     by_request: dict[str, dict[str, Any]] = {}
@@ -1519,7 +1561,7 @@ def transcript_markdown_export(
 
     def correlate(event: dict[str, Any]) -> dict[str, Any] | None:
         request_id = str(event.get("request_id") or "")
-        if request_id in ambiguous_requests:
+        if request_id in ambiguous_requests or request_id in contradictory_requests:
             return None
         return _transcript_correlated_step(
             event, requests.get(request_id, {}), by_id, by_request, ambiguous_saved_requests
@@ -1613,6 +1655,7 @@ def transcript_markdown_export(
                 )
             )
             label = role
+            accepted_response = False
             if kind == "provider_failure":
                 label += " · Provider failure"
             elif saved_steps is not None:
@@ -1633,19 +1676,37 @@ def transcript_markdown_export(
                     )
                 ):
                     label += " · Accepted response"
+                    accepted_response = True
                     represented.add(step["step_id"])
                 elif request_id in failed_requests:
                     label += " · Provider response with recorded failure"
-                elif request_id in ambiguous_requests or raw_response_counts.get(request_id, 0) > 1:
+                elif (
+                    request_id in ambiguous_requests
+                    or request_id in contradictory_requests
+                    or raw_response_counts.get(request_id, 0) > 1
+                ):
                     label += " · Provider response with ambiguous correlation"
                 else:
                     label += " · Raw response (acceptance unverified)"
+            if conversion_sources is not None:
+                if (
+                    accepted_response
+                    and step is not None
+                    and step.get("role") in {"investigator", "skeptic"}
+                    and role in {"Investigator", "Skeptic"}
+                    and bool(evidence.get("content_digest"))
+                    and evidence.get("content_digest") == step.get("content_digest")
+                    and sequence_counts.get(sequence) == 1
+                    and _transcript_conversion_digest(message)
+                ):
+                    conversion_sources[sequence] = message
+                continue
             uncertain = saved_steps is not None and not bound
             group_key, group_label = _transcript_raw_group(
                 strategy, turn, sequence, uncertain, _transcript_claimed_attribution(event, request)
             )
             provenance = f"Raw event #{sequence}."
-            if request and _transcript_consistent_attribution(event, request):
+            if request and request_id not in contradictory_requests:
                 provenance += f" Request event #{request.get('seq', '—')}"
                 if request.get("timestamp"):
                     provenance += f" at {request['timestamp']}"
@@ -1665,13 +1726,19 @@ def transcript_markdown_export(
                 )
             )
         elif kind == "provider_request":
+            if conversion_sources is not None:
+                continue
             if request_id in responded and request_id not in ambiguous_requests:
                 continue
-            pending = saved_steps is None or (
-                step is not None
-                and bound
-                and step["status"] == "running"
-                and session.get("status") in {"running", "queued"}
+            terminal_evidence = request_id in terminal_counts
+            pending = not terminal_evidence and (
+                saved_steps is None
+                or (
+                    step is not None
+                    and bound
+                    and step["status"] == "running"
+                    and session.get("status") in {"running", "queued"}
+                )
             )
             if step is not None and pending:
                 represented.add(step["step_id"])
@@ -1686,6 +1753,9 @@ def transcript_markdown_export(
             )
             if pending:
                 title_suffix, body = "Request pending", "Awaiting response."
+            elif terminal_evidence:
+                title_suffix = "Provider request (contradictory terminal evidence)"
+                body = "Terminal evidence exists; request identity or chronology is unverified."
             elif possible:
                 title_suffix = (
                     "Provider request (possibly active; attempt unconfirmed)"
@@ -1708,7 +1778,7 @@ def transcript_markdown_export(
                 strategy,
                 turn,
                 sequence,
-                saved_steps is not None and not bound,
+                saved_steps is not None and (not bound or terminal_evidence),
                 _transcript_claimed_attribution(event, {}),
             )
             stamp_line = f"*{stamp}*\n\n" if stamp else "Time unavailable.\n\n"
@@ -1728,6 +1798,15 @@ def transcript_markdown_export(
             accepted = review is not None and review_counts.get(review["step_id"]) == 1
             if review is not None and accepted:
                 represented.add(review["step_id"])
+            if conversion_sources is not None:
+                message = str(event.get("message") or "")
+                if (
+                    accepted
+                    and sequence_counts.get(sequence) == 1
+                    and _transcript_conversion_digest(message)
+                ):
+                    conversion_sources[sequence] = message
+                continue
             strategy = event.get("strategy_id") or (review or {}).get("strategy_id")
             turn = event.get("round") or (review or {}).get("round", "—")
             uncertain = saved_steps is not None and not accepted
@@ -1747,6 +1826,8 @@ def transcript_markdown_export(
                     + _markdown_payload(str(event.get("message") or ""), "Supervisor"),
                 )
             )
+        elif conversion_sources is not None:
+            continue
         elif kind == "session_event" and event.get("event_kind") == "intervention.accepted":
             # The full Human text is projected from the Session below.
             continue
@@ -1763,6 +1844,8 @@ def transcript_markdown_export(
                     f"### {label}\n\n" + stamp_line + _markdown_payload(message, label),
                 )
             )
+    if conversion_sources is not None:
+        return ""
     for index, step in enumerate(saved_steps or []):
         if step["step_id"] in represented:
             continue
@@ -1853,6 +1936,18 @@ def transcript_markdown_export(
     return "\n".join(output).rstrip() + "\n"
 
 
+def transcript_conversion_source(snapshot: dict[str, Any], sequence: int) -> str | None:
+    """Reuse the export's acceptance decisions, without rendering the report."""
+    saved = snapshot.get("transcript_state")
+    if not isinstance(saved, list):
+        return None
+    sources: dict[int, str] = {}
+    transcript_markdown_export(
+        snapshot["events"], [], snapshot["session"], "", saved, conversion_sources=sources
+    )
+    return sources.get(sequence)
+
+
 def _next_sequence(path: Path) -> int:
     events, _ = _frames(path)
     return (events[-1].get("seq", len(events)) if events else 0) + 1
@@ -1884,7 +1979,7 @@ def _transcript_state_version(
 ) -> str:
     # Scope the opaque version to the authorized canonical path and both IDs;
     # an import, atomic replacement or in-place write changes file identity.
-    identity = ("transcript-v3", str(project_file), project_id, session_id, checkpoint)
+    identity = ("transcript-v4", str(project_file), project_id, session_id, checkpoint)
     return hashlib.sha256(repr(identity).encode("utf-8")).hexdigest()
 
 
@@ -1952,9 +2047,13 @@ def read(
     return {
         "events": events,
         "transcript_responses": {
-            str(event["seq"]): _transcript_response_evidence(event.get("response"))
+            str(event["seq"]): _transcript_event_evidence(event)
             for event in events
             if event.get("type") == "provider_response"
+            or (
+                event.get("type") == "session_event"
+                and event.get("event_kind") == "supervisor.review"
+            )
         },
         "cursor": cursor,
         "transcript_state_version": version,

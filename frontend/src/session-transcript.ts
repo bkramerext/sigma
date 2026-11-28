@@ -28,13 +28,14 @@ export type TranscriptSavedStep = {
   incomplete_reason?: string; reason?: string; partial_text?: string; brainstorm_mode?: boolean;
 };
 /** Disposable server evidence, separate from retained raw events. */
-export type TranscriptResponseEvidence = Record<string, { text: string; content_digest: string | null }>;
+export type TranscriptResponseEvidence = Record<string, { text: string; content_digest: string | null; conversion_digest?: string | null }>;
 export type TranscriptEntry = {
   id: string; timestamp: string; role: TranscriptRole; title: string;
   text: string; round?: number; strategyId?: string; sequence: number;
   request?: unknown; response?: unknown; pending?: boolean; brainstormMode?: boolean;
   reconstructed?: boolean; historyNotice?: boolean; correlationUnknown?: boolean;
   claimedAttribution?: string; requestTimestamp?: string; requestSequence?: number;
+  conversionDigest?: string;
 };
 /** Strip the scored metadata from the rendered assessment while retaining the
  * saved text unmodified for Copy and Download. Old four-score reviews continue
@@ -215,7 +216,12 @@ export function projectTranscript(
   const ambiguousRequests = new Set<string>();
   const failedRequests = new Set<string>();
   const responseCounts = new Map<string, number>();
+  const terminalCounts = new Map<string, number>();
+  const sequenceCounts = new Map<number, number>();
   for (const event of events) {
+    sequenceCounts.set(event.seq, (sequenceCounts.get(event.seq) ?? 0) + 1);
+    if (event.request_id && ['provider_response', 'provider_failure'].includes(event.type))
+      terminalCounts.set(event.request_id, (terminalCounts.get(event.request_id) ?? 0) + 1);
     if (event.type === 'provider_request' && event.request_id) {
       if (requests.has(event.request_id)) ambiguousRequests.add(event.request_id);
       requests.set(event.request_id, event);
@@ -228,11 +234,16 @@ export function projectTranscript(
   const requestFor = (event: TranscriptEvent) =>
     event.request_id ? requests.get(event.request_id) : undefined;
   const responded = new Set<string>();
+  const contradictoryRequests = new Set<string>();
   for (const event of events) {
     if (!event.request_id || !['provider_response', 'provider_failure'].includes(event.type)) continue;
     const request = requestFor(event);
-    if (request && consistentAttribution(event, request)) responded.add(event.request_id);
+    if (request) {
+      if (consistentAttribution(event, request) && request.seq < event.seq) responded.add(event.request_id);
+      else contradictoryRequests.add(event.request_id);
+    }
   }
+  for (const id of contradictoryRequests) responded.delete(id);
 
   const savedById = new Map<string, TranscriptSavedStep>();
   const savedByRequest = new Map<string, TranscriptSavedStep>();
@@ -258,6 +269,7 @@ export function projectTranscript(
   const correlate = (event: TranscriptEvent): TranscriptSavedStep | undefined => {
     const request = requestFor(event);
     if (request && !consistentAttribution(event, request)) return undefined;
+    if (event.request_id && contradictoryRequests.has(event.request_id)) return undefined;
     const ids = new Set([event.step_id, request?.step_id].filter(
       (id): id is string => typeof id === 'string' && !!id));
     if (ids.size > 1 || (event.request_id && ambiguousRequests.has(event.request_id))) return undefined;
@@ -321,7 +333,7 @@ export function projectTranscript(
         ? String(event.provider_error ?? event.message ?? 'Provider call failed.')
         : evidence?.text ?? readableTranscriptResponse(event.response);
       const ambiguous = !!event.request_id && ((responseCounts.get(event.request_id) ?? 0) > 1
-        || ambiguousRequests.has(event.request_id));
+        || ambiguousRequests.has(event.request_id) || contradictoryRequests.has(event.request_id));
       const recordedFailure = !!event.request_id && failedRequests.has(event.request_id);
       const contentMatches = step?.content_digest !== undefined || responseEvidence !== undefined
         ? !!evidence?.content_digest && evidence.content_digest === step?.content_digest
@@ -349,8 +361,10 @@ export function projectTranscript(
         round: event.round ?? request?.round ?? step?.round,
         strategyId: event.strategy_id ?? request?.strategy_id ?? step?.strategy_id,
         sequence: event.seq, request: request?.request, response: event.response,
-        requestTimestamp: request && consistentAttribution(event, request) ? request.timestamp : undefined,
-        requestSequence: request && consistentAttribution(event, request) ? request.seq : undefined,
+        requestTimestamp: request && !contradictoryRequests.has(event.request_id ?? '') ? request.timestamp : undefined,
+        requestSequence: request && !contradictoryRequests.has(event.request_id ?? '') ? request.seq : undefined,
+        conversionDigest: accepted && (role === 'investigator' || role === 'skeptic')
+          && sequenceCounts.get(event.seq) === 1 ? evidence?.conversion_digest ?? undefined : undefined,
         brainstormMode: request || typeof event.brainstorm_mode === 'boolean'
           ? brainstormAtDispatch(request ?? event) : step?.brainstorm_mode === true,
         correlationUnknown: unknown,
@@ -362,19 +376,22 @@ export function projectTranscript(
       // Every unmatched raw request survives, even if its logical step ended.
       // Only a uniquely bound running attempt can be called pending.
       // A compatible unresolved request may be live, without that certainty.
-      const pending = savedSteps === undefined || (!!step && bound && active && step.status === 'running');
+      const terminalEvidence = !!event.request_id && terminalCounts.has(event.request_id);
+      const pending = !terminalEvidence && (savedSteps === undefined || (!!step && bound && active && step.status === 'running'));
       if (step && pending) represented.add(step);
       const possible = step && event.request_id && !failedRequests.has(event.request_id)
         && !responseCounts.has(event.request_id) && event.step_id === step.step_id
         ? possibleAttempts.get(step.step_id) ?? 0 : 0;
       const title = pending ? 'Provider request'
+        : terminalEvidence ? 'Provider request (contradictory terminal evidence)'
         : possible === 1 ? 'Provider request (possibly active; attempt unconfirmed)'
           : possible > 1 ? 'Provider request (active step; attempt ambiguous)' : 'Response not retained';
       const text = pending ? 'Awaiting response…'
+        : terminalEvidence ? 'Terminal evidence exists; request identity or chronology is unverified.'
         : possible === 1 ? 'Saved step is running; this raw request may be in flight. Its attempt identity and outcome are unconfirmed.'
           : possible > 1 ? 'Saved step is running; multiple unresolved raw requests match. Which attempt is active and their outcomes are unconfirmed.'
             : 'Raw response unavailable; outcome unverified.';
-      const unknown = savedSteps !== undefined && !bound;
+      const unknown = savedSteps !== undefined && (!bound || terminalEvidence);
       entries.push({
         id: 'pending-' + (event.request_id && !ambiguousRequests.has(event.request_id)
           ? event.request_id : event.seq), timestamp: event.timestamp,
@@ -409,6 +426,8 @@ export function projectTranscript(
         strategyId: event.strategy_id ?? review?.strategy_id, sequence: event.seq,
         correlationUnknown: unknown,
         claimedAttribution: unknown ? claimedAttribution(event) : undefined,
+        conversionDigest: accepted && sequenceCounts.get(event.seq) === 1
+          ? responseEvidence?.[String(event.seq)]?.conversion_digest ?? undefined : undefined,
       });
     }
   }

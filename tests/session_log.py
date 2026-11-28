@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from sigma import session_log
 
@@ -1159,35 +1159,176 @@ def test_transcript_conversion_uses_server_saved_event_only() -> None:
     from sigma import text_conversion
     from sigma.projects import ProjectError
 
-    with patch.object(
-        session_log,
-        "read",
-        return_value={
-            "events": [
-                {
-                    "seq": 5,
-                    "type": "provider_response",
-                    "response": {"output_text": "Claim: x_i is unverified."},
-                }
-            ]
-        },
-    ):
-        assert (
-            text_conversion._saved_transcript_text("saved", "session", "event.5")
-            == "Claim: x_i is unverified."
+    text = "Claim: x_i is unverified, and the scope remains limited."
+    record = {
+        "steps": [
+            {
+                "id": "step",
+                "request_id": "request",
+                "role": "investigator",
+                "status": "completed",
+                "output": text,
+            }
+        ]
+    }
+    event = {
+        "seq": 5,
+        "type": "provider_response",
+        "role": "investigator",
+        "request_id": "request",
+        "step_id": "step",
+        "response": {"output_text": text},
+    }
+    snapshot: dict[str, Any] = {
+        "project_id": "project",
+        "events": [event],
+        "session": {"status": "completed"},
+        "transcript_state": session_log.transcript_saved_steps(record),
+    }
+
+    def resolve(field="event.5"):
+        return text_conversion._saved_transcript_text("saved", "session", field, "project")
+
+    def rejected(field="event.5"):
+        try:
+            resolve(field)
+        except ProjectError:
+            return
+        raise AssertionError("Unverified transcript event was converted")
+
+    with patch.object(session_log, "read", return_value=snapshot):
+        assert resolve() == text
+        rejected("event.6")
+        rejected("../event.5")
+        snapshot["events"] = [event, {**event, "seq": 6, "type": "provider_failure"}]
+        rejected()
+        snapshot["events"] = [event, {**event, "request_id": "other"}]
+        rejected()
+        snapshot["events"] = [event]
+        snapshot["transcript_state"] = []
+        rejected()
+        snapshot["transcript_state"] = session_log.transcript_saved_steps(record)
+        text_conversion._verify_transcript_source(
+            "saved", "session", "event.5", "project", hashlib.sha256(text.encode()).hexdigest()
         )
+        snapshot["events"].append({**event, "seq": 6, "type": "provider_failure"})
         try:
-            text_conversion._saved_transcript_text("saved", "session", "event.6")
+            text_conversion._verify_transcript_source(
+                "saved", "session", "event.5", "project", hashlib.sha256(text.encode()).hexdigest()
+            )
         except ProjectError:
             pass
         else:
-            raise AssertionError("Unknown event was converted")
-        try:
-            text_conversion._saved_transcript_text("saved", "session", "../event.5")
-        except ProjectError:
-            pass
-        else:
-            raise AssertionError("Unallowlisted source path was accepted")
+            raise AssertionError("Late terminal evidence did not invalidate conversion")
+        review = {
+            "step_id": "review",
+            "role": "supervisor",
+            "status": "completed",
+            "text": text,
+        }
+        snapshot["transcript_state"] = [review]
+        snapshot["events"] = [
+            {
+                "seq": 5,
+                "type": "session_event",
+                "event_kind": "supervisor.review",
+                "role": "supervisor",
+                "message": text,
+            }
+        ]
+        assert resolve() == text
+        snapshot["events"].append({**snapshot["events"][0], "seq": 6})
+        rejected()
+
+    async def exercise_dispatch():
+        view = SimpleNamespace(
+            project=SimpleNamespace(id="project", title="Fixture", research_mode="literature")
+        )
+        binding = {"mode": "api_key", "token": "synthetic-fixture"}
+        config = {"available": True, "model": "fixture-model", "reasoning_effort": "low"}
+        failure = {**event, "seq": 6, "type": "provider_failure"}
+        source_digest = hashlib.sha256(text.encode()).hexdigest()
+        snapshot["transcript_state"] = session_log.transcript_saved_steps(record)
+        snapshot["events"] = [event]
+        dispatches = 0
+        invalidate_during_dispatch = False
+
+        async def fake_dispatch(*_args, **_kwargs):
+            nonlocal dispatches
+            dispatches += 1
+            if invalidate_during_dispatch:
+                snapshot["events"].append(failure)
+            return {
+                "status": "completed",
+                "model": config["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": json.dumps({"body": text, "warnings": []}),
+                            }
+                        ],
+                    }
+                ],
+            }
+
+        async def convert(expected=source_digest):
+            return await text_conversion.convert_text(
+                "saved",
+                "session-transcript",
+                "markdown",
+                expected_digest=expected,
+                expected_project_id="project",
+                session_id="session",
+                field_path="event.5",
+            )
+
+        async def reject(expected=source_digest):
+            try:
+                await convert(expected)
+            except ProjectError:
+                return
+            raise AssertionError("Ineligible conversion reached completion")
+
+        async def invalidate_configuration(**_kwargs):
+            snapshot["events"].append(failure)
+            return config
+
+        auth = AsyncMock(return_value=binding)
+        with (
+            patch.object(session_log, "read", return_value=snapshot),
+            patch.object(text_conversion, "inspect_project", return_value=view),
+            patch.object(text_conversion, "auth_context", new=auth),
+            patch.object(text_conversion, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(text_conversion.cloud_workspaces, "enabled", return_value=False),
+            patch.object(text_conversion.model_dispatch, "uses_personal_worker", return_value=True),
+            patch.object(
+                text_conversion.model_dispatch, "private_response_if_selected", new=fake_dispatch
+            ),
+            patch.object(text_conversion.cloud_research, "settle_provider_attempt"),
+            patch.object(text_conversion.httpx, "AsyncClient", side_effect=AssertionError("HTTP")),
+        ):
+            snapshot["events"] = [event, failure]
+            await reject()
+            auth.assert_not_awaited()
+            snapshot["events"] = [event]
+            await reject("server-snapshot")
+            auth.assert_not_awaited()
+            with patch.object(text_conversion, "configuration", new=invalidate_configuration):
+                await reject()
+            assert dispatches == 0
+            snapshot["events"] = [event]
+            result = await convert()
+            assert result["body"] == text and result["source_digest"] == source_digest
+            assert dispatches == 1
+            invalidate_during_dispatch = True
+            await reject()
+            assert dispatches == 2
+            assert snapshot["transcript_state"] == session_log.transcript_saved_steps(record)
+
+    asyncio.run(exercise_dispatch())
 
 
 def test_running_session_settings_update_preserves_in_flight_slots() -> None:
@@ -1616,6 +1757,87 @@ def test_transcript_content_evidence_preserves_types_and_rejects_malformed() -> 
     assert "Reconstructed from saved state" in report
 
 
+def test_transcript_legacy_strings_and_contradictory_terminal_evidence() -> None:
+    module = (Path(__file__).resolve().parents[1] / "frontend/src/session-transcript.ts").as_uri()
+
+    def project(events, saved, status="completed"):
+        evidence = {
+            str(event["seq"]): session_log._transcript_event_evidence(event)
+            for event in events
+            if event["type"] == "provider_response"
+        }
+        report = session_log.transcript_markdown_export(
+            events, [], {"status": status}, "Test", saved
+        )
+        result = subprocess.run(
+            [
+                "node",
+                "--experimental-strip-types",
+                "--input-type=module",
+                "-e",
+                (
+                    f"import {{ projectTranscript }} from {json.dumps(module)};"
+                    "import fs from 'node:fs';"
+                    "const s=JSON.parse(fs.readFileSync(0,'utf8'));"
+                    "console.log(JSON.stringify(projectTranscript(...s)));"
+                ),
+            ],
+            input=json.dumps([events, [], saved, status, evidence]),
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=15,
+        )
+        return report, json.loads(result.stdout)
+
+    base = {
+        "id": "step",
+        "request_id": "r",
+        "role": "investigator",
+        "strategy_id": "a",
+        "cycle": 1,
+        "status": "completed",
+    }
+    response = {
+        "seq": 2,
+        "type": "provider_response",
+        "request_id": "r",
+        "role": "investigator",
+        "step_id": "step",
+        "strategy_id": "a",
+        "round": 1,
+    }
+    for original, retained, accepted in (
+        ('{"a":1,"a":2}', '{"a":2}', False),
+        ('{"a":1.0000000000000001}', '{"a":1.0}', False),
+        ('{"password":"fixture-secret"}', '{"password":"fixture-secret"}', False),
+        ('{"b":2,"a":1}', '{"a":1,"b":2}', True),
+    ):
+        saved = session_log.transcript_saved_steps({"steps": [{**base, "output": original}]})
+        events = [{**response, "response": {"output_text": retained}}]
+        report, rows = project(events, saved)
+        assert ("· Accepted response" in report) == accepted
+        assert any(row["title"] == "Accepted response" for row in rows) == accepted
+        assert any(row.get("reconstructed") for row in rows) != accepted
+        assert "fixture-secret" not in report
+        assert "fixture-secret" not in json.dumps([row["text"] for row in rows])
+
+    request = {**response, "seq": 1, "type": "provider_request"}
+    saved = session_log.transcript_saved_steps({"steps": [{**base, "status": "running"}]})
+    for terminal in (
+        {**response, "strategy_id": "b", "type": "provider_failure"},
+        {**response, "strategy_id": "b"},
+        {**response, "seq": 0},
+    ):
+        events = [request, terminal]
+        report, rows = project(events, saved, "running")
+        assert "Awaiting response" not in report
+        assert "contradictory terminal evidence" in report
+        assert not any(row.get("pending") for row in rows)
+        assert any(row.get("reconstructed") for row in rows)
+        assert any("contradictory terminal evidence" in row["title"] for row in rows)
+
+
 def test_transcript_checkpoint_skips_unchanged_large_projection(root: Path) -> None:
     project_file = root / "large.json"
     project_file.write_bytes(b"synthetic checkpoint")
@@ -1801,6 +2023,7 @@ def main() -> None:
         test_transcript_exact_attempt_binding_and_uncertainty()
         test_transcript_unanswered_attempts_and_supervisor_mismatch()
         test_transcript_content_evidence_preserves_types_and_rejects_malformed()
+        test_transcript_legacy_strings_and_contradictory_terminal_evidence()
         test_transcript_checkpoint_skips_unchanged_large_projection(root)
         test_supervisor_gate_requires_saved_pairs_across_parallel_resume(root)
         test_transcript_structured_output_retains_nested_fields_and_redacts_keys()

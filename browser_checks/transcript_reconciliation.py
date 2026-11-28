@@ -55,7 +55,8 @@ def main():
                             response: { output_text: text },
                         }],
                         transcript_responses: {
-                            '1': { text, content_digest: 'fixture-digest-' + name },
+                            '1': { text, content_digest: 'fixture-digest-' + name,
+                                conversion_digest: 'fixture-conversion-' + name },
                         },
                         cursor: 1, project_id: 'project-' + name,
                         project_title: 'Fixture ' + name.toUpperCase(),
@@ -95,9 +96,13 @@ def main():
                     }
                     if (url.pathname === '/api/projects/text/convert') {
                         fixture.conversions++;
+                        const sent = JSON.parse(init.body);
+                        if (!sent.expected_digest.startsWith('fixture-conversion-'))
+                            throw new Error('Conversion must bind exact displayed source');
                         return new Promise(resolve => {
                             fixture.pendingConversion = () => resolve(Response.json({
                                 body: 'STALE CONVERSION MUST NEVER APPEAR',
+                                source_digest: sent.expected_digest,
                             }));
                         });
                     }

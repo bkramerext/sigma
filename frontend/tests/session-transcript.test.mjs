@@ -513,3 +513,22 @@ test('server content evidence handles lossless numeric text and field order with
   assert.equal(conflict.length, 2);
   assert.ok(conflict.every(r => !convertibleTranscriptEntry(r)));
 });
+
+test('contradictory terminal evidence never suppresses a running saved step', () => {
+  const request = { seq: 2, timestamp: '', type: 'provider_request', request_id: 'r',
+    step_id: 's', strategy_id: 'a', role: 'investigator', round: 1 };
+  const saved = { step_id: 's', request_id: 'r', strategy_id: 'a', role: 'investigator',
+    round: 1, status: 'running' };
+  for (const terminal of [
+    { ...request, seq: 3, type: 'provider_failure', strategy_id: 'b' },
+    { ...request, seq: 3, type: 'provider_response', strategy_id: 'b' },
+    { ...request, seq: 1, type: 'provider_response' },
+  ]) {
+    const rows = projectTranscript([request, terminal], [], [saved], 'running');
+    assert.equal(rows.length, 3);
+    assert.ok(rows.every(row => !row.pending && !convertibleTranscriptEntry(row)));
+    assert.ok(rows.some(row => row.reconstructed));
+    assert.ok(rows.some(row => row.title.includes('contradictory terminal evidence')));
+    assert.ok(rows.every(row => row.requestSequence === undefined));
+  }
+});

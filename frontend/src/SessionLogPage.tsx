@@ -77,8 +77,8 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
     [events, interventions, savedSteps, session?.status, responseEvidence]);
   const convertibleEntries = useRef(new Map<string, string>());
   useEffect(() => {
-    convertibleEntries.current = new Map(entries.filter(convertibleTranscriptEntry)
-      .map(entry => [entry.id, entry.text]));
+    convertibleEntries.current = new Map(entries.filter(entry => convertibleTranscriptEntry(entry) && !!entry.conversionDigest)
+      .map(entry => [entry.id, entry.conversionDigest!]));
   }, [entries]);
   useEffect(() => {
     if (!sessionId || !path) { setError('Session transcript link is incomplete.'); return; }
@@ -170,9 +170,9 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
       seenMarkdownEntries.has(entry.id) &&
       entry.role !== 'other' &&
       (expandedEntries[entry.id] ?? transcriptDefaultExpanded(entry)) &&
-      convertibleTranscriptEntry(entry));
+      convertibleTranscriptEntry(entry) && !!entry.conversionDigest);
     for (const entry of eligible) {
-      if (formattedEntriesRef.current[entry.id]?.source === entry.text || conversionQueued.current.has(entry.id)) continue;
+      if (formattedEntriesRef.current[entry.id]?.source === entry.conversionDigest || conversionQueued.current.has(entry.id)) continue;
       conversionQueued.current.add(entry.id);
       conversionQueue.current.push(entry);
     }
@@ -185,7 +185,7 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
           // An entry may have been deselected while another paid conversion ran.
           // Do not dispatch formatting for a row the user has switched off.
           if (!selectedMarkdownEntries.current.has(entry.id)
-            || convertibleEntries.current.get(entry.id) !== entry.text) {
+            || convertibleEntries.current.get(entry.id) !== entry.conversionDigest) {
             conversionQueued.current.delete(entry.id);
             continue;
           }
@@ -200,24 +200,24 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
             if (!settingsResponse.ok || !settings.available || !settings.binding)
               throw new Error(settings.message ?? 'Markdown formatting is unavailable.');
             if (controller.signal.aborted || !selectedMarkdownEntries.current.has(entry.id)
-              || convertibleEntries.current.get(entry.id) !== entry.text) continue;
+              || convertibleEntries.current.get(entry.id) !== entry.conversionDigest) continue;
             const response = await fetch('/api/projects/text/convert', {
               method: 'POST', signal: controller.signal,
               headers: { 'Content-Type': 'application/json', 'X-Sigma-Error-Handled': 'true' },
               body: JSON.stringify({
                 path, scope: 'session-transcript', session_id: sessionId,
                 field_path: `event.${entry.sequence}`, target: 'markdown',
-                expected_digest: 'server-snapshot',
+                expected_digest: entry.conversionDigest,
                 expected_project_id: projectId, expected_binding: settings.binding,
               }),
             });
             const result = await response.json();
-            if (!response.ok || typeof result.body !== 'string')
+            if (!response.ok || typeof result.body !== 'string' || result.source_digest !== entry.conversionDigest)
               throw new Error(result.error ?? result.detail ?? 'Transcript Markdown formatting failed.');
             if (!controller.signal.aborted && markdownEnabled.current
-              && convertibleEntries.current.get(entry.id) === entry.text
+              && convertibleEntries.current.get(entry.id) === entry.conversionDigest
               && selectedMarkdownEntries.current.has(entry.id)) {
-              const next = { ...formattedEntriesRef.current, [entry.id]: { source: entry.text, body: result.body } };
+              const next = { ...formattedEntriesRef.current, [entry.id]: { source: entry.conversionDigest!, body: result.body } };
               formattedEntriesRef.current = next;
               setFormattedEntries(next);
               setMarkdownError('');
@@ -325,7 +325,7 @@ function SessionLogContent({ path, sessionId, onSessionChange, resetSignal }: {
               const name = entryName(entry);
               const asMarkdown = markdownEntries.has(entry.id);
               const supervisor = entry.role === 'supervisor' ? supervisorDisplay(entry.text) : null;
-              const formatted = formattedEntries[entry.id]?.source === entry.text ? formattedEntries[entry.id].body : entry.text;
+              const formatted = entry.conversionDigest && formattedEntries[entry.id]?.source === entry.conversionDigest ? formattedEntries[entry.id].body : entry.text;
               const formattedSupervisor = supervisor?.scores ? supervisorDisplay(formatted) : null;
               // A converter may rephrase the rating block; fall back to the saved
               // observation so a formatted view never repeats scores as prose.
