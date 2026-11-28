@@ -344,7 +344,15 @@ with sync_playwright() as playwright:
     expect(dialog).to_be_visible()
     expect(dialog.locator("header").get_by_role("button", name="Save")).to_have_count(0)
     expect(dialog.get_by_role("heading", name="User Settings", exact=True)).to_be_visible()
-    for tab in ("Limits", "Preferences", "Research Ethos", "Project Types"):
+    dialog.get_by_role("tab", name="Limits", exact=True).click()
+    expect(dialog.locator("#sigma-global-concurrent")).to_be_visible()
+    expect(dialog.locator("#sigma-global-duration")).to_be_visible()
+    expect(dialog.locator("#sigma-global-input")).to_be_visible()
+    expect(dialog.locator("#sigma-global-cost")).to_be_visible()
+    expect(dialog.get_by_label("Research rounds", exact=True)).to_have_count(0)
+    expect(dialog.get_by_label("Turns per round", exact=True)).to_have_count(0)
+    expect(dialog.locator(".sigma-limit-calculation")).to_have_count(0)
+    for tab in ("Preferences", "Research Ethos", "Project Types"):
         dialog.get_by_role("tab", name=tab, exact=True).click()
         expect(dialog).to_be_visible()
     common = dialog.locator(".pt-common-references")
