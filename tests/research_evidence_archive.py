@@ -68,7 +68,9 @@ def _coverage(context: dict[str, Any], catalog: Catalog) -> tuple[int, int, int]
         )
         for row in duties
     )
-    peer_arguments = sum(source["argument"] != "not_supplied" for source in catalog["peer"].values())
+    peer_arguments = sum(
+        source["argument"] != "not_supplied" for source in catalog["peer"].values()
+    )
     return len(duties), covered, peer_arguments
 
 
@@ -106,7 +108,9 @@ def _reference_accepted(context: dict[str, Any], output: dict[str, Any]) -> bool
     return set(reviewed) == expected and len(reviewed) == len(expected)
 
 
-def _counterfactual(original: dict[str, Any], artifacts: dict[str, dict[str, Any]]) -> EvidenceContext:
+def _counterfactual(
+    original: dict[str, Any], artifacts: dict[str, dict[str, Any]]
+) -> EvidenceContext:
     context = EvidenceContext(deepcopy(original))
     # Only project argument from an already supplied peer ID. No later/new
     # artifact can enter a historical request.
@@ -185,9 +189,10 @@ def verify_frozen_evidence_archive() -> None:
             if identifier in invalid:
                 row = invalid[identifier]
                 assert row["project_key"] == subject["key"]
-                assert row["request_body_sha256"] == step["provider_input_audit"][
-                    "request_body_sha256"
-                ]
+                assert (
+                    row["request_body_sha256"]
+                    == step["provider_input_audit"]["request_body_sha256"]
+                )
                 assert step.get("status") != "completed"
                 raw = row["response"]["output"][0]["content"][0]["text"]
                 output = json.loads(raw)
