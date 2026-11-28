@@ -2395,7 +2395,11 @@ def _timestamp_seconds(step: dict[str, Any]) -> float | None:
 
 
 def _outcome_metrics(
-    record: dict[str, Any], outcome: dict[str, Any], *, observed_at: datetime | None = None
+    record: dict[str, Any],
+    outcome: dict[str, Any],
+    *,
+    observed_at: datetime | None = None,
+    audit_integrity: list[bool | None] | None = None,
 ) -> dict[str, Any]:
     """Project compact operational and research metrics from saved evidence only."""
     raw_steps = record.get("steps")
@@ -2404,9 +2408,20 @@ def _outcome_metrics(
         if isinstance(raw_steps, list)
         else []
     )
-    unique_steps = session_observability.unique_rows(steps)
+    # Reuse the existing public audit expansion, never inflate a body again.
+    # The integrity marker is projection-local; ignore any persisted copy.
+    diagnostic_steps = []
+    for index, step in enumerate(steps):
+        copy = dict(step)
+        copy["_observed_audit_integrity"] = (
+            audit_integrity[index] if audit_integrity is not None else None
+        )
+        diagnostic_steps.append(copy)
+    unique_steps = session_observability.unique_rows(diagnostic_steps)
     step_ids = {step["id"] for step in unique_steps if isinstance(step.get("id"), str)}
-    attempts, unrecorded_calls = session_observability.attempts(record)
+    attempts, unrecorded_calls = session_observability.attempts(
+        {**record, "steps": diagnostic_steps} if isinstance(raw_steps, list) else record
+    )
     provider_steps = [step for step in attempts if step.get("attempt_status") != "not_dispatched"]
     simulated = record.get("simulated") is True or record.get("mode") == "mock"
     receipt_counts = dict.fromkeys(("confirmed", "uncertain", "not_dispatched", "simulated"), 0)
@@ -2464,12 +2479,16 @@ def _outcome_metrics(
             continue
         failure_kind = step.get("failure_kind")
         http_status = step.get("provider_http_status")
-        if status == "completed":
+        if step.get("attempt_status") in ("preparing", "reserved") and status in (
+            "completed", "incomplete",
+        ):
+            bucket = "status unavailable"
+        elif status == "completed":
             bucket = "completed"
         elif status == "incomplete":
             bucket = "failed"
         elif failure_kind == "timeout" or (
-            status == "failed" and "timeout" in str(step.get("failure_message", "")).lower()
+            status == "failed" and session_observability.failure_message_class(step) == "timed out"
         ):
             bucket = "timed out"
         elif failure_kind in {"cancelled", "interrupted"} or status in {
@@ -2485,9 +2504,7 @@ def _outcome_metrics(
             bucket = "rejected"
         elif status == "failed":
             # Older records kept only a safe provider diagnostic in failure_message.
-            message = str(step.get("failure_message", ""))
-            match = re.search(r"HTTP\s+(\d{3})", message)
-            bucket = "rejected" if match and 400 <= int(match.group(1)) < 500 else "failed"
+            bucket = session_observability.failure_message_class(step) or "failed"
         elif status == "running":
             bucket = "in progress"
         else:
@@ -2507,7 +2524,10 @@ def _outcome_metrics(
             call_total += f" · {compiler_attempts} additional compiler attempt(s)"
     else:
         call_total = f"{dispatched} recorded or budget-counted attempts"
-    accepted = session_observability.accepted_counts(unique_steps, attempts)
+    accepted = session_observability.accepted_counts(unique_steps, attempts, simulated=simulated)
+    simulated_accepted = session_observability.accepted_counts(
+        unique_steps, attempts, simulated=simulated, select_simulated=True
+    )
     calls_value = (
         call_total
         + " · "
@@ -2531,16 +2551,18 @@ def _outcome_metrics(
     metered = [
         (step, usage)
         for step in provider_steps
-        if (usage := session_observability.reported_usage(step)) is not None
+        if (usage := session_observability.reported_usage(step, simulated=simulated)) is not None
     ]
     usage_steps = [usage for _, usage in metered]
     usage_models = [step.get("model") for step, _ in metered]
     complete_token_usage_calls = len(metered)
-    totals_known = inventory_complete and complete_token_usage_calls == dispatched
+    totals_known = not simulated and inventory_complete and complete_token_usage_calls == dispatched
 
     def token_sum(key: str) -> str:
         values = [usage.get(key) for usage in usage_steps]
         known = sum(type(value) is int for value in values)
+        if simulated:
+            return "— (simulated session; no provider usage)"
         if not inventory_known:
             return "— (attempt inventory unavailable)"
         if not inventory_complete and not unrecorded_calls:
@@ -2559,6 +2581,8 @@ def _outcome_metrics(
     total_tokens = (
         f"{sum(cast(int, usage['input_tokens']) + cast(int, usage['output_tokens']) for usage in usage_steps):,}"
         if totals_known
+        else "— (simulated session; no provider usage)"
+        if simulated
         else "— (attempt inventory incomplete or conflicting)"
         if not inventory_complete and not unrecorded_calls
         else f"— (token usage incomplete for {dispatched - complete_token_usage_calls} call(s))"
@@ -3014,6 +3038,7 @@ def _outcome_metrics(
         "research_quality": research_quality,
         "observability": {
             **accepted,
+            "simulated_accepted": simulated_accepted,
             **times,
             "recorded_attempts": len(provider_steps),
             "attempt_inventory_complete": inventory_complete,
@@ -3022,6 +3047,14 @@ def _outcome_metrics(
             ),
             "confirmed_provider_receipts": receipt_counts["confirmed"],
             "provider_receipt_states": receipt_counts,
+            "audit_receipt_evidence_counts": {
+                basis: sum(
+                    session_observability.receipt_state(step, simulated=simulated) == "confirmed"
+                    and session_observability.audit_receipt_basis(step) == basis
+                    for step in provider_steps
+                )
+                for basis in ("verified_body", "historical_declaration")
+            },
             "recorded_invocation_intervals": sum(
                 session_observability.attempt_seconds(step) is not None for step in provider_steps
             ),
@@ -5092,6 +5125,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 "Review the saved session activity and provider usage before resuming. Resuming "
                 "may start new provider work and can consume allowance or incur charges."
             )
+    audit_integrity: list[bool | None] = []
     if isinstance(record.get("steps"), list):
         result["steps"] = [dict(step) for step in record["steps"] if isinstance(step, dict)]
         for step in result["steps"]:
@@ -5100,7 +5134,24 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
                 audit = dict(audit)
                 step["provider_input_audit"] = audit
                 _expand_role_input_audit(audit)
+                modern = any(
+                    key in audit
+                    for key in (
+                        "version",
+                        "encoding",
+                        "request_body_bytes",
+                        "request_body_compressed",
+                    )
+                )
+                audit_integrity.append(
+                    audit.get("status") != "audit_unavailable_or_corrupt"
+                    and isinstance(audit.get("request_body"), dict)
+                    if modern
+                    else None
+                )
                 audit.pop("request_body_compressed", None)
+            else:
+                audit_integrity.append(None)
     _refresh_token_accounting(result)
     observed_at = datetime.now(UTC)
     wall_seconds = session_observability.session_times(record, observed_at)["wall_seconds"]
@@ -5117,7 +5168,9 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         saved_summary = saved_outcome.get("summary") if isinstance(saved_outcome, dict) else None
         if isinstance(saved_summary, str) and saved_summary.strip():
             outcome["summary"] = saved_summary
-    outcome["metrics"] = _outcome_metrics(record, outcome, observed_at=observed_at)
+    outcome["metrics"] = _outcome_metrics(
+        record, outcome, observed_at=observed_at, audit_integrity=audit_integrity
+    )
     result["outcome"] = outcome
     assessments = record.get("strategy_assessments")
     if not isinstance(assessments, list) or (

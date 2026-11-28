@@ -8,6 +8,7 @@ Historical gaps remain unknown; these helpers never change enforcement.
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -161,6 +162,10 @@ def _identity(row: dict[str, Any]) -> str | None:
 
 
 _AUDIT_EVIDENCE_FIELDS = (
+    "version",
+    "encoding",
+    "request_body_bytes",
+    "compressed_envelope_present",
     "kind",
     "status",
     "request_body_sha256",
@@ -173,7 +178,54 @@ _AUDIT_EVIDENCE_FIELDS = (
 def _audit_evidence(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
-    return {key: value[key] for key in _AUDIT_EVIDENCE_FIELDS if value.get(key) is not None}
+    evidence = {key: value[key] for key in _AUDIT_EVIDENCE_FIELDS if value.get(key) is not None}
+    if "request_body_compressed" in value:
+        evidence["compressed_envelope_present"] = True
+    return evidence
+
+
+def _aliases(row: dict[str, Any]) -> set[str]:
+    aliases = {
+        value
+        for key in ("id", "attempt_id")
+        if isinstance(value := row.get(key), str) and value
+    }
+    saved = row.get("observability_aliases")
+    if row.get("observability_conflict") and isinstance(saved, list):
+        aliases.update(value for value in saved if isinstance(value, str) and value)
+    return aliases
+
+
+def _identity_conflict(row: dict[str, Any]) -> bool:
+    if len(_aliases(row)) > 1 or any(
+        row.get(key) is not None and (not isinstance(row[key], str) or not row[key])
+        for key in ("id", "attempt_id", "provider_request_id", "provider_response_id")
+    ):
+        return True
+    audit = row.get("provider_input_audit")
+    if not isinstance(audit, dict):
+        return False
+    for key in ("provider_request_id", "provider_response_id", "attempt_id"):
+        values = [value for value in (row.get(key), audit.get(key)) if value is not None]
+        if key == "attempt_id" and _identity(row) is not None:
+            values.append(_identity(row))
+        if any(not isinstance(value, str) or not value for value in values):
+            return True
+        if values and any(value != values[0] for value in values[1:]):
+            return True
+    return False
+
+
+def failure_message_class(row: dict[str, Any]) -> str | None:
+    """Compare only the bounded classifications used by the existing counters."""
+    message = row.get("failure_message")
+    if not isinstance(message, str) or not message:
+        return None
+    message = message[:4096]
+    if "timeout" in message.lower():
+        return "timed out"
+    match = re.search(r"HTTP\s+(\d{3})", message)
+    return "rejected" if match and 400 <= int(match.group(1)) < 500 else "failed"
 
 
 def _disagree(first: dict[str, Any], second: dict[str, Any], fields: tuple[str, ...]) -> bool:
@@ -215,6 +267,7 @@ def _conflicts(first: dict[str, Any], second: dict[str, Any]) -> bool:
         "observed_cached_input_tokens",
         "observed_cache_metadata_status",
         "provider_response_observed",
+        "_observed_audit_integrity",
         "simulated",
         "provider_response_channel",
         "provider_response_status",
@@ -229,6 +282,12 @@ def _conflicts(first: dict[str, Any], second: dict[str, Any]) -> bool:
         "validation_failure",
         "mode",
     )
+    if _identity_conflict(first) or _identity_conflict(second):
+        return True
+    first_failure = failure_message_class(first)
+    second_failure = failure_message_class(second)
+    if first_failure is not None and second_failure is not None and first_failure != second_failure:
+        return True
     left_id, right_id = _identity(first), _identity(second)
     if left_id is not None and right_id is not None and left_id != right_id:
         return True
@@ -269,6 +328,7 @@ def _combine(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
         left_id, right_id = _identity(first), _identity(second)
         return {
             "id": left_id if left_id == right_id else None,
+            "observability_aliases": sorted(_aliases(first) | _aliases(second)),
             "number": first.get("number") if first.get("number") == second.get("number") else None,
             "role": first.get("role") if first.get("role") == second.get("role") else None,
             "observability_conflict": True,
@@ -285,23 +345,34 @@ def _combine(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
 
 
 def unique_rows(value: Any) -> list[dict[str, Any]]:
-    """Collapse compatible copies; a contradictory identity remains unknown."""
+    """Reconcile connected identity aliases; keep contradictions as unknown rows."""
     if not isinstance(value, list):
         return []
-    result: list[dict[str, Any]] = []
+    result: list[dict[str, Any] | None] = []
     seen: dict[str, int] = {}
     for row in value:
         if not isinstance(row, dict):
             continue
-        key = _identity(row)
-        if key is not None and key in seen:
-            index = seen[key]
-            result[index] = _combine(result[index], row)
-            continue
-        if key is not None:
-            seen[key] = len(result)
-        result.append(row)
-    return result
+        aliases = _aliases(row)
+        if _identity_conflict(row):
+            row = _combine(row, row)
+        indices = sorted({seen[key] for key in aliases if key in seen})
+        if not indices:
+            index = len(result)
+            result.append(row)
+        else:
+            index = indices[0]
+            for other in indices:
+                previous = result[other]
+                if previous is not None:
+                    aliases.update(_aliases(previous))
+                    row = _combine(previous, row)
+                if other != index:
+                    result[other] = None
+            result[index] = row
+        for key in aliases:
+            seen[key] = index
+    return [row for row in result if row is not None]
 
 
 def inventory_complete(record: dict[str, Any], rows: list[dict[str, Any]], gap: int) -> bool:
@@ -322,6 +393,10 @@ def inventory_complete(record: dict[str, Any], rows: list[dict[str, Any]], gap: 
     )
     return counted == record["calls_used"] and all(
         not row.get("observability_conflict")
+        and not (
+            row.get("attempt_status") in ("preparing", "reserved")
+            and row.get("status") in ("completed", "incomplete")
+        )
         and (
             _identity(row) is not None
             or (row.get("role") == "reference_compiler" and type(row.get("number")) is int)
@@ -451,15 +526,29 @@ def attempts(record: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
     return unique_rows(rows), gap
 
 
-def accepted_counts(steps: list[dict[str, Any]], rows: list[dict[str, Any]]) -> dict[str, int]:
-    conflicts = {_identity(row) for row in rows if row.get("observability_conflict")}
+def accepted_counts(
+    steps: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+    *,
+    simulated: bool = False,
+    select_simulated: bool = False,
+) -> dict[str, int]:
+    def selected(row: dict[str, Any]) -> bool:
+        local = simulated or row.get("simulated") is True or row.get("mode") == "mock"
+        return local == select_simulated
+
+    conflicts = {
+        alias for row in rows if row.get("observability_conflict") for alias in _aliases(row)
+    }
     accepted = {
         role: sum(
             step.get("role") == role
             and step.get("status") == "completed"
+            and selected(step)
             and not step.get("observability_conflict")
-            and _identity(step) not in conflicts
-            and step.get("attempt_status") != "not_dispatched"
+            and not (_aliases(step) & conflicts)
+            and not _identity_conflict(step)
+            and step.get("attempt_status") not in ("not_dispatched", "preparing", "reserved")
             for step in steps
         )
         for role in ("investigator", "skeptic")
@@ -472,14 +561,33 @@ def accepted_counts(steps: list[dict[str, Any]], rows: list[dict[str, Any]]) -> 
             row.get("role") == "supervisor"
             and row.get("status") == "completed"
             and isinstance(row.get("assessment"), dict)
-            and row.get("attempt_status") != "not_dispatched"
+            and selected(row)
+            and row.get("attempt_status") not in ("not_dispatched", "preparing", "reserved")
+            and not row.get("observability_conflict")
+            and not _identity_conflict(row)
             for row in rows
         ),
     }
 
 
-def reported_usage(row: dict[str, Any]) -> dict[str, int | None] | None:
-    if row.get("attempt_status") == "not_dispatched" or row.get("observability_conflict"):
+def reported_usage(
+    row: dict[str, Any], *, simulated: bool = False
+) -> dict[str, int | None] | None:
+    if (
+        simulated
+        or row.get("simulated") is True
+        or row.get("mode") == "mock"
+        or row.get("attempt_status") in ("not_dispatched", "preparing", "reserved")
+        or row.get("observability_conflict")
+        or _identity_conflict(row)
+    ):
+        return None
+    # Production's usage_estimated describes the cost estimate, not the
+    # token source, when explicit reported token metadata is also present.
+    if (
+        row.get("attempt_status") == "usage_estimated"
+        and row.get("token_usage_status") != "reported"
+    ):
         return None
     if not (
         row.get("status") in ("completed", "incomplete")
@@ -510,6 +618,48 @@ def reported_usage(row: dict[str, Any]) -> dict[str, int | None] | None:
     }
 
 
+def audit_receipt_basis(
+    row: dict[str, Any],
+) -> Literal["verified_body", "historical_declaration"] | None:
+    audit = row.get("provider_input_audit")
+    if not isinstance(audit, dict) or audit.get("kind") != "exact_provider_request_body":
+        return None
+    if audit.get("status") not in (
+        "provider_response_received",
+        "provider_response_incomplete",
+        "provider_response_invalid",
+    ):
+        return None
+    digest = audit.get("request_body_sha256")
+    if digest is not None and (
+        not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+    ):
+        return None
+    modern = any(
+        key in audit
+        for key in (
+            "version",
+            "encoding",
+            "request_body_bytes",
+            "request_body_compressed",
+            "compressed_envelope_present",
+        )
+    )
+    if not modern:
+        return "historical_declaration"
+    if (
+        type(audit.get("version")) is int
+        and audit["version"] == 1
+        and audit.get("encoding") == "zlib+base64-json"
+        and type(audit.get("request_body_bytes")) is int
+        and 0 < audit["request_body_bytes"] <= 1_000_000
+        and isinstance(digest, str)
+        and row.get("_observed_audit_integrity") is True
+    ):
+        return "verified_body"
+    return None
+
+
 def receipt_state(
     row: dict[str, Any], *, simulated: bool = False
 ) -> Literal["confirmed", "uncertain", "not_dispatched", "simulated"]:
@@ -519,7 +669,7 @@ def receipt_state(
         return "not_dispatched"
     if simulated or row.get("simulated") is True or row.get("mode") == "mock":
         return "simulated"
-    if row.get("observability_conflict"):
+    if row.get("observability_conflict") or _identity_conflict(row):
         return "uncertain"
     role = row.get("role")
     compiler = role == "reference_compiler"
@@ -533,17 +683,7 @@ def receipt_state(
         or row.get("status") not in ("completed", "incomplete", "failed", "interrupted", "running")
     ):
         return "uncertain"
-    audit = row.get("provider_input_audit")
-    if (
-        isinstance(audit, dict)
-        and audit.get("kind") == "exact_provider_request_body"
-        and audit.get("status")
-        in (
-            "provider_response_received",
-            "provider_response_incomplete",
-            "provider_response_invalid",
-        )
-    ):
+    if audit_receipt_basis(row) is not None:
         return "confirmed"
     if row.get("token_usage_status") == "reported" and reported_usage(row) is not None:
         return "confirmed"

@@ -3,12 +3,15 @@
 """Persistent A17 sessions use deterministic provider fixtures only."""
 
 import asyncio
+import base64
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+import zlib
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from html import escape
@@ -1458,6 +1461,10 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     assert observed["wall_seconds"] == 120
     assert observed["attempt_inventory_complete"] is False
     assert observed["usage_complete"] is False
+    assert observed["reported_tokens_subtotal"] == 5
+    assert observed["api_rate_equivalent_usd"] is None
+    assert observed["research_calls"] == 3
+    assert observed["simulated_accepted"]["research_calls"] == 1
 
     # Build real ledger transitions, including explicit abandonment of unknown
     # optional work. The diagnostic projection must retain the original bounds.
@@ -1567,6 +1574,100 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     ]
     assert simulated["confirmed_provider_receipts"] == 0
     assert simulated["provider_receipt_states"]["simulated"] == 6
+    assert simulated["reported_tokens_subtotal"] is None
+    assert simulated["usage_complete"] is False
+    assert simulated["api_rate_equivalent_usd"] is None
+    assert simulated["research_calls"] == 0
+
+    single = deepcopy(record)
+    single["calls_used"] = 1
+    single["steps"] = [{**confirmed, "model": MODEL}]
+
+    def observe(fixture):
+        research_sessions._save(str(path), fixture)
+        return research_sessions.get_session(str(path), session_id)
+
+    for mode, status, token_status in (
+        ("mock", None, "reported"),
+        ("api_key", "preparing", "reported"),
+        ("api_key", "reserved", "reported"),
+        ("api_key", "usage_estimated", None),
+    ):
+        fixture = deepcopy(single)
+        fixture["mode"] = mode
+        fixture["steps"][0]["attempt_status"] = status
+        fixture["steps"][0]["token_usage_status"] = token_status
+        diagnostic = observe(fixture)["outcome"]["metrics"]["observability"]
+        assert diagnostic["reported_tokens_subtotal"] is None
+        assert diagnostic["usage_complete"] is False
+        assert diagnostic["api_rate_equivalent_usd"] is None
+        if status != "usage_estimated":
+            assert diagnostic["research_calls"] == 0
+    # Cloud settlement can record an estimated price alongside reported tokens.
+    fixture = deepcopy(single)
+    fixture["steps"][0]["attempt_status"] = "usage_estimated"
+    diagnostic = observe(fixture)["outcome"]["metrics"]["observability"]
+    assert diagnostic["reported_tokens_subtotal"] == 5
+    assert diagnostic["usage_complete"] is True
+    assert diagnostic["api_rate_equivalent_usd"] is not None
+
+    body = b'{"model":"fixture"}'
+    modern_audit = {
+        "version": 1,
+        "kind": "exact_provider_request_body",
+        "status": "provider_response_received",
+        "encoding": "zlib+base64-json",
+        "request_body_sha256": hashlib.sha256(body).hexdigest(),
+        "request_body_bytes": len(body),
+        "request_body_compressed": base64.b64encode(zlib.compress(body)).decode("ascii"),
+    }
+    bare = {"id": "audit", "role": "investigator", "status": "completed"}
+    for audit, expected in (
+        (modern_audit, 1),
+        ({**modern_audit, "request_body_compressed": "bad"}, 0),
+        ({**modern_audit, "request_body_sha256": 123}, 0),
+        ({"kind": "exact_provider_request_body", "status": "provider_response_received"}, 1),
+        ({**modern_audit, "attempt_id": "wrong"}, 0),
+    ):
+        fixture = deepcopy(single)
+        fixture["steps"] = [{**bare, "provider_input_audit": audit}]
+        loaded_audit = observe(fixture)
+        diagnostic = loaded_audit["outcome"]["metrics"]["observability"]
+        assert diagnostic["confirmed_provider_receipts"] == expected
+        assert research_sessions._read(str(path), session_id)["steps"] == fixture["steps"]
+    fixture = deepcopy(single)
+    fixture["steps"] = [
+        {**confirmed, "provider_input_audit": {**modern_audit, "request_body_compressed": "bad"}}
+    ]
+    diagnostic = observe(fixture)["outcome"]["metrics"]["observability"]
+    assert diagnostic["confirmed_provider_receipts"] == 1  # Independent reported usage.
+
+    failure = {"id": "failure", "role": "skeptic", "status": "failed"}
+    fixture = deepcopy(single)
+    fixture["steps"] = [
+        {**failure, "failure_message": "timeout"},
+        {**failure, "failure_message": "HTTP 429"},
+    ]
+    for _ in range(2):
+        result = observe(fixture)
+        diagnostic = result["outcome"]["metrics"]["observability"]
+        assert diagnostic["attempt_status_counts"]["status unavailable"] == 1
+        assert diagnostic["attempt_status_counts"]["timed out"] == 0
+        assert diagnostic["attempt_status_counts"]["rejected"] == 0
+        assert diagnostic["attempt_inventory_complete"] is False
+        fixture["steps"].reverse()
+    fixture["steps"] = [
+        {**confirmed, "id": "a", "attempt_id": "a"},
+        {**confirmed, "id": "b", "attempt_id": "a"},
+    ]
+    for _ in range(2):
+        diagnostic = observe(fixture)["outcome"]["metrics"]["observability"]
+        assert diagnostic["recorded_attempts"] == 1
+        assert diagnostic["conflicting_attempt_identities"] == 1
+        assert diagnostic["confirmed_provider_receipts"] == 0
+        assert diagnostic["reported_tokens_subtotal"] is None
+        assert diagnostic["research_calls"] == 0
+        fixture["steps"].reverse()
     research_sessions._save(str(path), record)
 
     calls = operational["Agent turns by status"]

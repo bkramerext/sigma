@@ -290,8 +290,17 @@ def run() -> dict[str, Any]:
         assert obs.receipt_state(reconciled[0]) == "uncertain"
     for order in permutations([received, sparse]):
         reconciled = obs.unique_rows(list(order))
-        assert obs.receipt_state(reconciled[0]) == "confirmed"
+        assert obs.receipt_state(reconciled[0]) == "uncertain"
         assert "request_body_compressed" not in reconciled[0]["provider_input_audit"]
+    legacy = {
+        **received,
+        "provider_input_audit": {
+            "kind": "exact_provider_request_body",
+            "status": "provider_response_received",
+        },
+    }
+    for order in permutations([legacy, sparse]):
+        assert obs.receipt_state(obs.unique_rows(list(order))[0]) == "confirmed"
     for key, left, right in (
         ("mode", "chatgpt", "mock"),
         ("provider_request_id", "req-a", "req-b"),
@@ -327,6 +336,30 @@ def run() -> dict[str, Any]:
     assert obs.receipt_state(local) == "uncertain"
     assert obs.receipt_state(metered) == "confirmed"
     assert obs.receipt_state(metered, simulated=True) == "simulated"
+    assert obs.reported_usage(metered, simulated=True) is None
+    assert obs.reported_usage({**metered, "mode": "mock"}) is None
+    for status in ("preparing", "reserved"):
+        assert obs.reported_usage({**metered, "attempt_status": status}) is None
+    estimated = {**local, "attempt_status": "usage_estimated", "token_usage": _usage(3, 2)}
+    assert obs.reported_usage(estimated) is None
+    assert obs.reported_usage({**estimated, "token_usage_status": "reported"}) is not None
+    assert obs.receipt_state({**metered, "id": "a", "attempt_id": "b"}) == "uncertain"
+    contradictory = {
+        **legacy,
+        "provider_request_id": "a",
+        "provider_input_audit": {**legacy["provider_input_audit"], "provider_request_id": "b"},
+    }
+    assert obs.receipt_state(contradictory) == "uncertain"
+    for order in permutations(
+        [
+            {**metered, "id": "a", "attempt_id": "a"},
+            {**metered, "id": "b", "attempt_id": "a"},
+            {**metered, "id": "b", "attempt_id": "c"},
+        ]
+    ):
+        rows = obs.unique_rows(list(order))
+        assert len(rows) == 1 and rows[0]["observability_conflict"]
+        assert obs.receipt_state(rows[0]) == "uncertain"
     assert obs.receipt_state({**metered, "attempt_status": "not_dispatched"}) == "not_dispatched"
     assert obs.receipt_state({**metered, "attempt_status": "preparing"}) == "uncertain"
     assert obs.receipt_state({**metered, "id": None}) == "uncertain"
