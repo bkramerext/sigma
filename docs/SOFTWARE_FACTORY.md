@@ -1,20 +1,63 @@
 # SIGMA Software Factory
 
-This document is the operating protocol for developing SIGMA with a human engineering lead, ChatGPT coordinators, and parallel color-identified Codex workers. It describes **how we build SIGMA**, not SIGMA's own research-agent architecture. It is a working agreement, not a claim that agents execute autonomously.
+This document is the operating protocol for developing SIGMA with a human engineering lead, ChatGPT coordinators, and parallel color-identified Codex workers. It describes **how we build SIGMA**, not SIGMA's own research-agent architecture. It is a working agreement with human-mediated and explicitly delegated autonomous operating modes, not a claim that inactive agents execute continuously.
 
-## 0. Comprehensive remedy campaign — six-worker mailbox routing
+## 0. Operating modes and delegated autonomy
 
-Operator direction (2026-11-28): For the comprehensive ONP-derived SIGMA remedy campaign, six logical worker slots (Blue, Green, Red, Gray, Yellow, Purple) are coordinated by ChatGPT through the coordinator-owned `main:messages/<color>.txt` mailboxes. The human launches each worker with its mailbox address; thereafter the Coordinator stands in for the human for routine engineering dispatch, correction, review, integration sequencing and merge decisions within the approved campaign. Workers return ACK, STATUS, BLOCKED, R4R and correction responses through the assigned issue/PR. The human remains the final product, UX, budget, scope and release authority. No new UI, paid/live model calls, material scope changes, deployment, or waiver of mandatory acceptance criteria without explicit human approval. Yellow may revise the existing About Box content within #931.
+The human engineering lead chooses the operating mode explicitly for a defined campaign or coordination domain. Autonomy is an authorization and communication model, not a claim that an inactive conversation executes continuously. Both modes use the same ticket, isolation, evidence, security, review, CI, integration, and release gates.
 
-This scoped routing exception supersedes the older manual human-forwarding wording in Sections 1–5A, 10, 13–14 and the older Blue-specific mailbox/branch routing for these six campaign assignments. All other safeguards, worker isolation, review evidence and CI disciplines remain in force. Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the campaign's issue/PR feedback and mailbox protocol, not by contacting other colors. Coordinator mailbox writes are directives available for pickup, not evidence that a worker has read them. Acknowledgment establishes receipt.
+| Mode | Human role | Coordinator role | Worker communication |
+|---|---|---|---|
+| **Human-mediated** (default unless delegated) | Approves direction and forwards worker instructions and responses | Plans, reviews, directs, and merges within standing authorization | Copyable human-forwarded messages, durable GitHub records |
+| **Autonomous Coordinator + Workers** (explicit opt-in) | Defines objective, scope, constraints, resource limits and reserved decisions; receives progress and intervenes when needed | Acts in the human's place for routine engineering decisions, dispatch, dependency management, corrections, review, CI, merges and ticket burn-down | Coordinator-owned main-branch mailboxes and worker issue/PR feedback; no routine human relay |
 
-The Coordinator begins an adversarial code review as soon as a reviewable PR head exists, even while CI is running or failing. Inspect actual diff, tests, handoff, relevant code, security and regression risks, acceptance criteria, and cross-PR contracts; record MET / UNMET / UNVERIFIED for substantive requirements and issue actionable consolidated correction directives to the original worker through its mailbox. Monitor all CI workflows and shards at the current head. Workers diagnose failures locally while jobs run but collect the complete failure set before pushing one consolidated correction, following Section 5; document any permitted exception. Do not weaken CI gates. Re-review changed heads and verify required CI/security checks, mergeability and dependency order before merging using the reviewed head SHA. Workers never self-merge. After merging, verify issue closure, assign combined integration checks and report progress, blockers and next actions. Reassign a worker only when its previous assignment is resolved or explicitly parked; no seventh worker. The Coordinator cannot continuously operate disconnected sessions; polling must occur in active worker environments and scheduled reports are not a substitute for independent review. No claim of delivery, test execution, CI success or completion without evidence.
+### 0.1 Enable, bound, and end autonomous operation
+
+The human explicitly authorizes autonomous operation and specifies or confirms the campaign objective, approved backlog or scope, worker limit and identities, coordinator domain, merge authorization, budget/provider restrictions, UI restrictions, and release boundary. Record the authorization and constraints durably in the canonical campaign issue or coordinator handoff; retain decisions and amendments in the appropriate tickets. If any reserved decision or authorization is unclear, keep the affected work blocked rather than inferring permission. The human can override, pause, narrow, stop, or return the campaign to human-mediated mode at any time. The Coordinator records the decision, publishes the corresponding mailbox directives, and verifies acknowledgment where available. A change of mode does not authorize discarding work, bypassing gates, or deploying.
+
+In autonomous mode, the Coordinator stands in for the human **for routine engineering within the approved scope**. It may refine and consolidate the approved inventory into tickets, document risks and safeguards, set priorities and dependency order, choose scoped implementation approaches and shared contracts, assign and reassign workers, resolve ordinary blockers, request corrections, review and merge qualifying PRs, and arrange post-merge verification without asking the human for each decision. One accountable worker, one ticket, one branch and one implementation PR at a time; related corrections stay on that PR. The Coordinator must not become an unreviewed implementation worker merely to bypass an unavailable worker or review gate.
+
+The human retains final product direction, consequential architectural/security decisions outside the approved scope, UX approval, budget and paid/live provider authorization, approval of material scope changes and mandatory acceptance waivers, and release/deployment signoff. No new UI without discussion and explicit human approval when that restriction is in force; fixing existing UI defects within approved scope is not permission to invent new surfaces. Routine engineering delegation is not blanket authority to change these boundaries. Escalate data-loss, destructive migration, credential exposure, security, cost, or other consequential risks; continue independent authorized work when safe. No weakening of tests or security gates.
+
+### 0.2 Autonomous dispatch and mailbox contract
+
+1. The Coordinator establishes one authoritative mailbox per worker on `main`: `messages/<color>.txt` (lowercase color). For example, `messages/blue.txt`. The human launches each worker once with a copyable kickoff identifying its color, repository, this protocol, `AGENTS.md`, and mailbox address. Workers may run in Codex or another authorized tool-capable execution environment. Do not assume a proposed kickoff was delivered or a worker is active.
+2. The Coordinator owns mailbox writes and uses current branch HEAD / non-force updates, preserving unrelated changes. Each directive identifies campaign, color, monotonically increasing message number, current ticket, branch/base, status, scope, acceptance criteria or canonical reference, constraints, next action and stop/escalation conditions. Consolidate corrections; do not generate pointless commits or duplicate directives. Ordinary implementation changes use isolated worker branches and PRs, not direct commits to main. Workers never write the coordinator's mailbox.
+3. Workers read the current main mailbox (for example, `git fetch origin main && git show origin/main:messages/blue.txt`, or a connected GitHub file-read operation), the issue and comments, and applicable repository guidance. Acknowledge each new directive once in the assigned issue/PR, identifying color and message number. Read at natural checkpoints, when blocked, before submitting a PR and while awaiting review. When idle with a clean tree, poll read-only at a reasonable interval (normally 30 seconds in an active persistent executor); never force-sync, discard uncommitted work, or spin wastefully. Stop only on an applicable stop directive, campaign closure, safety escalation or actual execution-environment termination; preserve state and report limitations. A mailbox write makes a directive available, not delivered; ACK establishes receipt.
+4. Worker replies are durable issue/PR comments or linked handoffs, prefixed with color and ACK / STATUS / BLOCKED / R4R / CORRECTIONS COMPLETE, citing message number. Include current branch/head, PR link if available, completed work, actual tests and CI state, blocker, requested decision and next action. Use the PR handoff for detailed evidence. Workers must not contact other workers, negotiate interfaces directly, modify another worker's branch or self-merge. All cross-worker communication goes through the Coordinator.
+5. The Coordinator inspects replies, issues, PRs and CI, sends specific mailbox decisions, and resolves ownership/contract blockers promptly. Approve bounded independent work rather than making workers wait for unrelated PRs. Distinguish pending ACK, active implementation, blocked, R4R, review, corrections, CI status, merged, integration verified and accepted. Reassignment requires closure of the previous assignment or an explicit recorded safe parking/handoff; never exceed the human-approved worker cap.
+
+Mandatory autonomous worker-facing instruction: **“Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox.”** Use this routing instead of the human-mediated sentence in Section 4.
+
+### 0.3 Autonomous Coordinator operating loop
+
+The Coordinator actively drives the approved backlog, not merely reports it:
+
+- Reconcile current GitHub state and worker ACKs; maintain a rolling ledger of assignments, branch/PR head, acceptance status, CI, blockers, dependencies, and next action. Maintain the approved inventory-to-ticket mapping and avoid silently dropping lower-priority requirements. Every ticket includes risks, safeguards, observable acceptance criteria and ownership.
+- Start an independent, adversarial review as soon as a reviewable PR head exists, even if CI is running or failing. Inspect actual code/diff, tests, handoff, downstream behavior, shared contracts and regression/security risks; record MET / UNMET / UNVERIFIED with evidence. Do not merely accept the author's claims or a green suite. Send actionable corrections on the original ticket/PR through its mailbox; re-review the changed head.
+- Oversee all required CI runs/jobs/shards for each active PR at its current head. Prod workers to diagnose and fix failures; collect the entire failure set before one consolidated push, following Section 5's narrow exceptions. Run local checks first where possible. A green earlier head or same-head rerun is not verification of a changed commit. Never weaken tests or gates. Review and CI progress independently; both are merge prerequisites.
+- Verify current-head review, required acceptance evidence, CI/security gates, mergeability and dependency order before using authorized merge with the reviewed head SHA. Workers never self-merge. Verify actual merge and issue closure; arrange combined regression/integration checks on updated main. Do not declare DONE until the PR is merged and ticket resolved/closed; distinguish integrated and human-accepted/released. Reassign available colors to independent queued work within the cap.
+- Provide rolling progress reports to the human with per-color status, merged/closed counts versus approved backlog, PR and CI status, open review findings, blockers, next actions, unverified work and any human-only decisions. Report meaningful changes and stalled work without inventing progress. Close out the campaign only when all required tickets are resolved or expressly deferred by the human, integration evidence is recorded, and remaining release/acceptance decisions are clear.
+
+### 0.4 Execution limitations, recovery, and escalation
+
+Actual autonomy requires active execution environments with appropriate repository, branch, PR, CI and test access. The Coordinator cannot secretly operate disconnected local sessions or execute continuously between chat messages; workers in a completed chat turn cannot continue polling. Scheduled monitoring, if configured, has its own cadence and authorized actions; a read-only report is not autonomous dispatch, review or merge. Do not claim continuous monitoring or execution without an actual executor. If workers or Coordinator are inactive, explicitly identify the gap and the minimal wake-up/restart action; ordinary mailbox traffic does not require manual forwarding in autonomous mode.
+
+If a worker lacks a runnable checkout or local tooling but has authorized GitHub connector access, the Coordinator may explicitly authorize narrow connector-based implementation on its isolated branch and CI fallback for genuinely unavailable local checks. The worker must inspect actual source and current branch head, preserve unrelated changes, use safe non-force updates, supply focused tests, and distinguish inspected, executed and unexecuted verification. CI is not a waiver of mandatory checks; request a suitable runner or mark the requirement UNVERIFIED if evidence remains insufficient. No merge without required evidence or informed human-authorized disposition as specified in Section 5A. No paid model calls simply to validate infrastructure.
+
+On restart, reconstruct the campaign mode, delegation, current mailboxes/message numbers, ACKs, tickets/PRs and actual current heads/CI before issuing new instructions. Preserve existing branches and unpushed work; replace a failed executor in the same color slot only after reconciling its state. No new overlapping assignment or extra worker to compensate for an inactive session without approval.
+
+### 0.5 Routing precedence and current campaign authorization
+
+In autonomous mode, Sections 0.1–0.4 replace the manual human-relay routing and dispatch-confirmation steps in Sections 1–5A, 10, 13–14 and older color-specific mailbox/branch protocols for that campaign only. All other engineering, review, CI, authorization, evidence, and recovery safeguards apply unchanged. In human-mediated mode, the original human-forwarding procedures remain in force. The Coordinator must identify the active mode when starting or recovering a campaign.
+
+The human's 2026-11-28 direction activates autonomous mode for the comprehensive ONP-derived SIGMA remedy campaign with six logical slots: Blue, Green, Red, Gray, Yellow and Purple. Maximum six workers. The Coordinator may manage the approved comprehensive improvement inventory and merge reviewed qualifying PRs; no unapproved new UI, paid/live research calls, material scope changes, deployment or waiver of mandatory criteria. The explicitly requested existing About Box revision in #931 is permitted, not a general UI authorization. Current assignments, message numbers and progress belong in the individual mailboxes and GitHub issues/PRs, not this standing document.
 
 ## 1. Participants and authority
 
 | Participant | Responsibility | Authority and limits |
 |---|---|---|
-| **Human engineering lead** | Product vision, architecture and UX decisions, priorities, constraints, budget authorization, worker dispatch, hands-on product evaluation, release signoff | Final authority. May override assignments, challenge coordination decisions, and stop or redirect work. Manually forwards instructions between otherwise disconnected sessions. |
+| **Human engineering lead** | Product vision, architecture and UX decisions, priorities, constraints, budget authorization, worker dispatch, hands-on product evaluation, release signoff | Final authority. May override assignments, challenge coordination decisions, and stop or redirect work. Forwards instructions in human-mediated mode; delegates routine engineering coordination in autonomous mode (Section 0). |
 | **ChatGPT coordinator** | Clarify intent, propose architecture, scope T-tickets, assign workers, sequence dependencies, inspect GitHub code and PRs, review evidence, request corrections, merge reviewed PRs under the human's standing authorization, maintain integration and release status | Coordinates work, but does **not** secretly operate local Codex windows or run continuously between chat messages. Repository inspection is not local execution. Escalates consequential product/UX changes and paid calls. |
 | **Codex workers** | Implement assigned tickets, maintain code and tests, run focused/full checks, exercise browser/CLI when relevant, document findings, resolve their own PR conflicts, and submit reviewable PRs | Work only within assigned scope. Do not self-merge, reassign other workers, or communicate directly with other Codex workers. |
 | **GitHub** | Durable shared memory and integration boundary | Tickets, code, tests, PRs, commit history, review handoffs, and tracking provide the record. Conversation memory alone is not authoritative. |
@@ -27,7 +70,7 @@ A second ChatGPT conversation may coordinate a distinct domain. For example, clo
 
 ## 2. Color identity and ownership
 
-Colors identify **persistent Codex sessions/terminal windows**, not PR status or severity. Color-coding was adopted because terminal titles were unreliable. Use the color in every assignment and handoff to avoid sending instructions to the wrong worker.
+Colors identify **logical worker slots**, normally associated with persistent Codex sessions/terminal windows or other authorized executors, not PR status or severity. Color-coding was adopted because terminal titles were unreliable. Use the color in every assignment and handoff to avoid sending instructions to the wrong worker.
 
 | Color | Typical focus | Assignment source |
 |---|---|---|
@@ -35,10 +78,12 @@ Colors identify **persistent Codex sessions/terminal windows**, not PR status or
 | **Green** | Python/Sage execution, computational evidence, data and CLI tooling | Current GitHub issue/PR |
 | **Gray** | UI, browser acceptance, integration validation | Current GitHub issue/PR |
 | **Red** | Cloud deployment and access | Current GitHub issue/PR and release instructions |
+| **Yellow** | Additional scoped engineering capacity | Current GitHub issue/PR |
+| **Purple** | Additional scoped engineering capacity | Current GitHub issue/PR |
 
 These are **specializations, not permanent silos**. The coordinator can reassign workers as capacity and critical path change. Ticket ownership, rather than color, defines the current modification boundary. Workers should not touch another worker's active area without coordinator authorization.
 
-The human keeps the color windows open and forwards instructions to the corresponding session. ChatGPT can advise dispatch, but cannot directly send to those local sessions through this conversation.
+In human-mediated mode, the human keeps the color windows open and forwards instructions. In autonomous mode, workers retrieve Coordinator directives through Section 0 mailboxes; an active executor is still required. ChatGPT cannot directly operate disconnected local sessions.
 
 ## 3. Ticket and assignment contract
 
@@ -69,6 +114,8 @@ Write a message file for coordinator handoff.
 
 ## 4. Worker isolation and message protocol
 
+The worker isolation and durable handoff requirements below apply in both modes. Human-forwarding instructions and their exact routing sentence apply to human-mediated mode; use Section 0.2 for autonomous dispatch and replies.
+
 **Mandatory instruction in every worker-facing message:** Include the exact rule **“Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.”** This requirement applies to initial ticket assignments, follow-up tasks, correction requests, rebase requests, and handoffs. Do not assume a worker remembers the rule from an earlier message. Workers may read shared repository artifacts and integrated code, but may not directly instruct, message, or negotiate with other workers. The human and ChatGPT coordinator remain the only authorized coordination path.
 
 **No worker-to-worker coordination.** Blue, Green, Gray, and Red do not send each other instructions, negotiate APIs directly, or silently modify each other's branches. Dependencies, collisions, or discoveries are reported to the responsible ChatGPT coordinator through the human. The coordinator decides sequencing, interface contracts, and reassignment. If an issue crosses the local/cloud boundary, the human routes it between coordinators.
@@ -93,7 +140,9 @@ No invented test results. Report skipped, unavailable, or inconclusive verificat
 
 ## 4A. Messaging process: dispatch, handoff, correction, and closure
 
-**Single routing rule:** The human forwards messages between the ChatGPT coordinator and color-identified Codex sessions. GitHub tickets, PRs, and `messages/` files are the durable record. Writing a message does not dispatch it; a worker's completion claim does not constitute review or merge.
+The numbered human-relay workflow below applies to human-mediated mode. In autonomous mode, replace its transport and receipt steps with Section 0.2; retain the same review, evidence and closure requirements.
+
+**Human-mediated routing rule:** The human forwards messages between the ChatGPT coordinator and color-identified Codex sessions. GitHub tickets, PRs, and `messages/` files are the durable record. Writing a message does not dispatch it; a worker's completion claim does not constitute review or merge.
 
 **Coordinator to worker (via human):**
 1. The coordinator names the recipient **color outside** one self-contained, copyable message block. The block begins with the color and ticket/issue ID, identifies the current `main` base and scope, gives observable acceptance criteria, constraints, tests, deliverables, and stop/escalation conditions.
@@ -145,6 +194,8 @@ Review must account for downstream behavior, not just diff size. A fixture misma
 
 ## 5A. Explicit review, merge, and message-passing state machine
 
+The state machine and gates apply in both modes. References to human forwarding in this section describe human-mediated operation; autonomous mode uses mailbox directives and durable issue/PR responses under Section 0.
+
 The normal work cycle is **ASSIGNED → IMPLEMENTING → R4R → REVIEW → (CHANGES REQUESTED → IMPLEMENTING → R4R)* → APPROVED → MERGED → INTEGRATION VERIFIED**. A PR can be merged without overall product acceptance; release signoff is a separate human decision.
 
 | Event | Who initiates | Required response | Who owns next action |
@@ -183,7 +234,7 @@ Worker-reported test results are **evidence, not independent verification**. The
 
 **Corrections stay in the same PR.** The coordinator sends one consolidated correction message to the original color; the worker updates the branch, executes appropriate regressions, updates its message file, and announces **R4R again**. ChatGPT re-reads the changed head and message file before approving. Do not merge on the basis of an earlier review after the branch changes.
 
-**Message-passing path:** `Codex → PR handoff (or linked message file) + R4R notice → human → ChatGPT coordinator → copyable response → human → same Codex`. ChatGPT may inspect GitHub directly, but does not thereby gain access to a worker's local terminal. The human is the transport between disconnected conversations; GitHub is the durable record. Messages should be addressed to a color and ticket, state the requested action, and distinguish decisions from suggestions. The coordinator must never assert that a message was delivered merely because it generated one.
+**Human-mediated message-passing path:** `Codex → PR handoff (or linked message file) + R4R notice → human → ChatGPT coordinator → copyable response → human → same Codex`. Autonomous path: `worker → issue/PR handoff and R4R → Coordinator → main-branch color mailbox → same worker`. ChatGPT may inspect GitHub directly, but does not thereby gain access to a worker's local terminal. The human is the transport between disconnected conversations; GitHub is the durable record. Messages should be addressed to a color and ticket, state the requested action, and distinguish decisions from suggestions. The coordinator must never assert that a message was delivered merely because it generated one.
 
 **Post-merge discipline:** Notify the human of the merge result and immediately update the dependency picture. If another worker's branch is affected, send that worker a targeted update through the human. Run or assign cross-PR regression checks; do not mistake per-PR test success for a tested combined system. The final acceptance report names outstanding risks and explicitly identifies any unverified live-model behavior.
 
@@ -241,8 +292,8 @@ A new human, ChatGPT coordinator, or replacement Codex session must be able to r
 
 1. Read this protocol, the human–AI collaboration rules in Section 16, and `README.md`. Read the active GitHub Issues or legacy tickets, PR descriptions, and linked handoffs. Consult `docs/TICKET_TRACKING.md` if maintained.
 2. Inspect **current GitHub state**, not just tracker prose: default branch HEAD, open PRs and their bases/heads, mergeability, latest commits, review comments, and `messages/` handoffs. Tracking files are snapshots and can lag reality.
-3. Reconstruct a worker ledger: color, coordinator domain, assigned ticket, branch/PR, status, last confirmed human dispatch, blocker, next action, and whether tests were reported or independently reproduced.
-4. Reconcile discrepancies with the human. Ask which worker windows are still active, which instructions were actually forwarded, and whether a worker has unpushed changes. Never infer live activity from an open PR.
+3. Reconstruct a worker ledger: active mode, color, coordinator domain, assigned ticket, branch/PR, status, last confirmed human dispatch or mailbox message/ACK, blocker, next action, and whether tests were reported or independently reproduced.
+4. Reconcile discrepancies using durable records and the active execution environments. In human-mediated mode, confirm which instructions were forwarded with the human; in autonomous mode, inspect mailbox ACKs and worker status, escalating to the human only where actual executor state or unpushed changes cannot be established. Never infer live activity from an open PR.
 5. Confirm **current authorization**: who may merge, whether provider calls are permitted, spending limits, release target, UX constraints, and any paused work. Prior approvals do not imply approval for a new paid action.
 6. Check integration order and outstanding release gates; identify one critical path and independent secondary work. Only then dispatch or review.
 7. Record the reconciled snapshot in the appropriate tracker/handoff so the next coordinator can repeat this procedure.
@@ -301,7 +352,7 @@ For a ChatGPT coordinator replacement, use Section 10. A coordinator conversatio
 
 **Unavailable reviewer/coordinator:** leave the PR unmerged. R4R is not self-approval. The human can explicitly reassign independent review to another coordinator.
 
-**Unclear human dispatch:** treat the message as *not yet sent* until confirmed or evidenced. Avoid issuing conflicting follow-ups to an unconfirmed worker.
+**Unclear dispatch:** in human-mediated mode, treat the message as *not yet sent* until confirmed or evidenced. In autonomous mode, distinguish a published mailbox directive from acknowledged receipt. Avoid issuing conflicting follow-ups to an unconfirmed worker.
 
 ## 14. Decision and status hygiene
 
@@ -326,7 +377,7 @@ These principles apply to the human engineering lead, ChatGPT coordinators, and 
 - **Clarity:** Lead with the point. Match detail to complexity, not a word count.
 - **Audience:** Human-facing writing should be easy to scan. Preserve meaning; cut explanation that adds no value.
 - **AI-to-AI assignments:** Chat → Codex instructions need **granularity and exactness**. Brevity is not a goal; include contracts, edge cases, constraints, and verification requirements.
-- **Agency and authorization:** Independently investigate, challenge assumptions, and develop substantial drafts. Never modify the repository during discussion or treat a request to draft content as permission to publish it. Commit only with explicit user authorization, consolidating settled changes into deliberate commits rather than recording conversational iterations.
+- **Agency and authorization:** Independently investigate, challenge assumptions, and develop substantial drafts. Never modify the repository during discussion or treat a request to draft content as permission to publish it. Commit only with explicit user authorization or within an explicitly delegated autonomous campaign's authorized scope, consolidating settled changes into deliberate commits rather than recording conversational iterations. Delegation does not authorize unrelated changes.
 - **Continuity of agency:** Maintain independent judgment after criticism. Do not overcorrect into deference, agreement-seeking, passive replies, or merely echoing the user. Authorization boundaries do not remove responsibility to think and contribute.
 - **Continuity:** Keep decisions and revisions traceable without retelling discussions.
 - **Trust:** Separate facts from hypotheses and uncertainty. Never imply unperformed work is complete.
