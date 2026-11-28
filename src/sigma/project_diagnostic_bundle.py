@@ -225,7 +225,8 @@ def sanitize_event(event: dict[str, Any]) -> dict[str, Any]:
         omissions.update(
             reason
             for reason in prior
-            if reason in {
+            if reason
+            in {
                 "unknown_event_fields",
                 "opaque_wire_omitted",
                 "security_or_schema_projection",
@@ -323,7 +324,8 @@ def _validate_snapshot(raw: bytes, digest: str) -> None:
         snapshot = json.loads(raw)
         if (
             not isinstance(snapshot, dict)
-            or set(snapshot) != {
+            or set(snapshot)
+            != {
                 "source_project_id",
                 "source_session_id",
                 "availability",
@@ -336,7 +338,8 @@ def _validate_snapshot(raw: bytes, digest: str) -> None:
             or snapshot["availability"] not in {"retained", "partial", "unavailable"}
             or snapshot["coverage"] != "best_effort_not_complete"
             or not isinstance(snapshot["saved_evidence"], dict)
-            or set(snapshot["saved_evidence"]) != {
+            or set(snapshot["saved_evidence"])
+            != {
                 "steps",
                 "request_audits",
                 "context_manifests",
@@ -376,17 +379,13 @@ def _validate_snapshot(raw: bytes, digest: str) -> None:
 
 
 def _path_parts(name: str) -> tuple[str, str]:
-    match = re.fullmatch(
-        re.escape(PREFIX) + r"([0-9a-f-]{36})/([0-9a-f]{64})\.bin", name
-    )
+    match = re.fullmatch(re.escape(PREFIX) + r"([0-9a-f-]{36})/([0-9a-f]{64})\.bin", name)
     if match is None or not _uuid(match[1]):
         raise BundleError("Unsafe passive diagnostic path")
     return match[1], match[2]
 
 
-def _add(
-    passive: dict[str, bytes], session_id: str, raw: bytes, *, budget: int
-) -> None:
+def _add(passive: dict[str, bytes], session_id: str, raw: bytes, *, budget: int) -> None:
     digest = hashlib.sha256(raw).hexdigest()
     name = f"{PREFIX}{session_id}/{digest}.bin"
     if name in passive:
@@ -582,9 +581,7 @@ def encode(passive: dict[str, bytes]) -> dict[str, Any]:
     return {"version": _VERSION, "private": True, "sessions": mappings, "blobs": blobs}
 
 
-def decode(
-    payload: Any, members: dict[str, bytes], *, budget: int
-) -> dict[str, bytes]:
+def decode(payload: Any, members: dict[str, bytes], *, budget: int) -> dict[str, bytes]:
     project_id, session_ids = _session_ids(members)
     if (
         not isinstance(payload, dict)

@@ -275,7 +275,8 @@ def test_private_diagnostic_roundtrip() -> None:
         )
         assert stored_record["steps"][0]["context_manifest"] == {"sources": []}
         assert (
-            stored_record["steps"][0]["provider_input_audit"]["status"] == "prepared_before_dispatch"
+            stored_record["steps"][0]["provider_input_audit"]["status"]
+            == "prepared_before_dispatch"
         )
         assert stored_record["status"] == "stopped"
         preserved = root / "preserved.sigma"
@@ -412,9 +413,7 @@ def test_recorder_coverage_and_cross_mapping() -> None:
                 missing: archive["sessions"][first],
             },
         }
-        _expect_failure(
-            lambda: project_transfer.decode_bundle({**payload, "diagnostics": swapped})
-        )
+        _expect_failure(lambda: project_transfer.decode_bundle({**payload, "diagnostics": swapped}))
         log = session_log.log_path(str(origin), project_id, first)
         session_log._append_frame(
             log,
@@ -471,9 +470,9 @@ def test_diagnostic_resource_budget() -> None:
     tracemalloc.start()
     try:
         archive = project_diagnostic_bundle.encode({path: snapshot})
-        assert project_diagnostic_bundle.decode(
-            archive, members, budget=len(snapshot)
-        ) == {path: snapshot}
+        assert project_diagnostic_bundle.decode(archive, members, budget=len(snapshot)) == {
+            path: snapshot
+        }
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -486,7 +485,9 @@ def test_diagnostic_resource_budget() -> None:
     with patch.object(
         project_transfer,
         "MAX_BUNDLE_BYTES",
-        sum(map(len, project_transfer.decode_bundle(project_transfer.make_bundle(members)).values()))
+        sum(
+            map(len, project_transfer.decode_bundle(project_transfer.make_bundle(members)).values())
+        )
         + len(snapshot)
         - 1,
     ):

@@ -248,7 +248,8 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
         return migrated
     if (
         not isinstance(payload, dict)
-        or set(payload) not in (
+        or set(payload)
+        not in (
             {"format", "version", "files", "artifacts"},
             {"format", "version", "files", "artifacts", "diagnostics"},
         )
