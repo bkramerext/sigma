@@ -6283,7 +6283,7 @@ function AboutArchitecture() {
     setSessionExpanded(next);
   }
 
-  return <section className="about-architecture" aria-label="Multi-Agent Research">
+  return <section className="about-architecture" aria-label="Multi-Agent Research Process">
     <div className="about-research-flow">
       <div className="about-flow-project">{card('project', 'Research Question', 'Start with a question you want to solve')}</div>
       <div className="about-flow-connector"><span>Try more than one way to answer it</span><i aria-hidden="true"/></div>
@@ -6479,11 +6479,11 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <div className="about-disclosure-content"><AboutWorkflow/></div>
       </details>
       <details className="about-disclosure" data-about-section="researchArchitecture" open={aboutDisclosureState('researchArchitecture')} onToggle={event => rememberAboutDisclosure(event, 'researchArchitecture')}>
-        <summary>Research Architecture</summary>
+        <summary>Research Information Architecture</summary>
         <div className="about-disclosure-content"><AboutResearchArchitecture/></div>
       </details>
       <details className="about-disclosure about-architecture-disclosure" data-about-section="architecture" open={aboutDisclosureState('architecture')} onToggle={event => rememberAboutDisclosure(event, 'architecture')}>
-        <summary>Multi-Agent Research</summary>
+        <summary>Multi-Agent Research Process</summary>
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
       <details className="about-disclosure" data-about-section="features" open={aboutDisclosureState('features')} onToggle={event => rememberAboutDisclosure(event, 'features')}>

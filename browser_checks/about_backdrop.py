@@ -38,9 +38,13 @@ with sync_playwright() as playwright:
         opener.click()
         expect(dialog).to_be_visible()
         overview = dialog.locator('[data-about-section="researchArchitecture"]')
+        expect(overview.locator("summary")).to_have_text("Research Information Architecture")
+        expect(dialog.locator('[data-about-section="architecture"] summary')).to_have_text(
+            "Multi-Agent Research Process"
+        )
         expect(overview).not_to_have_attribute("open", "")
         overview.locator("summary").click()
-        diagram = overview.get_by_role("img", name="Research architecture and evidence flow")
+        diagram = overview.get_by_role("img", name="Research information architecture and evidence flow")
         expect(diagram).to_be_visible()
         expect(diagram.locator("desc")).to_contain_text(
             "Their contributions return to the persistent record for possible later inquiry."
@@ -87,6 +91,7 @@ with sync_playwright() as playwright:
         expect(perspectives.locator('g[aria-hidden="true"]')).to_have_count(1)
         expect(overview).to_contain_text("not a new database or a collection of verified truths")
         expect(overview).to_contain_text("omitted evidence is not resolved or verified")
+        expect(overview.locator("figcaption")).to_contain_text("not a prescribed execution sequence")
         expect(overview.locator("figcaption")).to_contain_text("architectural direction")
         expect(overview).to_contain_text("not unbounded autonomous self-direction")
         expect(overview).to_contain_text("subject to human review")

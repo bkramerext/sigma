@@ -114,17 +114,17 @@ export default function AboutProvenanceVision() {
   </section>;
 }
 
-/** Conceptual overview; detailed agent mechanics belong in Multi-Agent Research. */
+/** Conceptual overview; detailed agent mechanics belong in Multi-Agent Research Process. */
 export function AboutResearchArchitecture() {
   const colors = { blue: '#78bbee', green: '#85cfa7', gold: 'var(--sigma-copper-foreground)', violet: '#b59ff5', coral: '#f0a098' };
   const Arrow = (props: Parameters<typeof FlowArrow>[0]) => <FlowArrow {...props} prefix="about-research-architecture"/>;
-  return <section className="about-provenance" aria-label="Research Architecture">
+  return <section className="about-provenance" aria-label="Research Information Architecture">
     <p>The overarching research objective and the selected strategies define the inquiry. The <strong>Research Ethos</strong> guides how agents investigate; <strong>Source Material</strong> supplies evidence to examine, not unquestionable facts. Researchers decide which strategies to pursue and when to start, stop, resume or extend a session within its configured limits.</p>
     <p><strong>Persistent Research Knowledge</strong> is the saved project record: findings, hypotheses, failed approaches, disputed claims, uncertainties and their supporting evidence. It is a logical view of existing research history, not a new database or a collection of verified truths.</p>
     <figure className="about-provenance-figure about-research-architecture-figure">
-      <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Research architecture diagram; scroll horizontally on narrow screens">
-        <svg className="about-provenance-diagram about-research-architecture-diagram" viewBox="0 0 500 570" role="img" aria-label="Research architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
-          <desc id="about-research-architecture-description">Human direction, the overarching objective, selected strategies, Research Ethos and Source Material guide context selection. Persistent Research Knowledge feeds Context Selection and Budgeting, which supplies bounded context to the Investigator and Skeptic in a research session. Their contributions return to the persistent record for possible later inquiry. The optional Supervisor provides process guidance only. Research Perspectives groups Current Understanding, Research Q/A, research papers and ELI5 explanations of papers. These are ways to interpret and communicate the record, subject to human review. Broader context selection and budgeting remain architectural direction.</desc>
+      <div className="about-provenance-diagram-scroll" role="region" tabIndex={0} aria-label="Research information architecture diagram; scroll horizontally on narrow screens">
+        <svg className="about-provenance-diagram about-research-architecture-diagram" viewBox="0 0 500 570" role="img" aria-label="Research information architecture and evidence flow" aria-describedby="about-research-architecture-description" xmlns="http://www.w3.org/2000/svg">
+          <desc id="about-research-architecture-description">This view emphasizes information relationships, with limited participant coordination and process guidance; it is not a prescribed execution sequence. Human direction, the overarching objective, selected strategies, Research Ethos and Source Material guide context selection. Persistent Research Knowledge feeds Context Selection and Budgeting, which supplies bounded context to the Investigator and Skeptic in a research session. Their contributions return to the persistent record for possible later inquiry. The optional Supervisor provides process guidance only. Research Perspectives groups Current Understanding, Research Q/A, research papers and ELI5 explanations of papers. These are ways to interpret and communicate the record, subject to human review. Broader context selection and budgeting remain architectural direction.</desc>
           <defs>
             {(Object.keys(colors) as (keyof typeof colors)[]).map(tone => <marker key={tone} id={`about-research-architecture-arrow-${tone}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill={colors[tone]}/></marker>)}
           </defs>
@@ -170,7 +170,7 @@ export function AboutResearchArchitecture() {
           </g>
         </svg>
       </div>
-      <figcaption>Conceptual research flow. Broader context selection and budgeting are architectural direction, not a promise of complete retrieval or autonomous research. The saved record is not proof.</figcaption>
+      <figcaption>Information architecture: arrows primarily show how knowledge is selected, exchanged, saved and interpreted. The Investigator, Skeptic and Supervisor also illustrate control relationships, not a prescribed execution sequence. Broader context selection and budgeting are architectural direction, not a promise of complete retrieval or autonomous research. The saved record is not proof.</figcaption>
     </figure>
     <p><strong>Context Selection and Budgeting.</strong> Today, later turns can receive bounded selections of prior local and peer evidence; oversized context can be compacted for dispatch without changing the saved originals. The architectural direction is to improve relevance, coverage of unresolved questions and economy of context across future work. A selection is not the complete record, and omitted evidence is not resolved or verified.</p>
     <p>The Investigator develops approaches, arguments and tests. The Skeptic reasons independently within its role: it can challenge assumptions, contribute new ideas, redirect the investigation or identify missing information. Distinct roles do not imply independent verification by different models. Optional Python or SageMath computation can supply execution evidence when configured. The optional Supervisor observes and guides the process, not the substantive conclusions.</p>
