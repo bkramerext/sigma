@@ -137,6 +137,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/session_log.py"],
             [*python, "python", "tests/epistemic_continuity.py"],
             [*python, "python", "tests/provider_replay.py"],
+            [*python, "python", "tests/provider_replay_recovery.py"],
             [*python, "python", "tests/closure_basis.py"],
             [*python, "python", "tests/research_state.py"],
             [*python, "python", "tests/continuations.py"],

@@ -1,6 +1,7 @@
 """Strict, synthetic-only provider replay through the normal research scheduler."""
 
 import asyncio
+import base64
 import hashlib
 import itertools
 import os
@@ -82,6 +83,10 @@ def deny_network():
         attempts.append("Unexpected network attempt during offline replay")
         raise ReplayMismatch(attempts[-1])
 
+    def verify():
+        if attempts:
+            raise ReplayMismatch(attempts[0])
+
     with (
         patch.object(socket, "getaddrinfo", side_effect=blocked),
         patch.object(socket.socket, "connect", blocked),
@@ -89,10 +94,57 @@ def deny_network():
         patch.object(socket.socket, "sendto", blocked),
     ):
         try:
-            yield
+            yield verify
         finally:
-            if attempts:
-                raise ReplayMismatch(attempts[0])
+            verify()
+
+
+@contextmanager
+def synthetic_transport(credential, config, handler):
+    """Use the production HTTP client with an offline-only transport."""
+    from sigma import personal_inference, research_reference_content, research_sessions
+
+    failures: list[str] = []
+
+    def guarded(request):
+        try:
+            return handler(request)
+        except ReplayMismatch as exc:
+            failures.append(str(exc))
+            raise
+
+    with (
+        deny_network() as verify_network,
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions, "_frozen_session_configuration", new=AsyncMock(return_value=config)
+        ),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch.object(research_reference_content, "_read_remote", return_value=(404, "", b"", None)),
+        patch.object(
+            personal_inference,
+            "respond",
+            side_effect=ReplayMismatch("Unexpected Personal worker dispatch"),
+        ) as private_dispatch,
+        patch.object(
+            httpx,
+            "AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(guarded), **kwargs
+            ),
+        ),
+    ):
+        def verify():
+            verify_network()
+            private_dispatch.assert_not_called()
+            if failures:
+                raise ReplayMismatch(failures[0])
+
+        try:
+            yield verify
+        finally:
+            verify()
 
 
 def transport_checks() -> None:
@@ -100,7 +152,7 @@ def transport_checks() -> None:
     second = httpx.Request("POST", ENDPOINT, content=b'{"input":"synthetic B"}')
     tape = [
         Exchange(request_digest(first), b'{"fixture":1}'),
-        Exchange(request_digest(second), b'{}'),
+        Exchange(request_digest(second), b"{}"),
     ]
     replay = StrictReplay(tape)
     assert replay(first).json() == {"fixture": 1}
@@ -153,7 +205,7 @@ def transport_checks() -> None:
 async def production_replay(root: Path) -> None:
     from research_sessions import investigation, provider_response, setup, skeptic, wait_for
 
-    from sigma import personal_inference, research_reference_content, research_sessions, session_log
+    from sigma import research_sessions, session_log
 
     baseline = root / "baseline.sigma"
     view, strategy, credential, config = await setup(baseline)
@@ -182,36 +234,17 @@ async def production_replay(root: Path) -> None:
     async def run(path: Path, handler):
         ids = itertools.count(1)
         with (
-            deny_network(),
             patch.object(
                 research_sessions, "uuid4", side_effect=lambda: UUID(int=next(ids), version=4)
             ),
             patch.object(research_sessions, "_now", return_value=fixed_time),
-            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
-            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
-            patch.object(research_sessions, "execution_capabilities", return_value=[]),
-            patch.object(
-                research_reference_content, "_read_remote", return_value=(404, "", b"", None)
-            ),
-            patch.object(
-                personal_inference,
-                "respond",
-                side_effect=ReplayMismatch("Unexpected Personal worker dispatch"),
-            ) as personal_dispatch,
-            patch.object(
-                httpx,
-                "AsyncClient",
-                side_effect=lambda **kwargs: REAL_CLIENT(
-                    transport=httpx.MockTransport(handler), **kwargs
-                ),
-            ),
+            synthetic_transport(credential, config, handler),
         ):
             started = await research_sessions.start_session(
                 str(path), strategy.id, key, view.project.id, credential["identity"]
             )
             finished = await wait_for(path, started["id"])
             session_log.flush()
-            personal_dispatch.assert_not_called()
             return finished
 
     original = await run(recorded_path, record)
@@ -231,6 +264,55 @@ async def production_replay(root: Path) -> None:
     assert (baseline / "project.json").read_bytes() == before
     assert not research_sessions.list_sessions(str(baseline))
     print("PASS exact provider replay through production session start, dispatch, and acceptance")
+    verify_history_migration(root, recorded_path, original)
+
+
+def verify_history_migration(root: Path, source: Path, result: dict) -> None:
+    """Migrate real accepted synthetic research, not an empty mock session."""
+    from sigma import research_sessions
+    from sigma.project_bundle import import_bundle, read_file
+    from sigma.projects import inspect_project, migrate_project
+
+    session_id = result["id"]
+    session_member = f"research-sessions/{session_id}.json"
+    artifact_member = "artifacts/replay-fixture.bin"
+    artifact = source / artifact_member
+    artifact.parent.mkdir(exist_ok=True)
+    artifact.write_bytes(b"synthetic historical artifact\x00\xff")
+    originals = {
+        member: read_file(source, member)
+        for member in ("project.json", session_member, artifact_member)
+    }
+    migrated = migrate_project(source)
+    assert all(read_file(migrated.path, name) == raw for name, raw in originals.items())
+    assert all(read_file(source, name) == raw for name, raw in originals.items())
+    assert migrated.project == inspect_project(source).project
+    sessions = research_sessions.list_sessions(migrated.path)
+    assert len(sessions) == 1 and sessions[0]["id"] == session_id
+    assert sessions[0]["artifacts"] == result["artifacts"]
+
+    # Exercise the pre-compression v1 import path using the accepted session,
+    # not a fabricated empty record. Import may rekey session identity, but
+    # must preserve the accepted evidence and retain lineage to the source.
+    legacy = {
+        "format": "sigma.project.bundle",
+        "version": 1,
+        "files": {name: base64.b64encode(raw).decode() for name, raw in originals.items()},
+    }
+    imported = root / "legacy-history-import.json"
+    import_bundle(legacy, imported)
+    assert read_file(imported, artifact_member) == originals[artifact_member]
+    assert inspect_project(imported).project.id == migrated.project.id
+    sessions = research_sessions.list_sessions(str(imported))
+    assert len(sessions) == 1 and sessions[0]["id"] != session_id
+    saved = research_sessions._read(str(imported), sessions[0]["id"])
+    assert saved["source_session_id"] == session_id
+    assert len(saved["artifacts"]) == 1
+    actual, expected = saved["artifacts"][0], result["artifacts"][0]
+    for field in ("id", "claim_or_question", "reasoning_steps", "skeptic_output"):
+        assert actual[field] == expected[field], field
+    assert all(read_file(source, name) == raw for name, raw in originals.items())
+    print("PASS legacy migration and v1 import preserve accepted history and original bytes")
 
 
 def main() -> None:
@@ -244,6 +326,7 @@ def main() -> None:
             "SIGMA_STATE_DIR": str(root / "state"),
             "SIGMA_PROJECTS_ROOT": str(root / "projects"),
             "SIGMA_AUTH_HOME": str(root / "auth"),
+            "SIGMA_CLOUD_AUTH_ENABLED": "false",
             "SIGMA_REFERENCE_COMPILATION_ENABLED": "false",
         }
         for name in ("state", "projects", "auth"):
