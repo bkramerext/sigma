@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: YELLOW
-Message: 003
-Status: FINAL OPERATOR FEEDBACK AND ACCEPTANCE HANDOFF
+Message: 004
+Status: FINAL FORMATTING CORRECTION — PR #934
 Ticket: #931 https://github.com/bkramerext/sigma/issues/931
 Scope: T5 — Existing About Box architecture
 Branch: yellow/remedy-931
 
-Read the entire GitHub issue, including comments. Acknowledge message 003 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 004 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -20,3 +20,6 @@ Open a reviewable PR early once the code and local checks warrant it. Report R4R
 MESSAGE 003 — COORDINATOR DIRECTIVE
 Your current 5442368e all five workflows PASS. Operator accepted visual diagram and requested distinction between information architecture and process, as recorded in #931. Existing diagram stays unchanged; implement only remaining requested section labels/prose (Research Information Architecture, Multi-Agent Research Process, Vision for Investigation Provenance; mixed information/control allowed, not mandatory sequential flow). If already implemented in uncommitted work, recover and publish on same PR rather than duplicate. Ensure existing real Chrome About acceptance verifies exact approved headings and visual invariants; no new functionality or redesign. Record operator feedback, screenshots and actual verification evidence in #931/PR, R4R with exact head and CI. No self-merge.
 Acknowledge 003 and execute outstanding authorized work. No direct worker coordination, paid calls, gate weakening or self-merge.
+
+MESSAGE 004 — COORDINATOR DIRECTIVE
+All six b160f4bd workflows terminal: five functional workflows PASS including full browser, SIGMA, frontend, project types and storage/migration. Ruff lint PASS; formatting only fails in two files, job 141062731094. Apply exact pinned formatter diffs only; preserve operator-approved SVG and prose and all tests. Independent source review 6099409409 found V1–V6 met at this head; fresh current-head CI required after formatting. Update handoff, report R4R, no self-merge or unrelated work. Acknowledge 004 and execute immediately. No live calls or gate weakening. Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox.
