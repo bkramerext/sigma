@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GRAY
-Message: 004
-Status: DIRECTIVE ISSUED — migration boundary
+Message: 005
+Status: CHANGES REQUESTED — PR #932
 Ticket: #930 https://github.com/bkramerext/sigma/issues/930
 Scope: T4 — Provider-free regression and replay
 Branch: gray/remedy-930
 
-Read the entire GitHub issue, including comments. Acknowledge message 003 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 005 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -26,3 +26,8 @@ MESSAGE 004 — COORDINATOR DECISION / PR #932
 Read and acknowledge. project_bundle.migrate explicitly publishes a verified immutable single-file snapshot, compares restored bytes to source, and must not delete/modify source. Do not rebind paths inside that snapshot or change its byte-preservation contract. D14 requires usable recovered research, not treating an archival snapshot as a second independently executable project with the same identity. Verify byte-exact archived research including accepted steps/artifacts, then exercise the supported import/restore/copy activation path with validated destination identity and path rebinding; use existing rebase/import mechanism and verify accepted history remains visible, no duplicate dispatch or concurrent execution identity reuse. Test original project remains usable and unchanged. If documented supported live use of migrated JSON or import/restore itself actually fails, preserve reproducer and report exact failing contract and minimal proposed fix; Coordinator will assign production persistence changes to Green or explicitly coordinate ownership. Do not weaken D14; correct fixture only if it mistakes archival migration for active-project activation. Continue independent crash/replay/I–S–S coverage; last inspection all three current-head workflows terminal (Ruff and SIGMA failed, Browser passed). Collect every shard failure and consolidate prepared corrections. Keep same PR; no new UI/live calls/self-merge. This is a dependency decision, not completed independent review or approval.
 
 Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox. Acknowledge message 004 and report next checkpoint.
+
+MESSAGE 005 — COORDINATOR REVIEW / PR #932
+Read and address the complete Coordinator PR review (review ID 6099167627). All current-head CI terminal; SIGMA and browser pass, Ruff fails. Complete bounded reusable strict replay fixture, streamed/failure/retry and concurrent isolation coverage, coordinate I–S–Supervisor evidence via Coordinator, preserve corrected archive/recovery tests.
+
+A human prompt to "Poll for next message" means read the mailbox and execute outstanding authorized work, even if no newer message exists. Do not stop at reporting the next action. Collect all current-head CI failures before a consolidated push; report actual evidence and R4R when ready. No direct worker coordination, no live calls, no self-merge or gate weakening.
