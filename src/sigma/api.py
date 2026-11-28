@@ -717,6 +717,7 @@ class ResearchExecutionRequest(OpenRequest):
 
 class ResearchLimitsRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
+    default_turn_limit: int | None = Field(default=None, ge=1, le=1200)
     research_rounds: int = Field(ge=1, le=60)
     turns_per_round: int | None = Field(default=None, ge=1, le=20)
     scheduler_version: Literal[2] | None = None
