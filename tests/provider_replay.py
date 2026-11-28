@@ -454,6 +454,41 @@ def fixed_scheduler_clock(timestamp: str) -> type[datetime]:
     return SchedulerClock
 
 
+@contextmanager
+def fixed_attempt_clock(duration: float):
+    """Patch only RED's persisted attempt clock, when the contract is present."""
+    from sigma import research_sessions
+
+    if not hasattr(research_sessions, "_provider_attempt_clock"):
+        yield False
+        return
+    # Each worker task owns its own counter; overlapping provider calls cannot
+    # advance another task's interval. Exact binary fractions avoid rounding drift.
+    ticks: dict[asyncio.Task | None, int] = {}
+
+    def now() -> float:
+        task = asyncio.current_task()
+        tick = ticks.get(task, 0)
+        ticks[task] = tick + 1
+        return 100.0 + tick * duration
+
+    with patch.object(research_sessions, "_provider_attempt_clock", side_effect=now):
+        yield True
+    assert ticks and all(count % 2 == 0 for count in ticks.values())
+
+
+def assert_attempt_timing(result: dict, duration: float, *, enabled: bool) -> None:
+    observability = result["outcome"]["metrics"].get("observability", {})
+    if not enabled:
+        assert "provider_attempt_seconds" not in observability, (
+            "Integrated attempt metrics require the shared provider clock seam"
+        )
+        return
+    steps = result["steps"]
+    assert steps and all(step["provider_attempt_duration_seconds"] == duration for step in steps)
+    assert observability["provider_attempt_seconds"] == duration * len(steps)
+
+
 async def production_replay(root: Path) -> None:
     from research_sessions import investigation, provider_response, setup, skeptic, wait_for
 
@@ -483,7 +518,7 @@ async def production_replay(root: Path) -> None:
     fixed_time = research_sessions._now()
     key = str(uuid4())
 
-    async def run(path: Path, handler):
+    async def run(path: Path, handler, *, duration=0.125):
         ids = itertools.count(1)
         with (
             patch.object(
@@ -491,12 +526,14 @@ async def production_replay(root: Path) -> None:
             ),
             patch.object(research_sessions, "datetime", fixed_scheduler_clock(fixed_time)),
             synthetic_transport(credential, config, handler),
+            fixed_attempt_clock(duration) as timing_enabled,
         ):
             started = await research_sessions.start_session(
                 str(path), strategy.id, key, view.project.id, credential["identity"]
             )
             finished = await wait_for(path, started["id"])
             session_log.flush()
+            assert_attempt_timing(finished, duration, enabled=timing_enabled)
             return finished
 
     original = await run(recorded_path, record)
@@ -511,6 +548,28 @@ async def production_replay(root: Path) -> None:
         assert len(result["artifacts"]) == 1
         assert [step["role"] for step in result["steps"]] == ["investigator", "skeptic"]
     assert_accepted_equivalence(original, repeated)
+    if hasattr(research_sessions, "_provider_attempt_clock"):
+        timing_path = root / "timedrep.sigma"
+        shutil.copytree(baseline, timing_path)
+        timing_replay = StrictReplay(decode_tape(fixture_path.read_bytes()))
+        changed = await run(timing_path, timing_replay, duration=0.5)
+        timing_replay.assert_complete()
+        assert changed["calls_used"] == original["calls_used"]
+        assert changed["status"] == original["status"]
+        assert [step["provider_input_audit"]["request_body_sha256"] for step in changed["steps"]] == [
+            item.request_sha256 for item in tape
+        ]
+        differences = outcome_difference_paths(original["outcome"], changed["outcome"])
+        assert "outcome.metrics.observability.provider_attempt_seconds" in differences, differences
+        try:
+            assert_accepted_equivalence(original, changed)
+        except AssertionError as exc:
+            assert "outcome.metrics.observability.provider_attempt_seconds" in str(exc), str(exc)
+        else:
+            raise AssertionError("Strict replay accepted changed provider timing")
+        print("PASS actual persisted provider timing drift rejected by strict outcome equality")
+    else:
+        print("UNVERIFIED integrated attempt clock: RED seam not present on standalone head")
     assert [step["provider_input_audit"]["request_body_sha256"] for step in original["steps"]] == [
         item.request_sha256 for item in tape
     ]
@@ -772,11 +831,14 @@ async def parallel_stream_replay(root: Path) -> None:
             patch.object(research_sessions, "uuid4", side_effect=deterministic_uuid),
             patch.object(research_sessions, "datetime", fixed_scheduler_clock(fixed_time)),
             synthetic_transport(credential, config, overlap),
+            fixed_attempt_clock(0.125) as timing_enabled,
         ):
             results = await asyncio.gather(
                 *(session(index, item) for index, item in enumerate(baselines))
             )
             session_log.flush()
+            for result in results:
+                assert_attempt_timing(result, 0.125, enabled=timing_enabled)
         assert overlapping.is_set()
         return results
 
