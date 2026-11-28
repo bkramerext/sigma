@@ -794,6 +794,18 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _provider_attempt_clock() -> float:
+    """Monotonic observation of persisted attempt intervals; not a deadline clock."""
+    return time.monotonic()
+
+
+def _provider_attempt_elapsed(started: float | None) -> float | None:
+    if started is None:
+        return None
+    elapsed = _provider_attempt_clock() - started
+    return round(elapsed, 3) if math.isfinite(elapsed) and elapsed >= 0 else None
+
+
 def _digest(value: bytes | str) -> str:
     return hashlib.sha256(value if isinstance(value, bytes) else value.encode()).hexdigest()
 
@@ -2480,7 +2492,8 @@ def _outcome_metrics(
         failure_kind = step.get("failure_kind")
         http_status = step.get("provider_http_status")
         if step.get("attempt_status") in ("preparing", "reserved") and status in (
-            "completed", "incomplete",
+            "completed",
+            "incomplete",
         ):
             bucket = "status unavailable"
         elif status == "completed":
@@ -8873,7 +8886,7 @@ async def _call_provider(
         _call_timeout_seconds(record),
     )
     _sponsor_inference_diagnostic(record, "request_attempted")
-    context["_provider_attempt_started_monotonic"] = time.monotonic()
+    context["_provider_attempt_started_monotonic"] = _provider_attempt_clock()
 
     from sigma import model_dispatch
 
@@ -9368,7 +9381,7 @@ async def _call(
     finally:
         started = context.pop("_provider_attempt_started_monotonic", None)
         if type(started) is float:
-            context["_provider_attempt_duration_seconds"] = round(time.monotonic() - started, 3)
+            context["_provider_attempt_duration_seconds"] = _provider_attempt_elapsed(started)
     _sponsor_inference_diagnostic(record, "response_completed")
     return result
 
@@ -15335,7 +15348,7 @@ async def _portfolio_supervisor_call(
                 )
                 review["attempt_status"] = "dispatched_unknown"
                 _save(path, record)
-            provider_started = time.monotonic()
+            provider_started = _provider_attempt_clock()
             raw = await chat.respond(
                 speaker="supervisor",
                 messages=pair,
@@ -15387,11 +15400,7 @@ async def _portfolio_supervisor_call(
             elif isinstance(exc, (TimeoutError, httpx.TimeoutException)):
                 failure_fields["failure_kind"] = "timeout"
         finally:
-            provider_duration = (
-                round(time.monotonic() - provider_started, 3)
-                if provider_started is not None
-                else None
-            )
+            provider_duration = _provider_attempt_elapsed(provider_started)
             async with state_lock:
                 record = _read(path, session_id)
                 review = next(
@@ -17000,7 +17009,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         # The timeout expression is evaluated after the existing global gate
         # is acquired. Its context manager and timeout remain unchanged.
         nonlocal provider_started
-        provider_started = time.monotonic()
+        provider_started = _provider_attempt_clock()
         return asyncio.timeout(seconds)
 
     try:
@@ -17010,7 +17019,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         from sigma import model_dispatch
 
         async with _portfolio_global_gate(session_id):
-            provider_started = time.monotonic()
+            provider_started = _provider_attempt_clock()
             personal_raw = await model_dispatch.private_response_if_selected(
                 credential,
                 payload,
@@ -17153,9 +17162,7 @@ async def _ensure_reference_compilation(session_id: str, path: str) -> bool:
         if isinstance(exc, asyncio.CancelledError):
             raise
     finally:
-        provider_duration = (
-            round(time.monotonic() - provider_started, 3) if provider_started is not None else None
-        )
+        provider_duration = _provider_attempt_elapsed(provider_started)
         async with state_lock:
             latest = _read(path, session_id)
             stage = latest.get("reference_compilation")

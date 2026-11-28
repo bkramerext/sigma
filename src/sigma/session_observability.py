@@ -186,9 +186,7 @@ def _audit_evidence(value: Any) -> dict[str, Any]:
 
 def _aliases(row: dict[str, Any]) -> set[str]:
     aliases = {
-        value
-        for key in ("id", "attempt_id")
-        if isinstance(value := row.get(key), str) and value
+        value for key in ("id", "attempt_id") if isinstance(value := row.get(key), str) and value
     }
     saved = row.get("observability_aliases")
     if row.get("observability_conflict") and isinstance(saved, list):
@@ -570,9 +568,7 @@ def accepted_counts(
     }
 
 
-def reported_usage(
-    row: dict[str, Any], *, simulated: bool = False
-) -> dict[str, int | None] | None:
+def reported_usage(row: dict[str, Any], *, simulated: bool = False) -> dict[str, int | None] | None:
     if (
         simulated
         or row.get("simulated") is True

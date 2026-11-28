@@ -586,6 +586,11 @@ async def test_clipped_investigator_automatically_recovers(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions,
+            "_provider_attempt_clock",
+            side_effect=[10.0, 10.25, 20.0, 20.25, 30.0, 30.25],
+        ) as attempt_clock,
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -597,7 +602,12 @@ async def test_clipped_investigator_automatically_recovers(path: Path):
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
         finished = await wait_for(path, started["id"])
+    assert attempt_clock.call_count == 6
     assert len(submitted) == 3
+    saved = research_sessions._read(str(path), started["id"])
+    for snapshot in (finished, saved):
+        durations = [step["provider_attempt_duration_seconds"] for step in snapshot["steps"]]
+        assert durations == [0.25, 0.25, 0.25]
     assert finished["calls_used"] == 3
     assert [step["status"] for step in finished["steps"]] == [
         "incomplete",
@@ -721,6 +731,7 @@ async def test_pause_counts_interrupted_call(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_provider_attempt_clock", side_effect=[10.0, 11.25]),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -742,6 +753,8 @@ async def test_pause_counts_interrupted_call(path: Path):
         paused = research_sessions.get_session(str(path), started["id"])
     assert paused["status"] == "paused" and paused["calls_used"] == 1
     assert paused["steps"][-1]["status"] == "interrupted"
+    if paused.get("scheduler_version") == 2:
+        assert paused["steps"][-1]["provider_attempt_duration_seconds"] == 1.25
     paused_metrics = {
         item["label"]: item["value"] for item in paused["outcome"]["metrics"]["operational"]
     }
@@ -759,6 +772,7 @@ async def test_pause_counts_interrupted_call(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_provider_attempt_clock", side_effect=[20.0, 22.5]),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -775,6 +789,8 @@ async def test_pause_counts_interrupted_call(path: Path):
         await asyncio.sleep(0.02)
         stopped = research_sessions.get_session(str(path), started["id"])
         assert stopped["calls_used"] == 2 and stopped["steps"][-1]["status"] == "interrupted"
+        if stopped.get("scheduler_version") == 2:
+            assert stopped["steps"][-1]["provider_attempt_duration_seconds"] == 2.5
         stopped_metrics = {
             item["label"]: item["value"] for item in stopped["outcome"]["metrics"]["operational"]
         }
@@ -1298,6 +1314,9 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(cloud_research, "billing_enabled", return_value=False),
         patch.object(chat, "respond", new=AsyncMock(return_value=raw)) as respond,
+        patch.object(
+            research_sessions, "_provider_attempt_clock", side_effect=[10.0, 10.5]
+        ) as clock,
         patch.object(chat, "_response_text", side_effect=ProjectError("fixture invalid review")),
     ):
         await research_sessions._portfolio_supervisor_call(
@@ -1305,6 +1324,7 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
         )
         review = supervision["supervisor_reviews"][0]
         assert review["status"] == "failed" and review["attempt_status"] == "settled"
+        assert review["provider_attempt_duration_seconds"] == 0.5
         assert review["token_usage"] == {"input_tokens": 7, "output_tokens": 2}
         assert review["observed_cache_metadata_status"] == "malformed"
         assert review["execution_settings"]["supervisor_mode"] == "none"
@@ -1317,7 +1337,13 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
             "fixture", str(path), strategy.id, 2, asyncio.Lock()
         )
         assert respond.await_count == 1
+        assert clock.call_count == 2
         assert supervision["supervisor_reviews"][-1]["status"] == "skipped_budget"
+    with patch.object(research_sessions, "_provider_attempt_clock", return_value=1.0) as clock:
+        assert research_sessions._provider_attempt_elapsed(None) is None
+        clock.assert_not_called()
+        assert research_sessions._provider_attempt_elapsed(2.0) is None
+        assert research_sessions._provider_attempt_elapsed(float("nan")) is None
 
 
 async def test_prior_obligation_reference_compaction_keeps_text_and_traceability(path: Path):

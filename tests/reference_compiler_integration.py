@@ -14,6 +14,7 @@ import json
 import os
 import sys
 from contextlib import nullcontext
+from itertools import count
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -225,8 +226,14 @@ async def verify_compilation(
             raise AssertionError(f"Unexpected provider request: {name}")
         return httpx.Response(200, json=fixture.provider_response(result))
 
+    attempt_ticks = count(100)
     with (
         patch.dict(os.environ, {"SIGMA_REFERENCE_COMPILATION_ENABLED": "true"}),
+        patch.object(
+            research_sessions,
+            "_provider_attempt_clock",
+            side_effect=lambda: next(attempt_ticks) / 4,
+        ),
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch.object(research_sessions, "select_method_sources", return_value=source_catalog),
@@ -355,7 +362,7 @@ async def verify_compilation(
             assert attempt["reasoning_effort"] == "low"
             assert "backend_build_commit" in attempt
             assert attempt["execution_settings"]["mode"] == credential["mode"]
-            assert attempt["provider_attempt_duration_seconds"] >= 0
+            assert attempt["provider_attempt_duration_seconds"] == 0.25
         observation = finished["outcome"]["metrics"]["observability"]
         assert observation["recorded_attempts"] == len(finished["steps"]) + expected_compiler_count
         if compiler_retry_scenario in {"rate_limit_then_success", "invalid_then_success"}:
