@@ -1667,6 +1667,7 @@ async def paper_generate_view(body: PaperGenerateRequest, request: Request):
 class GlobalResearchSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     limits: dict[str, Any] | None = None
+    default_turn_limit: int | None = Field(default=None, ge=1, le=1200)
     ai_model: str | None = Field(default=None, min_length=1, max_length=128)
     reasoning_effort: str | None = Field(default=None, min_length=1, max_length=40)
     show_advanced_outcome_details: bool | None = None
@@ -1759,8 +1760,15 @@ def recover_invalid_research_ethos():
 @app.get("/api/projects/research-limits")
 def research_limits_view(path: str):
     inspect_project(path)
-    limits = research_sessions._new_session_limits(research_sessions.get_limits(path))
-    return {**limits, "max_concurrent_sessions": str(limits["max_concurrent_sessions"])}
+    from sigma import global_research_settings
+
+    config = global_research_settings.load_config()
+    limits = research_sessions._new_session_limits(config["limits"])
+    return {
+        **limits,
+        "max_concurrent_sessions": str(limits["max_concurrent_sessions"]),
+        "default_turn_limit": config["default_turn_limit"],
+    }
 
 
 @app.put("/api/projects/research-limits")
