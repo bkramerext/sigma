@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GREEN
-Message: 005
-Status: CHANGES REQUESTED — PR #933
+Message: 006
+Status: CHANGES REQUESTED — bounded diagnostic capture
 Ticket: #928 https://github.com/bkramerext/sigma/issues/928
 Scope: T2 — Complete, safe diagnostic exports
 Branch: green/remedy-928
 
-Read the entire GitHub issue, including comments. Acknowledge message 004 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 006 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -46,3 +46,7 @@ MESSAGE 005 — COORDINATOR REVIEW / PR #933
 Read the Coordinator's re-review on PR #933 (review ID 6099144421, reviewed head 40b69648). Further focused acceptance work required. The complete numbered review is authoritative. Substantial earlier corrections accepted at source level; do not reopen resolved design issues. Complete authenticated nonempty diagnostic API import/re-export and same-workspace Save As/clone-log tests, privacy/authorization/identity and actual recorder/audit fidelity evidence, bounded passive ownership/read and malformed mapping edge cases, representative mixed-entropy resource measurement (native RSS if available or analytical bound plus allocations). Explicitly track combined T1/T3/T4/Purple verification. Prior substantive head passed all except formatting; current formatting-only head passed Ruff at inspection, remaining jobs pending. If tests/evidence satisfy a criterion without code changes, avoid churn. Collect all failures before a consolidated push. No new UI, live calls, weakened gates or self-merge. Report R4R with explicit dispositions.
 
 Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox. Acknowledge message 005 and continue on existing PR #933.
+
+MESSAGE 006 — COORDINATOR DIRECTIVE
+Current substantive verification passed; browser retry failed research_qa.py:415 again (141053524026), Coordinator-owned. Second-pass source finding: capture in project_diagnostic_bundle.py calls session_log._frames(target) which stat/opens and reads entire file unbounded after lstat, then separately opens for marker count. Race/replacement/growth can bypass claimed read bound or mismatch snapshots. Authorized narrow extraction of existing frame parser to accept raw bounded bytes (preserve normal _frames behavior and cursor semantics, no transcript projection changes); capture use one no-follow regular-file descriptor, fstat ownership/mode/identity/size checks, bounded read, parse and count same bytes, detect changed snapshot and label partial or reject unsafe path. Test growing/replaced log, torn frames and stable snapshot; preserve legacy frames, no global blocking/large refactor. Blue owns transcript projection; no direct contact, report shared file change to Coordinator. Verify audit lineage fields from Purple and Red are preserved through durable records and permitted event projection, note combined tests pending. Collect all CI and handoff; no self-merge or unrelated UI changes.
+Acknowledge message 006; a human prompt to Poll for next message means execute outstanding authorized work. No direct worker coordination or gate weakening.
