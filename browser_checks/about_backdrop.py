@@ -57,13 +57,22 @@ with sync_playwright() as playwright:
             "Save contributions",
         ):
             expect(diagram.locator("text").filter(has_text=label)).to_have_count(1)
+        context_card = diagram.locator("g").filter(
+            has=page.locator("text", has_text="Context Selection")
+        )
+        record_card = diagram.locator("g").filter(
+            has=page.locator("text", has_text="Persistent Research")
+        )
+        assert float(context_card.locator("rect").get_attribute("x")) < float(
+            record_card.locator("rect").get_attribute("x")
+        )
         # These routes connect the record, context, participants, and both projections.
         for route in (
-            "M242 175 H286",
-            "M381 235 V280",
-            "M286 438 H269 V218 H242",
-            "M133 235 V315",
-            "M24 215 H10 V455 H24",
+            "M258 175 H214",
+            "M119 235 V280",
+            "M214 438 H231 V218 H258",
+            "M367 235 V315",
+            "M476 215 H490 V455 H476",
         ):
             expect(diagram.locator(f'path[d="{route}"][marker-end]')).to_have_count(1)
         expect(overview).to_contain_text("not a new database or a collection of verified truths")
