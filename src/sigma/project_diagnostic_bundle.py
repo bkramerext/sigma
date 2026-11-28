@@ -410,20 +410,21 @@ def read_passive(
 ) -> dict[str, bytes]:
     """Read existing passive snapshots without rereading durable directory members."""
     base = source / "diagnostics"
-    if source.suffix == ".sigma" and not os.path.lexists(base):
+    directory_source = source.suffix == ".sigma" or source.is_dir()
+    if directory_source and not os.path.lexists(base):
         return {}
     if members is None:
-        if source.suffix == ".sigma":
+        if directory_source:
             members = project_bundle._files(source, include_private=False)
         else:
             members = project_bundle._decode(project_bundle.read_bundle(source))
-    if source.suffix != ".sigma" and not any(
+    if not directory_source and not any(
         project_bundle.private_diagnostic_member(name) for name in members
     ):
         return {}
     _, session_ids = _session_ids(members)
     passive: dict[str, bytes] = {}
-    if source.suffix != ".sigma":
+    if not directory_source:
         for name, raw in members.items():
             if project_bundle.private_diagnostic_member(name):
                 session_id, digest = _path_parts(name)
@@ -464,7 +465,10 @@ def read_passive(
                 or len(passive) >= MAX_SNAPSHOTS
             ):
                 raise BundleError("Unsafe or oversized passive diagnostic member")
-            fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            except OSError as exc:
+                raise BundleError("Passive diagnostic member changed before open") from exc
             with os.fdopen(fd, "rb") as stream:
                 opened = os.fstat(stream.fileno())
                 if (
@@ -476,6 +480,20 @@ def read_passive(
                 ):
                     raise BundleError("Passive diagnostic member changed before read")
                 raw = stream.read(info.st_size + 1)
+                after = os.fstat(stream.fileno())
+                try:
+                    current = target.lstat()
+                except FileNotFoundError as exc:
+                    raise BundleError("Passive diagnostic member disappeared") from exc
+                for observed in (after, current):
+                    if (
+                        not stat.S_ISREG(observed.st_mode)
+                        or observed.st_uid != os.geteuid()
+                        or observed.st_mode & 0o077
+                        or (observed.st_dev, observed.st_ino, observed.st_size, observed.st_mtime_ns)
+                        != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+                    ):
+                        raise BundleError("Passive diagnostic member changed during read")
             if len(raw) != info.st_size or hashlib.sha256(raw).hexdigest() != digest:
                 raise BundleError("Passive diagnostic member changed or failed integrity check")
             _add(passive, session_id, raw, budget=budget)

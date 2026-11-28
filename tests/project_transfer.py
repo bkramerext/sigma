@@ -6,6 +6,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import tarfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -282,6 +283,33 @@ def test_private_diagnostic_roundtrip() -> None:
             assert "diagnostics" not in json.loads(project_transfer.export_project(imported))
         finally:
             passive_file.chmod(0o600)
+        assert project_bundle._decode(project_bundle.snapshot(imported))[
+            passive_file.relative_to(imported).as_posix()
+        ] == raw
+        real_open = os.open
+        saved_file = passive_file.with_suffix(".saved")
+
+        def replace_with_fifo(path, flags, *args, **kwargs):
+            if Path(path) == passive_file:
+                # Assert before attempting open: a regression cannot hang the test.
+                assert flags & os.O_NONBLOCK
+                passive_file.rename(saved_file)
+                os.mkfifo(passive_file, 0o600)
+            return real_open(path, flags, *args, **kwargs)
+
+        for operation in (
+            lambda: project_transfer.export_project(imported, diagnostics=True),
+            lambda: project_bundle.snapshot(imported),
+        ):
+            try:
+                with patch.object(os, "open", side_effect=replace_with_fifo):
+                    _expect_failure(operation)
+            finally:
+                if saved_file.exists():
+                    passive_file.unlink()
+                    saved_file.rename(passive_file)
+        assert passive_file.read_bytes() == raw
+        assert "diagnostics" not in json.loads(project_transfer.export_project(imported))
         assert session_id not in again["diagnostics"]["sessions"]
         assert len(again["diagnostics"]["sessions"]) == 1
         assert not (root / ".sigma-session-logs" / inspect_project(imported).project.id).exists()

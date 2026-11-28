@@ -58,7 +58,8 @@ def _files(directory: Path, *, include_private: bool = True) -> dict[str, bytes]
     for root, dirs, files in os.walk(directory, followlinks=False):
         dirs.sort()
         files.sort()
-        if not include_private and Path(root) == directory:
+        if Path(root) == directory:
+            # Private members use their own bounded, validated descriptor read.
             dirs[:] = [name for name in dirs if name != "diagnostics"]
             files = [name for name in files if name != "diagnostics"]
         if any(name in files for name in dirs):
@@ -90,6 +91,14 @@ def _files(directory: Path, *, include_private: bool = True) -> dict[str, bytes]
         raise BundleError("Invalid source project schema")
     if not 1 <= document["schema_version"] <= 13:
         raise BundleError("Unsupported source project schema")
+    if include_private and os.path.lexists(directory / "diagnostics"):
+        from sigma import project_diagnostic_bundle
+
+        entries.update(
+            project_diagnostic_bundle.read_passive(
+                directory, entries, budget=MAX_BUNDLE_BYTES - total_size
+            )
+        )
     return entries
 
 
