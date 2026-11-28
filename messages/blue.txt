@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: BLUE
-Message: 007
-Status: CHANGES REQUESTED — final formatting and review handoff
+Message: 008
+Status: CHANGES REQUIRED — cross-language accepted response representation
 Ticket: #927 https://github.com/bkramerext/sigma/issues/927
 Scope: T1 — Transcript integrity and reconciliation
 Branch: blue/remedy-927
 
-Read the entire GitHub issue, including comments. Acknowledge message 007 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 008 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -49,3 +49,7 @@ All seven current-head CI workflows passed. Read complete Coordinator review 609
 MESSAGE 007 — COORDINATOR DIRECTIVE
 All 31bed91d CI terminal: six workflows PASS including SIGMA/browser, Ruff lint PASS but format failure job 141055761649. Apply exact pinned formatter diff only unless independently discovered material defect; report actual held-open production fixture execution and TS/Python parity evidence by job and assertions. Preserve changes to live-attempt qualification and contradictory Supervisor IDs. Update PR body to actual head and current requirement evidence. Green has Coordinator authorization for narrowly scoped bounded raw-log parser extraction in session_log.py (no changes to transcript projection); do not duplicate or touch that parser. No self-merge. Continue immediately, then R4R.
 Acknowledge message 007; a human prompt to Poll for next message means execute outstanding authorized work. No direct worker coordination or gate weakening.
+
+MESSAGE 008 — COORDINATOR CONVERGENCE REVIEW
+Read review 6099409730 at f852ca14. Current browser only failure is shared Q/A geometry, Gray owns correction. Independently address realizable Python-vs-JS JSON numeric/key formatting causing exact bound accepted raw text vs saved text mismatch; prove on real allowed schema and same snapshot with provider-free fixtures. Preserve strict identity and semantic content checks, no false acceptance, paid conversion, or pending regressions. If case impossible for real response shape prove it and avoid needless changes. Record potential shared _session_log_attribution and Purple final wire/audit integration dependency to Coordinator. Do not edit other workers' areas.
+Acknowledge 008 and execute immediately. Collect all current-head CI failures before one consolidated push; no paid calls, gate weakening or self-merge. Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox.
