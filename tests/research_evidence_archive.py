@@ -28,6 +28,7 @@ from sigma.research_evidence_catalog import (
     Catalog,
     EvidenceContext,
     artifact_permissions,
+    audit_inventory,
     build_catalog,
     citable,
     step_permissions,
@@ -253,15 +254,32 @@ def _reconstruct_context(
     # Build only from session-start fields; dynamic fields come from the exact
     # original request or timestamp-validated accepted preceding role.
     frozen_fields = (
-        "id", "project_id", "problem", "desired_outcomes", "model", "reasoning_effort",
-        "investigation_type", "research_method_version", "research_method_sources",
-        "research_method_references", "research_method_reference_urls", "project_type_snapshot",
-        "use_saved_project_type_settings", "strategy_snapshot", "prior_session_findings",
-        "prior_session_obligations", "prior_session_failures", "prior_session_findings_omitted",
-        "prior_session_findings_omitted_source_ids", "prior_session_obligations_omitted",
-        "prior_session_obligation_omitted_ids", "prior_session_obligation_omitted_by_strategy",
-        "prior_session_obligation_omitted_ids_by_strategy", "prior_session_failures_omitted",
-        "prior_session_failure_omitted_attempt_ids", "research_context_version",
+        "id",
+        "project_id",
+        "problem",
+        "desired_outcomes",
+        "model",
+        "reasoning_effort",
+        "investigation_type",
+        "research_method_version",
+        "research_method_sources",
+        "research_method_references",
+        "research_method_reference_urls",
+        "project_type_snapshot",
+        "use_saved_project_type_settings",
+        "strategy_snapshot",
+        "prior_session_findings",
+        "prior_session_obligations",
+        "prior_session_failures",
+        "prior_session_findings_omitted",
+        "prior_session_findings_omitted_source_ids",
+        "prior_session_obligations_omitted",
+        "prior_session_obligation_omitted_ids",
+        "prior_session_obligation_omitted_by_strategy",
+        "prior_session_obligation_omitted_ids_by_strategy",
+        "prior_session_failures_omitted",
+        "prior_session_failure_omitted_attempt_ids",
+        "research_context_version",
         "obligation_id_format",
     )
     record = {key: deepcopy(session[key]) for key in frozen_fields if key in session}
@@ -342,9 +360,9 @@ def _reconstruct_context(
             return None, "historical_file_inspection_checkpoint_unavailable"
 
     alias_map: dict[str, str] = {}
-    observed_ids = {
-        row["obligation_id"] for row in original.get("obligation_ledger", [])
-    } | set(original.get("obligation_ledger_omitted_ids", []))
+    observed_ids = {row["obligation_id"] for row in original.get("obligation_ledger", [])} | set(
+        original.get("obligation_ledger_omitted_ids", [])
+    )
     if record.get("obligation_id_format") == "compact-v1":
         raw_map = files.get("research-sessions/obligation-ids.json")
         if raw_map is None:
@@ -371,8 +389,7 @@ def _reconstruct_context(
             for field in ("human_guidance", "execution_tools", "supervisor_guidance"):
                 if field in original:
                     context[field] = deepcopy(original[field])
-            finalize_dispatch_evidence(context, limit=256_000)
-            research_sessions._refresh_context_manifest_bytes(context)
+            research_sessions._finalize_role_context(record, context)
     except (KeyError, TypeError, ValueError, ProjectError):
         return None, "historical_builder_inputs_incomplete"
     assert context["evidence_catalog"] == build_catalog(context)
@@ -391,15 +408,26 @@ async def _production_validate(
         "strategy_runs": [{"strategy_id": step["strategy_id"]}],
     }
     audit = research_sessions._role_input_audit(record, step["role"], context, None)
-    record["steps"] = [{
-        "id": step["id"], "status": "running", "role": step["role"],
-        "strategy_id": step["strategy_id"], "provider_input_audit": audit,
-    }]
+    record["steps"] = [
+        {
+            "id": step["id"],
+            "status": "running",
+            "role": step["role"],
+            "strategy_id": step["strategy_id"],
+            "provider_input_audit": audit,
+        }
+    ]
     response = AsyncMock(return_value=deepcopy(raw))
     with (
-        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value={
-            "mode": record["mode"], "token": "offline-fixture-token",
-        })),
+        patch.object(
+            research_sessions,
+            "auth_context",
+            new=AsyncMock(
+                return_value={
+                    "mode": record["mode"], "token": "offline-fixture-token",
+                }
+            ),
+        ),
         patch.object(model_dispatch, "private_response_if_selected", new=response),
         patch.object(httpx, "AsyncClient", side_effect=AssertionError("Network forbidden")),
         patch.object(research_sessions, "_require_current_local_backend", return_value=None),
@@ -479,6 +507,7 @@ def verify_frozen_evidence_archive() -> None:
         categories_before: Counter[str] = Counter()
         categories_after: Counter[str] = Counter()
         causal_replays = 0
+        reconstructed_audit_bytes = 0
         complete_before = complete_after = 0
         new_duties = new_coverage = new_peers = byte_delta = 0
         max_catalog_bytes = oversized = reference_passes = responses_checked = 0
@@ -541,6 +570,9 @@ def verify_frozen_evidence_archive() -> None:
                 selected = reconstructed if reconstructed is not None else revised
                 if reconstructed is not None:
                     causal_replays += 1
+                    reconstructed_audit_bytes += research_sessions._json_bytes(
+                        audit_inventory(reconstructed)
+                    )
                 result = asyncio.run(_production_validate(session, step, selected, row["response"]))
                 print(
                     f"EVIDENCE_ARCHIVE {subject['key']} causal={prefix_reason}/{reason} "
@@ -572,7 +604,8 @@ def verify_frozen_evidence_archive() -> None:
             f"->{new_coverage}/{new_duties} peer_arguments={original_peers}->{new_peers} "
             f"complete_actionable_basis={complete_before}->{complete_after} "
             f"aggregate_byte_delta={byte_delta} max_catalog_bytes={max_catalog_bytes} "
-            f"above_compaction_target={oversized} causal_builder_replays={causal_replays}; "
+            f"above_compaction_target={oversized} causal_builder_replays={causal_replays} "
+            f"reconstructed_lineage_bytes={reconstructed_audit_bytes}; "
             "historical outcomes unchanged"
         )
 

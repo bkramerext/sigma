@@ -4888,6 +4888,154 @@ def test_evidence_catalog_conflicts_and_incomplete_closure() -> None:
     assert not claim_only["current_investigator"]["closure_argument"]
 
 
+def test_computation_catalog_permissions_and_closure() -> None:
+    from sigma.research_evidence_catalog import EvidenceContext
+
+    execution = {
+        "id": "run",
+        "status": "completed",
+        "exit_code": 0,
+        "source_sha256": "a" * 64,
+        "source": "print(1)",
+        "stdout": "1",
+        "artifacts": [{"filename": "result.txt"}, {"filename": ""}],
+        "artifact_inspections": [
+            {"filename": "result.txt", "inspection": {"status": "available", "truncated": True}}
+        ],
+    }
+    peer = {
+        "artifact_id": "peer",
+        "strategy_id": "other",
+        "claim_or_question": "Candidate numerical observation",
+        "argument_extract": {"reasoning_steps": [{"argument": "Incomplete peer excerpt"}]},
+        "python_execution": execution,
+    }
+    context = EvidenceContext(
+        {
+            "scheduler_version": 2,
+            "context_manifest": {"sources": []},
+            "other_strategy_evidence": [peer],
+            "obligation_ledger": [{"obligation_id": "open", "status": "unresolved"}],
+        }
+    )
+    research_sessions.finalize_dispatch_evidence(context, limit=16_000)
+    permission = context["evidence_catalog"]["computations"][0]
+    assert permission["evidence"] == ["source", "output"]
+    assert permission["filenames"] == ["result.txt"]
+    assert permission["result_filenames"] == ["result.txt"]
+    assert permission["closure_output"] is True
+    assert permission["closure_filenames"] == []
+    assert not context["evidence_catalog"]["peer"]["peer"]["closure_argument"]
+    citation = {
+        "research_artifact_id": "peer",
+        "execution_id": "run",
+        "evidence": "output",
+        "filename": None,
+        "use": "result",
+    }
+    review = {"basis_artifact_ids": ["peer"], "basis_step_ids": []}
+    sources = {"peer": {**peer, "id": "peer"}}
+    research_sessions._validate_computation_citations(context, [citation])
+    assert research_sessions._catalog_addressed_basis(context, review, [citation], sources)
+    assert not research_sessions._catalog_addressed_basis(context, review, [], sources)
+    assert not research_sessions._catalog_addressed_basis(
+        context,
+        review,
+        [{**citation, "evidence": "artifact", "filename": "result.txt"}],
+        sources,
+    )
+    for invalid in (
+        {**citation, "evidence": "error"},
+        {**citation, "evidence": "artifact", "filename": "missing.txt"},
+    ):
+        try:
+            research_sessions._validate_computation_citations(context, [invalid])
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError("An absent computation field was citable")
+
+    empty = EvidenceContext(
+        {
+            "context_manifest": {"sources": []},
+            "investigator_output": {
+                "python_execution": {"id": "pending", "status": "running", "source": " "}
+            },
+        }
+    )
+    research_sessions.finalize_dispatch_evidence(empty, limit=16_000)
+    assert empty["evidence_catalog"]["computations"] == []
+    duplicate = EvidenceContext(
+        {
+            "context_manifest": {"sources": []},
+            "other_strategy_evidence": [
+                peer,
+                {
+                    **peer,
+                    "artifact_id": "other-peer",
+                    "python_execution": {**execution, "stdout": "Conflicting result"},
+                },
+            ],
+        }
+    )
+    research_sessions.finalize_dispatch_evidence(duplicate, limit=16_000)
+    assert duplicate["evidence_catalog"]["computations"] == []
+
+
+def test_long_history_evidence_audit_overhead() -> None:
+    import tracemalloc
+
+    from sigma.research_evidence_catalog import EvidenceContext, audit_inventory
+
+    notes = [f"Resolve independent condition {index}." for index in range(12)]
+    artifacts = [
+        {
+            "id": f"artifact-{index}",
+            "strategy_id": "strategy",
+            "session_id": "session",
+            "sequence": index,
+            "claim_or_question": f"Candidate {index}",
+            "method": "Bounded method " * 500,
+            "open_obligations": notes,
+        }
+        for index in range(54)
+    ]
+    snapshot = deepcopy(artifacts)
+    originals = []
+    started = time.monotonic()
+    tracemalloc.start()
+    try:
+        obligations, _, _ = research_sessions._obligation_ledger(
+            artifacts, audit_originals=originals
+        )
+        raw = {
+            "scheduler_version": 2,
+            "context_manifest": {"sources": []},
+            "prior_artifacts": artifacts,
+            "obligation_ledger": obligations,
+        }
+        context = EvidenceContext(raw)
+        context.original_obligations = originals
+        context.remember("own", artifacts)
+        research_sessions.finalize_dispatch_evidence(context, limit=256_000)
+        audit = audit_inventory(context)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    elapsed = time.monotonic() - started
+    assert artifacts == snapshot
+    assert len(audit["original_obligation_references"]) == len(notes)
+    for entry in audit["original_obligation_references"]:
+        known = entry["source_refs"] + entry.get("additional_known_source_refs", [])
+        assert {item["artifact_id"] for item in known} == {item["id"] for item in artifacts}
+    print(
+        f"EVIDENCE_LINEAGE_STRESS artifacts={len(artifacts)} obligations={len(notes)} "
+        f"lineage_bytes={research_sessions._json_bytes(audit)} "
+        f"final_context_bytes={research_sessions._json_bytes(context)} "
+        f"peak_allocated_bytes={peak} elapsed_seconds={elapsed:.3f}"
+    )
+
+
 def test_frozen_evidence_archive_reference_replay() -> None:
     from research_evidence_archive import verify_frozen_evidence_archive
 

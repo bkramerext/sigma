@@ -6,6 +6,7 @@ catalog is derived from supplied rows, not historical ID allowlists.
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from typing import Any, Literal, TypedDict
 
@@ -268,7 +269,8 @@ def _groups(context: dict[str, Any]) -> dict[Category, dict[str, Source]]:
     }
     groups: dict[Category, dict[str, Source]] = {
         category: _sources(
-            rows, "artifact_id" if category == "peer" else "id",
+            rows,
+            "artifact_id" if category == "peer" else "id",
             complete=category == "continuation",
         )
         for category, rows in raw.items()
@@ -311,6 +313,9 @@ def _groups(context: dict[str, Any]) -> dict[Category, dict[str, Source]]:
 def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
     """Return only actual non-pointer execution records in the supplied packet."""
     targets: dict[tuple[str | None, str], dict[str, Any]] = {}
+    conflicts: set[tuple[str | None, str]] = set()
+    execution_examples: dict[str, dict[str, Any]] = {}
+    conflicting_executions: set[str] = set()
     blocked = {
         identifier
         for group in _groups(context).values()
@@ -331,17 +336,37 @@ def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
                 isinstance(execution, dict)
                 and isinstance(execution.get("id"), str)
                 and isinstance(execution.get("status"), str)
-                and execution["status"] in {
-                    "completed", "failed", "error", "timeout", "timed_out",
-                    "interrupted", "cancelled", "blocked", "rejected",
-                    "unavailable", "running", "queued", "output_limit",
+                and execution["status"]
+                in {
+                    "completed",
+                    "failed",
+                    "error",
+                    "timeout",
+                    "timed_out",
+                    "interrupted",
+                    "cancelled",
+                    "blocked",
+                    "rejected",
+                    "unavailable",
+                    "running",
+                    "queued",
+                    "output_limit",
                 }
                 and execution.get("evidence_availability") != POINTER
             ):
-                targets[(artifact_id, execution["id"])] = {
-                    "research_artifact_id": artifact_id,
-                    "execution": execution,
-                }
+                key = (artifact_id, execution["id"])
+                example = execution_examples.setdefault(execution["id"], execution)
+                if not _compatible_executions(example, execution):
+                    conflicting_executions.add(execution["id"])
+                previous = targets.get(key)
+                if previous is not None and previous["execution"] != execution:
+                    # Different representations are safe only when the fields
+                    # that both actually supply agree (including bounded prefixes).
+                    if not _compatible_executions(previous["execution"], execution):
+                        conflicts.add(key)
+                    elif len(str(previous["execution"])) > len(str(execution)):
+                        continue
+                targets[key] = {"research_artifact_id": artifact_id, "execution": execution}
 
     for field, key in (
         ("prior_session_findings", "id"),
@@ -360,38 +385,106 @@ def computation_targets(context: dict[str, Any]) -> list[dict[str, Any]]:
             add(row["id"], row)
             add(row["id"], row.get("investigator_output"))
     add(None, context.get("investigator_output"))
-    return list(targets.values())
+    return [
+        target
+        for key, target in targets.items()
+        if key not in conflicts and key[1] not in conflicting_executions
+    ]
+
+
+def _compatible_executions(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    for field in ("status", "exit_code", "source_sha256", "source", "runtime", "strategy_id"):
+        if field in first and field in second and first[field] != second[field]:
+            return False
+    for field in ("stdout", "stderr"):
+        a, b = first.get(field), second.get(field)
+        if isinstance(a, str) and isinstance(b, str) and a != b:
+            if not (
+                (first.get(f"{field}_truncated") and b.startswith(a))
+                or (second.get(f"{field}_truncated") and a.startswith(b))
+            ):
+                return False
+    if "artifacts" in first and "artifacts" in second and first["artifacts"] != second["artifacts"]:
+        return False
+    return True
+
+
+def execution_permissions(execution: dict[str, Any]) -> dict[str, Any]:
+    """The same visible-field contract drives catalog and response validation."""
+
+    def visible(key: str) -> bool:
+        value = execution.get(key)
+        return isinstance(value, str) and bool(value.strip())
+
+    evidence = [
+        field
+        for field, available in (
+            ("source", visible("source")),
+            ("output", visible("stdout")),
+            ("error", visible("stderr") or visible("artifact_error")),
+        )
+        if available
+    ]
+    filenames = list(
+        dict.fromkeys(
+            item["filename"]
+            for item in _rows(execution.get("artifacts"))
+            if isinstance(item.get("filename"), str) and item["filename"].strip()
+        )
+    )
+    result_filenames = [
+        name
+        for name in filenames
+        if execution.get("status") == "completed"
+        and any(
+            item.get("filename") == name
+            and isinstance(item.get("inspection"), dict)
+            and item["inspection"].get("status") == "available"
+            for item in _rows(execution.get("artifact_inspections"))
+        )
+    ]
+    successful = (
+        execution.get("status") == "completed"
+        and type(execution.get("exit_code")) is int
+        and execution["exit_code"] == 0
+        and isinstance(execution.get("source_sha256"), str)
+        and bool(re.fullmatch(r"[0-9a-f]{64}", execution["source_sha256"]))
+    )
+    return {
+        "evidence": evidence,
+        "filenames": filenames,
+        "result_filenames": result_filenames,
+        "closure_output": (
+            successful and visible("stdout") and not execution.get("stdout_truncated")
+        ),
+        "closure_filenames": [
+            name
+            for name in result_filenames
+            if successful
+            and any(
+                item.get("filename") == name
+                and isinstance(item.get("inspection"), dict)
+                and item["inspection"].get("status") == "available"
+                and not item["inspection"].get("truncated")
+                for item in _rows(execution.get("artifact_inspections"))
+            )
+        ],
+    }
 
 
 def _computation_permissions(context: dict[str, Any]) -> list[dict[str, Any]]:
     result = []
     for target in computation_targets(context):
         execution = target["execution"]
-        evidence = [
-            field
-            for field, available in (
-                ("source", isinstance(execution.get("source"), str)),
-                ("output", bool(execution.get("stdout"))),
-                (
-                    "error",
-                    bool(execution.get("stderr") or execution.get("artifact_error"))
-                    or execution.get("status") != "completed",
-                ),
+        permission = execution_permissions(execution)
+        if permission["evidence"] or permission["filenames"]:
+            result.append(
+                {
+                    "artifact_id": target["research_artifact_id"],
+                    "execution_id": execution["id"],
+                    **permission,
+                }
             )
-            if available
-        ]
-        result.append(
-            {
-                "artifact_id": target["research_artifact_id"],
-                "execution_id": execution["id"],
-                "evidence": evidence,
-                "filenames": [
-                    item["filename"]
-                    for item in _rows(execution.get("artifacts"))
-                    if isinstance(item.get("filename"), str)
-                ],
-            }
-        )
     return result
 
 

@@ -88,6 +88,8 @@ def main(part: int = 1):
     test_final_evidence_catalog_after_guidance_compaction()
     test_peer_argument_extract_is_bounded_and_attributed()
     test_evidence_catalog_conflicts_and_incomplete_closure()
+    test_computation_catalog_permissions_and_closure()
+    test_long_history_evidence_audit_overhead()
     test_frozen_evidence_archive_reference_replay()
     test_terminal_protocol_completion_plan_preserves_attempt_history()
     test_e004_e005_e006_e009_e010_e011_saved_protocol_recovery_plans()

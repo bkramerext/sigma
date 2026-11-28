@@ -82,6 +82,7 @@ from sigma.research_evidence_catalog import (
     citable,
     complete_argument,
     computation_targets,
+    execution_permissions,
     step_permissions,
 )
 from sigma.research_feedback import ComputationFeedback, validate_feedback
@@ -4166,10 +4167,18 @@ def _role_request_payload(
     # Supply it exactly once to the agent, avoiding redundant JSON context
     # and unnecessary growth in long multi-round session budgets.
     context.pop("research_ethos", None)
+    # Per-attempt operational metadata is never part of the role input.
+    context.pop("_session_log_request_id", None)
+    context.pop("_provider_response_audit", None)
     instructions_context = dict(context)
     if isinstance(record.get("research_ethos"), dict):
         instructions_context["research_ethos"] = record["research_ethos"]
     if isinstance(record.get("desired_outcomes"), str) and record["desired_outcomes"]:
+        if (
+            "evidence_catalog" in context
+            and context.get("desired_outcomes") != record["desired_outcomes"]
+        ):
+            raise ProjectError("Desired outcomes changed after research evidence finalization")
         context["desired_outcomes"] = record["desired_outcomes"]
     input_text = json.dumps(context, ensure_ascii=False)
     if "evidence_catalog" in context:
@@ -8721,7 +8730,7 @@ def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, An
             if (
                 citation.get("evidence") == "output"
                 and isinstance(execution.get("stdout"), str)
-                and bool(execution["stdout"])
+                and bool(execution["stdout"].strip())
                 and not execution.get("stdout_truncated")
             ):
                 return True
@@ -8736,6 +8745,64 @@ def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, An
                     for item in inspections
                 ):
                     return True
+    return False
+
+
+def _catalog_addressed_basis(
+    context: dict[str, Any],
+    review: dict[str, Any],
+    citations: list[dict[str, Any]],
+    sources: dict[str, Any],
+) -> bool:
+    """Use only the final catalog's whole arguments or cited complete computation results."""
+    catalog = context["evidence_catalog"]
+    artifact_ids = set(review["basis_artifact_ids"])
+    current = catalog["current_investigator"]
+    current_cited = current["step_id"] in review["basis_step_ids"]
+    if current_cited and current["closure_argument"]:
+        return True
+    for group in ("own", "prior", "continuation", "peer"):
+        if any(
+            identifier in artifact_ids
+            and source["closure_argument"]
+            and not source["conflicted"]
+            for identifier, source in catalog[group].items()
+        ):
+            return True
+
+    permissions = {
+        (item["artifact_id"], item["execution_id"]): item for item in catalog["computations"]
+    }
+    for citation in citations:
+        identifier = citation["research_artifact_id"]
+        if identifier is None:
+            if not current_cited:
+                continue
+            source = context.get("investigator_output")
+        elif identifier in artifact_ids:
+            source = sources.get(identifier)
+        else:
+            continue
+        if (
+            not isinstance(source, dict)
+            or source.get("retracted_by_artifact_ids")
+            or source.get("coordinator_decision") == "stop_retracted_claim"
+            or source.get("evidence_availability") == "pointer_only_original_not_supplied"
+        ):
+            continue
+        skeptic = source.get("skeptic_output")
+        if isinstance(skeptic, dict) and skeptic.get("stop_reason") == "claim_retracted":
+            continue
+        permission = permissions.get((identifier, citation["execution_id"]))
+        if permission is None or citation["use"] != "result":
+            continue
+        if citation["evidence"] == "output" and permission["closure_output"]:
+            return True
+        if (
+            citation["evidence"] == "artifact"
+            and citation.get("filename") in permission["closure_filenames"]
+        ):
+            return True
     return False
 
 
@@ -8758,6 +8825,8 @@ async def _call_provider(
     if credential["mode"] != record["mode"]:
         raise ProjectError("AI provider transport mode changed before dispatch.")
     schema_model = Investigator if role == "investigator" else Skeptic
+    context.pop("_provider_response_audit", None)
+    context.pop("_session_log_request_id", None)
     payload = _role_request_payload(record, role, context)
     context["_session_log_request_id"] = request_id
     _assert_safe_role_request(payload, credential.get("token"))
@@ -9171,6 +9240,13 @@ async def _call_provider(
             for item in context.get(group, [])
             if isinstance(item, dict) and isinstance(item.get("id"), str)
         }
+        closure_sources.update(
+            {
+                item["artifact_id"]: {**item, "id": item["artifact_id"]}
+                for item in context.get("other_strategy_evidence", [])
+                if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
+            }
+        )
         if isinstance(packet, dict):
             closure_sources.update(
                 {
@@ -9197,25 +9273,19 @@ async def _call_provider(
                 raise ProjectError(
                     "A resolved obligation disposition requires a supplied evidence source"
                 )
-            if (
-                review["status"] == "addressed"
-                and not (
-                    review["basis_step_ids"]
-                    and (
-                        not isinstance(catalog, dict)
-                        or catalog["current_investigator"]["closure_argument"]
-                        or _usable_addressed_obligation_basis(
-                            context.get("investigator_output"), validated["computational_citations"]
-                        )
-                        and catalog["current_investigator"]["availability"] == "complete"
-                    )
+            if review["status"] == "addressed" and not (
+                _catalog_addressed_basis(
+                    context, review, validated["computational_citations"], closure_sources
                 )
-                and not any(
-                    _usable_addressed_obligation_basis(
-                        closure_sources.get(artifact_id),
-                        validated["computational_citations"],
+                if isinstance(catalog, dict)
+                else (
+                    review["basis_step_ids"]
+                    or any(
+                        _usable_addressed_obligation_basis(
+                            closure_sources.get(artifact_id), validated["computational_citations"]
+                        )
+                        for artifact_id in review["basis_artifact_ids"]
                     )
-                    for artifact_id in review["basis_artifact_ids"]
                 )
             ):
                 raise ProjectError(
@@ -9843,8 +9913,9 @@ def _agent_context(
     context = dispatch
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     if finalize:
-        finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-    _refresh_context_manifest_bytes(context)
+        _finalize_role_context(record, context)
+    else:
+        _refresh_context_manifest_bytes(context)
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
@@ -9972,6 +10043,17 @@ def _context_byte_breakdown(
         f" phase={phase}; strategy={safe_identifier(strategy_id)};"
         f" role={safe_identifier(role)}; largest fields: {largest}."
     )
+
+
+def _finalize_role_context(record: dict[str, Any], context: dict[str, Any]) -> None:
+    """One dispatch boundary for evidence selection and exact wire accounting."""
+    context.pop("research_ethos", None)
+    context.pop("_session_log_request_id", None)
+    context.pop("_provider_response_audit", None)
+    if isinstance(record.get("desired_outcomes"), str) and record["desired_outcomes"]:
+        context["desired_outcomes"] = record["desired_outcomes"]
+    finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
+    _refresh_context_manifest_bytes(context)
 
 
 def _refresh_context_manifest_bytes(context: dict[str, Any]) -> None:
@@ -11051,35 +11133,20 @@ def _validate_computation_citations(
         evidence = citation["evidence"]
         if status != "completed" and use == "result":
             raise ProjectError("A failed computation cannot be cited as a result")
-        if evidence == "source" and not isinstance(execution.get("source"), str):
+        permission = execution_permissions(execution)
+        if evidence == "source" and "source" not in permission["evidence"]:
             raise ProjectError("Research output cited unavailable computation source")
-        if evidence == "output" and not execution.get("stdout"):
+        if evidence == "output" and "output" not in permission["evidence"]:
             raise ProjectError("Research output cited unavailable computation output")
-        if evidence == "error" and not (
-            execution.get("stderr") or execution.get("artifact_error") or status != "completed"
-        ):
+        if evidence == "error" and "error" not in permission["evidence"]:
             raise ProjectError("Research output cited an error absent from the computation record")
         if evidence == "artifact":
             filename = citation.get("filename")
-            files = execution.get("artifacts", [])
-            if not isinstance(filename, str) or not any(
-                isinstance(item, dict) and item.get("filename") == filename for item in files
-            ):
+            if not isinstance(filename, str) or filename not in permission["filenames"]:
                 raise ProjectError("Research output cited an artifact not supplied in context")
             if use == "result" and status != "completed":
                 raise ProjectError("A failed computation artifact cannot be cited as a result")
-            inspections = execution.get("artifact_inspections")
-            if use == "result" and not isinstance(inspections, list):
-                raise ProjectError(
-                    "An artifact without a successful content inspection cannot be cited as a result"
-                )
-            if use == "result" and not any(
-                isinstance(item, dict)
-                and item.get("filename") == filename
-                and isinstance(item.get("inspection"), dict)
-                and item["inspection"].get("status") == "available"
-                for item in inspections
-            ):
+            if use == "result" and filename not in permission["result_filenames"]:
                 raise ProjectError(
                     "An artifact without a successful content inspection cannot be cited as a result"
                 )
@@ -11434,8 +11501,9 @@ def _portfolio_context(
         )
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     if finalize:
-        finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-    _refresh_context_manifest_bytes(context)
+        _finalize_role_context(record, context)
+    else:
+        _refresh_context_manifest_bytes(context)
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
@@ -12585,8 +12653,7 @@ async def _portfolio_role_call(
                 if guidance_group is not None:
                     context["context_manifest"]["sources"].append(guidance_group)
                 compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
-                finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-                _refresh_context_manifest_bytes(context)
+                _finalize_role_context(record, context)
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                     raise _research_context_manifest_guard_error(context)
                 if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
@@ -18032,8 +18099,7 @@ async def _worker(session_id: str, path: str) -> None:
             if guidance_group is not None:
                 context["context_manifest"]["sources"].append(guidance_group)
             compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
-            finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-            _refresh_context_manifest_bytes(context)
+            _finalize_role_context(record, context)
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                 raise _research_context_manifest_guard_error(context)
             if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
