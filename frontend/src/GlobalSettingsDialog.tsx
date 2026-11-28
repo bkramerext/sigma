@@ -25,6 +25,7 @@ type LimitSettings = {
 };
 type ResearchConfig = {
   limits: LimitSettings;
+  default_turn_limit: number;
   ai_model: string;
   reasoning_effort: string;
   show_advanced_outcome_details: boolean;
@@ -106,6 +107,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>(initialSettingsTab);
   const [config, setConfig] = useState<ResearchConfig | null>(null);
+  const [turnDraft, setTurnDraft] = useState('');
   const [models, setModels] = useState<ModelOption[]>([]);
   const [modelsUnavailable, setModelsUnavailable] = useState(false);
   const [durationUnit, setDurationUnit] = useState<DurationUnit>('minutes');
@@ -160,6 +162,7 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         if (controller.signal.aborted) return;
         savedConfigSnapshot.current = JSON.stringify(research);
         setConfig(research);
+        setTurnDraft(String(research.default_turn_limit));
         const minutes = research.limits.session_duration_minutes;
         setDurationUnit(minutes === null ? 'unlimited'
           : minutes % 1440 === 0 ? 'days' : minutes % 60 === 0 ? 'hours' : 'minutes');
@@ -228,7 +231,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
   const hasOtherChanges = hasConfigChanges || hasPrefChanges;
   const hasChanges = typesSaveState.dirty || hasOtherChanges;
   const scratchpadChanged = scratchpadLoaded && JSON.stringify(scratchpad) !== JSON.stringify(savedScratchpad.current);
-  const validLimits = !!config && (['output_tokens_per_call', 'max_concurrent_sessions'] as const)
+  const validTurns = /^\d+$/.test(turnDraft) && Number(turnDraft) >= 1 && Number(turnDraft) <= 1200;
+  const validLimits = validTurns && !!config && (['output_tokens_per_call', 'max_concurrent_sessions'] as const)
     .every(field => Number.isInteger(Number(config.limits[field])) && Number(config.limits[field]) >= 1 && String(config.limits[field]).trim() !== '')
     && (['session_duration_minutes', 'maximum_input_tokens_per_session'] as const)
       .every(field => config.limits[field] == null || (Number.isFinite(Number(config.limits[field])) && Number(config.limits[field]) > 0 && String(config.limits[field]).trim() !== ''))
@@ -276,7 +280,8 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
         const cost = limits.maximum_estimated_cost_usd as number | string | null;
         limits.maximum_estimated_cost_usd = cost === '' || cost == null ? null : Number(cost);
         const next = await putJson('/api/user-preferences/research-settings', {
-          limits, ai_model: config.ai_model, reasoning_effort: config.reasoning_effort,
+          limits, default_turn_limit: config.default_turn_limit,
+          ai_model: config.ai_model, reasoning_effort: config.reasoning_effort,
           show_advanced_outcome_details: config.show_advanced_outcome_details,
         }) as ResearchConfig;
         setConfig(next);
@@ -446,6 +451,18 @@ export default function GlobalSettingsDialog({ onClose }: { onClose: () => void 
               <label htmlFor="sigma-global-concurrent">Max concurrent sessions</label>
               <input id="sigma-global-concurrent" type="number" min={1} max={4} value={config.limits.max_concurrent_sessions}
                 onChange={e => setLimit('max_concurrent_sessions', e.target.value)}/>
+            </div>
+            <div className="sigma-global-limit-field">
+              <label htmlFor="sigma-global-default-turns">Turns</label>
+              <input id="sigma-global-default-turns" type="number" min={1} max={1200} step={1}
+                value={turnDraft} aria-invalid={!validTurns} onChange={e => {
+                  const value = e.target.value;
+                  setTurnDraft(value);
+                  if (/^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 1200)
+                    setResearch({ default_turn_limit: Number(value) });
+                }}/>
+              <p className="settings-hint">Default turns per strategy in new sessions.</p>
+              {!validTurns && <p role="alert" className="error">Enter 1–1200 turns.</p>}
             </div>
           </div>
           <div className="sigma-global-limit-row sigma-global-limit-row--ceilings">
