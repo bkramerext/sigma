@@ -3,13 +3,16 @@
 import asyncio
 import base64
 import hashlib
+import inspect
 import itertools
 import json
 import os
+import re
 import shutil
 import socket
 import sys
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -32,41 +35,205 @@ def request_digest(request: httpx.Request) -> str:
     return hashlib.sha256(request.content).hexdigest()
 
 
+MAX_EXCHANGES = 32
+MAX_BODY_BYTES = 256_000
+MAX_TAPE_BYTES = 2_000_000
+MAX_CHUNKS = 32
+TAPE_VERSION = 1
+JSON_TYPE = "application/json"
+SSE_TYPE = "text/event-stream"
+
+
+def request_lane(request: httpx.Request) -> str:
+    try:
+        payload = json.loads(request.content)
+        context = payload["input"]
+        if isinstance(context, list):
+            context = context[0]["content"]
+        lane = json.loads(context)["strategy"]["id"]
+        if not isinstance(lane, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", lane):
+            raise ValueError("invalid strategy identity")
+        return lane
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ReplayMismatch("Request has no valid strategy identity") from exc
+
+
+class FixtureStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: tuple[bytes, ...]):
+        self.chunks = chunks
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            yield chunk
+
+
 @dataclass(frozen=True)
 class Exchange:
-    # Never retain bearer headers or raw request content in the tape.
+    # Only synthetic fixture responses and exact request digests, never raw
+    # requests, bearer headers, private model recordings or unknown attempts.
     request_sha256: str
     response: bytes
+    status: int = 200
+    content_type: str = JSON_TYPE
+    lane: str = "default"
+    chunk_sizes: tuple[int, ...] = ()
+
+    def __post_init__(self):
+        if (
+            not isinstance(self.request_sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", self.request_sha256)
+            or not isinstance(self.response, bytes)
+            or len(self.response) > MAX_BODY_BYTES
+            or type(self.status) is not int
+            or not (self.status == 200 or 400 <= self.status <= 599)
+            or self.content_type not in (JSON_TYPE, SSE_TYPE)
+            or not isinstance(self.lane, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", self.lane)
+            or not isinstance(self.chunk_sizes, tuple)
+            or len(self.chunk_sizes) > MAX_CHUNKS
+            or any(type(size) is not int or size <= 0 for size in self.chunk_sizes)
+            or (self.chunk_sizes and sum(self.chunk_sizes) != len(self.response))
+            or (self.content_type == SSE_TYPE and not self.chunk_sizes)
+        ):
+            raise ReplayMismatch("Invalid or oversized synthetic tape exchange")
+
+    def make_response(self) -> httpx.Response:
+        headers = {"content-type": self.content_type}
+        if self.chunk_sizes:
+            chunks = []
+            offset = 0
+            for size in self.chunk_sizes:
+                chunks.append(self.response[offset : offset + size])
+                offset += size
+            return httpx.Response(self.status, stream=FixtureStream(tuple(chunks)), headers=headers)
+        return httpx.Response(self.status, content=self.response, headers=headers)
+
+
+def validate_tape(exchanges: list[Exchange]) -> None:
+    if (
+        not exchanges
+        or len(exchanges) > MAX_EXCHANGES
+        or sum(len(item.response) for item in exchanges) > MAX_TAPE_BYTES
+    ):
+        raise ReplayMismatch("Empty or oversized synthetic tape")
+    lanes = {item.lane for item in exchanges}
+    if "default" in lanes and len(lanes) != 1:
+        raise ReplayMismatch("Default and strategy-specific tape lanes cannot be mixed")
+
+
+def encode_tape(exchanges: list[Exchange]) -> bytes:
+    validate_tape(exchanges)
+    return json.dumps(
+        {
+            "version": TAPE_VERSION,
+            "origin": "synthetic_fixture_only",
+            "endpoint": ENDPOINT,
+            "method": "POST",
+            "exchanges": [
+                {
+                    "request_sha256": item.request_sha256,
+                    "response_b64": base64.b64encode(item.response).decode("ascii"),
+                    "status": item.status,
+                    "content_type": item.content_type,
+                    "lane": item.lane,
+                    "chunk_sizes": item.chunk_sizes,
+                }
+                for item in exchanges
+            ],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def decode_tape(raw: bytes) -> list[Exchange]:
+    if not isinstance(raw, bytes) or len(raw) > 2 * MAX_TAPE_BYTES:
+        raise ReplayMismatch("Oversized synthetic tape encoding")
+    try:
+        document = json.loads(raw)
+        if (
+            not isinstance(document, dict)
+            or set(document) != {"version", "origin", "endpoint", "method", "exchanges"}
+            or type(document["version"]) is not int
+            or document["version"] != TAPE_VERSION
+            or document["origin"] != "synthetic_fixture_only"
+            or document["endpoint"] != ENDPOINT
+            or document["method"] != "POST"
+            or not isinstance(document["exchanges"], list)
+            or not 1 <= len(document["exchanges"]) <= MAX_EXCHANGES
+        ):
+            raise ReplayMismatch("Unsupported synthetic tape contract")
+        result = []
+        for item in document["exchanges"]:
+            if (
+                not isinstance(item, dict)
+                or set(item)
+                != {
+                    "request_sha256",
+                    "response_b64",
+                    "status",
+                    "content_type",
+                    "lane",
+                    "chunk_sizes",
+                }
+                or not isinstance(item["response_b64"], str)
+                or len(item["response_b64"]) > 2 * MAX_BODY_BYTES
+                or not isinstance(item["chunk_sizes"], list)
+                or len(item["chunk_sizes"]) > MAX_CHUNKS
+            ):
+                raise ReplayMismatch("Invalid synthetic tape exchange encoding")
+            result.append(
+                Exchange(
+                    item["request_sha256"],
+                    base64.b64decode(item["response_b64"], validate=True),
+                    item["status"],
+                    item["content_type"],
+                    item["lane"],
+                    tuple(item["chunk_sizes"]),
+                )
+            )
+        validate_tape(result)
+        return result
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise ReplayMismatch("Invalid synthetic tape encoding") from exc
 
 
 class StrictReplay:
     def __init__(self, exchanges: list[Exchange]):
+        validate_tape(exchanges)
         self.exchanges = tuple(exchanges)
+        self.lanes: dict[str, list[Exchange]] = {}
+        for item in exchanges:
+            self.lanes.setdefault(item.lane, []).append(item)
+        self.offsets = dict.fromkeys(self.lanes, 0)
         self.position = 0
         self.failures: list[str] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         try:
+            if self.failures:
+                raise ReplayMismatch(self.failures[0])
             digest = request_digest(request)
-            if self.position >= len(self.exchanges):
-                raise ReplayMismatch(f"Unexpected request at replay slot {self.position + 1}")
-            expected = self.exchanges[self.position]
+            lane = "default" if "default" in self.lanes else request_lane(request)
+            if lane not in self.lanes:
+                raise ReplayMismatch("Unexpected strategy lane")
+            offset = self.offsets[lane]
+            if offset >= len(self.lanes[lane]):
+                raise ReplayMismatch(f"Unexpected request at replay slot {offset + 1}")
+            expected = self.lanes[lane][offset]
             if digest != expected.request_sha256:
                 raise ReplayMismatch(
-                    f"Request mismatch at replay slot {self.position + 1}: "
+                    f"Request mismatch at replay slot {offset + 1}: "
                     f"expected sha256={expected.request_sha256}, received sha256={digest}"
                 )
         except ReplayMismatch as exc:
             self.failures.append(str(exc))
             raise
+        self.offsets[lane] += 1
         self.position += 1
-        return httpx.Response(
-            200, content=expected.response, headers={"content-type": "application/json"}
-        )
+        return expected.make_response()
 
     def assert_complete(self) -> None:
-        # The production worker can catch a dispatch failure. Do not let a
-        # later successful attempt hide a mismatch or unconsumed response.
         if self.failures:
             raise ReplayMismatch(self.failures[0])
         if self.position != len(self.exchanges):
@@ -107,9 +274,10 @@ def synthetic_transport(credential, config, handler):
 
     failures: list[str] = []
 
-    def guarded(request):
+    async def guarded(request):
         try:
-            return handler(request)
+            result = handler(request)
+            return await result if inspect.isawaitable(result) else result
         except ReplayMismatch as exc:
             failures.append(str(exc))
             raise
@@ -156,7 +324,15 @@ def transport_checks() -> None:
         Exchange(request_digest(first), b'{"fixture":1}'),
         Exchange(request_digest(second), b"{}"),
     ]
-    replay = StrictReplay(tape)
+    assert decode_tape(encode_tape(tape)) == tape
+    for malformed in (b"{}", b"not JSON", b" " * (2 * MAX_TAPE_BYTES + 1)):
+        try:
+            decode_tape(malformed)
+        except ReplayMismatch:
+            pass
+        else:
+            raise AssertionError("Malformed or oversized tape accepted")
+    replay = StrictReplay(decode_tape(encode_tape(tape)))
     assert replay(first).json() == {"fixture": 1}
     assert replay(second).json() == {}
     replay.assert_complete()
@@ -250,7 +426,9 @@ async def production_replay(root: Path) -> None:
             return finished
 
     original = await run(recorded_path, record)
-    replay = StrictReplay(tape)
+    fixture_path = root / "synthetic-api-tape.json"
+    fixture_path.write_bytes(encode_tape(tape))
+    replay = StrictReplay(decode_tape(fixture_path.read_bytes()))
     repeated = await run(replayed_path, replay)
     replay.assert_complete()
     assert len(tape) == 2
@@ -258,14 +436,14 @@ async def production_replay(root: Path) -> None:
         assert result["status"] == "ended" and result["calls_used"] == 2
         assert len(result["artifacts"]) == 1
         assert [step["role"] for step in result["steps"]] == ["investigator", "skeptic"]
-    assert original["artifacts"][0]["id"] == repeated["artifacts"][0]["id"]
-    assert (
-        original["artifacts"][0]["claim_or_question"]
-        == repeated["artifacts"][0]["claim_or_question"]
-    )
+    assert_accepted_equivalence(original, repeated)
+    assert [step["provider_input_audit"]["request_body_sha256"] for step in original["steps"]] == [
+        item.request_sha256 for item in tape
+    ]
     assert (baseline / "project.json").read_bytes() == before
     assert not research_sessions.list_sessions(str(baseline))
     print("PASS exact provider replay through production session start, dispatch, and acceptance")
+
     def forbidden(request: httpx.Request) -> httpx.Response:
         raise ReplayMismatch("History activation dispatched a provider request")
 
@@ -333,16 +511,224 @@ def verify_history_migration(root: Path, source: Path, result: dict) -> None:
         actual, expected = visible["artifacts"][0], result["artifacts"][0]
         for field in ("id", "claim_or_question", "reasoning_steps", "skeptic_output"):
             assert actual[field] == expected[field], field
-        assert [step["id"] for step in saved["steps"]] == [
-            step["id"] for step in archived["steps"]
-        ]
+        assert [step["id"] for step in saved["steps"]] == [step["id"] for step in archived["steps"]]
         assert [step["status"] for step in saved["steps"]] == [
             step["status"] for step in archived["steps"]
         ]
-    assert research_sessions.get_session(str(source), session_id)["artifacts"] == result["artifacts"]
+    assert (
+        research_sessions.get_session(str(source), session_id)["artifacts"] == result["artifacts"]
+    )
     assert all(read_file(source, name) == raw for name, raw in originals.items())
     assert all(read_file(migrated.path, name) == raw for name, raw in originals.items())
-    print("PASS archival migration and supported activation preserve accepted history and identities")
+    print(
+        "PASS archival migration and supported activation preserve accepted history and identities"
+    )
+
+
+def assert_accepted_equivalence(left: dict, right: dict) -> None:
+    # Exclude runtime timing/diagnostic fields, not substantive research.
+    fields = (
+        "id",
+        "strategy_id",
+        "claim_or_question",
+        "investigator_output",
+        "skeptic_output",
+        "reasoning_steps",
+        "open_obligations",
+        "objective_review",
+        "coordinator_decision",
+        "next_question",
+    )
+    assert len(left["artifacts"]) == len(right["artifacts"])
+    for first, second in zip(left["artifacts"], right["artifacts"], strict=True):
+        for field in fields:
+            assert first[field] == second[field], field
+    assert left["outcome"] == right["outcome"]
+    assert left["termination_reason_code"] == right["termination_reason_code"]
+    branch_fields = ("strategy_id", "status", "calls_used", "cycle", "current_question")
+    for first, second in zip(left["strategy_runs"], right["strategy_runs"], strict=True):
+        for field in branch_fields:
+            assert first[field] == second[field], field
+    assert [
+        (step["role"], step["status"], step["provider_input_audit"]["request_body_sha256"])
+        for step in left["steps"]
+    ] == [
+        (step["role"], step["status"], step["provider_input_audit"]["request_body_sha256"])
+        for step in right["steps"]
+    ]
+
+
+async def parallel_stream_replay(root: Path) -> None:
+    """Replay overlapping real strategy sessions, with a known rejection/retry."""
+    from research_sessions import investigation, provider_response, setup, skeptic, wait_for
+
+    from sigma import research_sessions, session_log
+    from sigma.projects import edit_strategy
+
+    baselines = []
+    for index in range(2):
+        path = root / f"stream-baseline-{index}.sigma"
+        view, strategy, credential, config = await setup(path)
+        research_sessions.save_limits(
+            str(path),
+            {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4},
+        )
+        baselines.append((path, view, strategy, str(uuid4())))
+    credential = {**credential, "mode": "chatgpt", "identity": "chatgpt:fixture"}
+    lanes = [entry[2].id for entry in baselines]
+    source_bytes = [entry[0].joinpath("project.json").read_bytes() for entry in baselines]
+    tape: list[Exchange] = []
+    requests = dict.fromkeys(lanes, 0)
+    fixed_time = research_sessions._now()
+    lane_counter: ContextVar = ContextVar("replay_lane_counter")
+
+    def deterministic_uuid():
+        index, counter = lane_counter.get()
+        return UUID(int=(index + 1) * 10_000 + next(counter), version=4)
+
+    def record(request: httpx.Request) -> httpx.Response:
+        lane = request_lane(request)
+        assert lane in lanes
+        index = lanes.index(lane)
+        requests[lane] += 1
+        ordinal = requests[lane]
+        payload = json.loads(request.content)
+        assert payload["stream"] is True
+        assert request.headers["Accept"] == SSE_TYPE
+        context = json.loads(payload["input"][0]["content"])
+        role = payload["text"]["format"]["name"]
+        assert not context["prior_artifacts"]
+        assert not context["prior_session_artifact_ids"]
+        assert not context.get("other_strategy_evidence")
+        if index == 0 and ordinal == 1:
+            exchange = Exchange(
+                request_digest(request),
+                b'{"error":{"code":"temporary_unavailable"}}',
+                503,
+                lane=lane,
+            )
+        else:
+            if role == "research_investigator":
+                output = investigation(1)
+                output["claim"] = f"Synthetic independent strategy {index} consequence."
+            else:
+                assert role == "research_skeptic"
+                output = skeptic(1)
+                assert context["investigator_output"]["claim"] == (
+                    f"Synthetic independent strategy {index} consequence."
+                )
+            response_id = f"fixture-{index}-{ordinal}"
+            envelope = {**provider_response(output), "id": response_id}
+            events = [
+                {
+                    "type": "response.created",
+                    "sequence_number": 0,
+                    "response": {"id": response_id},
+                },
+                {"type": "response.completed", "sequence_number": 1, "response": envelope},
+            ]
+            body = "".join(
+                f"event: {item['type']}\ndata: {json.dumps(item)}\n\n" for item in events
+            ).encode()
+            exchange = Exchange(
+                request_digest(request),
+                body,
+                content_type=SSE_TYPE,
+                lane=lane,
+                chunk_sizes=(11, len(body) - 11),
+            )
+        tape.append(exchange)
+        return exchange.make_response()
+
+    async def run(label, handler, *, drift=False):
+        seen = set()
+        overlapping = asyncio.Event()
+
+        async def overlap(request):
+            lane = request_lane(request)
+            if lane not in seen:
+                seen.add(lane)
+                if len(seen) == 2:
+                    overlapping.set()
+                await asyncio.wait_for(overlapping.wait(), timeout=5)
+            return handler(request)
+
+        async def session(index, baseline):
+            source, view, strategy, key = baseline
+            path = root / f"{label}-{index}.sigma"
+            shutil.copytree(source, path)
+            if drift and index == 0:
+                edit_strategy(
+                    path, strategy.id, strategy.title, "A materially different synthetic approach."
+                )
+            token = lane_counter.set((index, itertools.count(1)))
+            try:
+                started = await research_sessions.start_session(
+                    str(path), strategy.id, key, view.project.id, credential["identity"]
+                )
+                return await wait_for(path, started["id"])
+            finally:
+                lane_counter.reset(token)
+
+        with (
+            patch.object(research_sessions, "uuid4", side_effect=deterministic_uuid),
+            patch.object(research_sessions, "_now", return_value=fixed_time),
+            synthetic_transport(credential, config, overlap),
+        ):
+            results = await asyncio.gather(
+                *(session(index, item) for index, item in enumerate(baselines))
+            )
+            session_log.flush()
+        assert overlapping.is_set()
+        return results
+
+    original = await run("stream-record", record)
+    fixture = root / "synthetic-stream-tape.json"
+    fixture.write_bytes(encode_tape(tape))
+    loaded = decode_tape(fixture.read_bytes())
+    # Global arrival order is irrelevant across lanes; per-strategy order is
+    # preserved and strictly checked by exact request digest.
+    replay = StrictReplay([item for lane in reversed(lanes) for item in loaded if item.lane == lane])
+    repeated = await run("stream-replay", replay)
+    replay.assert_complete()
+    assert requests == {lanes[0]: 3, lanes[1]: 2}
+    assert [item.status for item in loaded if item.lane == lanes[0]] == [503, 200, 200]
+    for index, (first, second) in enumerate(zip(original, repeated, strict=True)):
+        assert first["status"] == second["status"] == "ended"
+        assert first["calls_used"] == second["calls_used"] == (3 if index == 0 else 2)
+        assert len(first["artifacts"]) == len(second["artifacts"]) == 1
+        assert first["artifacts"][0]["strategy_id"] == lanes[index]
+        assert_accepted_equivalence(first, second)
+        assert [
+            step["provider_input_audit"]["request_body_sha256"] for step in first["steps"]
+        ] == [item.request_sha256 for item in loaded if item.lane == lanes[index]]
+    assert [step["status"] for step in original[0]["steps"]] == [
+        "failed",
+        "completed",
+        "completed",
+    ]
+    assert original[0]["steps"][0]["failure_kind"] == "provider_temporary"
+    for index, (path, _, _, _) in enumerate(baselines):
+        assert path.joinpath("project.json").read_bytes() == source_bytes[index]
+        assert not research_sessions.list_sessions(str(path))
+
+    # Run the production scheduler with a deliberately incompatible tape.
+    # It must reject the mismatch without delivering any recorded response,
+    # and the sticky failure must escape even if the worker catches it.
+    incompatible = StrictReplay(loaded)
+    try:
+        await run("stream-mismatch", incompatible, drift=True)
+    except ReplayMismatch as exc:
+        assert "Request mismatch" in str(exc)
+    else:
+        raise AssertionError("Production scheduler concealed a strict request mismatch")
+    assert incompatible.failures and incompatible.offsets[lanes[0]] == 0
+    print("PASS concurrent strategy lanes, streamed responses, recorded rejection/retry and drift")
+
+
+async def run_integrations(root: Path) -> None:
+    await production_replay(root)
+    await parallel_stream_replay(root)
 
 
 def main() -> None:
@@ -362,7 +748,7 @@ def main() -> None:
         for name in ("state", "projects", "auth"):
             (root / name).mkdir(mode=0o700)
         with patch.dict(os.environ, env):
-            asyncio.run(production_replay(root / "projects"))
+            asyncio.run(run_integrations(root / "projects"))
 
 
 if __name__ == "__main__":
