@@ -334,19 +334,36 @@ def test_private_diagnostic_roundtrip() -> None:
         preserved_export = json.loads(project_transfer.export_project(preserved, diagnostics=True))
         assert project_transfer.decode_bundle(preserved_export)
         assert preserved_export["diagnostics"]["blobs"] == archive["blobs"]
+        # Preserve-identity import retains the project UUID but rekeys sessions.
+        # Exact internal restoration retains the session UUID and shares the
+        # existing live log, exercising true live/passive deduplication.
+        exact = root / "exact.sigma"
+        project_bundle.restore_members(project_transfer.decode_bundle(diagnostic), exact)
+        assert session_log.log_path(str(exact), project_id, session_id) == log
+        exact_members = project_bundle._files(exact, include_private=False)
+        assert project_diagnostic_bundle._session_ids(exact_members) == (project_id, {session_id})
         with patch.object(project_diagnostic_bundle, "MAX_DIAGNOSTIC_BYTES", len(raw)):
-            identical = json.loads(project_transfer.export_project(preserved, diagnostics=True))
-            assert identical["diagnostics"]["blobs"] == archive["blobs"]
-            original_log = log.read_bytes()
-            try:
-                session_log._append_frame(
-                    log, {"type": "session_event", "seq": 4, "message": "New evidence"}
-                )
-                _expect_failure(
-                    lambda: project_transfer.export_project(preserved, diagnostics=True)
-                )
-            finally:
-                log.write_bytes(original_log)
+            identical = json.loads(project_transfer.export_project(exact, diagnostics=True))
+            assert identical["diagnostics"] == archive
+        original_log = log.read_bytes()
+        try:
+            session_log._append_frame(
+                log, {"type": "session_event", "seq": 4, "message": "New evidence"}
+            )
+            changed = json.loads(project_transfer.export_project(exact, diagnostics=True))
+            assert len(changed["diagnostics"]["blobs"]) == 2
+            with patch.object(project_diagnostic_bundle, "MAX_DIAGNOSTIC_BYTES", len(raw)):
+                try:
+                    project_transfer.export_project(exact, diagnostics=True)
+                except BundleError as exc:
+                    assert "Diagnostic snapshot budget exceeded" in str(exc)
+                else:
+                    raise AssertionError("New snapshot did not exceed diagnostic budget")
+        finally:
+            log.write_bytes(original_log)
+        with patch.object(project_diagnostic_bundle, "MAX_DIAGNOSTIC_BYTES", len(raw)):
+            identical = json.loads(project_transfer.export_project(exact, diagnostics=True))
+            assert identical["diagnostics"] == archive
 
         digest = next(iter(archive["blobs"]))
         entry = archive["blobs"][digest]
@@ -610,7 +627,7 @@ def test_ambiguous_diagnostic_json_and_coverage() -> None:
 
         for event in fixtures[:3]:
             unsafe = {**snapshot, "events": [{**event, "seq": 1}]}
-            _expect_failure(lambda: project_transfer.decode_bundle(crafted(unsafe)))
+            _expect_failure(lambda unsafe=unsafe: project_transfer.decode_bundle(crafted(unsafe)))
         for inconsistent in (
             [{"type": "provider_request"}],
             [{"type": "provider_request", "seq": 2}],
@@ -621,10 +638,10 @@ def test_ambiguous_diagnostic_json_and_coverage() -> None:
             [],
         ):
             candidate = {**snapshot, "events": inconsistent}
-            _expect_failure(lambda: project_transfer.decode_bundle(crafted(candidate)))
-            assert project_transfer.decode_bundle(
-                crafted({**candidate, "availability": "partial"})
+            _expect_failure(
+                lambda candidate=candidate: project_transfer.decode_bundle(crafted(candidate))
             )
+            assert project_transfer.decode_bundle(crafted({**candidate, "availability": "partial"}))
         assert project_transfer.decode_bundle(
             crafted({**snapshot, "availability": "unavailable", "events": []})
         )
