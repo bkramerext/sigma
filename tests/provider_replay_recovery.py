@@ -41,7 +41,12 @@ async def crash_child(root: Path) -> None:
     assert not path.exists(), "The crash fixture must never reuse a project"
     view, strategy, credential, config = await setup(path)
     limits = dict(research_sessions.DEFAULT_LIMITS)
-    limits.update(research_rounds=2, model_calls=4)
+    limits.update(
+        research_rounds=2,
+        model_calls=4,
+        maximum_input_tokens_per_session=1_000_000,
+        maximum_estimated_cost_usd=100.0,
+    )
     research_sessions.save_limits(str(path), limits)
     outputs = iter((investigation(1), skeptic(1), investigation(2)))
     requests: list[str] = []

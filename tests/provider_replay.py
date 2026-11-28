@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import itertools
+import json
 import os
 import shutil
 import socket
@@ -135,6 +136,7 @@ def synthetic_transport(credential, config, handler):
             ),
         ),
     ):
+
         def verify():
             verify_network()
             private_dispatch.assert_not_called()
@@ -264,7 +266,11 @@ async def production_replay(root: Path) -> None:
     assert (baseline / "project.json").read_bytes() == before
     assert not research_sessions.list_sessions(str(baseline))
     print("PASS exact provider replay through production session start, dispatch, and acceptance")
-    verify_history_migration(root, recorded_path, original)
+    def forbidden(request: httpx.Request) -> httpx.Response:
+        raise ReplayMismatch("History activation dispatched a provider request")
+
+    with synthetic_transport(credential, config, forbidden):
+        verify_history_migration(root, recorded_path, original)
 
 
 def verify_history_migration(root: Path, source: Path, result: dict) -> None:
@@ -287,32 +293,56 @@ def verify_history_migration(root: Path, source: Path, result: dict) -> None:
     assert all(read_file(migrated.path, name) == raw for name, raw in originals.items())
     assert all(read_file(source, name) == raw for name, raw in originals.items())
     assert migrated.project == inspect_project(source).project
-    sessions = research_sessions.list_sessions(migrated.path)
-    assert len(sessions) == 1 and sessions[0]["id"] == session_id
-    assert sessions[0]["artifacts"] == result["artifacts"]
+    # Migration is an archival copy. Import is the supported activation path:
+    # it validates and rekeys sessions instead of opening the archive as a
+    # second executable project with the same session identity.
+    archived = json.loads(read_file(migrated.path, session_member))
+    assert archived["id"] == session_id
+    assert archived["project_path"] == str(source.resolve())
+    assert archived["artifacts"] == result["artifacts"]
+    assert [step["role"] for step in archived["steps"]] == ["investigator", "skeptic"]
 
-    # Exercise the pre-compression v1 import path using the accepted session,
-    # not a fabricated empty record. Import may rekey session identity, but
-    # must preserve the accepted evidence and retain lineage to the source.
     legacy = {
         "format": "sigma.project.bundle",
         "version": 1,
         "files": {name: base64.b64encode(raw).decode() for name, raw in originals.items()},
     }
-    imported = root / "legacy-history-import.json"
-    import_bundle(legacy, imported)
-    assert read_file(imported, artifact_member) == originals[artifact_member]
-    assert inspect_project(imported).project.id == migrated.project.id
-    sessions = research_sessions.list_sessions(str(imported))
-    assert len(sessions) == 1 and sessions[0]["id"] != session_id
-    saved = research_sessions._read(str(imported), sessions[0]["id"])
-    assert saved["source_session_id"] == session_id
-    assert len(saved["artifacts"]) == 1
-    actual, expected = saved["artifacts"][0], result["artifacts"][0]
-    for field in ("id", "claim_or_question", "reasoning_steps", "skeptic_output"):
-        assert actual[field] == expected[field], field
+    identities = {session_id}
+    for name, payload in (
+        ("activated-history.json", json.loads(Path(migrated.path).read_text())),
+        ("legacy-history-import.json", legacy),
+    ):
+        imported = root / name
+        import_bundle(payload, imported)
+        assert read_file(imported, artifact_member) == originals[artifact_member]
+        assert inspect_project(imported).project.id == migrated.project.id
+        sessions, unavailable = research_sessions.read_session_snapshot(str(imported))
+        assert unavailable == 0 and len(sessions) == 1
+        saved = sessions[0]
+        new_id = saved["id"]
+        assert new_id not in identities
+        identities.add(new_id)
+        assert saved["source_session_id"] == session_id
+        assert saved["project_path"] == str(imported.resolve())
+        assert saved["idempotency_key"] != archived["idempotency_key"]
+        visible = research_sessions.get_session(str(imported), new_id)
+        assert visible["status"] == result["status"] == "ended"
+        assert visible["calls_used"] == result["calls_used"] == 2
+        assert len(visible["artifacts"]) == 1
+        assert [step["role"] for step in visible["steps"]] == ["investigator", "skeptic"]
+        actual, expected = visible["artifacts"][0], result["artifacts"][0]
+        for field in ("id", "claim_or_question", "reasoning_steps", "skeptic_output"):
+            assert actual[field] == expected[field], field
+        assert [step["id"] for step in saved["steps"]] == [
+            step["id"] for step in archived["steps"]
+        ]
+        assert [step["status"] for step in saved["steps"]] == [
+            step["status"] for step in archived["steps"]
+        ]
+    assert research_sessions.get_session(str(source), session_id)["artifacts"] == result["artifacts"]
     assert all(read_file(source, name) == raw for name, raw in originals.items())
-    print("PASS legacy migration and v1 import preserve accepted history and original bytes")
+    assert all(read_file(migrated.path, name) == raw for name, raw in originals.items())
+    print("PASS archival migration and supported activation preserve accepted history and identities")
 
 
 def main() -> None:
