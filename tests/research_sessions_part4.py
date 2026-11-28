@@ -4582,6 +4582,7 @@ def test_paired_round_scheduler_budget_rotates_and_keeps_partial_pairs() -> None
 
 def test_final_evidence_catalog_after_guidance_compaction() -> None:
     """The final packet is the only evidence authority, including peer duplicates."""
+    from sigma.continuations import digest
     from sigma.research_evidence_catalog import (
         EvidenceContext,
         artifact_permissions,
@@ -4601,7 +4602,17 @@ def test_final_evidence_catalog_after_guidance_compaction() -> None:
             {"artifact_id": identifier} for identifier in ("old", "peer", "approved", "omitted")
         ],
     }
-    current = {"claim": "Current candidate", "method": "Current argument"}
+    current = {
+        "claim": "Current candidate",
+        "method": "Current argument",
+        "reasoning_steps": [{"argument": "The current complete argument."}],
+    }
+    original_current = deepcopy(current)
+    frozen = {
+        "id": "approved",
+        "investigator_output": deepcopy(current),
+        "skeptic_output": {"response": "Saved review."},
+    }
     context = EvidenceContext(
         {
             "scheduler_version": 2,
@@ -4622,7 +4633,8 @@ def test_final_evidence_catalog_after_guidance_compaction() -> None:
                 "sources": [
                     {
                         "artifact_id": "approved",
-                        "artifact": {"id": "approved", "method": "Frozen complete argument"},
+                        "artifact": frozen,
+                        "artifact_digest": digest(frozen),
                     }
                 ]
             },
@@ -4675,7 +4687,7 @@ def test_final_evidence_catalog_after_guidance_compaction() -> None:
     assert context["obligation_ledger"][0]["unsupplied_source_artifact_count"] == 2
     assert research_sessions._json_bytes(context) <= 6000
     assert context.original_obligations == [original]
-    assert current == {"claim": "Current candidate", "method": "Current argument"}
+    assert current == original_current
 
     review = {
         "obligation_id": "open",
@@ -4701,6 +4713,20 @@ def test_final_evidence_catalog_after_guidance_compaction() -> None:
     payload = research_sessions._role_request_payload(record, "skeptic", context)
     exact = json.loads(payload["input"][0]["content"])
     assert exact["evidence_catalog"] == catalog
+    altered = deepcopy(context)
+    altered["context_manifest"]["assembled_context_bytes"] += 1
+    try:
+        research_sessions._role_request_payload(record, "skeptic", altered)
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("Stale final byte count was accepted")
+    assert exact["context_manifest"]["assembled_context_bytes"] == len(
+        payload["input"][0]["content"].encode("utf-8")
+    )
+    assert catalog["current_investigator"]["closure_argument"] is True
+    assert catalog["continuation"]["approved"]["closure_argument"] is True
+    assert catalog["peer"]["peer"]["closure_argument"] is False
     audit = research_sessions._role_input_audit(record, "skeptic", context, None)
     assert audit["evidence_provenance"]["original_obligation_references"] == [original]
     assert audit["evidence_provenance"]["omitted"]["own"]["ids"] == ["omitted"]
@@ -4718,6 +4744,8 @@ def test_final_evidence_catalog_after_guidance_compaction() -> None:
         ]
     }
     research_sessions._assert_saved_role_input_matches(saved, "skeptic", payload, "step")
+    context.original_obligations[0]["source_refs"][0]["artifact_id"] = "mutated"
+    assert audit["evidence_provenance"]["original_obligation_references"] == [original]
     # Distinct project/attempt inventories must never leak through shared state.
     another = EvidenceContext(
         {
@@ -4763,6 +4791,101 @@ def test_peer_argument_extract_is_bounded_and_attributed() -> None:
         build_catalog({"investigator_step_id": "historical"})["current_investigator"]["step_id"]
         is None
     )
+
+
+def test_evidence_catalog_conflicts_and_incomplete_closure() -> None:
+    from sigma.research_evidence_catalog import (
+        EvidenceContext,
+        artifact_permissions,
+        build_catalog,
+        complete_argument,
+    )
+
+    complete = {
+        "id": "own",
+        "strategy_id": "first",
+        "claim": "Local claim",
+        "method": "Local method",
+        "reasoning_steps": [{"argument": "Complete saved step"}],
+    }
+    partial = {
+        **complete,
+        "id": "partial",
+        "reasoning_steps": [{"argument": "Partial step"}, {"argument": ""}],
+    }
+    withdrawn = {**complete, "id": "withdrawn", "retracted_by_artifact_ids": ["negative"]}
+    raw = {
+        "scheduler_version": 2,
+        "context_manifest": {"sources": []},
+        "prior_artifacts": [complete, partial, withdrawn],
+        "other_strategy_evidence": [
+            {"artifact_id": "own", "strategy_id": "second", "claim_or_question": "Different claim"}
+        ],
+        "investigator_step_id": "step",
+        "investigator_output": {**partial, "extract_complete": False},
+        "obligation_ledger": [
+            {
+                "obligation_id": "open",
+                "status": "unresolved",
+                "source_artifact_ids": ["own", "partial", "withdrawn"],
+                "source_step_ids": ["step"],
+            }
+        ],
+    }
+    original = deepcopy(raw)
+    context = EvidenceContext(raw)
+    research_sessions.finalize_dispatch_evidence(context, limit=16_000)
+    catalog = context["evidence_catalog"]
+    assert catalog == build_catalog(context)
+    assert raw == original
+    assert catalog["own"]["own"]["conflicted"]
+    assert catalog["peer"]["own"]["conflicted"]
+    assert artifact_permissions(catalog, include_peer=True) == {"partial", "withdrawn"}
+    assert not complete_argument(partial)
+    assert not complete_argument(withdrawn)
+    assert catalog["current_investigator"]["availability"] == "extract"
+    assert not catalog["current_investigator"]["closure_argument"]
+    assert not catalog["own"]["partial"]["closure_argument"]
+    assert not catalog["own"]["withdrawn"]["closure_argument"]
+    assert context["obligation_ledger"][0]["evidence_review_status"].startswith(
+        "no_complete_argument"
+    )
+    assert not research_sessions._usable_addressed_obligation_basis(
+        {
+            "id": "pointer",
+            "python_execution": {
+                "id": "execution",
+                "status": "completed",
+                "exit_code": 0,
+                "source_sha256": "hash",
+                "stdout": "not actually supplied",
+                "evidence_availability": "pointer_only_original_not_supplied",
+            },
+        },
+        [
+            {
+                "research_artifact_id": "pointer",
+                "execution_id": "execution",
+                "use": "result",
+                "evidence": "output",
+            }
+        ],
+    )
+    duplicate = build_catalog(
+        {"prior_artifacts": [complete, {**complete, "claim": "Contradictory duplicate"}]}
+    )
+    assert duplicate["own"]["own"]["conflicted"]
+    assert not artifact_permissions(duplicate, include_peer=True)
+    malformed = build_catalog(
+        {"prior_artifacts": [{"id": "only-id", "python_execution": {"id": "not-evidence"}}]}
+    )
+    assert malformed["own"]["only-id"]["availability"] == "pointer_only"
+    assert not malformed["computations"]
+    claim_only = build_catalog(
+        {"investigator_step_id": "step", "investigator_output": {"claim": "Claim only"}}
+    )
+    assert claim_only["current_investigator"]["availability"] == "extract"
+    assert not claim_only["current_investigator"]["closure_argument"]
 
 
 def test_frozen_evidence_archive_reference_replay() -> None:

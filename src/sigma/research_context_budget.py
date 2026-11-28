@@ -630,9 +630,11 @@ def finalize_dispatch_evidence(context: dict[str, Any], *, limit: int) -> None:
     to account for pointer substitutions without accumulating nested catalogs.
     The caller applies the existing hard byte guard after manifest accounting.
     """
+    _measure_context_bytes(context)
     catalog = build_catalog(context)
     for _ in range(3):
         context["evidence_catalog"] = catalog
+        _measure_context_bytes(context)
         if _bytes(context) <= limit:
             break
         before = _bytes(context)
@@ -667,12 +669,19 @@ def finalize_dispatch_evidence(context: dict[str, Any], *, limit: int) -> None:
             visible_refs(refs) if isinstance(refs, list) else []
             for refs in dictionary["source_refs"]
         ]
+    adequate_arguments = {
+        identifier
+        for group in (catalog["own"], catalog["prior"], catalog["continuation"], catalog["peer"])
+        for identifier, source in group.items()
+        if identifier in allowed and source["closure_argument"] and not source["conflicted"]
+    }
     for obligation in context.get("obligation_ledger", []):
         if not isinstance(obligation, dict):
             continue
         refs = obligation.get("source_refs")
         if isinstance(refs, list):
             obligation["source_refs"] = visible_refs(refs)
+        obligation.pop("evidence_review_status", None)
         if obligation.get("status") == "unresolved" and not (
             obligation.get("supplied_source_artifact_ids")
             or obligation.get("source_step_ids")
@@ -681,3 +690,27 @@ def finalize_dispatch_evidence(context: dict[str, Any], *, limit: int) -> None:
         ):
             obligation["source_artifact_availability"] = POINTER
             obligation["evidence_review_status"] = "no_supplied_basis; investigate or defer"
+        elif obligation.get("status") == "unresolved" and not (
+            adequate_arguments.intersection(obligation.get("supplied_source_artifact_ids", []))
+            or adequate_arguments.intersection(obligation.get("basis_artifact_ids", []))
+            or catalog["current_investigator"]["closure_argument"]
+            and (obligation.get("source_step_ids") or obligation.get("basis_step_ids"))
+        ):
+            obligation["evidence_review_status"] = (
+                "no_complete_argument; investigate or defer unless a supplied "
+                "successful bounded computation is explicitly cited"
+            )
+    _measure_context_bytes(context)
+
+
+def _measure_context_bytes(context: dict[str, Any]) -> None:
+    manifest = context.get("context_manifest")
+    if not isinstance(manifest, dict):
+        return
+    manifest["assembled_context_bytes"] = 0
+    for _ in range(6):
+        size = _bytes(context)
+        if manifest["assembled_context_bytes"] == size:
+            return
+        manifest["assembled_context_bytes"] = size
+    raise ValueError("Evidence catalog byte accounting did not converge")

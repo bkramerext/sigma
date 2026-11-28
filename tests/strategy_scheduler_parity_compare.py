@@ -129,6 +129,25 @@ def _argument_kind(row: dict) -> str:
     return "not_supplied"
 
 
+def _whole_argument(row: dict) -> bool:
+    # Independently inspect the supplied structured steps. Peer argument
+    # extracts do not establish that the entire saved argument was delivered.
+    steps = row.get("reasoning_steps")
+    if steps is None:
+        steps = (row.get("investigator_output") or {}).get("reasoning_steps")
+    return bool(
+        steps
+        and not row.get("extract_truncated_fields")
+        and not row.get("retracted_by_artifact_ids")
+        and all(
+            isinstance(step.get("argument"), str)
+            and step["argument"].strip()
+            and "[truncated" not in step["argument"]
+            for step in steps
+        )
+    )
+
+
 def _expected_source(row: dict, availability: str) -> dict:
     # This synthetic parity scenario has no compacted sources. Large/omitted,
     # pointer and continuation/computation cases are separately regression-tested.
@@ -138,6 +157,8 @@ def _expected_source(row: dict, availability: str) -> dict:
         "availability": availability,
         "argument": _argument_kind(row),
         "strategy_id": row.get("strategy_id"),
+        "closure_argument": _whole_argument(row),
+        "conflicted": False,
     }
 
 
@@ -207,7 +228,12 @@ def verified_evidence_overlay(context: dict, artifacts: dict, provenance: dict) 
     peer = {row["artifact_id"]: _expected_source(row, "extract") for row in peers}
     current = context.get("investigator_output")
     if current is None:
-        investigator = {"step_id": None, "availability": "omitted", "argument": "not_supplied"}
+        investigator = {
+            "step_id": None,
+            "availability": "omitted",
+            "argument": "not_supplied",
+            "closure_argument": False,
+        }
     else:
         assert isinstance(current, dict)
         assert not current.get("extract_truncated_fields")
@@ -215,12 +241,14 @@ def verified_evidence_overlay(context: dict, artifacts: dict, provenance: dict) 
             "step_id": context["investigator_step_id"],
             "availability": "complete",
             "argument": _argument_kind(current),
+            "closure_argument": _whole_argument(current),
         }
     expected_catalog = {
         "version": 1,
         "note": (
             "Complete means the original representation is supplied, not verified. "
-            "Extracts support only their visible material; pointers are not citable."
+            "Extracts support only their visible material; pointers and conflicts are not citable. "
+            "closure_argument means a whole unretracted structured argument is supplied, not a proof."
         ),
         "obligation_peer_citations": context.get("scheduler_version") == 2,
         "own": own,
@@ -264,6 +292,12 @@ def verified_evidence_overlay(context: dict, artifacts: dict, provenance: dict) 
     if expected_catalog["obligation_peer_citations"]:
         allowed.update(peer)
     steps = {investigator["step_id"]} - {None}
+    adequate = {
+        identifier
+        for group in (own, prior, peer)
+        for identifier, source in group.items()
+        if identifier in allowed and source["closure_argument"]
+    }
     for row in normalized["obligation_ledger"]:
         saved = original[row["obligation_id"]]
         for field in ("source_artifact_ids", "basis_artifact_ids"):
@@ -299,6 +333,16 @@ def verified_evidence_overlay(context: dict, artifacts: dict, provenance: dict) 
                 "withheld_pointer_source_count"
             ):
                 row["source_artifact_availability"] = "incomplete_extract_original_not_supplied"
+        elif row["status"] == "unresolved" and not (
+            adequate.intersection(row.get("supplied_source_artifact_ids", []))
+            or adequate.intersection(row.get("basis_artifact_ids", []))
+            or investigator["closure_argument"]
+            and (row.get("source_step_ids") or row.get("basis_step_ids"))
+        ):
+            assert row.pop("evidence_review_status") == (
+                "no_complete_argument; investigate or defer unless a supplied "
+                "successful bounded computation is explicitly cited"
+            )
         else:
             assert "evidence_review_status" not in row
     # Adjust only for the exact verified transformations above. The count in
@@ -316,10 +360,20 @@ def verified_evidence_overlay(context: dict, artifacts: dict, provenance: dict) 
 def verify_overlay_negative_controls(context: dict, artifacts: dict, provenance: dict) -> None:
     """A forged catalog or peer argument fails; unrelated changes remain visible."""
     expected = verified_evidence_overlay(context, artifacts, provenance)
-    for change in ("catalog", "peer", "byte_count"):
+    for change in ("catalog", "permission", "peer", "byte_count", "lineage"):
+        altered_provenance = copy.deepcopy(provenance)
         altered = copy.deepcopy(context)
         if change == "catalog":
             altered["evidence_catalog"]["version"] = 999
+        elif change == "permission":
+            altered["evidence_catalog"]["obligation_peer_citations"] = not altered[
+                "evidence_catalog"
+            ]["obligation_peer_citations"]
+        elif change == "lineage":
+            # A missing original lineage entry must fail, not normalize away.
+            if not altered_provenance["original_obligation_references"]:
+                continue
+            altered_provenance["original_obligation_references"] = []
         elif change == "peer":
             target = next(
                 (row for row in altered["other_strategy_evidence"] if "argument_extract" in row),
@@ -334,16 +388,20 @@ def verify_overlay_negative_controls(context: dict, artifacts: dict, provenance:
         else:
             altered["context_manifest"]["assembled_context_bytes"] += 1
         try:
-            verified_evidence_overlay(altered, artifacts, provenance)
-        except AssertionError:
+            verified_evidence_overlay(altered, artifacts, altered_provenance)
+        except (AssertionError, KeyError):
             pass
         else:
             raise AssertionError("Forged evidence-policy overlay passed: " + change)
-    changed = copy.deepcopy(context)
-    changed["problem"] += " Unapproved change."
-    for _ in range(3):
-        changed["context_manifest"]["assembled_context_bytes"] = _bytes(changed)
-    assert verified_evidence_overlay(changed, artifacts, provenance) != expected
+    for field in ("problem", "question", "strategy"):
+        changed = copy.deepcopy(context)
+        if field == "strategy":
+            changed[field]["approach"] += " Unapproved change."
+        else:
+            changed[field] += " Unapproved change."
+        for _ in range(3):
+            changed["context_manifest"]["assembled_context_bytes"] = _bytes(changed)
+        assert verified_evidence_overlay(changed, artifacts, provenance) != expected
 
 
 def assert_historical_schema(old: dict, new: dict) -> None:

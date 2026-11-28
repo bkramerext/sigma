@@ -78,7 +78,9 @@ from sigma.research_evidence_catalog import (
     EvidenceContext,
     artifact_permissions,
     audit_inventory,
+    build_catalog,
     citable,
+    complete_argument,
     computation_targets,
     step_permissions,
 )
@@ -4170,6 +4172,14 @@ def _role_request_payload(
     if isinstance(record.get("desired_outcomes"), str) and record["desired_outcomes"]:
         context["desired_outcomes"] = record["desired_outcomes"]
     input_text = json.dumps(context, ensure_ascii=False)
+    if "evidence_catalog" in context:
+        if (
+            not isinstance(context.get("context_manifest"), dict)
+            or context["evidence_catalog"] != build_catalog(context)
+            or context["context_manifest"].get("assembled_context_bytes")
+            != len(input_text.encode("utf-8"))
+        ):
+            raise ProjectError("Final research evidence catalog or wire byte count is inconsistent")
     if len(input_text.encode("utf-8")) > _agent_dispatch_guard_bytes(record):
         raise _research_context_guard_error(
             context,
@@ -8671,14 +8681,18 @@ def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, An
     A completed computation can support a *bounded* observation only when the
     reviewer explicitly cites its saved result. Neither path verifies a proof.
     """
-    if not isinstance(source, dict) or source.get("retracted_by_artifact_ids"):
+    if (
+        not isinstance(source, dict)
+        or source.get("retracted_by_artifact_ids")
+        or source.get("evidence_availability") == "pointer_only_original_not_supplied"
+        or source.get("coordinator_decision") == "stop_retracted_claim"
+    ):
         return False
-    truncated = source.get("extract_truncated_fields", [])
-    if not isinstance(truncated, list):
-        return False
-    steps = source.get("reasoning_steps")
-    if isinstance(steps, list) and bool(steps) and "reasoning_steps" not in truncated:
+    if complete_argument(source):
         return True
+    skeptic = source.get("skeptic_output")
+    if isinstance(skeptic, dict) and skeptic.get("stop_reason") == "claim_retracted":
+        return False
 
     investigation = source.get("investigator_output")
     for field in ("python_execution", "sage_execution"):
@@ -8688,10 +8702,13 @@ def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, An
         if not isinstance(execution, dict):
             continue
         if (
-            execution.get("status") != "completed"
+            execution.get("evidence_availability") == "pointer_only_original_not_supplied"
+            or execution.get("status") != "completed"
+            or type(execution.get("exit_code")) is not int
             or execution.get("exit_code") != 0
             or not isinstance(execution.get("id"), str)
             or not isinstance(execution.get("source_sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", execution["source_sha256"])
         ):
             continue
         for citation in citations:
@@ -9026,6 +9043,10 @@ async def _call_provider(
             "Legacy sessions cannot dispatch computations; start a new research session."
         )
     packet = context.get("approved_continuation")
+    if isinstance(packet, dict):
+        from sigma.continuations import expand_dispatch_packet
+
+        packet = expand_dispatch_packet(packet)
     reviews = validated.get("continuation_reviews", [])
     expected_sources = {row["artifact_id"] for row in packet["sources"]} if packet else set()
     reviewed_sources = [row["artifact_id"] for row in reviews]
@@ -9182,7 +9203,11 @@ async def _call_provider(
                     review["basis_step_ids"]
                     and (
                         not isinstance(catalog, dict)
-                        or catalog["current_investigator"]["availability"] == "complete"
+                        or catalog["current_investigator"]["closure_argument"]
+                        or _usable_addressed_obligation_basis(
+                            context.get("investigator_output"), validated["computational_citations"]
+                        )
+                        and catalog["current_investigator"]["availability"] == "complete"
                     )
                 )
                 and not any(
@@ -9414,6 +9439,7 @@ def _agent_context(
         ),
         None,
     )
+    original_obligations: list[dict[str, Any]] = []
     obligations, omitted_obligation_count, omitted_obligation_ids = _obligation_ledger(
         artifacts,
         pending_investigation,
@@ -9422,6 +9448,7 @@ def _agent_context(
         strategy_id=strategy_id,
         prior_obligations=prior_session_obligations,
         full_omission_ids=True,
+        audit_originals=original_obligations,
         identity_path=record.get("project_path")
         if record.get("obligation_id_format") == "compact-v1"
         else None,
@@ -9804,23 +9831,7 @@ def _agent_context(
     dispatch = EvidenceContext(context)
     dispatch.remember("own", artifacts)
     dispatch.remember("prior", prior_session_findings)
-    dispatch.original_obligations = [
-        {
-            key: item[key]
-            for key in (
-                "obligation_id",
-                "source_artifact_ids",
-                "source_artifact_count",
-                "source_refs",
-                "source_step_ids",
-                "basis_artifact_ids",
-                "basis_step_ids",
-            )
-            if key in item
-        }
-        for item in obligations
-        if isinstance(item.get("obligation_id"), str)
-    ]
+    dispatch.original_obligations = original_obligations
     dispatch.omission_metadata = {
         key: deepcopy(value) for key, value in manifest.items() if key.startswith("omitted_")
     }
@@ -9833,8 +9844,7 @@ def _agent_context(
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     if finalize:
         finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-    context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
-    _bound_context_manifest(context["context_manifest"])
+    _refresh_context_manifest_bytes(context)
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
@@ -9962,6 +9972,19 @@ def _context_byte_breakdown(
         f" phase={phase}; strategy={safe_identifier(strategy_id)};"
         f" role={safe_identifier(role)}; largest fields: {largest}."
     )
+
+
+def _refresh_context_manifest_bytes(context: dict[str, Any]) -> None:
+    """Measure the final JSON, including the count itself and bounded manifest."""
+    manifest = context["context_manifest"]
+    manifest["assembled_context_bytes"] = 0
+    for _ in range(8):
+        _bound_context_manifest(manifest)
+        size = _json_bytes(context)
+        if manifest["assembled_context_bytes"] == size:
+            return
+        manifest["assembled_context_bytes"] = size
+    raise ProjectError("Final research context byte accounting did not converge")
 
 
 def _bound_context_manifest(manifest: dict[str, Any]) -> None:
@@ -10094,12 +10117,14 @@ def _obligation_ledger(
     prior_obligations: list[dict[str, Any]] | None = None,
     unbounded_for_admission: bool = False,
     full_omission_ids: bool = False,
+    audit_originals: list[dict[str, Any]] | None = None,
     identity_path: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, list[str]]:
     """Apply obligation events chronologically; missing later notes do not resolve."""
     entries: dict[str, dict[str, Any]] = {}
     legacy_ids: dict[str, set[str]] = {}
     assigned: dict[str, str] = {}
+    known_source_refs: dict[str, dict[str, dict[str, Any]]] = {}
 
     def entry_for(
         text: str, *, source_project_id: Any, source_strategy_id: Any, assumptions: list[str]
@@ -10145,6 +10170,8 @@ def _obligation_ledger(
             "artifact_id": artifact_id,
             "sequence": artifact.get("sequence"),
         }
+        if audit_originals is not None:
+            known_source_refs.setdefault(item["obligation_id"], {})[artifact_id] = ref
         ids: list[str] = item["source_artifact_ids"]
         refs: list[dict[str, Any]] = item["source_refs"]
         if len(ids) < MAX_OBLIGATION_SOURCE_ARTIFACTS:
@@ -10233,7 +10260,7 @@ def _obligation_ledger(
     for saved in prior_obligations or []:
         if not isinstance(saved, dict) or not isinstance(saved.get("obligation_id"), str):
             continue
-        item = dict(saved)
+        item = deepcopy(saved)
         item.setdefault("status", "unresolved")
         item.setdefault("source_artifact_ids", [])
         item.setdefault("source_refs", [])
@@ -10243,6 +10270,12 @@ def _obligation_ledger(
         item.setdefault("basis_step_ids", [])
         item.setdefault("rationale", "")
         entries[item["obligation_id"]] = item
+        if audit_originals is not None:
+            known_source_refs[item["obligation_id"]] = {
+                ref["artifact_id"]: ref
+                for ref in item["source_refs"]
+                if isinstance(ref, dict) and isinstance(ref.get("artifact_id"), str)
+            }
         legacy_id = item.get("legacy_obligation_id")
         if isinstance(legacy_id, str):
             legacy_ids.setdefault(legacy_id, set()).add(item["obligation_id"])
@@ -10406,6 +10439,30 @@ def _obligation_ledger(
     result = list(entries.values())
     for item in result:
         item.pop("_seen_source_ids", None)
+    if audit_originals is not None:
+        for item in result:
+            lineage = {
+                key: deepcopy(item[key])
+                for key in (
+                    "obligation_id",
+                    "source_artifact_ids",
+                    "source_artifact_count",
+                    "source_refs",
+                    "source_step_ids",
+                    "basis_artifact_ids",
+                    "basis_step_ids",
+                )
+                if key in item
+            }
+            known = known_source_refs.get(item["obligation_id"], {})
+            additional = [
+                ref
+                for identifier, ref in known.items()
+                if identifier not in item["source_artifact_ids"]
+            ]
+            if additional:
+                lineage["additional_known_source_refs"] = deepcopy(additional)
+            audit_originals.append(lineage)
     if unbounded_for_admission or len(result) <= MAX_CONTEXT_OBLIGATIONS:
         return result, 0, []
     # Preserve the original ledger, but a long-running session can accumulate
@@ -11287,6 +11344,11 @@ def _portfolio_context(
             "evidence_status": _bounded_note(artifact.get("evidence_status"), 200),
             "current_peer_argument": artifact["id"] in current_peer_ids,
             **(
+                {"retracted_by_artifact_ids": artifact["retracted_by_artifact_ids"]}
+                if artifact.get("retracted_by_artifact_ids")
+                else {}
+            ),
+            **(
                 {"argument_extract": _peer_argument_extract(artifact)}
                 if artifact["id"] in current_peer_ids or _artifact_is_critical(artifact)
                 else {}
@@ -11373,8 +11435,7 @@ def _portfolio_context(
     compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
     if finalize:
         finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-    context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
-    _bound_context_manifest(context["context_manifest"])
+    _refresh_context_manifest_bytes(context)
     if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
         raise _research_context_manifest_guard_error(context)
     if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
@@ -12525,8 +12586,7 @@ async def _portfolio_role_call(
                     context["context_manifest"]["sources"].append(guidance_group)
                 compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
                 finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-                context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
-                _bound_context_manifest(context["context_manifest"])
+                _refresh_context_manifest_bytes(context)
                 if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                     raise _research_context_manifest_guard_error(context)
                 if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
@@ -17973,8 +18033,7 @@ async def _worker(session_id: str, path: str) -> None:
                 context["context_manifest"]["sources"].append(guidance_group)
             compact_dispatch_context(context, limit=MAX_AGENT_CONTEXT_BYTES)
             finalize_dispatch_evidence(context, limit=MAX_AGENT_CONTEXT_BYTES)
-            context["context_manifest"]["assembled_context_bytes"] = _json_bytes(context)
-            _bound_context_manifest(context["context_manifest"])
+            _refresh_context_manifest_bytes(context)
             if _json_bytes(context["context_manifest"]) > MAX_CONTEXT_MANIFEST_BYTES:
                 raise _research_context_manifest_guard_error(context)
             if _json_bytes(context) > _agent_dispatch_guard_bytes(record):
