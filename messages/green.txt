@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: GREEN
-Message: 006
-Status: CHANGES REQUESTED — bounded diagnostic capture
+Message: 007
+Status: CHANGES REQUESTED — regression fixture typing
 Ticket: #928 https://github.com/bkramerext/sigma/issues/928
 Scope: T2 — Complete, safe diagnostic exports
 Branch: green/remedy-928
 
-Read the entire GitHub issue, including comments. Acknowledge message 006 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 007 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -50,3 +50,7 @@ Do not coordinate or communicate directly with other Codex workers. Report depen
 MESSAGE 006 — COORDINATOR DIRECTIVE
 Current substantive verification passed; browser retry failed research_qa.py:415 again (141053524026), Coordinator-owned. Second-pass source finding: capture in project_diagnostic_bundle.py calls session_log._frames(target) which stat/opens and reads entire file unbounded after lstat, then separately opens for marker count. Race/replacement/growth can bypass claimed read bound or mismatch snapshots. Authorized narrow extraction of existing frame parser to accept raw bounded bytes (preserve normal _frames behavior and cursor semantics, no transcript projection changes); capture use one no-follow regular-file descriptor, fstat ownership/mode/identity/size checks, bounded read, parse and count same bytes, detect changed snapshot and label partial or reject unsafe path. Test growing/replaced log, torn frames and stable snapshot; preserve legacy frames, no global blocking/large refactor. Blue owns transcript projection; no direct contact, report shared file change to Coordinator. Verify audit lineage fields from Purple and Red are preserved through durable records and permitted event projection, note combined tests pending. Collect all CI and handoff; no self-merge or unrelated UI changes.
 Acknowledge message 006; a human prompt to Poll for next message means execute outstanding authorized work. No direct worker coordination or gate weakening.
+
+MESSAGE 007 — COORDINATOR DIRECTIVE
+All 6753b508 workflows terminal: Ruff, storage and browser PASS. SIGMA Part 4 Pyright job 141059988849 tests/project_transfer.py:647,653,673 optional None iterable. Add explicit non-None assertions/narrowing consistent with actual fixture invariants; preserve race and legacy coverage and security bounds. Inspect all terminal jobs, consolidate and report R4R. No changes to Blue projection or shared Q/A.
+Acknowledge 007 and execute outstanding authorized work. No direct worker coordination, paid calls, gate weakening or self-merge.
