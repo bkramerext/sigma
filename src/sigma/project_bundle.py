@@ -333,6 +333,9 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
     files = bundle["files"]
     if not isinstance(files, dict) or "project.json" not in files:
         raise BundleError("Project bundle has no project document")
+    if len(files) > 20000:
+        raise BundleError("Too many project bundle members")
+    names = set(files)
     result: dict[str, bytes] = {}
     total_size = 0
     for name, value in files.items():
@@ -341,7 +344,10 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
         path = Path(name)
         if path.is_absolute() or any(part in ("", ".", "..") for part in name.split("/")):
             raise BundleError("Unsafe bundle path")
-        if any(other != name and other.startswith(name + "/") for other in files):
+        if len(name) > 4096 or "\x00" in name:
+            raise BundleError("Unsafe bundle path")
+        parts = name.split("/")
+        if any("/".join(parts[:index]) in names for index in range(1, len(parts))):
             raise BundleError("Bundle member conflicts with a directory")
         if version == LEGACY_VERSION:
             if not isinstance(value, str):
@@ -363,6 +369,7 @@ def _decode(bundle: dict[str, Any]) -> dict[str, bytes]:
                     or type(size) is not int
                     or size < 0
                     or size > MAX_MEMBER_BYTES
+                    or total_size + size > MAX_BUNDLE_BYTES
                     or len(encoded) > ((MAX_COMPRESSED_MEMBER_BYTES + 2) // 3) * 4 + 4
                 ):
                     raise BundleError("Invalid compressed project member size")

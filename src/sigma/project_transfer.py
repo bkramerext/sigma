@@ -17,7 +17,7 @@ import tarfile
 from pathlib import Path
 from uuid import uuid4
 
-from sigma import project_bundle
+from sigma import project_bundle, project_diagnostic_bundle
 from sigma.project_bundle import BundleError
 from sigma.zstd_codec import (
     MAX_BUNDLE_BYTES,
@@ -158,6 +158,8 @@ def make_bundle(members: dict[str, bytes]) -> dict:
     standard: dict[str, bytes] = {}
     artifacts: dict[str, bytes] = {}
     for original, data in members.items():
+        if original.startswith(project_diagnostic_bundle.PREFIX):
+            continue
         name = _canon(original)
         if not _safe_name(name):
             raise BundleError("Unsafe project member name")
@@ -178,7 +180,7 @@ def make_bundle(members: dict[str, bytes]) -> dict:
     }
 
 
-def export_project(path: str | Path) -> bytes:
+def export_project(path: str | Path, *, diagnostics: bool = False) -> bytes:
     source = Path(path)
     if source.suffix == ".sigma" and source.is_dir():
         members = project_bundle._files(source)
@@ -188,9 +190,20 @@ def export_project(path: str | Path) -> bytes:
         members = project_bundle._decode(project_bundle.read_bundle(source))
     else:
         raise BundleError("Invalid project source")
-    return (
-        json.dumps(make_bundle(members), sort_keys=True, ensure_ascii=False, indent=2) + "\n"
-    ).encode("utf-8")
+    payload = make_bundle(members)
+    if diagnostics:
+        durable_size = sum(
+            len(data)
+            for name, data in members.items()
+            if not name.startswith(project_diagnostic_bundle.PREFIX)
+        )
+        passive = project_diagnostic_bundle.capture(
+            source, members, budget=MAX_BUNDLE_BYTES - durable_size
+        )
+        payload["diagnostics"] = project_diagnostic_bundle.encode(passive)
+    return (json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode(
+        "utf-8"
+    )
 
 
 def decode_bundle(payload: dict) -> dict[str, bytes]:
@@ -218,11 +231,19 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
         return migrated
     if (
         not isinstance(payload, dict)
-        or set(payload) != {"format", "version", "files", "artifacts"}
+        or set(payload) not in (
+            {"format", "version", "files", "artifacts"},
+            {"format", "version", "files", "artifacts", "diagnostics"},
+        )
         or payload["format"] != FORMAT
         or payload["version"] != VERSION
         or not isinstance(payload["files"], dict)
-        or any(name.startswith("artifacts/") for name in payload["files"])
+        or any(
+            not isinstance(name, str)
+            or name.startswith(("artifacts/", "diagnostics/"))
+            or name == "diagnostics"
+            for name in payload["files"]
+        )
     ):
         raise BundleError("Unsupported or malformed project bundle")
     standard = project_bundle._decode(
@@ -237,7 +258,16 @@ def decode_bundle(payload: dict) -> dict[str, bytes]:
         raise BundleError("Duplicate project member")
     if sum(map(len, standard.values())) + sum(map(len, artifacts.values())) > MAX_BUNDLE_BYTES:
         raise BundleError("Project members exceed the total bundle size limit")
-    return {**standard, **artifacts}
+    members = {**standard, **artifacts}
+    if "diagnostics" in payload:
+        members.update(
+            project_diagnostic_bundle.decode(
+                payload["diagnostics"],
+                members,
+                budget=MAX_BUNDLE_BYTES - sum(map(len, members.values())),
+            )
+        )
+    return members
 
 
 def bundle_document(payload: dict) -> dict:
@@ -268,6 +298,11 @@ def import_project(
     if destination.suffix != ".sigma" or destination.exists():
         raise BundleError("Import destination must be a new .sigma directory")
     members = decode_bundle(payload)
+    passive = {
+        name: members.pop(name)
+        for name in list(members)
+        if name.startswith(project_diagnostic_bundle.PREFIX)
+    }
     if title_override is not None:
         renamed = project_bundle.rename_bundle_project(
             project_bundle.portable_bundle(members), title_override
@@ -320,6 +355,8 @@ def import_project(
                 "utf-8"
             )
         members = {_canon(name): data for name, data in members.items()}
+        passive = project_diagnostic_bundle.rebind(passive, session_ids)
+    members.update(passive)
     # Verify all paper artifacts before publishing the directory.
     historical = {}
     for name, data in members.items():

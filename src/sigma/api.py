@@ -2494,14 +2494,14 @@ def export_project_view(path: str):
 
 @app.get("/api/projects/export")
 @app.get("/api/projects/download")
-def download_project_bundle(path: str):
+def download_project_bundle(path: str, diagnostics: bool = False):
     """Export every project file as one complete, importable JSON bundle."""
     from sigma.project_transfer import export_project
     from sigma.projects import project_path
 
     authorized = project_path(path)
     inspect_project(authorized)
-    content = export_project(authorized)
+    content = export_project(authorized, diagnostics=diagnostics)
     return Response(
         content=content,
         media_type="application/json",

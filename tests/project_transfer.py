@@ -11,7 +11,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from sigma import project_evidence, project_transfer, research_supplied_evidence
+from sigma import project_diagnostic_bundle, project_evidence, project_transfer, research_supplied_evidence
 from sigma.project_bundle import BundleError
 from sigma.projects import initialize_project, inspect_project
 from sigma.zstd_codec import compress
@@ -149,9 +149,95 @@ def test_rejects_traversal_in_archive() -> None:
         _expect_failure(lambda: project_transfer.decode_bundle(payload))
 
 
+def test_private_diagnostic_roundtrip() -> None:
+    from uuid import uuid4
+
+    from sigma import session_log
+
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        origin = root / "original.sigma"
+        initialize_project(origin, "Original", "A synthetic research problem")
+        project_id = inspect_project(origin).project.id
+        session_id = str(uuid4())
+        sessions = origin / "research-sessions"
+        sessions.mkdir(exist_ok=True)
+        (sessions / f"{session_id}.json").write_text(json.dumps({
+            "id": session_id,
+            "project_id": project_id,
+            "project_path": str(origin),
+            "session_number": 1,
+            "status": "stopped",
+        }))
+        log = session_log.log_path(str(origin), project_id, session_id)
+        log.parent.mkdir(parents=True)
+        session_log._ensure(log, project_id, session_id, 1)
+        session_log._append_frame(log, {
+            "type": "provider_request",
+            "request_id": "synthetic-request",
+            "request": {
+                "input": "Synthetic research premise",
+                "headers": {"Authorization": "unsafe-synthetic-secret"},
+            },
+            "authorization": "unsafe-synthetic-secret",
+        })
+        session_log._append_frame(log, {
+            "type": "provider_failure",
+            "request_id": "synthetic-request",
+            "status": "timeout",
+        })
+        ordinary = json.loads(project_transfer.export_project(origin))
+        assert "diagnostics" not in ordinary
+        diagnostic = json.loads(project_transfer.export_project(origin, diagnostics=True))
+        archive = diagnostic["diagnostics"]
+        assert archive["private"] is True
+        assert len(archive["blobs"]) == 1
+        members = project_transfer.decode_bundle(diagnostic)
+        passive = {
+            name: data for name, data in members.items()
+            if name.startswith(project_diagnostic_bundle.PREFIX)
+        }
+        assert len(passive) == 1
+        raw = next(iter(passive.values()))
+        snapshot = json.loads(raw)
+        assert snapshot["source_session_id"] == session_id
+        assert snapshot["events"][0]["request"]["input"] == "Synthetic research premise"
+        assert b"unsafe-synthetic-secret" not in raw
+        assert snapshot["events"][1]["request_id"] == "synthetic-request"
+        assert snapshot["availability"] == "available"
+        imported = root / "imported.sigma"
+        project_transfer.import_project(diagnostic, imported)
+        assert "diagnostics" not in json.loads(project_transfer.export_project(imported))
+        again = json.loads(project_transfer.export_project(imported, diagnostics=True))
+        assert again["diagnostics"]["blobs"] == archive["blobs"]
+        assert session_id not in again["diagnostics"]["sessions"]
+        assert len(again["diagnostics"]["sessions"]) == 1
+        assert not (root / ".sigma-session-logs" / inspect_project(imported).project.id).exists()
+
+        digest = next(iter(archive["blobs"]))
+        entry = archive["blobs"][digest]
+        corrupted = {**archive, "blobs": {digest: {**entry, "size": 999999999}}}
+        _expect_failure(
+            lambda: project_transfer.decode_bundle({**diagnostic, "diagnostics": corrupted})
+        )
+        _expect_failure(
+            lambda: project_transfer.decode_bundle({
+                **diagnostic,
+                "diagnostics": {**archive, "sessions": {str(uuid4()): [digest]}},
+            })
+        )
+        with patch.object(project_diagnostic_bundle, "MAX_DIAGNOSTIC_BYTES", 10):
+            _expect_failure(lambda: project_transfer.decode_bundle(diagnostic))
+        print(
+            f"Diagnostic synthetic snapshot: {len(raw)} bytes uncompressed, "
+            f"{len(json.dumps(archive))} bytes encoded archive."
+        )
+
+
 if __name__ == "__main__":
     test_single_archive_roundtrip()
     test_multiframe_artifact_archive_is_lossless_and_bounded()
     test_total_size_includes_metadata_and_artifacts()
     test_rejects_traversal_in_archive()
+    test_private_diagnostic_roundtrip()
     print("PASS v4 artifact archive, source links, restored files and unsafe path rejection.")
