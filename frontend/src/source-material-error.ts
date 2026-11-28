@@ -33,3 +33,30 @@ export function sourceMaterialOverflowCopy(
     next: 'Open this project’s Source Material list and disable or remove unneeded files and links, or replace long documents with shorter excerpts. Then click Resume. Before the first Investigator/Skeptic call, SIGMA will reload the current enabled sources and recheck the limit. Saved findings and any prior provider usage remain preserved.',
   };
 }
+
+/** A persisted event is emitted once per unsuccessful source retrieval.
+ * Ignore historical events on initial load, and never reannounce the same
+ * event on repeated or out-of-order polling responses.
+ */
+export function collectSourceMaterialWarnings(
+  sessions: readonly { id: string; events: readonly (SourceMaterialEvent & { sequence?: number })[] }[],
+  seen: Map<string, number>,
+  initialHistory = false,
+): string[] {
+  const messages: string[] = [];
+  for (const session of sessions) {
+    const previous = seen.get(session.id) ?? 0;
+    let latest = previous;
+    for (const event of [...session.events].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))) {
+      if (event.kind !== 'source_material.source_failed' || typeof event.sequence !== 'number'
+        || !Number.isSafeInteger(event.sequence) || event.sequence <= latest
+        || typeof event.message !== 'string' || !event.message.trim()) continue;
+      latest = event.sequence;
+      if (!initialHistory || seen.has(session.id)) {
+        messages.push(`Source Material: ${event.message}. In Project → Source Material, replace the link or upload a readable copy, or disable the source if unnecessary. Then Resume.`);
+      }
+    }
+    seen.set(session.id, latest);
+  }
+  return messages;
+}

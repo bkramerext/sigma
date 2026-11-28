@@ -17569,6 +17569,21 @@ async def _ensure_supplied_evidence_compilation(session_id: str, path: str) -> b
             if not any(item.get("id") == source["id"] for item in saved):
                 saved.append(compiled)
                 stage["completed_count"] = len(saved)
+                if (
+                    compiled.get("status") != "retrieved"
+                    or compiled.get("incomplete_extract")
+                    or not str(compiled.get("excerpt") or "").strip()
+                ):
+                    name = str(compiled.get("filename") or compiled.get("url") or source["id"])
+                    reason = compiled.get("reason") or (
+                        "incomplete_extract" if compiled.get("incomplete_extract") else "unavailable"
+                    )
+                    detail = str(reason).replace(chr(10), " ").replace(chr(13), " ")[:120]
+                    _event(
+                        latest,
+                        "source_material.source_failed",
+                        f"{name} ({detail})",
+                    )
                 _save(path, latest)
             if latest["status"] in {"stopped", "paused", "ended", "failed"}:
                 return False

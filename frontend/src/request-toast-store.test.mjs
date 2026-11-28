@@ -221,3 +221,16 @@ test('exit phase slides down, stack gap collapses, and reduced-motion CSS disabl
   assert.match(css, /max-height:\s*min\(70vh,\s*560px\)/);
   assert.match(css, /max-height:\s*min\(60vh,\s*480px\)/);
 });
+
+test('individual source warnings survive a burst beyond the ordinary error limit', () => {
+  const clock = new FakeClock();
+  const store = makeStore(clock);
+  for (let index = 0; index < 8; index++) store.add(`Source ${index}`, 'warning');
+  for (let index = 0; index < 6; index++) store.add(`Error ${index}`);
+  assert.equal(store.getSnapshot().filter(item => item.severity === 'warning').length, 8);
+  assert.equal(store.getSnapshot().filter(item => item.severity === 'error').length, 5);
+  store.add('Source 0', 'warning');
+  assert.equal(store.getSnapshot().filter(item => item.severity === 'warning').length, 8);
+  clock.advance(REQUEST_TOAST_LIFETIME_MS + REQUEST_TOAST_EXIT_MS);
+  assert.equal(store.getSnapshot().length, 0);
+});

@@ -14,7 +14,7 @@ import { openReusableTab } from './reusable-tabs';
 import ProjectDiagnosticsPanel, { type ProjectDiagnostic } from './ProjectDiagnosticsPanel';
 import { reportProjectDiagnostic } from './project-diagnostic-report';
 import { removeResearchSession } from './session-removal-request';
-import { sourceMaterialOverflowCopy } from './source-material-error';
+import { sourceMaterialOverflowCopy, collectSourceMaterialWarnings } from './source-material-error';
 import { publicationAwaitingLibrary, publishedRunActivityLabel, publishedRunReadyForHandoff, publishedRunStillFinishing, savedPaperAwaitingGenerationFinish, unlistedPublicationIds } from './paper-publication-handoff';
 import { displayedPaperNumber, hasActualDraftIdentity, shouldShowPaperLoading, canRemoveDisplayedPaperRun, shouldAutoSelectUnfinishedPaper, orderPaperRunsDescending } from './paper-completion-transition';
 import { activatePaperScoreStep } from './paper-score-action';
@@ -33,7 +33,7 @@ import './text-views.css';
 import './papers-pane.css';
 import './action-icons.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRequest, watchResearchProviderActivity, useAI } from './ai-connection';
-import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
+import { installRequestErrorToasts, reportRequestFailure, reportRequestWarning, RequestErrorToasts } from './request-toast';
 import { invitationWelcomePhrases } from './invitation-welcome-phrases';
 import AboutProvenanceVision from './about-provenance';
 import ProjectTypesDialog, { type ProjectTypeRecord } from './ProjectTypesDialog';
@@ -418,6 +418,12 @@ function stoppedSessionGuidance(session: ResearchSession): { cause: string; next
   // A frozen Source Material overflow is not a model context failure. Use
   // the saved backend measurement (or its historical blocked event) so users
   // can see the size and reduce their source selection before a new session.
+  if (/Cannot research with incomplete Source Material/i.test(message)) {
+    return {
+      cause: message,
+      next: 'Open Project → Source Material. Replace inaccessible links, upload readable copies, or disable sources you do not need. Then click Resume to retry. Saved research remains preserved.',
+    };
+  }
   if (/source material contains|source material exceeds context limit/i.test(evidence)) {
     return sourceMaterialOverflowCopy(
       session.message,
@@ -1601,6 +1607,7 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
   const selectedSessionId = useRef('');
   const sessionsLoaded = useRef(false);
+  const sourceWarningSequences = useRef(new Map<string, number>());
   const initialRevealSessionId = useRef<string | null>(null);
   const [pendingStrategyIds, setPendingStrategyIds] = useState<string[]>([]);
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
@@ -1776,6 +1783,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
     setReadError('');
     const requestedId = preferredId ?? selectedSessionId.current;
     const firstLoad = !sessionsLoaded.current;
+    collectSourceMaterialWarnings(nextSessions, sourceWarningSequences.current, firstLoad)
+      .forEach(reportRequestWarning);
     const chosen = (requestedId ? nextSessions.find(item => item.id === requestedId) : null)
       ?? (!sessionsLoaded.current && !selectedSessionId.current
         ? nextSessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused') ?? nextSessions[0] ?? null
@@ -1857,6 +1866,8 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
         if (!alive) return;
         const current = sessionForDisplay(data);
         if (!current) throw new Error('Research progress response was invalid');
+        collectSourceMaterialWarnings([current], sourceWarningSequences.current)
+          .forEach(reportRequestWarning);
         setSessions(sessions => sessions.map(item => item.id === current.id ? current : item));
         if (current.status !== activeSession.status
           || current.steps.length !== activeSession.steps.length
@@ -1952,7 +1963,11 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
       // without blocking the controls on reloading every session and
       // rebuilding Current Understanding; reconcile the history asynchronously.
       const initialSnapshot = sessionForDisplay(accepted);
-      if (initialSnapshot) setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
+      if (initialSnapshot) {
+        collectSourceMaterialWarnings([initialSnapshot], sourceWarningSequences.current)
+          .forEach(reportRequestWarning);
+        setSessions(current => [initialSnapshot, ...current.filter(item => item.id !== next.id)]);
+      }
       void load(next.id).catch(reportReadFailure);
       if (next.research_method_sources?.advisory) {
         setAnnouncement(next.research_method_sources.advisory);
@@ -2014,7 +2029,11 @@ function ResearchWorkspace({ collaborationRevision, artifactAuthors, viewerEmail
             ? await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action: 'stop', request_only: true }, undefined, true)
             : accepted;
           const acknowledged = sessionForDisplay(resolved);
-          if (acknowledged) setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
+          if (acknowledged) {
+            collectSourceMaterialWarnings([acknowledged], sourceWarningSequences.current)
+              .forEach(reportRequestWarning);
+            setSessions(current => current.map(item => item.id === target.id ? acknowledged : item));
+          }
           void load(target.id).catch(reportReadFailure);
           break;
         } catch (cause) {

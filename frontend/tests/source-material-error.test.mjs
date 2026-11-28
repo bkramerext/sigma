@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sourceMaterialOverflowCopy } from '../src/source-material-error.ts';
+import { sourceMaterialOverflowCopy, collectSourceMaterialWarnings } from '../src/source-material-error.ts';
 
 const exact = 'Source Material contains 279,835 extracted characters; the session supports at most 60,000. Split or shorten the supplied documents.';
 
@@ -38,4 +38,28 @@ test('missing counts are not invented', () => {
   const copy = sourceMaterialOverflowCopy('Source material exceeds context limit');
   assert.match(copy.cause, /exceed SIGMA’s extracted-text limit/);
   assert.doesNotMatch(copy.cause, /\d+,\d+/);
+});
+
+test('source warnings are announced individually and only once across polls', () => {
+  const seen = new Map();
+  const event = (sequence, message) => ({ sequence, kind: 'source_material.source_failed', message });
+  const session = events => ({ id: 's1', events });
+  assert.deepEqual(collectSourceMaterialWarnings([session([event(2, 'old (http_403)')])], seen, true), []);
+  const events = [event(2, 'old (http_403)'), event(5, 'first (http_403)'), event(6, 'second (timeout)')];
+  const warnings = collectSourceMaterialWarnings([session(events)], seen);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], /first \(http_403\)/);
+  assert.match(warnings[1], /second \(timeout\)/);
+  assert.match(warnings[1], /Source Material.*Resume/);
+  assert.deepEqual(collectSourceMaterialWarnings([session(events)], seen), []);
+  assert.deepEqual(collectSourceMaterialWarnings([session(events.slice(0, 1))], seen), []);
+  assert.equal(collectSourceMaterialWarnings([session([...events, event(9, 'first (http_403)')])], seen).length, 1);
+});
+
+test('a new session may fail before its first poll; historical stopped sessions do not replay', () => {
+  const seen = new Map();
+  collectSourceMaterialWarnings([], seen, true);
+  const events = [{ sequence: 1, kind: 'source_material.source_failed', message: 'failed link' }];
+  assert.equal(collectSourceMaterialWarnings([{ id: 'new', events }], seen).length, 1);
+  assert.deepEqual(collectSourceMaterialWarnings([{ id: 'new', events }], seen), []);
 });

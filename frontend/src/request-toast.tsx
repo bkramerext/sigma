@@ -22,6 +22,10 @@ export function reportRequestFailure(message: string) {
   toastStore.add(actionableRequestMessage(message));
 }
 
+export function reportRequestWarning(message: string) {
+  toastStore.add(message, 'warning');
+}
+
 function describeError(body: unknown): string | null {
   if (typeof body === 'string') return body.trim() || null;
   if (!body || typeof body !== 'object') return null;
@@ -92,12 +96,12 @@ export function installRequestErrorToasts() {
 
 export function RequestErrorToasts() {
   const failures = useSyncExternalStore(toastStore.subscribe, toastStore.getSnapshot, toastStore.getSnapshot);
-  return <div className="request-toast-stack" aria-label="Request errors">
+  return <div className="request-toast-stack" aria-label="Request notifications">
     {failures.map(failure => <div className="request-toast-item" data-phase={failure.phase} key={failure.id}>
       <div className="request-toast-item-inner">
-        <div className="request-toast" data-phase={failure.phase} role="alert">
-          <div className="request-toast-content"><strong>{providerInterruptionCopy(failure.message)?.title ?? 'Request Failed'}</strong><p>{providerInterruptionCopy(failure.message) ? `${providerInterruptionCopy(failure.message)?.description} ${providerInterruptionCopy(failure.message)?.next}` : failure.message}</p></div>
-          <button type="button" className="request-toast-dismiss" aria-label="Dismiss request error" data-tooltip="Dismiss request error" onClick={() => toastStore.dismiss(failure.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
+        <div className="request-toast" data-phase={failure.phase} data-severity={failure.severity} role="alert">
+          <div className="request-toast-content"><strong>{failure.severity === 'warning' ? 'Source Material Warning' : providerInterruptionCopy(failure.message)?.title ?? 'Request Failed'}</strong><p>{failure.severity === 'error' && providerInterruptionCopy(failure.message) ? `${providerInterruptionCopy(failure.message)?.description} ${providerInterruptionCopy(failure.message)?.next}` : failure.message}</p></div>
+          <button type="button" className="request-toast-dismiss" aria-label={failure.severity === 'warning' ? 'Dismiss warning' : 'Dismiss request error'} data-tooltip={failure.severity === 'warning' ? 'Dismiss warning' : 'Dismiss request error'} onClick={() => toastStore.dismiss(failure.id)}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" aria-hidden="true"><path d="M8 8 16 16M16 8 8 16"/></svg></button>
         </div>
       </div>
     </div>)}
