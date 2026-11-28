@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: BLUE
-Message: 006
-Status: CHANGES REQUESTED — live-attempt correctness
+Message: 007
+Status: CHANGES REQUESTED — final formatting and review handoff
 Ticket: #927 https://github.com/bkramerext/sigma/issues/927
 Scope: T1 — Transcript integrity and reconciliation
 Branch: blue/remedy-927
 
-Read the entire GitHub issue, including comments. Acknowledge message 006 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
+Read the entire GitHub issue, including comments. Acknowledge message 007 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. Implement the ticket including its risk safeguards and acceptance criteria.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -45,3 +45,7 @@ A human prompt to "Poll for next message" means read the mailbox and execute out
 
 MESSAGE 006 — FINAL ADVERSARIAL REVIEW / PR #935
 All seven current-head CI workflows passed. Read complete Coordinator review 6099198152 on 3fc3f167. Fix the actual live-attempt attribution defect: request ID is persisted only after successful completion, yet both views require it to display genuine pending attempts. Do not label in-flight requests as missing history or claim acceptance without evidence. Use existing durable identity boundary or conservative qualified status; test held-open production dispatch, completion and interruption/retry. Also prevent Supervisor text fallback after contradictory explicit identity. Preserve all previous improvements, no unnecessary churn or unrelated scheduler/budget changes. Historical root cause remains explicitly unverified; report demonstrated mechanisms and missing data. Resume work now; no self-merge or paid calls. R4R with current-head evidence.
+
+MESSAGE 007 — COORDINATOR DIRECTIVE
+All 31bed91d CI terminal: six workflows PASS including SIGMA/browser, Ruff lint PASS but format failure job 141055761649. Apply exact pinned formatter diff only unless independently discovered material defect; report actual held-open production fixture execution and TS/Python parity evidence by job and assertions. Preserve changes to live-attempt qualification and contradictory Supervisor IDs. Update PR body to actual head and current requirement evidence. Green has Coordinator authorization for narrowly scoped bounded raw-log parser extraction in session_log.py (no changes to transcript projection); do not duplicate or touch that parser. No self-merge. Continue immediately, then R4R.
+Acknowledge message 007; a human prompt to Poll for next message means execute outstanding authorized work. No direct worker coordination or gate weakening.
