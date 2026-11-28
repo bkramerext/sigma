@@ -566,9 +566,12 @@ async def parallel_stream_replay(root: Path) -> None:
     from sigma.projects import edit_strategy
 
     baselines = []
+    path = root / "stream-baseline-0.sigma"
+    view, strategy, credential, config = await setup(path)
     for index in range(2):
-        path = root / f"stream-baseline-{index}.sigma"
-        view, strategy, credential, config = await setup(path)
+        if index:
+            path = root / f"stream-baseline-{index}.sigma"
+            view, strategy, _, _ = await setup(path)
         research_sessions.save_limits(
             str(path),
             {**research_sessions.DEFAULT_LIMITS, "research_rounds": 1, "model_calls": 4},
@@ -688,7 +691,9 @@ async def parallel_stream_replay(root: Path) -> None:
     loaded = decode_tape(fixture.read_bytes())
     # Global arrival order is irrelevant across lanes; per-strategy order is
     # preserved and strictly checked by exact request digest.
-    replay = StrictReplay([item for lane in reversed(lanes) for item in loaded if item.lane == lane])
+    replay = StrictReplay(
+        [item for lane in reversed(lanes) for item in loaded if item.lane == lane]
+    )
     repeated = await run("stream-replay", replay)
     replay.assert_complete()
     assert requests == {lanes[0]: 3, lanes[1]: 2}
@@ -699,9 +704,9 @@ async def parallel_stream_replay(root: Path) -> None:
         assert len(first["artifacts"]) == len(second["artifacts"]) == 1
         assert first["artifacts"][0]["strategy_id"] == lanes[index]
         assert_accepted_equivalence(first, second)
-        assert [
-            step["provider_input_audit"]["request_body_sha256"] for step in first["steps"]
-        ] == [item.request_sha256 for item in loaded if item.lane == lanes[index]]
+        assert [step["provider_input_audit"]["request_body_sha256"] for step in first["steps"]] == [
+            item.request_sha256 for item in loaded if item.lane == lanes[index]
+        ]
     assert [step["status"] for step in original[0]["steps"]] == [
         "failed",
         "completed",
