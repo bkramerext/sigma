@@ -1,12 +1,12 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: PURPLE
-Message: 005
-Status: CHANGES REQUESTED — PR #936
+Message: 006
+Status: CHANGES REQUESTED — continuation and evidence contract
 Ticket: #447 https://github.com/bkramerext/sigma/issues/447
 Scope: Existing research context provenance contract — first context workstream
 Branch: purple/remedy-447
 
-Read the entire GitHub issue, including comments. Acknowledge message 005 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. First inspect existing #447 implementation and related tests, identify what remains and propose a bounded implementation/contract covering authoritative per-turn evidence, final dispatched context and current peer argument availability. Report cross-worker dependencies involving Blue/Green/Gray to the Coordinator only; do not undertake the entire C-series or change role prompts/scheduler/UI. Report the proposed boundary before invasive shared context changes.
+Read the entire GitHub issue, including comments. Acknowledge message 006 in an issue comment (include your color). Begin the scoped work on your own branch from current main; one ticket, one PR targeting main, no self-merge. Do not modify other workers' files merely to coordinate. Before changing shared contracts, report proposed ownership/interfaces to Coordinator and obtain agreement; continue independent work meanwhile. First inspect existing #447 implementation and related tests, identify what remains and propose a bounded implementation/contract covering authoritative per-turn evidence, final dispatched context and current peer argument availability. Report cross-worker dependencies involving Blue/Green/Gray to the Coordinator only; do not undertake the entire C-series or change role prompts/scheduler/UI. Report the proposed boundary before invasive shared context changes.
 
 Mandatory: no new UI without explicit operator approval (Yellow may revise existing About Box only); preserve research data, intellectual independence, bounded sessions and resumability; no live model calls for regression testing; do not publish private project/provider payloads or secrets; no unrelated refactors. Extend existing mechanisms. Check CI and resolve failures. Report any adverse consequence or incomplete criterion.
 
@@ -44,3 +44,6 @@ MESSAGE 005 — COORDINATOR REVIEW / PR #936
 Read and address the complete Coordinator PR review (review ID 6099167718). Prior parity/SIGMA green; current Ruff green, remaining CI pending. Investigate the four historical failures and pre-dispatch reconstruction without future leakage; validate final exact catalog/byte accounting, closure semantics and audit lineage. Do not weaken validation or target retroactive acceptance. Shared Q/A toolbar failure is Coordinator-owned; preserve evidence.
 
 A human prompt to "Poll for next message" means read the mailbox and execute outstanding authorized work, even if no newer message exists. Do not stop at reporting the next action. Collect all current-head CI failures before a consolidated push; report actual evidence and R4R when ready. No direct worker coordination, no live calls, no self-merge or gate weakening.
+
+MESSAGE 006 — SECOND-PASS REVIEW / PR #936
+Read full review 6099284946 on df13f8c8. All CI terminal; fix continuation Part 8 legitimate-wire regression and exact Ruff corrections. Preserve final guard, reconcile catalog/closure and computation permission semantics, assess lineage/deepcopy overhead. Test real frozen continuation and actual request audit/validator with outcomes, late guidance, compaction. No gate weakening or unrelated UI/scheduler changes. Continue immediately and R4R with evidence; no paid calls or self-merge.
