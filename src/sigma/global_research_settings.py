@@ -19,7 +19,12 @@ from sigma.projects import ProjectError
 
 _FILENAME = ".sigma-global-research-settings.json"
 DEFAULT_TURN_LIMIT = 20
-_OBSOLETE_PROTOCOL_FIELDS = {"scheduler_version", "research_rounds", "turns_per_round", "model_calls"}
+_OBSOLETE_PROTOCOL_FIELDS = {
+    "scheduler_version",
+    "research_rounds",
+    "turns_per_round",
+    "model_calls",
+}
 
 
 def user_config(config: dict[str, Any]) -> dict[str, Any]:
