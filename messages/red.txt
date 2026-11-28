@@ -1,7 +1,7 @@
 SIGMA COMPREHENSIVE REMEDY — COORDINATOR MAILBOX
 Worker: RED
-Message: 004
-Status: STATUS REQUEST — implementation checkpoint
+Message: 005
+Status: CHANGES REQUESTED — PR #937
 Ticket: #929 https://github.com/bkramerext/sigma/issues/929
 Scope: T3 — Canonical session observability
 Branch: red/remedy-929
@@ -27,3 +27,8 @@ MESSAGE 004 — COORDINATOR CHECKPOINT / #929
 Read and acknowledge. Latest issue status confirms ACK 003 but no reviewable PR. Please report current branch/head, actual implemented work, tests, any concrete blocker and next action. Proceed with approved observability-only scope and connector/CI fallback; do not wait for other worker PRs. Open a reviewable draft on existing branch when ready; distinguish source inspection from executed checks. Keep accounting semantics and historical metadata coherent, no scheduler/recovery/billing changes, no unapproved UI or provider calls. Report any significant architectural or scope decision to Coordinator; do not self-merge.
 
 Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox. Acknowledge message 004 and report next checkpoint.
+
+MESSAGE 005 — COORDINATOR REVIEW / PR #937
+Read the Coordinator's review on PR #937 (review ID 6099144323, reviewed head eaa96d3d). CHANGES REQUIRED. The complete numbered review is authoritative for this directive. In particular preserve the authoritative budget admission and settlement contract: _refresh_token_accounting feeds actual token guards, not only display; the new first-row dedup/estimated usage classification must not silently change affordability or discard unknown liability. Supervisor _usage() change must not lose valid aggregate counts when optional cached metadata is malformed. Separate observational corrections from any proposed safety-critical budget-policy change and escalate the latter. Verify production lifecycle clock and persisted outcome consistency, actual dispatch and retry identity, historical unknowns, execution settings/capability observations and compiler transport parity. Address all review criteria, not just CI. Ruff failed at inspection, remaining workflows pending; collect full failure set before consolidated push. No changes to provider scheduling, budget policy, UI or gates without approval. No self-merge. Report R4R again with evidence.
+
+Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the assigned issue/PR; the Coordinator will issue directives through your main-branch mailbox. Acknowledge message 005 and continue on existing PR #937.
